@@ -8,7 +8,7 @@ const BASE_URL = "https://rest.zuora.com"
 # `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
 # where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o API_REFERENCE_BILLING_TOKEN | default "" }
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o API_REFERENCE_BILLING_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
@@ -40,14 +40,11 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
-# Trick: `url encode --all` over-encodes, then we decode the four unreserved
-# punctuation chars back. Pre-existing %XX sequences in the input survive
-# because `url encode --all` first turns their % into %25.
 def encode-path-segment [v: any]: nothing -> string {
   $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
-# Serialize an array-typed path parameter (issue 49.A). OpenAPI 3 `style: simple`
+# Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
 # (the default for path params) and Swagger 2 `collectionFormat: csv` both join
 # the elements with a literal comma WITHIN the single path segment, each element
 # RFC-3986-encoded individually (so a comma inside an element stays %2C). Without
@@ -58,60 +55,72 @@ def encode-path-array [v: any]: nothing -> string {
   if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
 }
 
-# Build URL from base, path, and optional query string
-def build-url [base: string, path: string, query?: string]: nothing -> string {
+# Build the request URL from base, path, and any number of pre-encoded query
+# fragments (param serializer output and/or the auth query). Each fragment is an
+# `&`-joinable `key=value` string already percent-encoded by its producer; empty
+# fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
+# delimiters are hand-spliced — and any query already on the base URL is merged in.
+def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
   let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
-  let result = ($parsed | upsert path $full_path)
-  if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
+  let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
+  $parsed | upsert path $full_path | upsert query $query | url join
 }
 
-# Build the dry-run record returned by --dry-run. Shape:
-#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
-#    auth: {scheme, location}}
-# `meta` carries logical-form data (the query record by spec name, the pre-serialization
-# body) that do-request itself cannot reconstruct from its wire-format args.
-def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
-  let m = ($meta | default {})
-  {
-    dry_run: true
-    method: $method
-    url: $url
-    query: ($m | get -o query | default {})
-    headers: $auth.headers
-    body: ($m | get -o body)
-    content_type: $content_type
-    timeout: $timeout
-    auth: {scheme: $auth.scheme, location: $auth.location}
-  }
+# Success policy: did this response succeed? Single source of truth, consulted by
+# handle-response and the HEAD header-unwrap. Empty ok_codes means the spec listed
+# none, so fall back to < 400. Otherwise: any 2xx, plus documented success codes.
+def status-ok [status: int, ok_codes: list<int>]: nothing -> bool {
+  if ($ok_codes | is-empty) { $status < 400 } else { ($status >= 200 and $status < 300) or ($status in $ok_codes) }
 }
 
-# Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
-  let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
-  let timeout = ($max_time | default 30min)
-  let ct = ($content_type | default "application/json")
-  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
-  let resp = match $method {
-    "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
-  }
-  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
-  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
+# Unwrap a `--full` HTTP response into the user-facing value. Response arrives
+# via pipeline; ok_codes gates the error throw (see status-ok).
+def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: record -> any {
+  let resp = $in
+  if $allow_errors { return $resp }
+  if not (status-ok $resp.status $ok_codes) { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } }
+  if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
+  if $resp.status == 204 { return null }
+  $resp.body
+}
+
+# GET — bodyless, honours --raw
+def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+}
+
+# POST — body + content-type
+def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# PUT — body + content-type
+def send-put [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http put --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http put --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# PATCH — body + content-type
+def send-patch [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http patch --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http patch --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# DELETE — body via --data
+def send-delete [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http delete --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url } else { http delete --headers $req.headers --content-type $req.content_type --data $body --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url }
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # Build a `multipart/form-data` envelope per RFC 7578. `file_fields` lists
 # the field names whose value should be read from disk as bytes; every
 # other field is sent as a text part (records/lists JSON-stringified).
-# Returns {content_type, body} ready to pass to `do-request`.
+# Returns {content_type, body}.
 # When `$dry_run` is true, file fields are NOT read from disk — they emit
 # an empty-bytes placeholder so callers can inspect the request shape
-# without the file existing on disk (issue 11.B).
+# without the file existing on disk.
 def build-multipart-body [parts: record, file_fields: list<string>, dry_run: bool = false]: nothing -> record {
   let boundary = $"----nu-(random chars --length 24)"
   let crlf = "\r\n"
@@ -261,12 +270,23 @@ export def "charge-metrics-data-charge-metrics get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fromTimestamp" $from_timestamp "scalar") (serialize-qp "toTimestamp" $to_timestamp "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/charge-metrics/data/charge-metrics" $qp)
+  let full_url = (build-url $base "/charge-metrics/data/charge-metrics" $qp $auth.query)
   let accept_val = ($accept | default "application/json-seq")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"fromTimestamp": $from_timestamp, "toTimestamp": $to_timestamp} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"fromTimestamp": $from_timestamp, "toTimestamp": $to_timestamp} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List discount allocation details by time range
@@ -292,12 +312,23 @@ export def "charge-metrics-data-charge-metrics-discount-allocation-detail get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fromTimestamp" $from_timestamp "scalar") (serialize-qp "toTimestamp" $to_timestamp "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/charge-metrics/data/charge-metrics-discount-allocation-detail" $qp)
+  let full_url = (build-url $base "/charge-metrics/data/charge-metrics-discount-allocation-detail" $qp $auth.query)
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"fromTimestamp": $from_timestamp, "toTimestamp": $to_timestamp} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"fromTimestamp": $from_timestamp, "toTimestamp": $to_timestamp} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List event triggers
@@ -327,12 +358,23 @@ export def "events-event-triggers list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "baseObject" $base_object "scalar") (serialize-qp "eventTypeName" $event_type_name "scalar") (serialize-qp "active" $active "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/events/event-triggers" $qp)
+  let full_url = (build-url $base "/events/event-triggers" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Zuora-Entity-Ids": $zuora_entity_ids, "Zuora-Track-Id": $zuora_track_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"baseObject": $base_object, "eventTypeName": $event_type_name, "active": $active, "start": $start, "limit": $limit} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"baseObject": $base_object, "eventTypeName": $event_type_name, "active": $active, "start": $start, "limit": $limit} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create an event trigger
@@ -363,14 +405,25 @@ export def "events-event-triggers create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/events/event-triggers")
+  let full_url = (build-url $base "/events/event-triggers" $auth.query)
   let req_body = {"active": $active, "baseObject": $base_object, "condition": $condition, "description": $description, "eventType": $event_type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Zuora-Entity-Ids": $zuora_entity_ids, "Zuora-Track-Id": $zuora_track_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Delete an event trigger
@@ -395,12 +448,23 @@ export def "events-event-triggers delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/events/event-triggers/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/events/event-triggers/{id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Zuora-Entity-Ids": $zuora_entity_ids, "Zuora-Track-Id": $zuora_track_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Retrieve an event trigger
@@ -426,12 +490,23 @@ export def "events-event-triggers get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/events/event-triggers/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/events/event-triggers/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Zuora-Entity-Ids": $zuora_entity_ids, "Zuora-Track-Id": $zuora_track_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update an event trigger
@@ -463,14 +538,25 @@ export def "events-event-triggers update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/events/event-triggers/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/events/event-triggers/{id}") $auth.query)
   let req_body = {"active": $active, "condition": $condition, "description": $description, "eventType": $event_type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Zuora-Entity-Ids": $zuora_entity_ids, "Zuora-Track-Id": $zuora_track_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # List email templates
@@ -498,12 +584,23 @@ export def "notifications-email-templates get-list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "eventTypeName" $event_type_name "scalar") (serialize-qp "name" $name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/notifications/email-templates" $qp)
+  let full_url = (build-url $base "/notifications/email-templates" $qp $auth.query)
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"start": $start, "limit": $limit, "eventTypeName": $event_type_name, "name": $name} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"start": $start, "limit": $limit, "eventTypeName": $event_type_name, "name": $name} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create an email template
@@ -546,14 +643,25 @@ export def "notifications-email-templates create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/notifications/email-templates")
+  let full_url = (build-url $base "/notifications/email-templates" $auth.query)
   let req_body = {"active": $active, "bccEmailAddress": $bcc_email_address, "ccEmailAddress": $cc_email_address, "ccEmailType": $cc_email_type, "description": $description, "emailBody": $email_body, "emailSubject": $email_subject, "encodingType": $encoding_type, "eventTypeName": $event_type_name, "eventTypeNamespace": $event_type_namespace, "fromEmailAddress": $from_email_address, "fromEmailType": $from_email_type, "fromName": $from_name, "isHtml": $is_html, "name": $name, "replyToEmailAddress": $reply_to_email_address, "replyToEmailType": $reply_to_email_type, "toEmailAddress": $to_email_address, "toEmailType": $to_email_type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Delete an email template
@@ -578,12 +686,23 @@ export def "notifications-email-templates delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/notifications/email-templates/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/notifications/email-templates/{id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Retrieve an email template
@@ -608,12 +727,23 @@ export def "notifications-email-templates get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/notifications/email-templates/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/notifications/email-templates/{id}") $auth.query)
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update an email template
@@ -656,14 +786,25 @@ export def "notifications-email-templates update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/notifications/email-templates/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/notifications/email-templates/{id}") $auth.query)
   let req_body = {"active": $active, "bccEmailAddress": $bcc_email_address, "ccEmailAddress": $cc_email_address, "ccEmailType": $cc_email_type, "description": $description, "emailBody": $email_body, "emailSubject": $email_subject, "encodingType": $encoding_type, "fromEmailAddress": $from_email_address, "fromEmailType": $from_email_type, "fromName": $from_name, "isHtml": $is_html, "name": $name, "replyToEmailAddress": $reply_to_email_address, "replyToEmailType": $reply_to_email_type, "toEmailAddress": $to_email_address, "toEmailType": $to_email_type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Delete notification histories for an account
@@ -689,12 +830,23 @@ export def "notifications-history delete-for-account" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "accountId" $account_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/notifications/history" $qp)
+  let full_url = (build-url $base "/notifications/history" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"accountId": $account_id} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"accountId": $account_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [202]
 }
 
 # Retrieve a notification history deletion task
@@ -720,12 +872,23 @@ export def "notifications-history-tasks get-deletion" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/notifications/history/tasks/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/notifications/history/tasks/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List notification definitions
@@ -754,12 +917,23 @@ export def "notifications-notification-definitions get-list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "profileId" $profile_id "scalar") (serialize-qp "eventTypeName" $event_type_name "scalar") (serialize-qp "emailTemplateId" $email_template_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/notifications/notification-definitions" $qp)
+  let full_url = (build-url $base "/notifications/notification-definitions" $qp $auth.query)
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"start": $start, "limit": $limit, "profileId": $profile_id, "eventTypeName": $event_type_name, "emailTemplateId": $email_template_id} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"start": $start, "limit": $limit, "profileId": $profile_id, "eventTypeName": $event_type_name, "emailTemplateId": $email_template_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a notification definition
@@ -797,14 +971,25 @@ export def "notifications-notification-definitions create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/notifications/notification-definitions")
+  let full_url = (build-url $base "/notifications/notification-definitions" $auth.query)
   let req_body = {"active": $active, "callout": $callout, "calloutActive": $callout_active, "communicationProfileId": $communication_profile_id, "description": $description, "emailActive": $email_active, "emailTemplateId": $email_template_id, "eventTypeName": $event_type_name, "eventTypeNamespace": $event_type_namespace, "filterRule": $filter_rule, "filterRuleParams": $filter_rule_params, "name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Delete a notification definition
@@ -829,12 +1014,23 @@ export def "notifications-notification-definitions delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/notifications/notification-definitions/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/notifications/notification-definitions/{id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Retrieve a notification definition
@@ -859,12 +1055,23 @@ export def "notifications-notification-definitions get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/notifications/notification-definitions/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/notifications/notification-definitions/{id}") $auth.query)
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update a notification definition
@@ -902,14 +1109,25 @@ export def "notifications-notification-definitions update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/notifications/notification-definitions/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/notifications/notification-definitions/{id}") $auth.query)
   let req_body = {"active": $active, "callout": $callout, "calloutActive": $callout_active, "communicationProfileId": $communication_profile_id, "description": $description, "emailActive": $email_active, "emailTemplateId": $email_template_id, "filterRule": $filter_rule, "filterRuleParams": $filter_rule_params, "name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Create an OAuth token
@@ -935,7 +1153,7 @@ export def "oauth-token create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/oauth/token")
+  let full_url = (build-url $base "/oauth/token" $auth.query)
   let req_body = {"client_id": $client_id, "client_secret": $client_secret, "grant_type": $grant_type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
@@ -943,7 +1161,18 @@ export def "oauth-token create" [
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/x-www-form-urlencoded"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Update or delete custom object records
@@ -972,14 +1201,25 @@ export def "objects-batch-default create-custom-records-update-or-delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($object | is-empty) { error make --unspanned { msg: "path parameter 'object' must be non-empty" } }
-  let full_url = (build-url $base ({object: (encode-path-segment $object)} | format pattern "/objects/batch/default/{object}"))
+  let full_url = (build-url $base ({object: (encode-path-segment $object)} | format pattern "/objects/batch/default/{object}") $auth.query)
   let req_body = {"action": $action} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids, "Authorization": $authorization, "Zuora-Version": $zuora_version} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # List custom object definitions
@@ -1005,12 +1245,23 @@ export def "objects-definitions-default get-list-custom-in-namespace" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "select" $select "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/objects/definitions/default" $qp)
+  let full_url = (build-url $base "/objects/definitions/default" $qp $auth.query)
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids, "Authorization": $authorization, "Zuora-Version": $zuora_version} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"select": $select} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"select": $select} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create custom object definitions
@@ -1036,14 +1287,25 @@ export def "objects-definitions-default create-custom" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/objects/definitions/default")
+  let full_url = (build-url $base "/objects/definitions/default" $auth.query)
   let req_body = {"definitions": $definitions} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids, "Authorization": $authorization, "Zuora-Version": $zuora_version} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Delete a custom object definition
@@ -1069,12 +1331,23 @@ export def "objects-definitions-default delete-custom-by-type" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($object | is-empty) { error make --unspanned { msg: "path parameter 'object' must be non-empty" } }
-  let full_url = (build-url $base ({object: (encode-path-segment $object)} | format pattern "/objects/definitions/default/{object}"))
+  let full_url = (build-url $base ({object: (encode-path-segment $object)} | format pattern "/objects/definitions/default/{object}") $auth.query)
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids, "Authorization": $authorization, "Zuora-Version": $zuora_version} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve a custom object definition
@@ -1100,12 +1373,23 @@ export def "objects-definitions-default get-custom-by-type" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($object | is-empty) { error make --unspanned { msg: "path parameter 'object' must be non-empty" } }
-  let full_url = (build-url $base ({object: (encode-path-segment $object)} | format pattern "/objects/definitions/default/{object}"))
+  let full_url = (build-url $base ({object: (encode-path-segment $object)} | format pattern "/objects/definitions/default/{object}") $auth.query)
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids, "Authorization": $authorization, "Zuora-Version": $zuora_version} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List all custom object bulk jobs
@@ -1132,12 +1416,23 @@ export def "objects-jobs get-list-custom-bulk" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pageSize" $page_size "scalar") (serialize-qp "cursor" $cursor "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/objects/jobs" $qp)
+  let full_url = (build-url $base "/objects/jobs" $qp $auth.query)
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids, "Authorization": $authorization, "Zuora-Version": $zuora_version} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"pageSize": $page_size, "cursor": $cursor} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"pageSize": $page_size, "cursor": $cursor} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Submit a custom object bulk job
@@ -1167,14 +1462,25 @@ export def "objects-jobs create-custom-bulk" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/objects/jobs")
+  let full_url = (build-url $base "/objects/jobs" $auth.query)
   let req_body = {"filter": $filter, "namespace": $namespace, "object": $object, "operation": $operation} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids, "Authorization": $authorization, "Zuora-Version": $zuora_version} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve a custom object bulk job
@@ -1200,12 +1506,23 @@ export def "objects-jobs get-custom-bulk" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/objects/jobs/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/objects/jobs/{id}") $auth.query)
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids, "Authorization": $authorization, "Zuora-Version": $zuora_version} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List all errors for a custom object bulk job
@@ -1231,12 +1548,23 @@ export def "objects-jobs-errors get-custom-bulk" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/objects/jobs/{id}/errors"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/objects/jobs/{id}/errors") $auth.query)
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids, "Authorization": $authorization, "Zuora-Version": $zuora_version} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Upload a file for a custom object bulk job
@@ -1266,7 +1594,7 @@ export def "objects-jobs-files create-upload-for-custom-bulk" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/objects/jobs/{id}/files"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/objects/jobs/{id}/files") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = ($accept | default "application/json")
@@ -1275,7 +1603,18 @@ export def "objects-jobs-files create-upload-for-custom-bulk" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let effective_ct = ($content_type | default "text/csv")
   let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $effective_ct $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: $effective_ct
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Update a custom object definition
@@ -1302,14 +1641,25 @@ export def "objects-migrations create-update-custom-definition" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/objects/migrations")
+  let full_url = (build-url $base "/objects/migrations" $auth.query)
   let req_body = {"actions": $actions} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids, "Authorization": $authorization, "Zuora-Version": $zuora_version} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # List records for a custom object
@@ -1340,12 +1690,23 @@ export def "objects-records-default get-list-for-custom-type" [
   let base = ($base_url | default $BASE_URL)
   if ($object | is-empty) { error make --unspanned { msg: "path parameter 'object' must be non-empty" } }
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "ids" $ids "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "cursor" $cursor "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({object: (encode-path-segment $object)} | format pattern "/objects/records/default/{object}") $qp)
+  let full_url = (build-url $base ({object: (encode-path-segment $object)} | format pattern "/objects/records/default/{object}") $qp $auth.query)
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids, "Authorization": $authorization, "Zuora-Version": $zuora_version} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"q": $q, "ids": $ids, "pageSize": $page_size, "cursor": $cursor} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"q": $q, "ids": $ids, "pageSize": $page_size, "cursor": $cursor} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create custom object records
@@ -1374,14 +1735,25 @@ export def "objects-records-default create-custom" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($object | is-empty) { error make --unspanned { msg: "path parameter 'object' must be non-empty" } }
-  let full_url = (build-url $base ({object: (encode-path-segment $object)} | format pattern "/objects/records/default/{object}"))
+  let full_url = (build-url $base ({object: (encode-path-segment $object)} | format pattern "/objects/records/default/{object}") $auth.query)
   let req_body = {"allowPartialSuccess": $allow_partial_success, "records": $records} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids, "Authorization": $authorization, "Zuora-Version": $zuora_version} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Delete a custom object record
@@ -1409,12 +1781,23 @@ export def "objects-records-default delete-custom" [
   let base = ($base_url | default $BASE_URL)
   if ($object | is-empty) { error make --unspanned { msg: "path parameter 'object' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({object: (encode-path-segment $object), id: (encode-path-segment $id)} | format pattern "/objects/records/default/{object}/{id}"))
+  let full_url = (build-url $base ({object: (encode-path-segment $object), id: (encode-path-segment $id)} | format pattern "/objects/records/default/{object}/{id}") $auth.query)
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids, "Authorization": $authorization, "Zuora-Version": $zuora_version} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve a custom object record
@@ -1442,12 +1825,23 @@ export def "objects-records-default get-custom" [
   let base = ($base_url | default $BASE_URL)
   if ($object | is-empty) { error make --unspanned { msg: "path parameter 'object' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({object: (encode-path-segment $object), id: (encode-path-segment $id)} | format pattern "/objects/records/default/{object}/{id}"))
+  let full_url = (build-url $base ({object: (encode-path-segment $object), id: (encode-path-segment $id)} | format pattern "/objects/records/default/{object}/{id}") $auth.query)
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids, "Authorization": $authorization, "Zuora-Version": $zuora_version} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Partially update a custom object record
@@ -1477,14 +1871,25 @@ export def "objects-records-default update-custom-by-object-id" [
   let base = ($base_url | default $BASE_URL)
   if ($object | is-empty) { error make --unspanned { msg: "path parameter 'object' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({object: (encode-path-segment $object), id: (encode-path-segment $id)} | format pattern "/objects/records/default/{object}/{id}"))
+  let full_url = (build-url $base ({object: (encode-path-segment $object), id: (encode-path-segment $id)} | format pattern "/objects/records/default/{object}/{id}") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids, "Authorization": $authorization, "Zuora-Version": $zuora_version} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/merge-patch+json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/merge-patch+json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Update a custom object record
@@ -1515,14 +1920,25 @@ export def "objects-records-default update-custom-by-object-id-1" [
   let base = ($base_url | default $BASE_URL)
   if ($object | is-empty) { error make --unspanned { msg: "path parameter 'object' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({object: (encode-path-segment $object), id: (encode-path-segment $id)} | format pattern "/objects/records/default/{object}/{id}"))
+  let full_url = (build-url $base ({object: (encode-path-segment $object), id: (encode-path-segment $id)} | format pattern "/objects/records/default/{object}/{id}") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids, "Authorization": $authorization, "If-Match": $if_match, "Zuora-Version": $zuora_version} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # List data query jobs
@@ -1549,12 +1965,23 @@ export def "query-jobs list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "queryStatus" $query_status "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/query/jobs" $qp)
+  let full_url = (build-url $base "/query/jobs" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Zuora-Entity-Ids": $zuora_entity_ids, "Zuora-Track-Id": $zuora_track_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"queryStatus": $query_status, "pageSize": $page_size} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"queryStatus": $query_status, "pageSize": $page_size} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Submit a data query
@@ -1589,14 +2016,25 @@ export def "query-jobs create-data" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/query/jobs")
+  let full_url = (build-url $base "/query/jobs" $auth.query)
   let req_body = {"columnSeparator": $column_separator, "compression": $compression, "encryptionKey": $encryption_key, "output": $output, "outputFormat": $output_format, "query": $query, "readDeleted": $read_deleted, "sourceData": $source_data, "useIndexJoin": $use_index_join} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Zuora-Entity-Ids": $zuora_entity_ids, "Zuora-Track-Id": $zuora_track_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Cancel a data query job
@@ -1622,12 +2060,23 @@ export def "query-jobs delete-data" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'job-id' must be non-empty" } }
-  let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/query/jobs/{job_id}"))
+  let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/query/jobs/{job_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Zuora-Entity-Ids": $zuora_entity_ids, "Zuora-Track-Id": $zuora_track_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve a data query job
@@ -1653,12 +2102,23 @@ export def "query-jobs get-data" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'job-id' must be non-empty" } }
-  let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/query/jobs/{job_id}"))
+  let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/query/jobs/{job_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Zuora-Entity-Ids": $zuora_entity_ids, "Zuora-Track-Id": $zuora_track_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Submit settings requests
@@ -1684,14 +2144,25 @@ export def "settings-batch-requests create-process" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/settings/batch-requests")
+  let full_url = (build-url $base "/settings/batch-requests" $auth.query)
   let req_body = {"requests": $requests} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Zuora-Entity-Ids": $zuora_entity_ids, "Zuora-Track-Id": $zuora_track_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # List all settings
@@ -1716,12 +2187,23 @@ export def "settings-listing get-list" [
 ]: nothing -> record<settings: table<context: string, description: string, httpOperations: list, key: string, pathPattern: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/settings/listing")
+  let full_url = (build-url $base "/settings/listing" $auth.query)
   let accept_val = ($accept | default "application/csv")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Zuora-Entity-Ids": $zuora_entity_ids, "Zuora-Track-Id": $zuora_track_id, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List all accounting codes
@@ -1746,12 +2228,23 @@ export def "accounting-codes get-list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v1/accounting-codes" $qp)
+  let full_url = (build-url $base "/v1/accounting-codes" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"pageSize": $page_size} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"pageSize": $page_size} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create an accounting code
@@ -1780,14 +2273,25 @@ export def "accounting-codes create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v1/accounting-codes")
+  let full_url = (build-url $base "/v1/accounting-codes" $auth.query)
   let req_body = {"glAccountName": $gl_account_name, "glAccountNumber": $gl_account_number, "name": $name, "notes": $notes, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Delete an accounting code
@@ -1812,12 +2316,23 @@ export def "accounting-codes delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($ac_id | is-empty) { error make --unspanned { msg: "path parameter 'ac-id' must be non-empty" } }
-  let full_url = (build-url $base ({ac_id: (encode-path-segment $ac_id)} | format pattern "/v1/accounting-codes/{ac_id}"))
+  let full_url = (build-url $base ({ac_id: (encode-path-segment $ac_id)} | format pattern "/v1/accounting-codes/{ac_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve an accounting code
@@ -1842,12 +2357,23 @@ export def "accounting-codes get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($ac_id | is-empty) { error make --unspanned { msg: "path parameter 'ac-id' must be non-empty" } }
-  let full_url = (build-url $base ({ac_id: (encode-path-segment $ac_id)} | format pattern "/v1/accounting-codes/{ac_id}"))
+  let full_url = (build-url $base ({ac_id: (encode-path-segment $ac_id)} | format pattern "/v1/accounting-codes/{ac_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update an accounting code
@@ -1878,14 +2404,25 @@ export def "accounting-codes update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($ac_id | is-empty) { error make --unspanned { msg: "path parameter 'ac-id' must be non-empty" } }
-  let full_url = (build-url $base ({ac_id: (encode-path-segment $ac_id)} | format pattern "/v1/accounting-codes/{ac_id}"))
+  let full_url = (build-url $base ({ac_id: (encode-path-segment $ac_id)} | format pattern "/v1/accounting-codes/{ac_id}") $auth.query)
   let req_body = {"glAccountName": $gl_account_name, "glAccountNumber": $gl_account_number, "name": $name, "notes": $notes, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Activate an accounting code
@@ -1910,12 +2447,23 @@ export def "accounting-codes-activate update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($ac_id | is-empty) { error make --unspanned { msg: "path parameter 'ac-id' must be non-empty" } }
-  let full_url = (build-url $base ({ac_id: (encode-path-segment $ac_id)} | format pattern "/v1/accounting-codes/{ac_id}/activate"))
+  let full_url = (build-url $base ({ac_id: (encode-path-segment $ac_id)} | format pattern "/v1/accounting-codes/{ac_id}/activate") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Deactivate an accounting code
@@ -1940,12 +2488,23 @@ export def "accounting-codes-deactivate update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($ac_id | is-empty) { error make --unspanned { msg: "path parameter 'ac-id' must be non-empty" } }
-  let full_url = (build-url $base ({ac_id: (encode-path-segment $ac_id)} | format pattern "/v1/accounting-codes/{ac_id}/deactivate"))
+  let full_url = (build-url $base ({ac_id: (encode-path-segment $ac_id)} | format pattern "/v1/accounting-codes/{ac_id}/deactivate") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req null $insecure $raw $allow_errors $full [200]
 }
 
 # List all accounting periods
@@ -1970,12 +2529,23 @@ export def "accounting-periods get-list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v1/accounting-periods" $qp)
+  let full_url = (build-url $base "/v1/accounting-periods" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"pageSize": $page_size} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"pageSize": $page_size} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create an accounting period
@@ -2005,14 +2575,25 @@ export def "accounting-periods create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v1/accounting-periods")
+  let full_url = (build-url $base "/v1/accounting-periods" $auth.query)
   let req_body = {"endDate": $end_date, "fiscalYear": $fiscal_year, "fiscal_quarter": $fiscal_quarter, "name": $name, "notes": $notes, "startDate": $start_date} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Delete an accounting period
@@ -2037,12 +2618,23 @@ export def "accounting-periods delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($ap_id | is-empty) { error make --unspanned { msg: "path parameter 'ap-id' must be non-empty" } }
-  let full_url = (build-url $base ({ap_id: (encode-path-segment $ap_id)} | format pattern "/v1/accounting-periods/{ap_id}"))
+  let full_url = (build-url $base ({ap_id: (encode-path-segment $ap_id)} | format pattern "/v1/accounting-periods/{ap_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve an accounting period
@@ -2067,12 +2659,23 @@ export def "accounting-periods get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($ap_id | is-empty) { error make --unspanned { msg: "path parameter 'ap-id' must be non-empty" } }
-  let full_url = (build-url $base ({ap_id: (encode-path-segment $ap_id)} | format pattern "/v1/accounting-periods/{ap_id}"))
+  let full_url = (build-url $base ({ap_id: (encode-path-segment $ap_id)} | format pattern "/v1/accounting-periods/{ap_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update an accounting period
@@ -2104,14 +2707,25 @@ export def "accounting-periods update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($ap_id | is-empty) { error make --unspanned { msg: "path parameter 'ap-id' must be non-empty" } }
-  let full_url = (build-url $base ({ap_id: (encode-path-segment $ap_id)} | format pattern "/v1/accounting-periods/{ap_id}"))
+  let full_url = (build-url $base ({ap_id: (encode-path-segment $ap_id)} | format pattern "/v1/accounting-periods/{ap_id}") $auth.query)
   let req_body = {"endDate": $end_date, "fiscalYear": $fiscal_year, "fiscal_quarter": $fiscal_quarter, "name": $name, "notes": $notes, "startDate": $start_date} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Close an accounting period
@@ -2136,12 +2750,23 @@ export def "accounting-periods-close update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($ap_id | is-empty) { error make --unspanned { msg: "path parameter 'ap-id' must be non-empty" } }
-  let full_url = (build-url $base ({ap_id: (encode-path-segment $ap_id)} | format pattern "/v1/accounting-periods/{ap_id}/close"))
+  let full_url = (build-url $base ({ap_id: (encode-path-segment $ap_id)} | format pattern "/v1/accounting-periods/{ap_id}/close") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Set an accounting period to pending close
@@ -2166,12 +2791,23 @@ export def "accounting-periods-pending-close update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($ap_id | is-empty) { error make --unspanned { msg: "path parameter 'ap-id' must be non-empty" } }
-  let full_url = (build-url $base ({ap_id: (encode-path-segment $ap_id)} | format pattern "/v1/accounting-periods/{ap_id}/pending-close"))
+  let full_url = (build-url $base ({ap_id: (encode-path-segment $ap_id)} | format pattern "/v1/accounting-periods/{ap_id}/pending-close") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Reopen an accounting period
@@ -2196,12 +2832,23 @@ export def "accounting-periods-reopen update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($ap_id | is-empty) { error make --unspanned { msg: "path parameter 'ap-id' must be non-empty" } }
-  let full_url = (build-url $base ({ap_id: (encode-path-segment $ap_id)} | format pattern "/v1/accounting-periods/{ap_id}/reopen"))
+  let full_url = (build-url $base ({ap_id: (encode-path-segment $ap_id)} | format pattern "/v1/accounting-periods/{ap_id}/reopen") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Run trial balance
@@ -2226,12 +2873,23 @@ export def "accounting-periods-run-trial-balance update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($ap_id | is-empty) { error make --unspanned { msg: "path parameter 'ap-id' must be non-empty" } }
-  let full_url = (build-url $base ({ap_id: (encode-path-segment $ap_id)} | format pattern "/v1/accounting-periods/{ap_id}/run-trial-balance"))
+  let full_url = (build-url $base ({ap_id: (encode-path-segment $ap_id)} | format pattern "/v1/accounting-periods/{ap_id}/run-trial-balance") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Create an account
@@ -2305,14 +2963,25 @@ export def "accounts create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v1/accounts")
+  let full_url = (build-url $base "/v1/accounts" $auth.query)
   let req_body = {"accountNumber": $account_number, "additionalEmailAddresses": $additional_email_addresses, "applicationOrder": $application_order, "applyCredit": $apply_credit, "applyCreditBalance": $apply_credit_balance, "autoPay": $auto_pay, "batch": $batch, "billCycleDay": $bill_cycle_day, "billToContact": $bill_to_contact, "collect": $collect, "communicationProfileId": $communication_profile_id, "creditCard": $credit_card, "creditMemoTemplateId": $credit_memo_template_id, "crmId": $crm_id, "currency": $currency, "debitMemoTemplateId": $debit_memo_template_id, "documentDate": $document_date, "hpmCreditCardPaymentMethodId": $hpm_credit_card_payment_method_id, "invoice": $invoice, "invoiceCollect": $invoice_collect, "invoiceDeliveryPrefsEmail": $invoice_delivery_prefs_email, "invoiceDeliveryPrefsPrint": $invoice_delivery_prefs_print, "invoiceTargetDate": $invoice_target_date, "invoiceTemplateId": $invoice_template_id, "name": $name, "notes": $notes, "parentId": $parent_id, "paymentGateway": $payment_gateway, "paymentMethod": $payment_method, "paymentTerm": $payment_term, "runBilling": $run_billing, "salesRep": $sales_rep, "sequenceSetId": $sequence_set_id, "soldToContact": $sold_to_contact, "soldToSameAsBillTo": $sold_to_same_as_bill_to, "subscription": $subscription, "tagging": $tagging, "targetDate": $target_date, "taxInfo": $tax_info, "Class__NS": $class_ns, "CustomerType__NS": $customer_type_ns, "Department__NS": $department_ns, "IntegrationId__NS": $integration_id_ns, "IntegrationStatus__NS": $integration_status_ns, "Location__NS": $location_ns, "Subsidiary__NS": $subsidiary_ns, "SyncDate__NS": $sync_date_ns, "SynctoNetSuite__NS": $syncto_net_suite_ns} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids, "zuora-version": $zuora_version} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Create a job to hard delete billing document files
@@ -2337,14 +3006,25 @@ export def "accounts-billing-documents-files-deletion-jobs create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v1/accounts/billing-documents/files/deletion-jobs")
+  let full_url = (build-url $base "/v1/accounts/billing-documents/files/deletion-jobs" $auth.query)
   let req_body = {"accountIds": $account_ids} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve a job of hard deleting billing document files
@@ -2369,12 +3049,23 @@ export def "accounts-billing-documents-files-deletion-jobs get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'jobId' must be non-empty" } }
-  let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/v1/accounts/billing-documents/files/deletion-jobs/{job_id}"))
+  let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/v1/accounts/billing-documents/files/deletion-jobs/{job_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve an account
@@ -2399,12 +3090,23 @@ export def "accounts get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_key | is-empty) { error make --unspanned { msg: "path parameter 'account-key' must be non-empty" } }
-  let full_url = (build-url $base ({account_key: (encode-path-segment $account_key)} | format pattern "/v1/accounts/{account_key}"))
+  let full_url = (build-url $base ({account_key: (encode-path-segment $account_key)} | format pattern "/v1/accounts/{account_key}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update an account
@@ -2460,14 +3162,25 @@ export def "accounts update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_key | is-empty) { error make --unspanned { msg: "path parameter 'account-key' must be non-empty" } }
-  let full_url = (build-url $base ({account_key: (encode-path-segment $account_key)} | format pattern "/v1/accounts/{account_key}"))
+  let full_url = (build-url $base ({account_key: (encode-path-segment $account_key)} | format pattern "/v1/accounts/{account_key}") $auth.query)
   let req_body = {"additionalEmailAddresses": $additional_email_addresses, "autoPay": $auto_pay, "batch": $batch, "billToContact": $bill_to_contact, "communicationProfileId": $communication_profile_id, "creditMemoTemplateId": $credit_memo_template_id, "crmId": $crm_id, "debitMemoTemplateId": $debit_memo_template_id, "invoiceDeliveryPrefsEmail": $invoice_delivery_prefs_email, "invoiceDeliveryPrefsPrint": $invoice_delivery_prefs_print, "invoiceTemplateId": $invoice_template_id, "name": $name, "notes": $notes, "parentId": $parent_id, "paymentGateway": $payment_gateway, "salesRep": $sales_rep, "sequenceSetId": $sequence_set_id, "soldToContact": $sold_to_contact, "tagging": $tagging, "taxInfo": $tax_info, "Class__NS": $class_ns, "CustomerType__NS": $customer_type_ns, "Department__NS": $department_ns, "IntegrationId__NS": $integration_id_ns, "IntegrationStatus__NS": $integration_status_ns, "Location__NS": $location_ns, "Subsidiary__NS": $subsidiary_ns, "SyncDate__NS": $sync_date_ns, "SynctoNetSuite__NS": $syncto_net_suite_ns} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve an account summary
@@ -2492,12 +3205,23 @@ export def "accounts-summary get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_key | is-empty) { error make --unspanned { msg: "path parameter 'account-key' must be non-empty" } }
-  let full_url = (build-url $base ({account_key: (encode-path-segment $account_key)} | format pattern "/v1/accounts/{account_key}/summary"))
+  let full_url = (build-url $base ({account_key: (encode-path-segment $account_key)} | format pattern "/v1/accounts/{account_key}/summary") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Generate billing documents by account ID
@@ -2529,14 +3253,25 @@ export def "accounts-billing-documents-generate create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/accounts/{id}/billing-documents/generate"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/accounts/{id}/billing-documents/generate") $auth.query)
   let req_body = {"autoPost": $auto_post, "autoRenew": $auto_renew, "chargeTypeToExclude": $charge_type_to_exclude, "effectiveDate": $effective_date, "subscriptionIds": $subscription_ids, "targetDate": $target_date} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Amend
@@ -2565,14 +3300,25 @@ export def "action-amend create-pos-tamend" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "rejectUnknownFields" $reject_unknown_fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v1/action/amend" $qp)
+  let full_url = (build-url $base "/v1/action/amend" $qp $auth.query)
   let req_body = {"requests": $requests} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Entity-Ids": $zuora_entity_ids, "Zuora-Track-Id": $zuora_track_id, "X-Zuora-WSDL-Version": $x_zuora_wsdl_version} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: ({"rejectUnknownFields": $reject_unknown_fields} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"rejectUnknownFields": $reject_unknown_fields} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Create
@@ -2601,14 +3347,25 @@ export def "action-create create-pos-tcreate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "rejectUnknownFields" $reject_unknown_fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v1/action/create" $qp)
+  let full_url = (build-url $base "/v1/action/create" $qp $auth.query)
   let req_body = {"objects": $objects, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Entity-Ids": $zuora_entity_ids, "Zuora-Track-Id": $zuora_track_id, "X-Zuora-WSDL-Version": $x_zuora_wsdl_version} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: ({"rejectUnknownFields": $reject_unknown_fields} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"rejectUnknownFields": $reject_unknown_fields} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Delete
@@ -2637,14 +3394,25 @@ export def "action-delete create-pos-tdelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "rejectUnknownFields" $reject_unknown_fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v1/action/delete" $qp)
+  let full_url = (build-url $base "/v1/action/delete" $qp $auth.query)
   let req_body = {"ids": $ids, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Entity-Ids": $zuora_entity_ids, "Zuora-Track-Id": $zuora_track_id, "X-Zuora-WSDL-Version": $x_zuora_wsdl_version} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: ({"rejectUnknownFields": $reject_unknown_fields} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"rejectUnknownFields": $reject_unknown_fields} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Execute
@@ -2674,14 +3442,25 @@ export def "action-execute create-pos-texecute" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "rejectUnknownFields" $reject_unknown_fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v1/action/execute" $qp)
+  let full_url = (build-url $base "/v1/action/execute" $qp $auth.query)
   let req_body = {"ids": $ids, "synchronous": $synchronous, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Entity-Ids": $zuora_entity_ids, "Zuora-Track-Id": $zuora_track_id, "X-Zuora-WSDL-Version": $x_zuora_wsdl_version} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: ({"rejectUnknownFields": $reject_unknown_fields} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"rejectUnknownFields": $reject_unknown_fields} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Generate
@@ -2710,14 +3489,25 @@ export def "action-generate create-pos-tgenerate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "rejectUnknownFields" $reject_unknown_fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v1/action/generate" $qp)
+  let full_url = (build-url $base "/v1/action/generate" $qp $auth.query)
   let req_body = {"objects": $objects, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Entity-Ids": $zuora_entity_ids, "Zuora-Track-Id": $zuora_track_id, "X-Zuora-WSDL-Version": $x_zuora_wsdl_version} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: ({"rejectUnknownFields": $reject_unknown_fields} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"rejectUnknownFields": $reject_unknown_fields} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Query
@@ -2747,14 +3537,25 @@ export def "action-query create-pos-tquery" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "rejectUnknownFields" $reject_unknown_fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v1/action/query" $qp)
+  let full_url = (build-url $base "/v1/action/query" $qp $auth.query)
   let req_body = {"conf": $conf, "queryString": $query_string} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Entity-Ids": $zuora_entity_ids, "Zuora-Track-Id": $zuora_track_id, "X-Zuora-WSDL-Version": $x_zuora_wsdl_version} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: ({"rejectUnknownFields": $reject_unknown_fields} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"rejectUnknownFields": $reject_unknown_fields} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # QueryMore
@@ -2781,14 +3582,25 @@ export def "action-query-more create-pos-tquery" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "rejectUnknownFields" $reject_unknown_fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v1/action/queryMore" $qp)
+  let full_url = (build-url $base "/v1/action/queryMore" $qp $auth.query)
   let req_body = {"queryLocator": $query_locator} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Entity-Ids": $zuora_entity_ids, "Zuora-Track-Id": $zuora_track_id, "X-Zuora-WSDL-Version": $x_zuora_wsdl_version} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: ({"rejectUnknownFields": $reject_unknown_fields} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"rejectUnknownFields": $reject_unknown_fields} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Subscribe
@@ -2817,14 +3629,25 @@ export def "action-subscribe create-pos-tsubscribe" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "rejectUnknownFields" $reject_unknown_fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v1/action/subscribe" $qp)
+  let full_url = (build-url $base "/v1/action/subscribe" $qp $auth.query)
   let req_body = {"subscribes": $subscribes} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Entity-Ids": $zuora_entity_ids, "Zuora-Track-Id": $zuora_track_id, "X-Zuora-WSDL-Version": $x_zuora_wsdl_version} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: ({"rejectUnknownFields": $reject_unknown_fields} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"rejectUnknownFields": $reject_unknown_fields} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Update
@@ -2854,14 +3677,25 @@ export def "action-update create-pos-tupdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "rejectUnknownFields" $reject_unknown_fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v1/action/update" $qp)
+  let full_url = (build-url $base "/v1/action/update" $qp $auth.query)
   let req_body = {"objects": $objects, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Entity-Ids": $zuora_entity_ids, "Zuora-Track-Id": $zuora_track_id, "X-Zuora-WSDL-Version": $x_zuora_wsdl_version} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: ({"rejectUnknownFields": $reject_unknown_fields} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"rejectUnknownFields": $reject_unknown_fields} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # List all amendments of a subscription
@@ -2886,12 +3720,23 @@ export def "amendments-subscriptions get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscription-id' must be non-empty" } }
-  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/v1/amendments/subscriptions/{subscription_id}"))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/v1/amendments/subscriptions/{subscription_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve an amendment
@@ -2916,12 +3761,23 @@ export def "amendments get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($amendment_key | is-empty) { error make --unspanned { msg: "path parameter 'amendment-key' must be non-empty" } }
-  let full_url = (build-url $base ({amendment_key: (encode-path-segment $amendment_key)} | format pattern "/v1/amendments/{amendment_key}"))
+  let full_url = (build-url $base ({amendment_key: (encode-path-segment $amendment_key)} | format pattern "/v1/amendments/{amendment_key}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve the status and response of a job
@@ -2945,12 +3801,23 @@ export def "async-jobs get-status-and-response" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'jobId' must be non-empty" } }
-  let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/v1/async-jobs/{job_id}"))
+  let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/v1/async-jobs/{job_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create an order asynchronously
@@ -2989,14 +3856,25 @@ export def "async-orders create-asynchronously" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "returnIds" $return_ids "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v1/async/orders" $qp)
+  let full_url = (build-url $base "/v1/async/orders" $qp $auth.query)
   let req_body = {"customFields": $custom_fields, "description": $description, "existingAccountNumber": $existing_account_number, "newAccount": $new_account, "orderDate": $order_date, "orderLineItems": $order_line_items, "orderNumber": $order_number, "processingOptions": $processing_options, "subscriptions": $subscriptions} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids, "zuora-version": $zuora_version} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: ({"returnIds": $return_ids} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"returnIds": $return_ids} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [202]
 }
 
 # Preview an order asynchronously
@@ -3033,14 +3911,25 @@ export def "async-orders-preview create-asynchronously" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v1/async/orders/preview")
+  let full_url = (build-url $base "/v1/async/orders/preview" $auth.query)
   let req_body = {"customFields": $custom_fields, "description": $description, "existingAccountNumber": $existing_account_number, "orderDate": $order_date, "orderLineItems": $order_line_items, "orderNumber": $order_number, "previewAccountInfo": $preview_account_info, "previewOptions": $preview_options, "subscriptions": $subscriptions} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [202]
 }
 
 # Create an attachment
@@ -3069,7 +3958,7 @@ export def "attachments create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "description" $description "scalar") (serialize-qp "associatedObjectType" $associated_object_type "scalar") (serialize-qp "associatedObjectKey" $associated_object_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v1/attachments" $qp)
+  let full_url = (build-url $base "/v1/attachments" $qp $auth.query)
   let req_body = {"file": $file} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
@@ -3078,7 +3967,18 @@ export def "attachments create" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body ["file"] $dry_run)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: ({"description": $description, "associatedObjectType": $associated_object_type, "associatedObjectKey": $associated_object_key} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"description": $description, "associatedObjectType": $associated_object_type, "associatedObjectKey": $associated_object_key} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: $mp.content_type
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $mp.body $insecure $raw $allow_errors $full [200]
 }
 
 # Delete an attachment
@@ -3103,12 +4003,23 @@ export def "attachments delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($attachment_id | is-empty) { error make --unspanned { msg: "path parameter 'attachment-id' must be non-empty" } }
-  let full_url = (build-url $base ({attachment_id: (encode-path-segment $attachment_id)} | format pattern "/v1/attachments/{attachment_id}"))
+  let full_url = (build-url $base ({attachment_id: (encode-path-segment $attachment_id)} | format pattern "/v1/attachments/{attachment_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve an attachment
@@ -3133,12 +4044,23 @@ export def "attachments get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($attachment_id | is-empty) { error make --unspanned { msg: "path parameter 'attachment-id' must be non-empty" } }
-  let full_url = (build-url $base ({attachment_id: (encode-path-segment $attachment_id)} | format pattern "/v1/attachments/{attachment_id}"))
+  let full_url = (build-url $base ({attachment_id: (encode-path-segment $attachment_id)} | format pattern "/v1/attachments/{attachment_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update an attachment
@@ -3166,14 +4088,25 @@ export def "attachments update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($attachment_id | is-empty) { error make --unspanned { msg: "path parameter 'attachment-id' must be non-empty" } }
-  let full_url = (build-url $base ({attachment_id: (encode-path-segment $attachment_id)} | format pattern "/v1/attachments/{attachment_id}"))
+  let full_url = (build-url $base ({attachment_id: (encode-path-segment $attachment_id)} | format pattern "/v1/attachments/{attachment_id}") $auth.query)
   let req_body = {"description": $description, "fileName": $file_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # List attachments by object type and key
@@ -3202,12 +4135,23 @@ export def "attachments get-list" [
   if ($object_type | is-empty) { error make --unspanned { msg: "path parameter 'object-type' must be non-empty" } }
   if ($object_key | is-empty) { error make --unspanned { msg: "path parameter 'object-key' must be non-empty" } }
   let qp = [(serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({object_type: (encode-path-segment $object_type), object_key: (encode-path-segment $object_key)} | format pattern "/v1/attachments/{object_type}/{object_key}") $qp)
+  let full_url = (build-url $base ({object_type: (encode-path-segment $object_type), object_key: (encode-path-segment $object_key)} | format pattern "/v1/attachments/{object_type}/{object_key}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"pageSize": $page_size} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"pageSize": $page_size} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Email billing documents generated from a bill run
@@ -3234,14 +4178,25 @@ export def "bill-runs-emails create-billing-documentsfrom" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bill_run_id | is-empty) { error make --unspanned { msg: "path parameter 'billRunId' must be non-empty" } }
-  let full_url = (build-url $base ({bill_run_id: (encode-path-segment $bill_run_id)} | format pattern "/v1/bill-runs/{bill_run_id}/emails"))
+  let full_url = (build-url $base ({bill_run_id: (encode-path-segment $bill_run_id)} | format pattern "/v1/bill-runs/{bill_run_id}/emails") $auth.query)
   let req_body = {"resend": $resend} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # List billing documents for an account
@@ -3270,12 +4225,23 @@ export def "billing-documents get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pageSize" $page_size "scalar") (serialize-qp "accountId" $account_id "scalar") (serialize-qp "documentDate" $document_date "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v1/billing-documents" $qp)
+  let full_url = (build-url $base "/v1/billing-documents" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"pageSize": $page_size, "accountId": $account_id, "documentDate": $document_date, "status": $status, "sort": $qp_sort} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"pageSize": $page_size, "accountId": $account_id, "documentDate": $document_date, "status": $status, "sort": $qp_sort} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a billing preview run
@@ -3304,14 +4270,25 @@ export def "billing-preview-runs create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v1/billing-preview-runs")
+  let full_url = (build-url $base "/v1/billing-preview-runs" $auth.query)
   let req_body = {"assumeRenewal": $assume_renewal, "batch": $batch, "chargeTypeToExclude": $charge_type_to_exclude, "includingEvergreenSubscription": $including_evergreen_subscription, "targetDate": $target_date} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve a billing preview run
@@ -3336,12 +4313,23 @@ export def "billing-preview-runs get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_preview_run_id | is-empty) { error make --unspanned { msg: "path parameter 'billingPreviewRunId' must be non-empty" } }
-  let full_url = (build-url $base ({billing_preview_run_id: (encode-path-segment $billing_preview_run_id)} | format pattern "/v1/billing-preview-runs/{billing_preview_run_id}"))
+  let full_url = (build-url $base ({billing_preview_run_id: (encode-path-segment $billing_preview_run_id)} | format pattern "/v1/billing-preview-runs/{billing_preview_run_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Perform a mass action
@@ -3367,7 +4355,7 @@ export def "bulk create-mass-updater" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v1/bulk")
+  let full_url = (build-url $base "/v1/bulk" $auth.query)
   let req_body = {"file": $file, "params": $params} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
@@ -3376,7 +4364,18 @@ export def "bulk create-mass-updater" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body ["file"] $dry_run)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: $mp.content_type
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $mp.body $insecure $raw $allow_errors $full [200]
 }
 
 # List all results of a mass action
@@ -3401,12 +4400,23 @@ export def "bulk get-mass-updater" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bulk_key | is-empty) { error make --unspanned { msg: "path parameter 'bulk-key' must be non-empty" } }
-  let full_url = (build-url $base ({bulk_key: (encode-path-segment $bulk_key)} | format pattern "/v1/bulk/{bulk_key}"))
+  let full_url = (build-url $base ({bulk_key: (encode-path-segment $bulk_key)} | format pattern "/v1/bulk/{bulk_key}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Stop a mass action
@@ -3431,12 +4441,23 @@ export def "bulk-stop update-mass-updater" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bulk_key | is-empty) { error make --unspanned { msg: "path parameter 'bulk-key' must be non-empty" } }
-  let full_url = (build-url $base ({bulk_key: (encode-path-segment $bulk_key)} | format pattern "/v1/bulk/{bulk_key}/stop"))
+  let full_url = (build-url $base ({bulk_key: (encode-path-segment $bulk_key)} | format pattern "/v1/bulk/{bulk_key}/stop") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve a product
@@ -3462,12 +4483,23 @@ export def "catalog-product get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($product_id | is-empty) { error make --unspanned { msg: "path parameter 'product-id' must be non-empty" } }
-  let full_url = (build-url $base ({product_id: (encode-path-segment $product_id)} | format pattern "/v1/catalog/product/{product_id}"))
+  let full_url = (build-url $base ({product_id: (encode-path-segment $product_id)} | format pattern "/v1/catalog/product/{product_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids, "zuora-version": $zuora_version} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List all products
@@ -3494,12 +4526,23 @@ export def "catalog-products get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v1/catalog/products" $qp)
+  let full_url = (build-url $base "/v1/catalog/products" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids, "zuora-version": $zuora_version} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "pageSize": $page_size} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"page": $page, "pageSize": $page_size} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Multi-entity: Share a product with an entity
@@ -3526,14 +4569,25 @@ export def "catalog-products-share create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($product_id | is-empty) { error make --unspanned { msg: "path parameter 'product-id' must be non-empty" } }
-  let full_url = (build-url $base ({product_id: (encode-path-segment $product_id)} | format pattern "/v1/catalog/products/{product_id}/share"))
+  let full_url = (build-url $base ({product_id: (encode-path-segment $product_id)} | format pattern "/v1/catalog/products/{product_id}/share") $auth.query)
   let req_body = {"toEntityIds": $to_entity_ids} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve a charge revenue summary by charge ID
@@ -3558,12 +4612,23 @@ export def "charge-revenue-summaries-subscription-charges get-crs" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($charge_key | is-empty) { error make --unspanned { msg: "path parameter 'charge-key' must be non-empty" } }
-  let full_url = (build-url $base ({charge_key: (encode-path-segment $charge_key)} | format pattern "/v1/charge-revenue-summaries/subscription-charges/{charge_key}"))
+  let full_url = (build-url $base ({charge_key: (encode-path-segment $charge_key)} | format pattern "/v1/charge-revenue-summaries/subscription-charges/{charge_key}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List all details of a charge revenue summary
@@ -3588,12 +4653,23 @@ export def "charge-revenue-summaries get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($crs_number | is-empty) { error make --unspanned { msg: "path parameter 'crs-number' must be non-empty" } }
-  let full_url = (build-url $base ({crs_number: (encode-path-segment $crs_number)} | format pattern "/v1/charge-revenue-summaries/{crs_number}"))
+  let full_url = (build-url $base ({crs_number: (encode-path-segment $crs_number)} | format pattern "/v1/charge-revenue-summaries/{crs_number}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Establish a connection to Zuora REST API
@@ -3619,12 +4695,23 @@ export def "connections create" [
 ]: nothing -> record<processId: string, reasons: table<code: string, message: string>, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v1/connections")
+  let full_url = (build-url $base "/v1/connections" $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids, "apiAccessKeyId": $api_access_key_id, "apiSecretAccessKey": $api_secret_access_key, "Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Scrub a contact
@@ -3649,12 +4736,23 @@ export def "contacts-scrub update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($contact_id | is-empty) { error make --unspanned { msg: "path parameter 'contactId' must be non-empty" } }
-  let full_url = (build-url $base ({contact_id: (encode-path-segment $contact_id)} | format pattern "/v1/contacts/{contact_id}/scrub"))
+  let full_url = (build-url $base ({contact_id: (encode-path-segment $contact_id)} | format pattern "/v1/contacts/{contact_id}/scrub") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Entity-Ids": $zuora_entity_ids, "Zuora-Track-Id": $zuora_track_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req null $insecure $raw $allow_errors $full [200]
 }
 
 # List credit memos
@@ -3700,12 +4798,23 @@ export def "creditmemos get-credit-memos" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pageSize" $page_size "scalar") (serialize-qp "accountId" $account_id "scalar") (serialize-qp "amount" $amount "scalar") (serialize-qp "appliedAmount" $applied_amount "scalar") (serialize-qp "autoApplyUponPosting" $auto_apply_upon_posting "scalar") (serialize-qp "createdById" $created_by_id "scalar") (serialize-qp "createdDate" $created_date "scalar") (serialize-qp "creditMemoDate" $credit_memo_date "scalar") (serialize-qp "currency" $currency "scalar") (serialize-qp "excludeFromAutoApplyRules" $exclude_from_auto_apply_rules "scalar") (serialize-qp "number" $number "scalar") (serialize-qp "referredInvoiceId" $referred_invoice_id "scalar") (serialize-qp "refundAmount" $refund_amount "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "targetDate" $target_date "scalar") (serialize-qp "taxAmount" $tax_amount "scalar") (serialize-qp "totalTaxExemptAmount" $total_tax_exempt_amount "scalar") (serialize-qp "transferredToAccounting" $transferred_to_accounting "scalar") (serialize-qp "unappliedAmount" $unapplied_amount "scalar") (serialize-qp "updatedById" $updated_by_id "scalar") (serialize-qp "updatedDate" $updated_date "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v1/creditmemos" $qp)
+  let full_url = (build-url $base "/v1/creditmemos" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"pageSize": $page_size, "accountId": $account_id, "amount": $amount, "appliedAmount": $applied_amount, "autoApplyUponPosting": $auto_apply_upon_posting, "createdById": $created_by_id, "createdDate": $created_date, "creditMemoDate": $credit_memo_date, "currency": $currency, "excludeFromAutoApplyRules": $exclude_from_auto_apply_rules, "number": $number, "referredInvoiceId": $referred_invoice_id, "refundAmount": $refund_amount, "status": $status, "targetDate": $target_date, "taxAmount": $tax_amount, "totalTaxExemptAmount": $total_tax_exempt_amount, "transferredToAccounting": $transferred_to_accounting, "unappliedAmount": $unapplied_amount, "updatedById": $updated_by_id, "updatedDate": $updated_date, "sort": $qp_sort} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"pageSize": $page_size, "accountId": $account_id, "amount": $amount, "appliedAmount": $applied_amount, "autoApplyUponPosting": $auto_apply_upon_posting, "createdById": $created_by_id, "createdDate": $created_date, "creditMemoDate": $credit_memo_date, "currency": $currency, "excludeFromAutoApplyRules": $exclude_from_auto_apply_rules, "number": $number, "referredInvoiceId": $referred_invoice_id, "refundAmount": $refund_amount, "status": $status, "targetDate": $target_date, "taxAmount": $tax_amount, "totalTaxExemptAmount": $total_tax_exempt_amount, "transferredToAccounting": $transferred_to_accounting, "unappliedAmount": $unapplied_amount, "updatedById": $updated_by_id, "updatedDate": $updated_date, "sort": $qp_sort} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a credit memo from a charge
@@ -3742,14 +4851,25 @@ export def "creditmemos create-credit-memo-from-prpc" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v1/creditmemos")
+  let full_url = (build-url $base "/v1/creditmemos" $auth.query)
   let req_body = {"accountId": $account_id, "autoPost": $auto_post, "charges": $charges, "comment": $comment, "effectiveDate": $effective_date, "reasonCode": $reason_code, "IntegrationId__NS": $integration_id_ns, "IntegrationStatus__NS": $integration_status_ns, "Origin__NS": $origin_ns, "SyncDate__NS": $sync_date_ns, "Transaction__NS": $transaction_ns} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids, "zuora-version": $zuora_version} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Delete a credit memo
@@ -3774,12 +4894,23 @@ export def "creditmemos delete-credit-memo" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($credit_memo_id | is-empty) { error make --unspanned { msg: "path parameter 'creditMemoId' must be non-empty" } }
-  let full_url = (build-url $base ({credit_memo_id: (encode-path-segment $credit_memo_id)} | format pattern "/v1/creditmemos/{credit_memo_id}"))
+  let full_url = (build-url $base ({credit_memo_id: (encode-path-segment $credit_memo_id)} | format pattern "/v1/creditmemos/{credit_memo_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve a credit memo
@@ -3804,12 +4935,23 @@ export def "creditmemos get-credit-memo" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($credit_memo_id | is-empty) { error make --unspanned { msg: "path parameter 'creditMemoId' must be non-empty" } }
-  let full_url = (build-url $base ({credit_memo_id: (encode-path-segment $credit_memo_id)} | format pattern "/v1/creditmemos/{credit_memo_id}"))
+  let full_url = (build-url $base ({credit_memo_id: (encode-path-segment $credit_memo_id)} | format pattern "/v1/creditmemos/{credit_memo_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update a credit memo
@@ -3848,14 +4990,25 @@ export def "creditmemos update-credit-memo" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($credit_memo_id | is-empty) { error make --unspanned { msg: "path parameter 'creditMemoId' must be non-empty" } }
-  let full_url = (build-url $base ({credit_memo_id: (encode-path-segment $credit_memo_id)} | format pattern "/v1/creditmemos/{credit_memo_id}"))
+  let full_url = (build-url $base ({credit_memo_id: (encode-path-segment $credit_memo_id)} | format pattern "/v1/creditmemos/{credit_memo_id}") $auth.query)
   let req_body = {"autoApplyUponPosting": $auto_apply_upon_posting, "comment": $comment, "effectiveDate": $effective_date, "excludeFromAutoApplyRules": $exclude_from_auto_apply_rules, "items": $items, "reasonCode": $reason_code, "transferredToAccounting": $transferred_to_accounting, "IntegrationId__NS": $integration_id_ns, "IntegrationStatus__NS": $integration_status_ns, "Origin__NS": $origin_ns, "SyncDate__NS": $sync_date_ns, "Transaction__NS": $transaction_ns} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Apply a credit memo
@@ -3886,14 +5039,25 @@ export def "creditmemos-apply update-credit-memo" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($credit_memo_id | is-empty) { error make --unspanned { msg: "path parameter 'creditMemoId' must be non-empty" } }
-  let full_url = (build-url $base ({credit_memo_id: (encode-path-segment $credit_memo_id)} | format pattern "/v1/creditmemos/{credit_memo_id}/apply"))
+  let full_url = (build-url $base ({credit_memo_id: (encode-path-segment $credit_memo_id)} | format pattern "/v1/creditmemos/{credit_memo_id}/apply") $auth.query)
   let req_body = {"debitMemos": $debit_memos, "effectiveDate": $effective_date, "invoices": $invoices} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Cancel a credit memo
@@ -3918,12 +5082,23 @@ export def "creditmemos-cancel update-credit-memo" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($credit_memo_id | is-empty) { error make --unspanned { msg: "path parameter 'creditMemoId' must be non-empty" } }
-  let full_url = (build-url $base ({credit_memo_id: (encode-path-segment $credit_memo_id)} | format pattern "/v1/creditmemos/{credit_memo_id}/cancel"))
+  let full_url = (build-url $base ({credit_memo_id: (encode-path-segment $credit_memo_id)} | format pattern "/v1/creditmemos/{credit_memo_id}/cancel") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Email a credit memo
@@ -3952,14 +5127,25 @@ export def "creditmemos-emails create-credit-memo" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($credit_memo_id | is-empty) { error make --unspanned { msg: "path parameter 'creditMemoId' must be non-empty" } }
-  let full_url = (build-url $base ({credit_memo_id: (encode-path-segment $credit_memo_id)} | format pattern "/v1/creditmemos/{credit_memo_id}/emails"))
+  let full_url = (build-url $base ({credit_memo_id: (encode-path-segment $credit_memo_id)} | format pattern "/v1/creditmemos/{credit_memo_id}/emails") $auth.query)
   let req_body = {"emailAddresses": $email_addresses, "includeAdditionalEmailAddresses": $include_additional_email_addresses, "useEmailTemplateSetting": $use_email_template_setting} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Upload a file for a credit memo
@@ -3986,7 +5172,7 @@ export def "creditmemos-files create-upload-for-credit-memo" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($credit_memo_id | is-empty) { error make --unspanned { msg: "path parameter 'creditMemoId' must be non-empty" } }
-  let full_url = (build-url $base ({credit_memo_id: (encode-path-segment $credit_memo_id)} | format pattern "/v1/creditmemos/{credit_memo_id}/files"))
+  let full_url = (build-url $base ({credit_memo_id: (encode-path-segment $credit_memo_id)} | format pattern "/v1/creditmemos/{credit_memo_id}/files") $auth.query)
   let req_body = {"file": $file} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
@@ -3995,7 +5181,18 @@ export def "creditmemos-files create-upload-for-credit-memo" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body ["file"] $dry_run)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: $mp.content_type
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $mp.body $insecure $raw $allow_errors $full [200]
 }
 
 # List credit memo items
@@ -4038,12 +5235,23 @@ export def "creditmemos-items list" [
   let base = ($base_url | default $BASE_URL)
   if ($credit_memo_id | is-empty) { error make --unspanned { msg: "path parameter 'creditMemoId' must be non-empty" } }
   let qp = [(serialize-qp "pageSize" $page_size "scalar") (serialize-qp "amount" $amount "scalar") (serialize-qp "appliedAmount" $applied_amount "scalar") (serialize-qp "createdById" $created_by_id "scalar") (serialize-qp "createdDate" $created_date "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "refundAmount" $refund_amount "scalar") (serialize-qp "serviceEndDate" $service_end_date "scalar") (serialize-qp "serviceStartDate" $service_start_date "scalar") (serialize-qp "sku" $sku "scalar") (serialize-qp "skuName" $sku_name "scalar") (serialize-qp "sourceItemId" $source_item_id "scalar") (serialize-qp "subscriptionId" $subscription_id "scalar") (serialize-qp "updatedById" $updated_by_id "scalar") (serialize-qp "updatedDate" $updated_date "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({credit_memo_id: (encode-path-segment $credit_memo_id)} | format pattern "/v1/creditmemos/{credit_memo_id}/items") $qp)
+  let full_url = (build-url $base ({credit_memo_id: (encode-path-segment $credit_memo_id)} | format pattern "/v1/creditmemos/{credit_memo_id}/items") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids, "zuora-version": $zuora_version} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"pageSize": $page_size, "amount": $amount, "appliedAmount": $applied_amount, "createdById": $created_by_id, "createdDate": $created_date, "id": $id, "refundAmount": $refund_amount, "serviceEndDate": $service_end_date, "serviceStartDate": $service_start_date, "sku": $sku, "skuName": $sku_name, "sourceItemId": $source_item_id, "subscriptionId": $subscription_id, "updatedById": $updated_by_id, "updatedDate": $updated_date, "sort": $qp_sort} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"pageSize": $page_size, "amount": $amount, "appliedAmount": $applied_amount, "createdById": $created_by_id, "createdDate": $created_date, "id": $id, "refundAmount": $refund_amount, "serviceEndDate": $service_end_date, "serviceStartDate": $service_start_date, "sku": $sku, "skuName": $sku_name, "sourceItemId": $source_item_id, "subscriptionId": $subscription_id, "updatedById": $updated_by_id, "updatedDate": $updated_date, "sort": $qp_sort} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve a credit memo item
@@ -4071,12 +5279,23 @@ export def "creditmemos-items get-credit-memo" [
   let base = ($base_url | default $BASE_URL)
   if ($credit_memo_id | is-empty) { error make --unspanned { msg: "path parameter 'creditMemoId' must be non-empty" } }
   if ($cmitemid | is-empty) { error make --unspanned { msg: "path parameter 'cmitemid' must be non-empty" } }
-  let full_url = (build-url $base ({credit_memo_id: (encode-path-segment $credit_memo_id), cmitemid: (encode-path-segment $cmitemid)} | format pattern "/v1/creditmemos/{credit_memo_id}/items/{cmitemid}"))
+  let full_url = (build-url $base ({credit_memo_id: (encode-path-segment $credit_memo_id), cmitemid: (encode-path-segment $cmitemid)} | format pattern "/v1/creditmemos/{credit_memo_id}/items/{cmitemid}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids, "zuora-version": $zuora_version} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List all taxation items of a credit memo item
@@ -4106,12 +5325,23 @@ export def "creditmemos-items-taxation-items get-of-credit-memo" [
   if ($credit_memo_id | is-empty) { error make --unspanned { msg: "path parameter 'creditMemoId' must be non-empty" } }
   if ($cmitemid | is-empty) { error make --unspanned { msg: "path parameter 'cmitemid' must be non-empty" } }
   let qp = [(serialize-qp "pageSize" $page_size "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({credit_memo_id: (encode-path-segment $credit_memo_id), cmitemid: (encode-path-segment $cmitemid)} | format pattern "/v1/creditmemos/{credit_memo_id}/items/{cmitemid}/taxation-items") $qp)
+  let full_url = (build-url $base ({credit_memo_id: (encode-path-segment $credit_memo_id), cmitemid: (encode-path-segment $cmitemid)} | format pattern "/v1/creditmemos/{credit_memo_id}/items/{cmitemid}/taxation-items") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"pageSize": $page_size, "page": $page} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"pageSize": $page_size, "page": $page} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List all parts of a credit memo
@@ -4138,12 +5368,23 @@ export def "creditmemos-parts list" [
   let base = ($base_url | default $BASE_URL)
   if ($credit_memo_id | is-empty) { error make --unspanned { msg: "path parameter 'creditMemoId' must be non-empty" } }
   let qp = [(serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({credit_memo_id: (encode-path-segment $credit_memo_id)} | format pattern "/v1/creditmemos/{credit_memo_id}/parts") $qp)
+  let full_url = (build-url $base ({credit_memo_id: (encode-path-segment $credit_memo_id)} | format pattern "/v1/creditmemos/{credit_memo_id}/parts") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"pageSize": $page_size} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"pageSize": $page_size} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve a credit memo part
@@ -4170,12 +5411,23 @@ export def "creditmemos-parts get-credit-memo" [
   let base = ($base_url | default $BASE_URL)
   if ($credit_memo_id | is-empty) { error make --unspanned { msg: "path parameter 'creditMemoId' must be non-empty" } }
   if ($partid | is-empty) { error make --unspanned { msg: "path parameter 'partid' must be non-empty" } }
-  let full_url = (build-url $base ({credit_memo_id: (encode-path-segment $credit_memo_id), partid: (encode-path-segment $partid)} | format pattern "/v1/creditmemos/{credit_memo_id}/parts/{partid}"))
+  let full_url = (build-url $base ({credit_memo_id: (encode-path-segment $credit_memo_id), partid: (encode-path-segment $partid)} | format pattern "/v1/creditmemos/{credit_memo_id}/parts/{partid}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List all credit memo part items
@@ -4204,12 +5456,23 @@ export def "creditmemos-parts-itemparts list" [
   if ($credit_memo_id | is-empty) { error make --unspanned { msg: "path parameter 'creditMemoId' must be non-empty" } }
   if ($partid | is-empty) { error make --unspanned { msg: "path parameter 'partid' must be non-empty" } }
   let qp = [(serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({credit_memo_id: (encode-path-segment $credit_memo_id), partid: (encode-path-segment $partid)} | format pattern "/v1/creditmemos/{credit_memo_id}/parts/{partid}/itemparts") $qp)
+  let full_url = (build-url $base ({credit_memo_id: (encode-path-segment $credit_memo_id), partid: (encode-path-segment $partid)} | format pattern "/v1/creditmemos/{credit_memo_id}/parts/{partid}/itemparts") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"pageSize": $page_size} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"pageSize": $page_size} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve a credit memo part item
@@ -4238,12 +5501,23 @@ export def "creditmemos-parts-itemparts get-credit-memo-item" [
   if ($credit_memo_id | is-empty) { error make --unspanned { msg: "path parameter 'creditMemoId' must be non-empty" } }
   if ($partid | is-empty) { error make --unspanned { msg: "path parameter 'partid' must be non-empty" } }
   if ($itempartid | is-empty) { error make --unspanned { msg: "path parameter 'itempartid' must be non-empty" } }
-  let full_url = (build-url $base ({credit_memo_id: (encode-path-segment $credit_memo_id), partid: (encode-path-segment $partid), itempartid: (encode-path-segment $itempartid)} | format pattern "/v1/creditmemos/{credit_memo_id}/parts/{partid}/itemparts/{itempartid}"))
+  let full_url = (build-url $base ({credit_memo_id: (encode-path-segment $credit_memo_id), partid: (encode-path-segment $partid), itempartid: (encode-path-segment $itempartid)} | format pattern "/v1/creditmemos/{credit_memo_id}/parts/{partid}/itemparts/{itempartid}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Generate a credit memo PDF file
@@ -4268,12 +5542,23 @@ export def "creditmemos-pdfs create-credit-memo" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($credit_memo_id | is-empty) { error make --unspanned { msg: "path parameter 'creditMemoId' must be non-empty" } }
-  let full_url = (build-url $base ({credit_memo_id: (encode-path-segment $credit_memo_id)} | format pattern "/v1/creditmemos/{credit_memo_id}/pdfs"))
+  let full_url = (build-url $base ({credit_memo_id: (encode-path-segment $credit_memo_id)} | format pattern "/v1/creditmemos/{credit_memo_id}/pdfs") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Post a credit memo
@@ -4298,12 +5583,23 @@ export def "creditmemos-post update-credit-memo" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($credit_memo_id | is-empty) { error make --unspanned { msg: "path parameter 'creditMemoId' must be non-empty" } }
-  let full_url = (build-url $base ({credit_memo_id: (encode-path-segment $credit_memo_id)} | format pattern "/v1/creditmemos/{credit_memo_id}/post"))
+  let full_url = (build-url $base ({credit_memo_id: (encode-path-segment $credit_memo_id)} | format pattern "/v1/creditmemos/{credit_memo_id}/post") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Create taxation items for a credit memo
@@ -4331,14 +5627,25 @@ export def "creditmemos-taxationitems create-cm-taxation-items" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($credit_memo_id | is-empty) { error make --unspanned { msg: "path parameter 'creditMemoId' must be non-empty" } }
-  let full_url = (build-url $base ({credit_memo_id: (encode-path-segment $credit_memo_id)} | format pattern "/v1/creditmemos/{credit_memo_id}/taxationitems"))
+  let full_url = (build-url $base ({credit_memo_id: (encode-path-segment $credit_memo_id)} | format pattern "/v1/creditmemos/{credit_memo_id}/taxationitems") $auth.query)
   let req_body = {"taxationItems": $taxation_items} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Unapply a credit memo
@@ -4369,14 +5676,25 @@ export def "creditmemos-unapply update-credit-memo" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($credit_memo_id | is-empty) { error make --unspanned { msg: "path parameter 'creditMemoId' must be non-empty" } }
-  let full_url = (build-url $base ({credit_memo_id: (encode-path-segment $credit_memo_id)} | format pattern "/v1/creditmemos/{credit_memo_id}/unapply"))
+  let full_url = (build-url $base ({credit_memo_id: (encode-path-segment $credit_memo_id)} | format pattern "/v1/creditmemos/{credit_memo_id}/unapply") $auth.query)
   let req_body = {"debitMemos": $debit_memos, "effectiveDate": $effective_date, "invoices": $invoices} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Unpost a credit memo
@@ -4401,12 +5719,23 @@ export def "creditmemos-unpost update-credit-memo" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($credit_memo_id | is-empty) { error make --unspanned { msg: "path parameter 'creditMemoId' must be non-empty" } }
-  let full_url = (build-url $base ({credit_memo_id: (encode-path-segment $credit_memo_id)} | format pattern "/v1/creditmemos/{credit_memo_id}/unpost"))
+  let full_url = (build-url $base ({credit_memo_id: (encode-path-segment $credit_memo_id)} | format pattern "/v1/creditmemos/{credit_memo_id}/unpost") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Refund a credit memo
@@ -4455,14 +5784,25 @@ export def "creditmemos-refunds create-credit-memo" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($creditmemo_id | is-empty) { error make --unspanned { msg: "path parameter 'creditmemoId' must be non-empty" } }
-  let full_url = (build-url $base ({creditmemo_id: (encode-path-segment $creditmemo_id)} | format pattern "/v1/creditmemos/{creditmemo_id}/refunds"))
+  let full_url = (build-url $base ({creditmemo_id: (encode-path-segment $creditmemo_id)} | format pattern "/v1/creditmemos/{creditmemo_id}/refunds") $auth.query)
   let req_body = {"comment": $comment, "financeInformation": $finance_information, "gatewayId": $gateway_id, "gatewayOptions": $gateway_options, "items": $items, "methodType": $method_type, "paymentMethodId": $payment_method_id, "reasonCode": $reason_code, "referenceId": $reference_id, "refundDate": $refund_date, "secondRefundReferenceId": $second_refund_reference_id, "softDescriptor": $soft_descriptor, "softDescriptorPhone": $soft_descriptor_phone, "totalAmount": $total_amount, "type": $type, "IntegrationId__NS": $integration_id_ns, "IntegrationStatus__NS": $integration_status_ns, "Origin__NS": $origin_ns, "SyncDate__NS": $sync_date_ns, "SynctoNetSuite__NS": $syncto_net_suite_ns} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # List custom exchange rates by currency
@@ -4490,12 +5830,23 @@ export def "custom-exchange-rates get" [
   let base = ($base_url | default $BASE_URL)
   if ($currency | is-empty) { error make --unspanned { msg: "path parameter 'currency' must be non-empty" } }
   let qp = [(serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({currency: (encode-path-segment $currency)} | format pattern "/v1/custom-exchange-rates/{currency}") $qp)
+  let full_url = (build-url $base ({currency: (encode-path-segment $currency)} | format pattern "/v1/custom-exchange-rates/{currency}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"startDate": $start_date, "endDate": $end_date} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"startDate": $start_date, "endDate": $end_date} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List debit memos
@@ -4538,12 +5889,23 @@ export def "debitmemos get-debit-memos" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pageSize" $page_size "scalar") (serialize-qp "accountId" $account_id "scalar") (serialize-qp "amount" $amount "scalar") (serialize-qp "balance" $balance "scalar") (serialize-qp "beAppliedAmount" $be_applied_amount "scalar") (serialize-qp "createdById" $created_by_id "scalar") (serialize-qp "createdDate" $created_date "scalar") (serialize-qp "currency" $currency "scalar") (serialize-qp "debitMemoDate" $debit_memo_date "scalar") (serialize-qp "dueDate" $due_date "scalar") (serialize-qp "number" $number "scalar") (serialize-qp "referredInvoiceId" $referred_invoice_id "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "targetDate" $target_date "scalar") (serialize-qp "taxAmount" $tax_amount "scalar") (serialize-qp "totalTaxExemptAmount" $total_tax_exempt_amount "scalar") (serialize-qp "updatedById" $updated_by_id "scalar") (serialize-qp "updatedDate" $updated_date "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v1/debitmemos" $qp)
+  let full_url = (build-url $base "/v1/debitmemos" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"pageSize": $page_size, "accountId": $account_id, "amount": $amount, "balance": $balance, "beAppliedAmount": $be_applied_amount, "createdById": $created_by_id, "createdDate": $created_date, "currency": $currency, "debitMemoDate": $debit_memo_date, "dueDate": $due_date, "number": $number, "referredInvoiceId": $referred_invoice_id, "status": $status, "targetDate": $target_date, "taxAmount": $tax_amount, "totalTaxExemptAmount": $total_tax_exempt_amount, "updatedById": $updated_by_id, "updatedDate": $updated_date, "sort": $qp_sort} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"pageSize": $page_size, "accountId": $account_id, "amount": $amount, "balance": $balance, "beAppliedAmount": $be_applied_amount, "createdById": $created_by_id, "createdDate": $created_date, "currency": $currency, "debitMemoDate": $debit_memo_date, "dueDate": $due_date, "number": $number, "referredInvoiceId": $referred_invoice_id, "status": $status, "targetDate": $target_date, "taxAmount": $tax_amount, "totalTaxExemptAmount": $total_tax_exempt_amount, "updatedById": $updated_by_id, "updatedDate": $updated_date, "sort": $qp_sort} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a debit memo from a charge
@@ -4581,14 +5943,25 @@ export def "debitmemos create-debit-memo-from-prpc" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v1/debitmemos")
+  let full_url = (build-url $base "/v1/debitmemos" $auth.query)
   let req_body = {"accountId": $account_id, "accountNumber": $account_number, "autoPay": $auto_pay, "autoPost": $auto_post, "charges": $charges, "comment": $comment, "dueDate": $due_date, "effectiveDate": $effective_date, "reasonCode": $reason_code, "IntegrationId__NS": $integration_id_ns, "IntegrationStatus__NS": $integration_status_ns, "SyncDate__NS": $sync_date_ns} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids, "zuora-version": $zuora_version} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Update debit memos
@@ -4614,14 +5987,25 @@ export def "debitmemos update-batch-debit-memos" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v1/debitmemos")
+  let full_url = (build-url $base "/v1/debitmemos" $auth.query)
   let req_body = {"debitMemos": $debit_memos} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Delete a debit memo
@@ -4646,12 +6030,23 @@ export def "debitmemos delete-debit-memo" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($debit_memo_id | is-empty) { error make --unspanned { msg: "path parameter 'debitMemoId' must be non-empty" } }
-  let full_url = (build-url $base ({debit_memo_id: (encode-path-segment $debit_memo_id)} | format pattern "/v1/debitmemos/{debit_memo_id}"))
+  let full_url = (build-url $base ({debit_memo_id: (encode-path-segment $debit_memo_id)} | format pattern "/v1/debitmemos/{debit_memo_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve a debit memo
@@ -4676,12 +6071,23 @@ export def "debitmemos get-debit-memo" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($debit_memo_id | is-empty) { error make --unspanned { msg: "path parameter 'debitMemoId' must be non-empty" } }
-  let full_url = (build-url $base ({debit_memo_id: (encode-path-segment $debit_memo_id)} | format pattern "/v1/debitmemos/{debit_memo_id}"))
+  let full_url = (build-url $base ({debit_memo_id: (encode-path-segment $debit_memo_id)} | format pattern "/v1/debitmemos/{debit_memo_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update a debit memo
@@ -4718,14 +6124,25 @@ export def "debitmemos update-debit-memo" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($debit_memo_id | is-empty) { error make --unspanned { msg: "path parameter 'debitMemoId' must be non-empty" } }
-  let full_url = (build-url $base ({debit_memo_id: (encode-path-segment $debit_memo_id)} | format pattern "/v1/debitmemos/{debit_memo_id}"))
+  let full_url = (build-url $base ({debit_memo_id: (encode-path-segment $debit_memo_id)} | format pattern "/v1/debitmemos/{debit_memo_id}") $auth.query)
   let req_body = {"autoPay": $auto_pay, "comment": $comment, "dueDate": $due_date, "effectiveDate": $effective_date, "items": $items, "reasonCode": $reason_code, "transferredToAccounting": $transferred_to_accounting, "IntegrationId__NS": $integration_id_ns, "IntegrationStatus__NS": $integration_status_ns, "SyncDate__NS": $sync_date_ns} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # List all application parts of a debit memo
@@ -4750,12 +6167,23 @@ export def "debitmemos-application-parts get-debit-memo" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($debit_memo_id | is-empty) { error make --unspanned { msg: "path parameter 'debitMemoId' must be non-empty" } }
-  let full_url = (build-url $base ({debit_memo_id: (encode-path-segment $debit_memo_id)} | format pattern "/v1/debitmemos/{debit_memo_id}/application-parts"))
+  let full_url = (build-url $base ({debit_memo_id: (encode-path-segment $debit_memo_id)} | format pattern "/v1/debitmemos/{debit_memo_id}/application-parts") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Cancel a debit memo
@@ -4780,12 +6208,23 @@ export def "debitmemos-cancel update-debit-memo" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($debit_memo_id | is-empty) { error make --unspanned { msg: "path parameter 'debitMemoId' must be non-empty" } }
-  let full_url = (build-url $base ({debit_memo_id: (encode-path-segment $debit_memo_id)} | format pattern "/v1/debitmemos/{debit_memo_id}/cancel"))
+  let full_url = (build-url $base ({debit_memo_id: (encode-path-segment $debit_memo_id)} | format pattern "/v1/debitmemos/{debit_memo_id}/cancel") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Collect a posted debit memo
@@ -4816,14 +6255,25 @@ export def "debitmemos-collect create-debit-memo" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($debit_memo_id | is-empty) { error make --unspanned { msg: "path parameter 'debitMemoId' must be non-empty" } }
-  let full_url = (build-url $base ({debit_memo_id: (encode-path-segment $debit_memo_id)} | format pattern "/v1/debitmemos/{debit_memo_id}/collect"))
+  let full_url = (build-url $base ({debit_memo_id: (encode-path-segment $debit_memo_id)} | format pattern "/v1/debitmemos/{debit_memo_id}/collect") $auth.query)
   let req_body = {"applicationOrder": $application_order, "applyCredit": $apply_credit, "collect": $collect, "payment": $payment} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Email a debit memo
@@ -4852,14 +6302,25 @@ export def "debitmemos-emails create-debit-memo" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($debit_memo_id | is-empty) { error make --unspanned { msg: "path parameter 'debitMemoId' must be non-empty" } }
-  let full_url = (build-url $base ({debit_memo_id: (encode-path-segment $debit_memo_id)} | format pattern "/v1/debitmemos/{debit_memo_id}/emails"))
+  let full_url = (build-url $base ({debit_memo_id: (encode-path-segment $debit_memo_id)} | format pattern "/v1/debitmemos/{debit_memo_id}/emails") $auth.query)
   let req_body = {"emailAddresses": $email_addresses, "includeAdditionalEmailAddresses": $include_additional_email_addresses, "useEmailTemplateSetting": $use_email_template_setting} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Upload a file for a debit memo
@@ -4886,7 +6347,7 @@ export def "debitmemos-files create-upload-for-debit-memo" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($debit_memo_id | is-empty) { error make --unspanned { msg: "path parameter 'debitMemoId' must be non-empty" } }
-  let full_url = (build-url $base ({debit_memo_id: (encode-path-segment $debit_memo_id)} | format pattern "/v1/debitmemos/{debit_memo_id}/files"))
+  let full_url = (build-url $base ({debit_memo_id: (encode-path-segment $debit_memo_id)} | format pattern "/v1/debitmemos/{debit_memo_id}/files") $auth.query)
   let req_body = {"file": $file} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
@@ -4895,7 +6356,18 @@ export def "debitmemos-files create-upload-for-debit-memo" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body ["file"] $dry_run)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: $mp.content_type
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $mp.body $insecure $raw $allow_errors $full [200]
 }
 
 # List debit memo items
@@ -4937,12 +6409,23 @@ export def "debitmemos-items list" [
   let base = ($base_url | default $BASE_URL)
   if ($debit_memo_id | is-empty) { error make --unspanned { msg: "path parameter 'debitMemoId' must be non-empty" } }
   let qp = [(serialize-qp "pageSize" $page_size "scalar") (serialize-qp "amount" $amount "scalar") (serialize-qp "beAppliedAmount" $be_applied_amount "scalar") (serialize-qp "createdById" $created_by_id "scalar") (serialize-qp "createdDate" $created_date "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "serviceEndDate" $service_end_date "scalar") (serialize-qp "serviceStartDate" $service_start_date "scalar") (serialize-qp "sku" $sku "scalar") (serialize-qp "skuName" $sku_name "scalar") (serialize-qp "sourceItemId" $source_item_id "scalar") (serialize-qp "subscriptionId" $subscription_id "scalar") (serialize-qp "updatedById" $updated_by_id "scalar") (serialize-qp "updatedDate" $updated_date "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({debit_memo_id: (encode-path-segment $debit_memo_id)} | format pattern "/v1/debitmemos/{debit_memo_id}/items") $qp)
+  let full_url = (build-url $base ({debit_memo_id: (encode-path-segment $debit_memo_id)} | format pattern "/v1/debitmemos/{debit_memo_id}/items") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids, "zuora-version": $zuora_version} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"pageSize": $page_size, "amount": $amount, "beAppliedAmount": $be_applied_amount, "createdById": $created_by_id, "createdDate": $created_date, "id": $id, "serviceEndDate": $service_end_date, "serviceStartDate": $service_start_date, "sku": $sku, "skuName": $sku_name, "sourceItemId": $source_item_id, "subscriptionId": $subscription_id, "updatedById": $updated_by_id, "updatedDate": $updated_date, "sort": $qp_sort} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"pageSize": $page_size, "amount": $amount, "beAppliedAmount": $be_applied_amount, "createdById": $created_by_id, "createdDate": $created_date, "id": $id, "serviceEndDate": $service_end_date, "serviceStartDate": $service_start_date, "sku": $sku, "skuName": $sku_name, "sourceItemId": $source_item_id, "subscriptionId": $subscription_id, "updatedById": $updated_by_id, "updatedDate": $updated_date, "sort": $qp_sort} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve a debit memo item
@@ -4970,12 +6453,23 @@ export def "debitmemos-items get-debit-memo" [
   let base = ($base_url | default $BASE_URL)
   if ($debit_memo_id | is-empty) { error make --unspanned { msg: "path parameter 'debitMemoId' must be non-empty" } }
   if ($dmitemid | is-empty) { error make --unspanned { msg: "path parameter 'dmitemid' must be non-empty" } }
-  let full_url = (build-url $base ({debit_memo_id: (encode-path-segment $debit_memo_id), dmitemid: (encode-path-segment $dmitemid)} | format pattern "/v1/debitmemos/{debit_memo_id}/items/{dmitemid}"))
+  let full_url = (build-url $base ({debit_memo_id: (encode-path-segment $debit_memo_id), dmitemid: (encode-path-segment $dmitemid)} | format pattern "/v1/debitmemos/{debit_memo_id}/items/{dmitemid}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids, "zuora-version": $zuora_version} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List all taxation items of a debit memo item
@@ -5005,12 +6499,23 @@ export def "debitmemos-items-taxation-items get-of-debit-memo" [
   if ($debit_memo_id | is-empty) { error make --unspanned { msg: "path parameter 'debitMemoId' must be non-empty" } }
   if ($dmitemid | is-empty) { error make --unspanned { msg: "path parameter 'dmitemid' must be non-empty" } }
   let qp = [(serialize-qp "pageSize" $page_size "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({debit_memo_id: (encode-path-segment $debit_memo_id), dmitemid: (encode-path-segment $dmitemid)} | format pattern "/v1/debitmemos/{debit_memo_id}/items/{dmitemid}/taxation-items") $qp)
+  let full_url = (build-url $base ({debit_memo_id: (encode-path-segment $debit_memo_id), dmitemid: (encode-path-segment $dmitemid)} | format pattern "/v1/debitmemos/{debit_memo_id}/items/{dmitemid}/taxation-items") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"pageSize": $page_size, "page": $page} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"pageSize": $page_size, "page": $page} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Generate a debit memo PDF file
@@ -5035,12 +6540,23 @@ export def "debitmemos-pdfs create-debit-memo" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($debit_memo_id | is-empty) { error make --unspanned { msg: "path parameter 'debitMemoId' must be non-empty" } }
-  let full_url = (build-url $base ({debit_memo_id: (encode-path-segment $debit_memo_id)} | format pattern "/v1/debitmemos/{debit_memo_id}/pdfs"))
+  let full_url = (build-url $base ({debit_memo_id: (encode-path-segment $debit_memo_id)} | format pattern "/v1/debitmemos/{debit_memo_id}/pdfs") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Post a debit memo
@@ -5065,12 +6581,23 @@ export def "debitmemos-post update-debit-memo" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($debit_memo_id | is-empty) { error make --unspanned { msg: "path parameter 'debitMemoId' must be non-empty" } }
-  let full_url = (build-url $base ({debit_memo_id: (encode-path-segment $debit_memo_id)} | format pattern "/v1/debitmemos/{debit_memo_id}/post"))
+  let full_url = (build-url $base ({debit_memo_id: (encode-path-segment $debit_memo_id)} | format pattern "/v1/debitmemos/{debit_memo_id}/post") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Create taxation items for a debit memo
@@ -5098,14 +6625,25 @@ export def "debitmemos-taxationitems create-dm-taxation-items" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($debit_memo_id | is-empty) { error make --unspanned { msg: "path parameter 'debitMemoId' must be non-empty" } }
-  let full_url = (build-url $base ({debit_memo_id: (encode-path-segment $debit_memo_id)} | format pattern "/v1/debitmemos/{debit_memo_id}/taxationitems"))
+  let full_url = (build-url $base ({debit_memo_id: (encode-path-segment $debit_memo_id)} | format pattern "/v1/debitmemos/{debit_memo_id}/taxationitems") $auth.query)
   let req_body = {"taxationItems": $taxation_items} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Unpost a debit memo
@@ -5130,12 +6668,23 @@ export def "debitmemos-unpost update-debit-memo" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($debit_memo_id | is-empty) { error make --unspanned { msg: "path parameter 'debitMemoId' must be non-empty" } }
-  let full_url = (build-url $base ({debit_memo_id: (encode-path-segment $debit_memo_id)} | format pattern "/v1/debitmemos/{debit_memo_id}/unpost"))
+  let full_url = (build-url $base ({debit_memo_id: (encode-path-segment $debit_memo_id)} | format pattern "/v1/debitmemos/{debit_memo_id}/unpost") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Describe an object
@@ -5159,12 +6708,23 @@ export def "describe get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($object | is-empty) { error make --unspanned { msg: "path parameter 'object' must be non-empty" } }
-  let full_url = (build-url $base ({object: (encode-path-segment $object)} | format pattern "/v1/describe/{object}"))
+  let full_url = (build-url $base ({object: (encode-path-segment $object)} | format pattern "/v1/describe/{object}") $auth.query)
   let accept_val = "text/xml; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create document properties
@@ -5191,14 +6751,25 @@ export def "document-properties create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v1/document-properties")
+  let full_url = (build-url $base "/v1/document-properties" $auth.query)
   let req_body = {"customFileName": $custom_file_name, "documentId": $document_id, "documentType": $document_type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Entity-Ids": $zuora_entity_ids, "Zuora-Track-Id": $zuora_track_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Delete document properties
@@ -5223,12 +6794,23 @@ export def "document-properties delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($document_properties_id | is-empty) { error make --unspanned { msg: "path parameter 'documentPropertiesId' must be non-empty" } }
-  let full_url = (build-url $base ({document_properties_id: (encode-path-segment $document_properties_id)} | format pattern "/v1/document-properties/{document_properties_id}"))
+  let full_url = (build-url $base ({document_properties_id: (encode-path-segment $document_properties_id)} | format pattern "/v1/document-properties/{document_properties_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Entity-Ids": $zuora_entity_ids, "Zuora-Track-Id": $zuora_track_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Update document properties
@@ -5255,14 +6837,25 @@ export def "document-properties update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($document_properties_id | is-empty) { error make --unspanned { msg: "path parameter 'documentPropertiesId' must be non-empty" } }
-  let full_url = (build-url $base ({document_properties_id: (encode-path-segment $document_properties_id)} | format pattern "/v1/document-properties/{document_properties_id}"))
+  let full_url = (build-url $base ({document_properties_id: (encode-path-segment $document_properties_id)} | format pattern "/v1/document-properties/{document_properties_id}") $auth.query)
   let req_body = {"customFileName": $custom_file_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Entity-Ids": $zuora_entity_ids, "Zuora-Track-Id": $zuora_track_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # List all properties of a billing document
@@ -5289,12 +6882,23 @@ export def "document-properties get-properies" [
   let base = ($base_url | default $BASE_URL)
   if ($document_type | is-empty) { error make --unspanned { msg: "path parameter 'documentType' must be non-empty" } }
   if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'documentId' must be non-empty" } }
-  let full_url = (build-url $base ({document_type: (encode-path-segment $document_type), document_id: (encode-path-segment $document_id)} | format pattern "/v1/document-properties/{document_type}/{document_id}"))
+  let full_url = (build-url $base ({document_type: (encode-path-segment $document_type), document_id: (encode-path-segment $document_id)} | format pattern "/v1/document-properties/{document_type}/{document_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Entity-Ids": $zuora_entity_ids, "Zuora-Track-Id": $zuora_track_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Multi-entity: List entities
@@ -5319,12 +6923,23 @@ export def "entities get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "provisioned" $provisioned "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v1/entities" $qp)
+  let full_url = (build-url $base "/v1/entities" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"provisioned": $provisioned} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"provisioned": $provisioned} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Multi-entity: Create an entity
@@ -5353,14 +6968,25 @@ export def "entities create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v1/entities")
+  let full_url = (build-url $base "/v1/entities" $auth.query)
   let req_body = {"displayName": $display_name, "locale": $locale, "name": $name, "parentId": $parent_id, "timezone": $timezone} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Multi-entity: Delete an entity
@@ -5385,12 +7011,23 @@ export def "entities delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/entities/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/entities/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Multi-entity: Retrieve an entity
@@ -5415,12 +7052,23 @@ export def "entities get-entity" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/entities/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/entities/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Multi-entity: Update an entity
@@ -5450,14 +7098,25 @@ export def "entities update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/entities/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/entities/{id}") $auth.query)
   let req_body = {"displayName": $display_name, "locale": $locale, "name": $name, "timezone": $timezone} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Multi-entity: Provision an entity
@@ -5482,12 +7141,23 @@ export def "entities-provision update-entity" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/entities/{id}/provision"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/entities/{id}/provision") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Multi-entity: List connections
@@ -5513,12 +7183,23 @@ export def "entity-connections get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pageSize" $page_size "scalar") (serialize-qp "type" $type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v1/entity-connections" $qp)
+  let full_url = (build-url $base "/v1/entity-connections" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"pageSize": $page_size, "type": $type} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"pageSize": $page_size, "type": $type} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Multi-entity: Initiate a connection request
@@ -5543,14 +7224,25 @@ export def "entity-connections create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v1/entity-connections")
+  let full_url = (build-url $base "/v1/entity-connections" $auth.query)
   let req_body = {"targetEntityId": $target_entity_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Multi-entity: Accept a connection request
@@ -5575,12 +7267,23 @@ export def "entity-connections-accept update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connection-id' must be non-empty" } }
-  let full_url = (build-url $base ({connection_id: (encode-path-segment $connection_id)} | format pattern "/v1/entity-connections/{connection_id}/accept"))
+  let full_url = (build-url $base ({connection_id: (encode-path-segment $connection_id)} | format pattern "/v1/entity-connections/{connection_id}/accept") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Multi-entity: Deny a connection request
@@ -5605,12 +7308,23 @@ export def "entity-connections-deny update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connection-id' must be non-empty" } }
-  let full_url = (build-url $base ({connection_id: (encode-path-segment $connection_id)} | format pattern "/v1/entity-connections/{connection_id}/deny"))
+  let full_url = (build-url $base ({connection_id: (encode-path-segment $connection_id)} | format pattern "/v1/entity-connections/{connection_id}/deny") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Multi-entity: Disconnect a connection
@@ -5635,12 +7349,23 @@ export def "entity-connections-disconnect update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connection-id' must be non-empty" } }
-  let full_url = (build-url $base ({connection_id: (encode-path-segment $connection_id)} | format pattern "/v1/entity-connections/{connection_id}/disconnect"))
+  let full_url = (build-url $base ({connection_id: (encode-path-segment $connection_id)} | format pattern "/v1/entity-connections/{connection_id}/disconnect") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve a file
@@ -5664,12 +7389,23 @@ export def "files get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($file_id | is-empty) { error make --unspanned { msg: "path parameter 'file-id' must be non-empty" } }
-  let full_url = (build-url $base ({file_id: (encode-path-segment $file_id)} | format pattern "/v1/files/{file_id}"))
+  let full_url = (build-url $base ({file_id: (encode-path-segment $file_id)} | format pattern "/v1/files/{file_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Reverse a payment
@@ -5701,14 +7437,25 @@ export def "gateway-settlement-payments-chargeback create-reverse" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($payment_id | is-empty) { error make --unspanned { msg: "path parameter 'payment-id' must be non-empty" } }
-  let full_url = (build-url $base ({payment_id: (encode-path-segment $payment_id)} | format pattern "/v1/gateway-settlement/payments/{payment_id}/chargeback"))
+  let full_url = (build-url $base ({payment_id: (encode-path-segment $payment_id)} | format pattern "/v1/gateway-settlement/payments/{payment_id}/chargeback") $auth.query)
   let req_body = {"amount": $amount, "gatewayResponse": $gateway_response, "gatewayResponseCode": $gateway_response_code, "referenceId": $reference_id, "secondReferenceId": $second_reference_id, "settledOn": $settled_on} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Reject a payment
@@ -5739,14 +7486,25 @@ export def "gateway-settlement-payments-reject create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($payment_id | is-empty) { error make --unspanned { msg: "path parameter 'payment-id' must be non-empty" } }
-  let full_url = (build-url $base ({payment_id: (encode-path-segment $payment_id)} | format pattern "/v1/gateway-settlement/payments/{payment_id}/reject"))
+  let full_url = (build-url $base ({payment_id: (encode-path-segment $payment_id)} | format pattern "/v1/gateway-settlement/payments/{payment_id}/reject") $auth.query)
   let req_body = {"gatewayResponse": $gateway_response, "gatewayResponseCode": $gateway_response_code, "referenceId": $reference_id, "secondReferenceId": $second_reference_id, "settledOn": $settled_on} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Settle a payment
@@ -5773,14 +7531,25 @@ export def "gateway-settlement-payments-settle create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($payment_id | is-empty) { error make --unspanned { msg: "path parameter 'payment-id' must be non-empty" } }
-  let full_url = (build-url $base ({payment_id: (encode-path-segment $payment_id)} | format pattern "/v1/gateway-settlement/payments/{payment_id}/settle"))
+  let full_url = (build-url $base ({payment_id: (encode-path-segment $payment_id)} | format pattern "/v1/gateway-settlement/payments/{payment_id}/settle") $auth.query)
   let req_body = {"settledOn": $settled_on} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Generate an HMAC signature
@@ -5809,14 +7578,25 @@ export def "hmac-signatures create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v1/hmac-signatures")
+  let full_url = (build-url $base "/v1/hmac-signatures" $auth.query)
   let req_body = {"accountKey": $account_key, "method": $method, "name": $name, "pageId": $page_id, "uri": $uri} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # List hosted pages
@@ -5841,12 +7621,23 @@ export def "hostedpages get-hosted-pages" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "versionNumber" $version_number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v1/hostedpages" $qp)
+  let full_url = (build-url $base "/v1/hostedpages" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"versionNumber": $version_number} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"versionNumber": $version_number} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a standalone invoice
@@ -5882,14 +7673,25 @@ export def "invoices create-standalone" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v1/invoices")
+  let full_url = (build-url $base "/v1/invoices" $auth.query)
   let req_body = {"accountId": $account_id, "autoPay": $auto_pay, "comments": $comments, "dueDate": $due_date, "invoiceDate": $invoice_date, "invoiceItems": $invoice_items, "status": $status, "transferredToAccounting": $transferred_to_accounting, "IntegrationId__NS": $integration_id_ns, "IntegrationStatus__NS": $integration_status_ns, "SyncDate__NS": $sync_date_ns} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Update invoices
@@ -5915,14 +7717,25 @@ export def "invoices update-batch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v1/invoices")
+  let full_url = (build-url $base "/v1/invoices" $auth.query)
   let req_body = {"invoices": $invoices} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Update an invoice
@@ -5958,14 +7771,25 @@ export def "invoices update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($invoice_id | is-empty) { error make --unspanned { msg: "path parameter 'invoiceId' must be non-empty" } }
-  let full_url = (build-url $base ({invoice_id: (encode-path-segment $invoice_id)} | format pattern "/v1/invoices/{invoice_id}"))
+  let full_url = (build-url $base ({invoice_id: (encode-path-segment $invoice_id)} | format pattern "/v1/invoices/{invoice_id}") $auth.query)
   let req_body = {"autoPay": $auto_pay, "comments": $comments, "dueDate": $due_date, "invoiceDate": $invoice_date, "invoiceItems": $invoice_items, "transferredToAccounting": $transferred_to_accounting, "IntegrationId__NS": $integration_id_ns, "IntegrationStatus__NS": $integration_status_ns, "SyncDate__NS": $sync_date_ns} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # List all application parts of an invoice
@@ -5990,12 +7814,23 @@ export def "invoices-application-parts get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($invoice_id | is-empty) { error make --unspanned { msg: "path parameter 'invoiceId' must be non-empty" } }
-  let full_url = (build-url $base ({invoice_id: (encode-path-segment $invoice_id)} | format pattern "/v1/invoices/{invoice_id}/application-parts"))
+  let full_url = (build-url $base ({invoice_id: (encode-path-segment $invoice_id)} | format pattern "/v1/invoices/{invoice_id}/application-parts") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a credit memo from an invoice
@@ -6037,14 +7872,25 @@ export def "invoices-creditmemos create-credit-memo" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($invoice_id | is-empty) { error make --unspanned { msg: "path parameter 'invoiceId' must be non-empty" } }
-  let full_url = (build-url $base ({invoice_id: (encode-path-segment $invoice_id)} | format pattern "/v1/invoices/{invoice_id}/creditmemos"))
+  let full_url = (build-url $base ({invoice_id: (encode-path-segment $invoice_id)} | format pattern "/v1/invoices/{invoice_id}/creditmemos") $auth.query)
   let req_body = {"autoApplyToInvoiceUponPosting": $auto_apply_to_invoice_upon_posting, "autoPost": $auto_post, "comment": $comment, "effectiveDate": $effective_date, "excludeFromAutoApplyRules": $exclude_from_auto_apply_rules, "invoiceId": $body_invoice_id, "items": $items, "reasonCode": $reason_code, "taxAutoCalculation": $tax_auto_calculation, "IntegrationId__NS": $integration_id_ns, "IntegrationStatus__NS": $integration_status_ns, "Origin__NS": $origin_ns, "SyncDate__NS": $sync_date_ns, "Transaction__NS": $transaction_ns} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids, "zuora-version": $zuora_version} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Create a debit memo from an invoice
@@ -6083,14 +7929,25 @@ export def "invoices-debitmemos create-debit-memo" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($invoice_id | is-empty) { error make --unspanned { msg: "path parameter 'invoiceId' must be non-empty" } }
-  let full_url = (build-url $base ({invoice_id: (encode-path-segment $invoice_id)} | format pattern "/v1/invoices/{invoice_id}/debitmemos"))
+  let full_url = (build-url $base ({invoice_id: (encode-path-segment $invoice_id)} | format pattern "/v1/invoices/{invoice_id}/debitmemos") $auth.query)
   let req_body = {"autoPay": $auto_pay, "autoPost": $auto_post, "comment": $comment, "effectiveDate": $effective_date, "invoiceId": $body_invoice_id, "items": $items, "reasonCode": $reason_code, "taxAutoCalculation": $tax_auto_calculation, "IntegrationId__NS": $integration_id_ns, "IntegrationStatus__NS": $integration_status_ns, "SyncDate__NS": $sync_date_ns} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids, "zuora-version": $zuora_version} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Email an invoice
@@ -6119,14 +7976,25 @@ export def "invoices-emails create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($invoice_id | is-empty) { error make --unspanned { msg: "path parameter 'invoiceId' must be non-empty" } }
-  let full_url = (build-url $base ({invoice_id: (encode-path-segment $invoice_id)} | format pattern "/v1/invoices/{invoice_id}/emails"))
+  let full_url = (build-url $base ({invoice_id: (encode-path-segment $invoice_id)} | format pattern "/v1/invoices/{invoice_id}/emails") $auth.query)
   let req_body = {"emailAddresses": $email_addresses, "includeAdditionalEmailAddresses": $include_additional_email_addresses, "useEmailTemplateSetting": $use_email_template_setting} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # List all files of an invoice
@@ -6153,12 +8021,23 @@ export def "invoices-files get" [
   let base = ($base_url | default $BASE_URL)
   if ($invoice_id | is-empty) { error make --unspanned { msg: "path parameter 'invoiceId' must be non-empty" } }
   let qp = [(serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({invoice_id: (encode-path-segment $invoice_id)} | format pattern "/v1/invoices/{invoice_id}/files") $qp)
+  let full_url = (build-url $base ({invoice_id: (encode-path-segment $invoice_id)} | format pattern "/v1/invoices/{invoice_id}/files") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"pageSize": $page_size} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"pageSize": $page_size} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Upload a file for an invoice
@@ -6185,7 +8064,7 @@ export def "invoices-files create-upload" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($invoice_id | is-empty) { error make --unspanned { msg: "path parameter 'invoiceId' must be non-empty" } }
-  let full_url = (build-url $base ({invoice_id: (encode-path-segment $invoice_id)} | format pattern "/v1/invoices/{invoice_id}/files"))
+  let full_url = (build-url $base ({invoice_id: (encode-path-segment $invoice_id)} | format pattern "/v1/invoices/{invoice_id}/files") $auth.query)
   let req_body = {"file": $file} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
@@ -6194,7 +8073,18 @@ export def "invoices-files create-upload" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body ["file"] $dry_run)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: $mp.content_type
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $mp.body $insecure $raw $allow_errors $full [200]
 }
 
 # List all items of an invoice
@@ -6221,12 +8111,23 @@ export def "invoices-items get" [
   let base = ($base_url | default $BASE_URL)
   if ($invoice_id | is-empty) { error make --unspanned { msg: "path parameter 'invoiceId' must be non-empty" } }
   let qp = [(serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({invoice_id: (encode-path-segment $invoice_id)} | format pattern "/v1/invoices/{invoice_id}/items") $qp)
+  let full_url = (build-url $base ({invoice_id: (encode-path-segment $invoice_id)} | format pattern "/v1/invoices/{invoice_id}/items") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"pageSize": $page_size} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"pageSize": $page_size} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List all taxation items of an invoice item
@@ -6256,12 +8157,23 @@ export def "invoices-items-taxation-items get" [
   if ($invoice_id | is-empty) { error make --unspanned { msg: "path parameter 'invoiceId' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
   let qp = [(serialize-qp "pageSize" $page_size "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({invoice_id: (encode-path-segment $invoice_id), item_id: (encode-path-segment $item_id)} | format pattern "/v1/invoices/{invoice_id}/items/{item_id}/taxation-items") $qp)
+  let full_url = (build-url $base ({invoice_id: (encode-path-segment $invoice_id), item_id: (encode-path-segment $item_id)} | format pattern "/v1/invoices/{invoice_id}/items/{item_id}/taxation-items") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"pageSize": $page_size, "page": $page} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"pageSize": $page_size, "page": $page} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Reverse an invoice
@@ -6289,14 +8201,25 @@ export def "invoices-reverse update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($invoice_id | is-empty) { error make --unspanned { msg: "path parameter 'invoiceId' must be non-empty" } }
-  let full_url = (build-url $base ({invoice_id: (encode-path-segment $invoice_id)} | format pattern "/v1/invoices/{invoice_id}/reverse"))
+  let full_url = (build-url $base ({invoice_id: (encode-path-segment $invoice_id)} | format pattern "/v1/invoices/{invoice_id}/reverse") $auth.query)
   let req_body = {"applyEffectiveDate": $apply_effective_date, "memoDate": $memo_date} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Write off an invoice
@@ -6332,14 +8255,25 @@ export def "invoices-write-off update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($invoice_id | is-empty) { error make --unspanned { msg: "path parameter 'invoiceId' must be non-empty" } }
-  let full_url = (build-url $base ({invoice_id: (encode-path-segment $invoice_id)} | format pattern "/v1/invoices/{invoice_id}/write-off"))
+  let full_url = (build-url $base ({invoice_id: (encode-path-segment $invoice_id)} | format pattern "/v1/invoices/{invoice_id}/write-off") $auth.query)
   let req_body = {"comment": $comment, "items": $items, "memoDate": $memo_date, "reasonCode": $reason_code, "IntegrationId__NS": $integration_id_ns, "IntegrationStatus__NS": $integration_status_ns, "Origin__NS": $origin_ns, "SyncDate__NS": $sync_date_ns, "Transaction__NS": $transaction_ns} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Create a summary journal entry
@@ -6372,14 +8306,25 @@ export def "journal-entries create-summary-entry" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v1/journal-entries")
+  let full_url = (build-url $base "/v1/journal-entries" $auth.query)
   let req_body = {"accountingPeriodName": $accounting_period_name, "currency": $currency, "journalEntryDate": $journal_entry_date, "journalEntryItems": $journal_entry_items, "notes": $notes, "segments": $segments, "transferredToAccounting": $transferred_to_accounting} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # List all summary journal entries in a journal run
@@ -6406,12 +8351,23 @@ export def "journal-entries-journal-runs get-list-summary" [
   let base = ($base_url | default $BASE_URL)
   if ($jr_number | is-empty) { error make --unspanned { msg: "path parameter 'jr-number' must be non-empty" } }
   let qp = [(serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({jr_number: (encode-path-segment $jr_number)} | format pattern "/v1/journal-entries/journal-runs/{jr_number}") $qp)
+  let full_url = (build-url $base ({jr_number: (encode-path-segment $jr_number)} | format pattern "/v1/journal-entries/journal-runs/{jr_number}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"pageSize": $page_size} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"pageSize": $page_size} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Delete a summary journal entry
@@ -6436,12 +8392,23 @@ export def "journal-entries delete-summary-entry" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($je_number | is-empty) { error make --unspanned { msg: "path parameter 'je-number' must be non-empty" } }
-  let full_url = (build-url $base ({je_number: (encode-path-segment $je_number)} | format pattern "/v1/journal-entries/{je_number}"))
+  let full_url = (build-url $base ({je_number: (encode-path-segment $je_number)} | format pattern "/v1/journal-entries/{je_number}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve a summary journal entry
@@ -6466,12 +8433,23 @@ export def "journal-entries get-summary-entry" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($je_number | is-empty) { error make --unspanned { msg: "path parameter 'je-number' must be non-empty" } }
-  let full_url = (build-url $base ({je_number: (encode-path-segment $je_number)} | format pattern "/v1/journal-entries/{je_number}"))
+  let full_url = (build-url $base ({je_number: (encode-path-segment $je_number)} | format pattern "/v1/journal-entries/{je_number}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update a summary journal entry
@@ -6501,14 +8479,25 @@ export def "journal-entries-basic-information update-summary-entry" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($je_number | is-empty) { error make --unspanned { msg: "path parameter 'je-number' must be non-empty" } }
-  let full_url = (build-url $base ({je_number: (encode-path-segment $je_number)} | format pattern "/v1/journal-entries/{je_number}/basic-information"))
+  let full_url = (build-url $base ({je_number: (encode-path-segment $je_number)} | format pattern "/v1/journal-entries/{je_number}/basic-information") $auth.query)
   let req_body = {"journalEntryItems": $journal_entry_items, "notes": $notes, "transferredToAccounting": $transferred_to_accounting} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Cancel a summary journal entry
@@ -6533,12 +8522,23 @@ export def "journal-entries-cancel update-summary-entry" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($je_number | is-empty) { error make --unspanned { msg: "path parameter 'je-number' must be non-empty" } }
-  let full_url = (build-url $base ({je_number: (encode-path-segment $je_number)} | format pattern "/v1/journal-entries/{je_number}/cancel"))
+  let full_url = (build-url $base ({je_number: (encode-path-segment $je_number)} | format pattern "/v1/journal-entries/{je_number}/cancel") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Create a journal run
@@ -6568,14 +8568,25 @@ export def "journal-runs create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v1/journal-runs")
+  let full_url = (build-url $base "/v1/journal-runs" $auth.query)
   let req_body = {"accountingPeriodName": $accounting_period_name, "journalEntryDate": $journal_entry_date, "targetEndDate": $target_end_date, "targetStartDate": $target_start_date, "transactionTypes": $transaction_types} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Delete a journal run
@@ -6600,12 +8611,23 @@ export def "journal-runs delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($jr_number | is-empty) { error make --unspanned { msg: "path parameter 'jr-number' must be non-empty" } }
-  let full_url = (build-url $base ({jr_number: (encode-path-segment $jr_number)} | format pattern "/v1/journal-runs/{jr_number}"))
+  let full_url = (build-url $base ({jr_number: (encode-path-segment $jr_number)} | format pattern "/v1/journal-runs/{jr_number}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve a journal run
@@ -6630,12 +8652,23 @@ export def "journal-runs get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($jr_number | is-empty) { error make --unspanned { msg: "path parameter 'jr-number' must be non-empty" } }
-  let full_url = (build-url $base ({jr_number: (encode-path-segment $jr_number)} | format pattern "/v1/journal-runs/{jr_number}"))
+  let full_url = (build-url $base ({jr_number: (encode-path-segment $jr_number)} | format pattern "/v1/journal-runs/{jr_number}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Cancel a journal run
@@ -6660,12 +8693,23 @@ export def "journal-runs-cancel update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($jr_number | is-empty) { error make --unspanned { msg: "path parameter 'jr-number' must be non-empty" } }
-  let full_url = (build-url $base ({jr_number: (encode-path-segment $jr_number)} | format pattern "/v1/journal-runs/{jr_number}/cancel"))
+  let full_url = (build-url $base ({jr_number: (encode-path-segment $jr_number)} | format pattern "/v1/journal-runs/{jr_number}/cancel") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req null $insecure $raw $allow_errors $full [200]
 }
 
 # List callout notification histories
@@ -6696,12 +8740,23 @@ export def "notification-history-callout get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pageSize" $page_size "scalar") (serialize-qp "endTime" $end_time "scalar") (serialize-qp "startTime" $start_time "scalar") (serialize-qp "objectId" $object_id "scalar") (serialize-qp "failedOnly" $failed_only "scalar") (serialize-qp "eventCategory" $event_category "scalar") (serialize-qp "includeResponseContent" $include_response_content "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v1/notification-history/callout" $qp)
+  let full_url = (build-url $base "/v1/notification-history/callout" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"pageSize": $page_size, "endTime": $end_time, "startTime": $start_time, "objectId": $object_id, "failedOnly": $failed_only, "eventCategory": $event_category, "includeResponseContent": $include_response_content} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"pageSize": $page_size, "endTime": $end_time, "startTime": $start_time, "objectId": $object_id, "failedOnly": $failed_only, "eventCategory": $event_category, "includeResponseContent": $include_response_content} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List email notification histories
@@ -6731,12 +8786,23 @@ export def "notification-history-email get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pageSize" $page_size "scalar") (serialize-qp "endTime" $end_time "scalar") (serialize-qp "startTime" $start_time "scalar") (serialize-qp "objectId" $object_id "scalar") (serialize-qp "failedOnly" $failed_only "scalar") (serialize-qp "eventCategory" $event_category "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v1/notification-history/email" $qp)
+  let full_url = (build-url $base "/v1/notification-history/email" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"pageSize": $page_size, "endTime": $end_time, "startTime": $start_time, "objectId": $object_id, "failedOnly": $failed_only, "eventCategory": $event_category} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"pageSize": $page_size, "endTime": $end_time, "startTime": $start_time, "objectId": $object_id, "failedOnly": $failed_only, "eventCategory": $event_category} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # CRUD: Create an account
@@ -6805,14 +8871,25 @@ export def "object-account create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "rejectUnknownFields" $reject_unknown_fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v1/object/account" $qp)
+  let full_url = (build-url $base "/v1/object/account" $qp $auth.query)
   let req_body = {"AccountNumber": $account_number, "AdditionalEmailAddresses": $additional_email_addresses, "AllowInvoiceEdit": $allow_invoice_edit, "AutoPay": $auto_pay, "Batch": $batch, "BcdSettingOption": $bcd_setting_option, "BillCycleDay": $bill_cycle_day, "BillToId": $bill_to_id, "CrmId": $crm_id, "Currency": $currency, "CustomerServiceRepName": $customer_service_rep_name, "DefaultPaymentMethodId": $default_payment_method_id, "InvoiceDeliveryPrefsEmail": $invoice_delivery_prefs_email, "InvoiceDeliveryPrefsPrint": $invoice_delivery_prefs_print, "InvoiceTemplateId": $invoice_template_id, "Name": $name, "Notes": $notes, "ParentId": $parent_id, "PaymentGateway": $payment_gateway, "PaymentTerm": $payment_term, "PurchaseOrderNumber": $purchase_order_number, "SalesRepName": $sales_rep_name, "SoldToId": $sold_to_id, "Status": $status, "TaxCompanyCode": $tax_company_code, "TaxExemptCertificateID": $tax_exempt_certificate_id, "TaxExemptCertificateType": $tax_exempt_certificate_type, "TaxExemptDescription": $tax_exempt_description, "TaxExemptEffectiveDate": $tax_exempt_effective_date, "TaxExemptExpirationDate": $tax_exempt_expiration_date, "TaxExemptIssuingJurisdiction": $tax_exempt_issuing_jurisdiction, "TaxExemptStatus": $tax_exempt_status, "VATId": $vat_id, "communicationProfileId": $communication_profile_id, "Class__NS": $class_ns, "CustomerType__NS": $customer_type_ns, "Department__NS": $department_ns, "IntegrationId__NS": $integration_id_ns, "IntegrationStatus__NS": $integration_status_ns, "Location__NS": $location_ns, "Subsidiary__NS": $subsidiary_ns, "SyncDate__NS": $sync_date_ns, "SynctoNetSuite__NS": $syncto_net_suite_ns} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Entity-Ids": $zuora_entity_ids, "Zuora-Track-Id": $zuora_track_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: ({"rejectUnknownFields": $reject_unknown_fields} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"rejectUnknownFields": $reject_unknown_fields} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # CRUD: Delete an account
@@ -6837,12 +8914,23 @@ export def "object-account delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/account/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/account/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Entity-Ids": $zuora_entity_ids, "Zuora-Track-Id": $zuora_track_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # CRUD: Retrieve an account
@@ -6869,12 +8957,23 @@ export def "object-account get" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/account/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/account/{id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Entity-Ids": $zuora_entity_ids, "Zuora-Track-Id": $zuora_track_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"fields": $fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"fields": $fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # CRUD: Update an account
@@ -6945,14 +9044,25 @@ export def "object-account update" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "rejectUnknownFields" $reject_unknown_fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/account/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/account/{id}") $qp $auth.query)
   let req_body = {"AccountNumber": $account_number, "AdditionalEmailAddresses": $additional_email_addresses, "AllowInvoiceEdit": $allow_invoice_edit, "AutoPay": $auto_pay, "Batch": $batch, "BcdSettingOption": $bcd_setting_option, "BillCycleDay": $bill_cycle_day, "BillToId": $bill_to_id, "CrmId": $crm_id, "Currency": $currency, "CustomerServiceRepName": $customer_service_rep_name, "DefaultPaymentMethodId": $default_payment_method_id, "InvoiceDeliveryPrefsEmail": $invoice_delivery_prefs_email, "InvoiceDeliveryPrefsPrint": $invoice_delivery_prefs_print, "InvoiceTemplateId": $invoice_template_id, "Name": $name, "Notes": $notes, "ParentId": $parent_id, "PaymentGateway": $payment_gateway, "PaymentTerm": $payment_term, "PurchaseOrderNumber": $purchase_order_number, "SalesRepName": $sales_rep_name, "SoldToId": $sold_to_id, "Status": $status, "TaxCompanyCode": $tax_company_code, "TaxExemptCertificateID": $tax_exempt_certificate_id, "TaxExemptCertificateType": $tax_exempt_certificate_type, "TaxExemptDescription": $tax_exempt_description, "TaxExemptEffectiveDate": $tax_exempt_effective_date, "TaxExemptExpirationDate": $tax_exempt_expiration_date, "TaxExemptIssuingJurisdiction": $tax_exempt_issuing_jurisdiction, "TaxExemptStatus": $tax_exempt_status, "VATId": $vat_id, "communicationProfileId": $communication_profile_id, "Class__NS": $class_ns, "CustomerType__NS": $customer_type_ns, "Department__NS": $department_ns, "IntegrationId__NS": $integration_id_ns, "IntegrationStatus__NS": $integration_status_ns, "Location__NS": $location_ns, "Subsidiary__NS": $subsidiary_ns, "SyncDate__NS": $sync_date_ns, "SynctoNetSuite__NS": $syncto_net_suite_ns} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Entity-Ids": $zuora_entity_ids, "Zuora-Track-Id": $zuora_track_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: ({"rejectUnknownFields": $reject_unknown_fields} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"rejectUnknownFields": $reject_unknown_fields} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # CRUD: Delete an amendment
@@ -6977,12 +9087,23 @@ export def "object-amendment delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/amendment/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/amendment/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Entity-Ids": $zuora_entity_ids, "Zuora-Track-Id": $zuora_track_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # CRUD: Retrieve an amendment
@@ -7009,12 +9130,23 @@ export def "object-amendment get" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/amendment/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/amendment/{id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Entity-Ids": $zuora_entity_ids, "Zuora-Track-Id": $zuora_track_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"fields": $fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"fields": $fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # CRUD: Update an amendment
@@ -7060,14 +9192,25 @@ export def "object-amendment update" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "rejectUnknownFields" $reject_unknown_fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/amendment/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/amendment/{id}") $qp $auth.query)
   let req_body = {"AutoRenew": $auto_renew, "ContractEffectiveDate": $contract_effective_date, "CurrentTerm": $current_term, "CurrentTermPeriodType": $current_term_period_type, "CustomerAcceptanceDate": $customer_acceptance_date, "Description": $description, "EffectiveDate": $effective_date, "Name": $name, "RenewalSetting": $renewal_setting, "RenewalTerm": $renewal_term, "RenewalTermPeriodType": $renewal_term_period_type, "ServiceActivationDate": $service_activation_date, "SpecificUpdateDate": $specific_update_date, "Status": $status, "SubscriptionId": $subscription_id, "TermStartDate": $term_start_date, "TermType": $term_type, "Type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Entity-Ids": $zuora_entity_ids, "Zuora-Track-Id": $zuora_track_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: ({"rejectUnknownFields": $reject_unknown_fields} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"rejectUnknownFields": $reject_unknown_fields} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # CRUD: Create a bill run
@@ -7103,14 +9246,25 @@ export def "object-bill-run create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "rejectUnknownFields" $reject_unknown_fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v1/object/bill-run" $qp)
+  let full_url = (build-url $base "/v1/object/bill-run" $qp $auth.query)
   let req_body = {"AccountId": $account_id, "AutoEmail": $auto_email, "AutoPost": $auto_post, "AutoRenewal": $auto_renewal, "Batch": $batch, "BillCycleDay": $bill_cycle_day, "ChargeTypeToExclude": $charge_type_to_exclude, "InvoiceDate": $invoice_date, "NoEmailForZeroAmountInvoice": $no_email_for_zero_amount_invoice, "TargetDate": $target_date} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Entity-Ids": $zuora_entity_ids, "Zuora-Track-Id": $zuora_track_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: ({"rejectUnknownFields": $reject_unknown_fields} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"rejectUnknownFields": $reject_unknown_fields} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # CRUD: Delete a bill run
@@ -7135,12 +9289,23 @@ export def "object-bill-run delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/bill-run/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/bill-run/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Entity-Ids": $zuora_entity_ids, "Zuora-Track-Id": $zuora_track_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # CRUD: Retrieve a bill run
@@ -7167,12 +9332,23 @@ export def "object-bill-run get" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/bill-run/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/bill-run/{id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Entity-Ids": $zuora_entity_ids, "Zuora-Track-Id": $zuora_track_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"fields": $fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"fields": $fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # CRUD: Post or cancel a bill run
@@ -7202,14 +9378,25 @@ export def "object-bill-run update" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "rejectUnknownFields" $reject_unknown_fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/bill-run/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/bill-run/{id}") $qp $auth.query)
   let req_body = {"InvoiceDate": $invoice_date, "Status": $status} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Entity-Ids": $zuora_entity_ids, "Zuora-Track-Id": $zuora_track_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: ({"rejectUnknownFields": $reject_unknown_fields} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"rejectUnknownFields": $reject_unknown_fields} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # CRUD: Retrieve a communication profile
@@ -7235,12 +9422,23 @@ export def "object-communication-profile get" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/communication-profile/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/communication-profile/{id}") $qp $auth.query)
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Entity-Ids": $zuora_entity_ids, "Zuora-Track-Id": $zuora_track_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"fields": $fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"fields": $fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # CRUD: Create a contact
@@ -7287,14 +9485,25 @@ export def "object-contact create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "rejectUnknownFields" $reject_unknown_fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v1/object/contact" $qp)
+  let full_url = (build-url $base "/v1/object/contact" $qp $auth.query)
   let req_body = {"AccountId": $account_id, "Address1": $address1, "Address2": $address2, "City": $city, "Country": $country, "County": $county, "Description": $description, "Fax": $fax, "FirstName": $first_name, "HomePhone": $home_phone, "LastName": $last_name, "MobilePhone": $mobile_phone, "NickName": $nick_name, "OtherPhone": $other_phone, "OtherPhoneType": $other_phone_type, "PersonalEmail": $personal_email, "PostalCode": $postal_code, "State": $state, "TaxRegion": $tax_region, "WorkEmail": $work_email, "WorkPhone": $work_phone} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Entity-Ids": $zuora_entity_ids, "Zuora-Track-Id": $zuora_track_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: ({"rejectUnknownFields": $reject_unknown_fields} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"rejectUnknownFields": $reject_unknown_fields} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # CRUD: Delete a contact
@@ -7319,12 +9528,23 @@ export def "object-contact delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/contact/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/contact/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Entity-Ids": $zuora_entity_ids, "Zuora-Track-Id": $zuora_track_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # CRUD: Retrieve a contact
@@ -7351,12 +9571,23 @@ export def "object-contact get" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/contact/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/contact/{id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Entity-Ids": $zuora_entity_ids, "Zuora-Track-Id": $zuora_track_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"fields": $fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"fields": $fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # CRUD: Update a contact
@@ -7405,14 +9636,25 @@ export def "object-contact update" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "rejectUnknownFields" $reject_unknown_fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/contact/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/contact/{id}") $qp $auth.query)
   let req_body = {"AccountId": $account_id, "Address1": $address1, "Address2": $address2, "City": $city, "Country": $country, "County": $county, "Description": $description, "Fax": $fax, "FirstName": $first_name, "HomePhone": $home_phone, "LastName": $last_name, "MobilePhone": $mobile_phone, "NickName": $nick_name, "OtherPhone": $other_phone, "OtherPhoneType": $other_phone_type, "PersonalEmail": $personal_email, "PostalCode": $postal_code, "State": $state, "TaxRegion": $tax_region, "WorkEmail": $work_email, "WorkPhone": $work_phone} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Entity-Ids": $zuora_entity_ids, "Zuora-Track-Id": $zuora_track_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: ({"rejectUnknownFields": $reject_unknown_fields} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"rejectUnknownFields": $reject_unknown_fields} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # CRUD: Create a credit balance adjustment
@@ -7450,14 +9692,25 @@ export def "object-credit-balance-adjustment create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "rejectUnknownFields" $reject_unknown_fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v1/object/credit-balance-adjustment" $qp)
+  let full_url = (build-url $base "/v1/object/credit-balance-adjustment" $qp $auth.query)
   let req_body = {"AccountingCode": $accounting_code, "AdjustmentDate": $adjustment_date, "Amount": $amount, "Comment": $comment, "ReasonCode": $reason_code, "ReferenceId": $reference_id, "SourceTransactionId": $source_transaction_id, "SourceTransactionNumber": $source_transaction_number, "Type": $type, "IntegrationId__NS": $integration_id_ns, "IntegrationStatus__NS": $integration_status_ns, "SyncDate__NS": $sync_date_ns} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Entity-Ids": $zuora_entity_ids, "Zuora-Track-Id": $zuora_track_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: ({"rejectUnknownFields": $reject_unknown_fields} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"rejectUnknownFields": $reject_unknown_fields} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # CRUD: Retrieve a credit balance adjustment
@@ -7484,12 +9737,23 @@ export def "object-credit-balance-adjustment get" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/credit-balance-adjustment/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/credit-balance-adjustment/{id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Entity-Ids": $zuora_entity_ids, "Zuora-Track-Id": $zuora_track_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"fields": $fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"fields": $fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # CRUD: Update a credit balance adjustment
@@ -7523,14 +9787,25 @@ export def "object-credit-balance-adjustment update" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "rejectUnknownFields" $reject_unknown_fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/credit-balance-adjustment/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/credit-balance-adjustment/{id}") $qp $auth.query)
   let req_body = {"ReasonCode": $reason_code, "Status": $status, "TransferredToAccounting": $transferred_to_accounting, "IntegrationId__NS": $integration_id_ns, "IntegrationStatus__NS": $integration_status_ns, "SyncDate__NS": $sync_date_ns} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Entity-Ids": $zuora_entity_ids, "Zuora-Track-Id": $zuora_track_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: ({"rejectUnknownFields": $reject_unknown_fields} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"rejectUnknownFields": $reject_unknown_fields} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # CRUD: Create an export
@@ -7566,14 +9841,25 @@ export def "object-export create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "rejectUnknownFields" $reject_unknown_fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v1/object/export" $qp)
+  let full_url = (build-url $base "/v1/object/export" $qp $auth.query)
   let req_body = {"ConvertToCurrencies": $convert_to_currencies, "Encrypted": $encrypted, "FileId": $file_id, "Format": $format, "Name": $name, "Query": $query, "Size": $size, "Status": $status, "StatusReason": $status_reason, "Zip": $zip} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Entity-Ids": $zuora_entity_ids, "Zuora-Track-Id": $zuora_track_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: ({"rejectUnknownFields": $reject_unknown_fields} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"rejectUnknownFields": $reject_unknown_fields} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # CRUD: Retrieve an export
@@ -7600,12 +9886,23 @@ export def "object-export get" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/export/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/export/{id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Entity-Ids": $zuora_entity_ids, "Zuora-Track-Id": $zuora_track_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"fields": $fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"fields": $fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # CRUD: Create a feature
@@ -7635,14 +9932,25 @@ export def "object-feature create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "rejectUnknownFields" $reject_unknown_fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v1/object/feature" $qp)
+  let full_url = (build-url $base "/v1/object/feature" $qp $auth.query)
   let req_body = {"Description": $description, "FeatureCode": $feature_code, "Name": $name, "Status": $status} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Entity-Ids": $zuora_entity_ids, "Zuora-Track-Id": $zuora_track_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: ({"rejectUnknownFields": $reject_unknown_fields} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"rejectUnknownFields": $reject_unknown_fields} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # CRUD: Delete a feature
@@ -7667,12 +9975,23 @@ export def "object-feature delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/feature/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/feature/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Entity-Ids": $zuora_entity_ids, "Zuora-Track-Id": $zuora_track_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # CRUD: Retrieve a feature
@@ -7699,12 +10018,23 @@ export def "object-feature get" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/feature/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/feature/{id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Entity-Ids": $zuora_entity_ids, "Zuora-Track-Id": $zuora_track_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"fields": $fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"fields": $fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # CRUD: Update a feature
@@ -7736,14 +10066,25 @@ export def "object-feature update" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "rejectUnknownFields" $reject_unknown_fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/feature/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/feature/{id}") $qp $auth.query)
   let req_body = {"Description": $description, "FeatureCode": $feature_code, "Name": $name, "Status": $status} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Entity-Ids": $zuora_entity_ids, "Zuora-Track-Id": $zuora_track_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: ({"rejectUnknownFields": $reject_unknown_fields} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"rejectUnknownFields": $reject_unknown_fields} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # CRUD: Create an import
@@ -7772,7 +10113,7 @@ export def "object-import create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "rejectUnknownFields" $reject_unknown_fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v1/object/import" $qp)
+  let full_url = (build-url $base "/v1/object/import" $qp $auth.query)
   let req_body = {"File": $file, "ImportType": $import_type, "Name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
@@ -7781,7 +10122,18 @@ export def "object-import create" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body ["File"] $dry_run)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: ({"rejectUnknownFields": $reject_unknown_fields} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"rejectUnknownFields": $reject_unknown_fields} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: $mp.content_type
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $mp.body $insecure $raw $allow_errors $full [200]
 }
 
 # CRUD: Retrieve an import
@@ -7807,12 +10159,23 @@ export def "object-import get" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/import/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/import/{id}") $qp $auth.query)
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Entity-Ids": $zuora_entity_ids, "Zuora-Track-Id": $zuora_track_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"fields": $fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"fields": $fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # CRUD: Create an invoice adjustment
@@ -7853,14 +10216,25 @@ export def "object-invoice-adjustment create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "rejectUnknownFields" $reject_unknown_fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v1/object/invoice-adjustment" $qp)
+  let full_url = (build-url $base "/v1/object/invoice-adjustment" $qp $auth.query)
   let req_body = {"AccountId": $account_id, "AccountingCode": $accounting_code, "AdjustmentDate": $adjustment_date, "AdjustmentNumber": $adjustment_number, "Amount": $amount, "Comments": $comments, "CustomerName": $customer_name, "CustomerNumber": $customer_number, "ImpactAmount": $impact_amount, "InvoiceId": $invoice_id, "InvoiceNumber": $invoice_number, "ReasonCode": $reason_code, "ReferenceId": $reference_id, "Status": $status, "Type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Entity-Ids": $zuora_entity_ids, "Zuora-Track-Id": $zuora_track_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: ({"rejectUnknownFields": $reject_unknown_fields} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"rejectUnknownFields": $reject_unknown_fields} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # CRUD: Delete an invoice adjustment
@@ -7884,12 +10258,23 @@ export def "object-invoice-adjustment delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/invoice-adjustment/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/invoice-adjustment/{id}") $auth.query)
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Entity-Ids": $zuora_entity_ids, "Zuora-Track-Id": $zuora_track_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # CRUD: Retrieve an invoice adjustment
@@ -7916,12 +10301,23 @@ export def "object-invoice-adjustment get" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/invoice-adjustment/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/invoice-adjustment/{id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Entity-Ids": $zuora_entity_ids, "Zuora-Track-Id": $zuora_track_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"fields": $fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"fields": $fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # CRUD: Update an invoice adjustment
@@ -7951,14 +10347,25 @@ export def "object-invoice-adjustment update" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "rejectUnknownFields" $reject_unknown_fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/invoice-adjustment/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/invoice-adjustment/{id}") $qp $auth.query)
   let req_body = {"ReasonCode": $reason_code, "Status": $status, "TransferredToAccounting": $transferred_to_accounting} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Entity-Ids": $zuora_entity_ids, "Zuora-Track-Id": $zuora_track_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: ({"rejectUnknownFields": $reject_unknown_fields} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"rejectUnknownFields": $reject_unknown_fields} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # CRUD: Delete an invoice item adjustment
@@ -7982,12 +10389,23 @@ export def "object-invoice-item-adjustment delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/invoice-item-adjustment/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/invoice-item-adjustment/{id}") $auth.query)
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Entity-Ids": $zuora_entity_ids, "Zuora-Track-Id": $zuora_track_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # CRUD: Retrieve an invoice item adjustment
@@ -8014,12 +10432,23 @@ export def "object-invoice-item-adjustment get" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/invoice-item-adjustment/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/invoice-item-adjustment/{id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Entity-Ids": $zuora_entity_ids, "Zuora-Track-Id": $zuora_track_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"fields": $fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"fields": $fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # CRUD: Retrieve an invoice item
@@ -8046,12 +10475,23 @@ export def "object-invoice-item get" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/invoice-item/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/invoice-item/{id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Entity-Ids": $zuora_entity_ids, "Zuora-Track-Id": $zuora_track_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"fields": $fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"fields": $fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # CRUD: Create an invoice payment
@@ -8080,14 +10520,25 @@ export def "object-invoice-payment create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "rejectUnknownFields" $reject_unknown_fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v1/object/invoice-payment" $qp)
+  let full_url = (build-url $base "/v1/object/invoice-payment" $qp $auth.query)
   let req_body = {"Amount": $amount, "InvoiceId": $invoice_id, "PaymentId": $payment_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Entity-Ids": $zuora_entity_ids, "Zuora-Track-Id": $zuora_track_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: ({"rejectUnknownFields": $reject_unknown_fields} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"rejectUnknownFields": $reject_unknown_fields} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # CRUD: Retrieve an invoice payment
@@ -8114,12 +10565,23 @@ export def "object-invoice-payment get" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/invoice-payment/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/invoice-payment/{id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Entity-Ids": $zuora_entity_ids, "Zuora-Track-Id": $zuora_track_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"fields": $fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"fields": $fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # CRUD: Update an invoice payment
@@ -8147,14 +10609,25 @@ export def "object-invoice-payment update" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "rejectUnknownFields" $reject_unknown_fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/invoice-payment/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/invoice-payment/{id}") $qp $auth.query)
   let req_body = {"Amount": $amount} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Entity-Ids": $zuora_entity_ids, "Zuora-Track-Id": $zuora_track_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: ({"rejectUnknownFields": $reject_unknown_fields} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"rejectUnknownFields": $reject_unknown_fields} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # CRUD: Retrieve an invoice split item
@@ -8181,12 +10654,23 @@ export def "object-invoice-split-item get" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/invoice-split-item/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/invoice-split-item/{id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Entity-Ids": $zuora_entity_ids, "Zuora-Track-Id": $zuora_track_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"fields": $fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"fields": $fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # CRUD: Retrieve an invoice split
@@ -8213,12 +10697,23 @@ export def "object-invoice-split get" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/invoice-split/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/invoice-split/{id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Entity-Ids": $zuora_entity_ids, "Zuora-Track-Id": $zuora_track_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"fields": $fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"fields": $fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # CRUD: Delete an invoice
@@ -8243,12 +10738,23 @@ export def "object-invoice delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/invoice/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/invoice/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Entity-Ids": $zuora_entity_ids, "Zuora-Track-Id": $zuora_track_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # CRUD: Retrieve an invoice
@@ -8275,12 +10781,23 @@ export def "object-invoice get" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/invoice/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/invoice/{id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Entity-Ids": $zuora_entity_ids, "Zuora-Track-Id": $zuora_track_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"fields": $fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"fields": $fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # CRUD: Update an invoice
@@ -8314,14 +10831,25 @@ export def "object-invoice update" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "rejectUnknownFields" $reject_unknown_fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/invoice/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/invoice/{id}") $qp $auth.query)
   let req_body = {"RegenerateInvoicePDF": $regenerate_invoice_pdf, "Status": $status, "TransferredToAccounting": $transferred_to_accounting, "IntegrationId__NS": $integration_id_ns, "IntegrationStatus__NS": $integration_status_ns, "SyncDate__NS": $sync_date_ns} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Entity-Ids": $zuora_entity_ids, "Zuora-Track-Id": $zuora_track_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: ({"rejectUnknownFields": $reject_unknown_fields} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"rejectUnknownFields": $reject_unknown_fields} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # CRUD: Create a payment
@@ -8378,14 +10906,25 @@ export def "object-payment create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "rejectUnknownFields" $reject_unknown_fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v1/object/payment" $qp)
+  let full_url = (build-url $base "/v1/object/payment" $qp $auth.query)
   let req_body = {"AccountId": $account_id, "AccountingCode": $accounting_code, "Amount": $amount, "AppliedCreditBalanceAmount": $applied_credit_balance_amount, "AppliedInvoiceAmount": $applied_invoice_amount, "AuthTransactionId": $auth_transaction_id, "Comment": $comment, "EffectiveDate": $effective_date, "Gateway": $gateway, "GatewayOptionData": $gateway_option_data, "GatewayOrderId": $gateway_order_id, "GatewayResponse": $gateway_response, "GatewayResponseCode": $gateway_response_code, "GatewayState": $gateway_state, "InvoiceId": $invoice_id, "InvoiceNumber": $invoice_number, "InvoicePaymentData": $invoice_payment_data, "PaymentMethodId": $payment_method_id, "PaymentNumber": $payment_number, "ReferenceId": $reference_id, "SoftDescriptor": $soft_descriptor, "SoftDescriptorPhone": $soft_descriptor_phone, "Status": $status, "Type": $type, "IntegrationId__NS": $integration_id_ns, "IntegrationStatus__NS": $integration_status_ns, "Origin__NS": $origin_ns, "SyncDate__NS": $sync_date_ns, "Transaction__NS": $transaction_ns} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Entity-Ids": $zuora_entity_ids, "Zuora-Track-Id": $zuora_track_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: ({"rejectUnknownFields": $reject_unknown_fields} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"rejectUnknownFields": $reject_unknown_fields} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # CRUD: Create a payment method
@@ -8479,14 +11018,25 @@ export def "object-payment-method create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "rejectUnknownFields" $reject_unknown_fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v1/object/payment-method" $qp)
+  let full_url = (build-url $base "/v1/object/payment-method" $qp $auth.query)
   let req_body = {"AccountId": $account_id, "AchAbaCode": $ach_aba_code, "AchAccountName": $ach_account_name, "AchAccountNumber": $ach_account_number, "AchAccountType": $ach_account_type, "AchAddress1": $ach_address1, "AchAddress2": $ach_address2, "AchBankName": $ach_bank_name, "AchCity": $ach_city, "AchCountry": $ach_country, "AchPostalCode": $ach_postal_code, "AchState": $ach_state, "BankBranchCode": $bank_branch_code, "BankCheckDigit": $bank_check_digit, "BankTransferAccountName": $bank_transfer_account_name, "BankTransferAccountNumber": $bank_transfer_account_number, "BankTransferAccountNumberMask": $bank_transfer_account_number_mask, "BankTransferType": $bank_transfer_type, "BusinessIdentificationCode": $business_identification_code, "City": $city, "CompanyName": $company_name, "Country": $country, "CreditCardAddress1": $credit_card_address1, "CreditCardAddress2": $credit_card_address2, "CreditCardCity": $credit_card_city, "CreditCardCountry": $credit_card_country, "CreditCardExpirationMonth": $credit_card_expiration_month, "CreditCardExpirationYear": $credit_card_expiration_year, "CreditCardHolderName": $credit_card_holder_name, "CreditCardNumber": $credit_card_number, "CreditCardPostalCode": $credit_card_postal_code, "CreditCardSecurityCode": $credit_card_security_code, "CreditCardState": $credit_card_state, "CreditCardType": $credit_card_type, "DeviceSessionId": $device_session_id, "Email": $email, "ExistingMandate": $existing_mandate, "FirstName": $first_name, "GatewayOptionData": $gateway_option_data, "IBAN": $iban, "IPAddress": $ip_address, "IdentityNumber": $identity_number, "IsCompany": $is_company, "LastName": $last_name, "LastTransactionDateTime": $last_transaction_date_time, "MandateCreationDate": $mandate_creation_date, "MandateID": $mandate_id, "MandateReceived": $mandate_received, "MandateUpdateDate": $mandate_update_date, "MaxConsecutivePaymentFailures": $max_consecutive_payment_failures, "NumConsecutiveFailures": $num_consecutive_failures, "PaymentRetryWindow": $payment_retry_window, "PaypalBaid": $paypal_baid, "PaypalEmail": $paypal_email, "PaypalPreapprovalKey": $paypal_preapproval_key, "PaypalType": $paypal_type, "Phone": $phone, "PostalCode": $postal_code, "SecondTokenId": $second_token_id, "SkipValidation": $skip_validation, "State": $state, "StreetName": $street_name, "StreetNumber": $street_number, "TokenId": $token_id, "Type": $type, "UseDefaultRetryRule": $use_default_retry_rule, "currencyCode": $currency_code} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Entity-Ids": $zuora_entity_ids, "Zuora-Track-Id": $zuora_track_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: ({"rejectUnknownFields": $reject_unknown_fields} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"rejectUnknownFields": $reject_unknown_fields} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # CRUD: Retrieve a payment method snapshot
@@ -8513,12 +11063,23 @@ export def "object-payment-method-snapshot get" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/payment-method-snapshot/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/payment-method-snapshot/{id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Entity-Ids": $zuora_entity_ids, "Zuora-Track-Id": $zuora_track_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"fields": $fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"fields": $fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # CRUD: Retrieve a payment method transaction log
@@ -8544,12 +11105,23 @@ export def "object-payment-method-transaction-log get" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/payment-method-transaction-log/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/payment-method-transaction-log/{id}") $qp $auth.query)
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Entity-Ids": $zuora_entity_ids, "Zuora-Track-Id": $zuora_track_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"fields": $fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"fields": $fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # CRUD: Delete a payment method
@@ -8574,12 +11146,23 @@ export def "object-payment-method delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/payment-method/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/payment-method/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Entity-Ids": $zuora_entity_ids, "Zuora-Track-Id": $zuora_track_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # CRUD: Retrieve a payment method
@@ -8606,12 +11189,23 @@ export def "object-payment-method get" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/payment-method/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/payment-method/{id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Entity-Ids": $zuora_entity_ids, "Zuora-Track-Id": $zuora_track_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"fields": $fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"fields": $fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # CRUD: Update a payment method
@@ -8693,14 +11287,25 @@ export def "object-payment-method update" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "rejectUnknownFields" $reject_unknown_fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/payment-method/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/payment-method/{id}") $qp $auth.query)
   let req_body = {"AccountId": $account_id, "AchAbaCode": $ach_aba_code, "AchAccountName": $ach_account_name, "AchAccountType": $ach_account_type, "AchAddress1": $ach_address1, "AchAddress2": $ach_address2, "AchBankName": $ach_bank_name, "AchCity": $ach_city, "AchCountry": $ach_country, "AchPostalCode": $ach_postal_code, "AchState": $ach_state, "BankBranchCode": $bank_branch_code, "BankCheckDigit": $bank_check_digit, "BankTransferType": $bank_transfer_type, "BusinessIdentificationCode": $business_identification_code, "City": $city, "CompanyName": $company_name, "Country": $country, "CreditCardAddress1": $credit_card_address1, "CreditCardAddress2": $credit_card_address2, "CreditCardCity": $credit_card_city, "CreditCardCountry": $credit_card_country, "CreditCardExpirationMonth": $credit_card_expiration_month, "CreditCardExpirationYear": $credit_card_expiration_year, "CreditCardHolderName": $credit_card_holder_name, "CreditCardPostalCode": $credit_card_postal_code, "CreditCardSecurityCode": $credit_card_security_code, "CreditCardState": $credit_card_state, "CreditCardType": $credit_card_type, "DeviceSessionId": $device_session_id, "Email": $email, "ExistingMandate": $existing_mandate, "FirstName": $first_name, "IBAN": $iban, "IPAddress": $ip_address, "IdentityNumber": $identity_number, "IsCompany": $is_company, "LastName": $last_name, "LastTransactionDateTime": $last_transaction_date_time, "MandateCreationDate": $mandate_creation_date, "MandateID": $mandate_id, "MandateReceived": $mandate_received, "MandateUpdateDate": $mandate_update_date, "MaxConsecutivePaymentFailures": $max_consecutive_payment_failures, "NumConsecutiveFailures": $num_consecutive_failures, "PaymentMethodStatus": $payment_method_status, "PaymentRetryWindow": $payment_retry_window, "Phone": $phone, "PostalCode": $postal_code, "SecondTokenId": $second_token_id, "State": $state, "StreetName": $street_name, "StreetNumber": $street_number, "UseDefaultRetryRule": $use_default_retry_rule} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Entity-Ids": $zuora_entity_ids, "Zuora-Track-Id": $zuora_track_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: ({"rejectUnknownFields": $reject_unknown_fields} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"rejectUnknownFields": $reject_unknown_fields} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # CRUD: Retrieve a payment transaction log
@@ -8725,12 +11330,23 @@ export def "object-payment-transaction-log get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/payment-transaction-log/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/payment-transaction-log/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Entity-Ids": $zuora_entity_ids, "Zuora-Track-Id": $zuora_track_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # CRUD: Delete a payment
@@ -8755,12 +11371,23 @@ export def "object-payment delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/payment/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/payment/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Entity-Ids": $zuora_entity_ids, "Zuora-Track-Id": $zuora_track_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # CRUD: Retrieve a payment
@@ -8785,12 +11412,23 @@ export def "object-payment get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/payment/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/payment/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Entity-Ids": $zuora_entity_ids, "Zuora-Track-Id": $zuora_track_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # CRUD: Update a payment
@@ -8832,14 +11470,25 @@ export def "object-payment update" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "rejectUnknownFields" $reject_unknown_fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/payment/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/payment/{id}") $qp $auth.query)
   let req_body = {"AccountId": $account_id, "AccountingCode": $accounting_code, "Amount": $amount, "EffectiveDate": $effective_date, "PaymentMethodId": $payment_method_id, "ReferenceId": $reference_id, "Status": $status, "TransferredToAccounting": $transferred_to_accounting, "Type": $type, "IntegrationId__NS": $integration_id_ns, "IntegrationStatus__NS": $integration_status_ns, "Origin__NS": $origin_ns, "SyncDate__NS": $sync_date_ns, "Transaction__NS": $transaction_ns} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Entity-Ids": $zuora_entity_ids, "Zuora-Track-Id": $zuora_track_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: ({"rejectUnknownFields": $reject_unknown_fields} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"rejectUnknownFields": $reject_unknown_fields} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # CRUD: Create a product
@@ -8876,14 +11525,25 @@ export def "object-product create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "rejectUnknownFields" $reject_unknown_fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v1/object/product" $qp)
+  let full_url = (build-url $base "/v1/object/product" $qp $auth.query)
   let req_body = {"AllowFeatureChanges": $allow_feature_changes, "Category": $category, "Description": $description, "EffectiveEndDate": $effective_end_date, "EffectiveStartDate": $effective_start_date, "Name": $name, "SKU": $sku, "IntegrationId__NS": $integration_id_ns, "IntegrationStatus__NS": $integration_status_ns, "ItemType__NS": $item_type_ns, "SyncDate__NS": $sync_date_ns} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Entity-Ids": $zuora_entity_ids, "Zuora-Track-Id": $zuora_track_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: ({"rejectUnknownFields": $reject_unknown_fields} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"rejectUnknownFields": $reject_unknown_fields} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # CRUD: Delete a product feature
@@ -8908,12 +11568,23 @@ export def "object-product-feature delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/product-feature/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/product-feature/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Entity-Ids": $zuora_entity_ids, "Zuora-Track-Id": $zuora_track_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # CRUD: Retrieve a product feature
@@ -8940,12 +11611,23 @@ export def "object-product-feature get" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/product-feature/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/product-feature/{id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Entity-Ids": $zuora_entity_ids, "Zuora-Track-Id": $zuora_track_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"fields": $fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"fields": $fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # CRUD: Create a product rate plan
@@ -8989,14 +11671,25 @@ export def "object-product-rate-plan create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "rejectUnknownFields" $reject_unknown_fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v1/object/product-rate-plan" $qp)
+  let full_url = (build-url $base "/v1/object/product-rate-plan" $qp $auth.query)
   let req_body = {"ActiveCurrencies": $active_currencies, "Description": $description, "EffectiveEndDate": $effective_end_date, "EffectiveStartDate": $effective_start_date, "Name": $name, "ProductId": $product_id, "BillingPeriod__NS": $billing_period_ns, "Class__NS": $class_ns, "Department__NS": $department_ns, "IncludeChildren__NS": $include_children_ns, "IntegrationId__NS": $integration_id_ns, "IntegrationStatus__NS": $integration_status_ns, "ItemType__NS": $item_type_ns, "Location__NS": $location_ns, "MultiCurrencyPrice__NS": $multi_currency_price_ns, "Price__NS": $price_ns, "Subsidiary__NS": $subsidiary_ns, "SyncDate__NS": $sync_date_ns} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Entity-Ids": $zuora_entity_ids, "Zuora-Track-Id": $zuora_track_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: ({"rejectUnknownFields": $reject_unknown_fields} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"rejectUnknownFields": $reject_unknown_fields} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # CRUD: Create a product rate plan charge
@@ -9086,14 +11779,25 @@ export def "object-product-rate-plan-charge create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "rejectUnknownFields" $reject_unknown_fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v1/object/product-rate-plan-charge" $qp)
+  let full_url = (build-url $base "/v1/object/product-rate-plan-charge" $qp $auth.query)
   let req_body = {"AccountingCode": $accounting_code, "ApplyDiscountTo": $apply_discount_to, "BillCycleDay": $bill_cycle_day, "BillCycleType": $bill_cycle_type, "BillingPeriod": $billing_period, "BillingPeriodAlignment": $billing_period_alignment, "BillingTiming": $billing_timing, "ChargeModel": $charge_model, "ChargeModelConfiguration": $charge_model_configuration, "ChargeType": $charge_type, "DefaultQuantity": $default_quantity, "DeferredRevenueAccount": $deferred_revenue_account, "Description": $description, "DiscountLevel": $discount_level, "EndDateCondition": $end_date_condition, "IncludedUnits": $included_units, "LegacyRevenueReporting": $legacy_revenue_reporting, "ListPriceBase": $list_price_base, "MaxQuantity": $max_quantity, "MinQuantity": $min_quantity, "Name": $name, "NumberOfPeriod": $number_of_period, "OverageCalculationOption": $overage_calculation_option, "OverageUnusedUnitsCreditOption": $overage_unused_units_credit_option, "PriceChangeOption": $price_change_option, "PriceIncreaseOption": $price_increase_option, "PriceIncreasePercentage": $price_increase_percentage, "ProductRatePlanChargeTierData": $product_rate_plan_charge_tier_data, "ProductRatePlanId": $product_rate_plan_id, "RatingGroup": $rating_group, "RecognizedRevenueAccount": $recognized_revenue_account, "RevRecCode": $rev_rec_code, "RevRecTriggerCondition": $rev_rec_trigger_condition, "RevenueRecognitionRuleName": $revenue_recognition_rule_name, "SmoothingModel": $smoothing_model, "SpecificBillingPeriod": $specific_billing_period, "TaxCode": $tax_code, "TaxMode": $tax_mode, "Taxable": $taxable, "TriggerEvent": $trigger_event, "UOM": $uom, "UpToPeriods": $up_to_periods, "UpToPeriodsType": $up_to_periods_type, "UsageRecordRatingOption": $usage_record_rating_option, "UseDiscountSpecificAccountingCode": $use_discount_specific_accounting_code, "UseTenantDefaultForPriceChange": $use_tenant_default_for_price_change, "WeeklyBillCycleDay": $weekly_bill_cycle_day, "Class__NS": $class_ns, "DeferredRevAccount__NS": $deferred_rev_account_ns, "Department__NS": $department_ns, "IncludeChildren__NS": $include_children_ns, "IntegrationId__NS": $integration_id_ns, "IntegrationStatus__NS": $integration_status_ns, "ItemType__NS": $item_type_ns, "Location__NS": $location_ns, "RecognizedRevAccount__NS": $recognized_rev_account_ns, "RevRecEnd__NS": $rev_rec_end_ns, "RevRecStart__NS": $rev_rec_start_ns, "RevRecTemplateType__NS": $rev_rec_template_type_ns, "Subsidiary__NS": $subsidiary_ns, "SyncDate__NS": $sync_date_ns} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Entity-Ids": $zuora_entity_ids, "Zuora-Track-Id": $zuora_track_id, "X-Zuora-WSDL-Version": $x_zuora_wsdl_version} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: ({"rejectUnknownFields": $reject_unknown_fields} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"rejectUnknownFields": $reject_unknown_fields} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # CRUD: Retrieve a product rate plan charge tier
@@ -9120,12 +11824,23 @@ export def "object-product-rate-plan-charge-tier get" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/product-rate-plan-charge-tier/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/product-rate-plan-charge-tier/{id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Entity-Ids": $zuora_entity_ids, "Zuora-Track-Id": $zuora_track_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"fields": $fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"fields": $fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # CRUD: Update a product rate plan charge tier
@@ -9154,14 +11869,25 @@ export def "object-product-rate-plan-charge-tier update" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "rejectUnknownFields" $reject_unknown_fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/product-rate-plan-charge-tier/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/product-rate-plan-charge-tier/{id}") $qp $auth.query)
   let req_body = {"Price": $price} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Entity-Ids": $zuora_entity_ids, "Zuora-Track-Id": $zuora_track_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: ({"rejectUnknownFields": $reject_unknown_fields} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"rejectUnknownFields": $reject_unknown_fields} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # CRUD: Delete a product rate plan charge
@@ -9186,12 +11912,23 @@ export def "object-product-rate-plan-charge delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/product-rate-plan-charge/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/product-rate-plan-charge/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Entity-Ids": $zuora_entity_ids, "Zuora-Track-Id": $zuora_track_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # CRUD: Retrieve a product rate plan charge
@@ -9218,12 +11955,23 @@ export def "object-product-rate-plan-charge get" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/product-rate-plan-charge/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/product-rate-plan-charge/{id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Entity-Ids": $zuora_entity_ids, "Zuora-Track-Id": $zuora_track_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"fields": $fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"fields": $fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # CRUD: Update a product rate plan charge
@@ -9314,14 +12062,25 @@ export def "object-product-rate-plan-charge update" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "rejectUnknownFields" $reject_unknown_fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/product-rate-plan-charge/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/product-rate-plan-charge/{id}") $qp $auth.query)
   let req_body = {"AccountingCode": $accounting_code, "ApplyDiscountTo": $apply_discount_to, "BillCycleDay": $bill_cycle_day, "BillCycleType": $bill_cycle_type, "BillingPeriod": $billing_period, "BillingPeriodAlignment": $billing_period_alignment, "BillingTiming": $billing_timing, "ChargeModel": $charge_model, "ChargeModelConfiguration": $charge_model_configuration, "DefaultQuantity": $default_quantity, "DeferredRevenueAccount": $deferred_revenue_account, "Description": $description, "DiscountLevel": $discount_level, "EndDateCondition": $end_date_condition, "IncludedUnits": $included_units, "LegacyRevenueReporting": $legacy_revenue_reporting, "ListPriceBase": $list_price_base, "MaxQuantity": $max_quantity, "MinQuantity": $min_quantity, "Name": $name, "NumberOfPeriod": $number_of_period, "OverageCalculationOption": $overage_calculation_option, "OverageUnusedUnitsCreditOption": $overage_unused_units_credit_option, "PriceChangeOption": $price_change_option, "PriceIncreaseOption": $price_increase_option, "PriceIncreasePercentage": $price_increase_percentage, "ProductRatePlanChargeTierData": $product_rate_plan_charge_tier_data, "ProductRatePlanId": $product_rate_plan_id, "RatingGroup": $rating_group, "RecognizedRevenueAccount": $recognized_revenue_account, "RevRecCode": $rev_rec_code, "RevRecTriggerCondition": $rev_rec_trigger_condition, "RevenueRecognitionRuleName": $revenue_recognition_rule_name, "SmoothingModel": $smoothing_model, "SpecificBillingPeriod": $specific_billing_period, "TaxCode": $tax_code, "TaxMode": $tax_mode, "Taxable": $taxable, "TriggerEvent": $trigger_event, "UOM": $uom, "UpToPeriods": $up_to_periods, "UpToPeriodsType": $up_to_periods_type, "UsageRecordRatingOption": $usage_record_rating_option, "UseDiscountSpecificAccountingCode": $use_discount_specific_accounting_code, "UseTenantDefaultForPriceChange": $use_tenant_default_for_price_change, "WeeklyBillCycleDay": $weekly_bill_cycle_day, "Class__NS": $class_ns, "DeferredRevAccount__NS": $deferred_rev_account_ns, "Department__NS": $department_ns, "IncludeChildren__NS": $include_children_ns, "IntegrationId__NS": $integration_id_ns, "IntegrationStatus__NS": $integration_status_ns, "ItemType__NS": $item_type_ns, "Location__NS": $location_ns, "RecognizedRevAccount__NS": $recognized_rev_account_ns, "RevRecEnd__NS": $rev_rec_end_ns, "RevRecStart__NS": $rev_rec_start_ns, "RevRecTemplateType__NS": $rev_rec_template_type_ns, "Subsidiary__NS": $subsidiary_ns, "SyncDate__NS": $sync_date_ns} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Entity-Ids": $zuora_entity_ids, "Zuora-Track-Id": $zuora_track_id, "X-Zuora-WSDL-Version": $x_zuora_wsdl_version} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: ({"rejectUnknownFields": $reject_unknown_fields} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"rejectUnknownFields": $reject_unknown_fields} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # CRUD: Delete a product rate plan
@@ -9346,12 +12105,23 @@ export def "object-product-rate-plan delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/product-rate-plan/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/product-rate-plan/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Entity-Ids": $zuora_entity_ids, "Zuora-Track-Id": $zuora_track_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # CRUD: Retrieve a product rate plan
@@ -9378,12 +12148,23 @@ export def "object-product-rate-plan get" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/product-rate-plan/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/product-rate-plan/{id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Entity-Ids": $zuora_entity_ids, "Zuora-Track-Id": $zuora_track_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"fields": $fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"fields": $fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # CRUD: Update a product rate plan
@@ -9429,14 +12210,25 @@ export def "object-product-rate-plan update" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "rejectUnknownFields" $reject_unknown_fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/product-rate-plan/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/product-rate-plan/{id}") $qp $auth.query)
   let req_body = {"ActiveCurrencies": $active_currencies, "Description": $description, "EffectiveEndDate": $effective_end_date, "EffectiveStartDate": $effective_start_date, "Name": $name, "ProductId": $product_id, "BillingPeriod__NS": $billing_period_ns, "Class__NS": $class_ns, "Department__NS": $department_ns, "IncludeChildren__NS": $include_children_ns, "IntegrationId__NS": $integration_id_ns, "IntegrationStatus__NS": $integration_status_ns, "ItemType__NS": $item_type_ns, "Location__NS": $location_ns, "MultiCurrencyPrice__NS": $multi_currency_price_ns, "Price__NS": $price_ns, "Subsidiary__NS": $subsidiary_ns, "SyncDate__NS": $sync_date_ns} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Entity-Ids": $zuora_entity_ids, "Zuora-Track-Id": $zuora_track_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: ({"rejectUnknownFields": $reject_unknown_fields} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"rejectUnknownFields": $reject_unknown_fields} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # CRUD: Delete a product
@@ -9461,12 +12253,23 @@ export def "object-product delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/product/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/product/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Entity-Ids": $zuora_entity_ids, "Zuora-Track-Id": $zuora_track_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # CRUD: Retrieve a product
@@ -9493,12 +12296,23 @@ export def "object-product get" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/product/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/product/{id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Entity-Ids": $zuora_entity_ids, "Zuora-Track-Id": $zuora_track_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"fields": $fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"fields": $fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # CRUD: Update a product
@@ -9537,14 +12351,25 @@ export def "object-product update" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "rejectUnknownFields" $reject_unknown_fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/product/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/product/{id}") $qp $auth.query)
   let req_body = {"AllowFeatureChanges": $allow_feature_changes, "Category": $category, "Description": $description, "EffectiveEndDate": $effective_end_date, "EffectiveStartDate": $effective_start_date, "Name": $name, "SKU": $sku, "IntegrationId__NS": $integration_id_ns, "IntegrationStatus__NS": $integration_status_ns, "ItemType__NS": $item_type_ns, "SyncDate__NS": $sync_date_ns} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Entity-Ids": $zuora_entity_ids, "Zuora-Track-Id": $zuora_track_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: ({"rejectUnknownFields": $reject_unknown_fields} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"rejectUnknownFields": $reject_unknown_fields} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # CRUD: Retrieve a rate plan charge tier
@@ -9571,12 +12396,23 @@ export def "object-rate-plan-charge-tier get" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/rate-plan-charge-tier/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/rate-plan-charge-tier/{id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Entity-Ids": $zuora_entity_ids, "Zuora-Track-Id": $zuora_track_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"fields": $fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"fields": $fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # CRUD: Retrieve a rate plan charge
@@ -9603,12 +12439,23 @@ export def "object-rate-plan-charge get" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/rate-plan-charge/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/rate-plan-charge/{id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Entity-Ids": $zuora_entity_ids, "Zuora-Track-Id": $zuora_track_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"fields": $fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"fields": $fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # CRUD: Update a rate plan charge
@@ -9652,14 +12499,25 @@ export def "object-rate-plan-charge update" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "rejectUnknownFields" $reject_unknown_fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/rate-plan-charge/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/rate-plan-charge/{id}") $qp $auth.query)
   let req_body = {"BillingTiming": $billing_timing, "DiscountAmount": $discount_amount, "DiscountPercentage": $discount_percentage, "EndDateCondition": $end_date_condition, "ListPriceBase": $list_price_base, "PriceChangeOption": $price_change_option, "PriceIncreasePercentage": $price_increase_percentage, "RatingGroup": $rating_group, "RevRecCode": $rev_rec_code, "RevRecTriggerCondition": $rev_rec_trigger_condition, "RevenueRecognitionRuleName": $revenue_recognition_rule_name, "SpecificEndDate": $specific_end_date, "TriggerDate": $trigger_date, "TriggerEvent": $trigger_event, "UpToPeriodsType": $up_to_periods_type, "WeeklyBillCycleDay": $weekly_bill_cycle_day} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Entity-Ids": $zuora_entity_ids, "Zuora-Track-Id": $zuora_track_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: ({"rejectUnknownFields": $reject_unknown_fields} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"rejectUnknownFields": $reject_unknown_fields} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # CRUD: Retrieve a rate plan
@@ -9686,12 +12544,23 @@ export def "object-rate-plan get" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/rate-plan/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/rate-plan/{id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Entity-Ids": $zuora_entity_ids, "Zuora-Track-Id": $zuora_track_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"fields": $fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"fields": $fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # CRUD: Create a refund
@@ -9739,14 +12608,25 @@ export def "object-refund create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "rejectUnknownFields" $reject_unknown_fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v1/object/refund" $qp)
+  let full_url = (build-url $base "/v1/object/refund" $qp $auth.query)
   let req_body = {"AccountId": $account_id, "Amount": $amount, "Comment": $comment, "GatewayOptionData": $gateway_option_data, "GatewayState": $gateway_state, "MethodType": $method_type, "PaymentId": $payment_id, "PaymentMethodId": $payment_method_id, "ReasonCode": $reason_code, "RefundDate": $refund_date, "RefundInvoicePaymentData": $refund_invoice_payment_data, "SoftDescriptor": $soft_descriptor, "SoftDescriptorPhone": $soft_descriptor_phone, "SourceType": $source_type, "Type": $type, "IntegrationId__NS": $integration_id_ns, "IntegrationStatus__NS": $integration_status_ns, "Origin__NS": $origin_ns, "SyncDate__NS": $sync_date_ns, "SynctoNetSuite__NS": $syncto_net_suite_ns} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Entity-Ids": $zuora_entity_ids, "Zuora-Track-Id": $zuora_track_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: ({"rejectUnknownFields": $reject_unknown_fields} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"rejectUnknownFields": $reject_unknown_fields} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # CRUD: Retrieve a refund invoice payment
@@ -9772,12 +12652,23 @@ export def "object-refund-invoice-payment get" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/refund-invoice-payment/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/refund-invoice-payment/{id}") $qp $auth.query)
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Entity-Ids": $zuora_entity_ids, "Zuora-Track-Id": $zuora_track_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"fields": $fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"fields": $fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # CRUD: Retrieve a refund transaction log
@@ -9804,12 +12695,23 @@ export def "object-refund-transaction-log get" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/refund-transaction-log/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/refund-transaction-log/{id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Entity-Ids": $zuora_entity_ids, "Zuora-Track-Id": $zuora_track_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"fields": $fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"fields": $fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # CRUD: Delete a refund
@@ -9834,12 +12736,23 @@ export def "object-refund delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/refund/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/refund/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Entity-Ids": $zuora_entity_ids, "Zuora-Track-Id": $zuora_track_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # CRUD: Retrieve a refund
@@ -9866,12 +12779,23 @@ export def "object-refund get" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/refund/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/refund/{id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Entity-Ids": $zuora_entity_ids, "Zuora-Track-Id": $zuora_track_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"fields": $fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"fields": $fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # CRUD: Update a refund
@@ -9907,14 +12831,25 @@ export def "object-refund update" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "rejectUnknownFields" $reject_unknown_fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/refund/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/refund/{id}") $qp $auth.query)
   let req_body = {"ReasonCode": $reason_code, "Status": $status, "TransferredToAccounting": $transferred_to_accounting, "IntegrationId__NS": $integration_id_ns, "IntegrationStatus__NS": $integration_status_ns, "Origin__NS": $origin_ns, "SyncDate__NS": $sync_date_ns, "SynctoNetSuite__NS": $syncto_net_suite_ns} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Entity-Ids": $zuora_entity_ids, "Zuora-Track-Id": $zuora_track_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: ({"rejectUnknownFields": $reject_unknown_fields} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"rejectUnknownFields": $reject_unknown_fields} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # CRUD: Retrieve a subscription product feature
@@ -9941,12 +12876,23 @@ export def "object-subscription-product-feature get" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/subscription-product-feature/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/subscription-product-feature/{id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Entity-Ids": $zuora_entity_ids, "Zuora-Track-Id": $zuora_track_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"fields": $fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"fields": $fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # CRUD: Delete a subscription
@@ -9971,12 +12917,23 @@ export def "object-subscription delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/subscription/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/subscription/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Entity-Ids": $zuora_entity_ids, "Zuora-Track-Id": $zuora_track_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # CRUD: Retrieve a subscription
@@ -10004,12 +12961,23 @@ export def "object-subscription get" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/subscription/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/subscription/{id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Entity-Ids": $zuora_entity_ids, "Zuora-Track-Id": $zuora_track_id, "X-Zuora-WSDL-Version": $x_zuora_wsdl_version} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"fields": $fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"fields": $fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # CRUD: Update a subscription
@@ -10068,14 +13036,25 @@ export def "object-subscription update" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "rejectUnknownFields" $reject_unknown_fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/subscription/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/subscription/{id}") $qp $auth.query)
   let req_body = {"AccountId": $account_id, "AutoRenew": $auto_renew, "CancelledDate": $cancelled_date, "ContractAcceptanceDate": $contract_acceptance_date, "ContractEffectiveDate": $contract_effective_date, "CurrentTermPeriodType": $current_term_period_type, "InitialTerm": $initial_term, "InitialTermPeriodType": $initial_term_period_type, "InvoiceOwnerId": $invoice_owner_id, "IsInvoiceSeparate": $is_invoice_separate, "Name": $name, "Notes": $notes, "RenewalSetting": $renewal_setting, "RenewalTerm": $renewal_term, "RenewalTermPeriodType": $renewal_term_period_type, "ServiceActivationDate": $service_activation_date, "Status": $status, "TermStartDate": $term_start_date, "TermType": $term_type, "Version": $version, "CpqBundleJsonId__QT": $cpq_bundle_json_id_qt, "OpportunityCloseDate__QT": $opportunity_close_date_qt, "OpportunityName__QT": $opportunity_name_qt, "QuoteBusinessType__QT": $quote_business_type_qt, "QuoteNumber__QT": $quote_number_qt, "QuoteType__QT": $quote_type_qt, "IntegrationId__NS": $integration_id_ns, "IntegrationStatus__NS": $integration_status_ns, "Project__NS": $project_ns, "SalesOrder__NS": $sales_order_ns, "SyncDate__NS": $sync_date_ns} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Entity-Ids": $zuora_entity_ids, "Zuora-Track-Id": $zuora_track_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: ({"rejectUnknownFields": $reject_unknown_fields} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"rejectUnknownFields": $reject_unknown_fields} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # CRUD: Create a taxation item
@@ -10114,14 +13093,25 @@ export def "object-taxation-item create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "rejectUnknownFields" $reject_unknown_fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v1/object/taxation-item" $qp)
+  let full_url = (build-url $base "/v1/object/taxation-item" $qp $auth.query)
   let req_body = {"AccountingCode": $accounting_code, "ExemptAmount": $exempt_amount, "InvoiceItemId": $invoice_item_id, "Jurisdiction": $jurisdiction, "LocationCode": $location_code, "Name": $name, "TaxAmount": $tax_amount, "TaxCode": $tax_code, "TaxCodeDescription": $tax_code_description, "TaxDate": $tax_date, "TaxRate": $tax_rate, "TaxRateDescription": $tax_rate_description, "TaxRateType": $tax_rate_type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Entity-Ids": $zuora_entity_ids, "Zuora-Track-Id": $zuora_track_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: ({"rejectUnknownFields": $reject_unknown_fields} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"rejectUnknownFields": $reject_unknown_fields} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # CRUD: Delete a taxation item
@@ -10145,12 +13135,23 @@ export def "object-taxation-item delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/taxation-item/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/taxation-item/{id}") $auth.query)
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Entity-Ids": $zuora_entity_ids, "Zuora-Track-Id": $zuora_track_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # CRUD: Retrieve a taxation item
@@ -10177,12 +13178,23 @@ export def "object-taxation-item get" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/taxation-item/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/taxation-item/{id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Entity-Ids": $zuora_entity_ids, "Zuora-Track-Id": $zuora_track_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"fields": $fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"fields": $fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # CRUD: Update a taxation item
@@ -10221,14 +13233,25 @@ export def "object-taxation-item update" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "rejectUnknownFields" $reject_unknown_fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/taxation-item/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/taxation-item/{id}") $qp $auth.query)
   let req_body = {"AccountingCode": $accounting_code, "ExemptAmount": $exempt_amount, "Jurisdiction": $jurisdiction, "LocationCode": $location_code, "Name": $name, "TaxAmount": $tax_amount, "TaxCode": $tax_code, "TaxCodeDescription": $tax_code_description, "TaxDate": $tax_date, "TaxRate": $tax_rate, "TaxRateDescription": $tax_rate_description, "TaxRateType": $tax_rate_type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Entity-Ids": $zuora_entity_ids, "Zuora-Track-Id": $zuora_track_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: ({"rejectUnknownFields": $reject_unknown_fields} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"rejectUnknownFields": $reject_unknown_fields} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # CRUD: Create a unit of measure
@@ -10259,14 +13282,25 @@ export def "object-unit-of-measure create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "rejectUnknownFields" $reject_unknown_fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v1/object/unit-of-measure" $qp)
+  let full_url = (build-url $base "/v1/object/unit-of-measure" $qp $auth.query)
   let req_body = {"Active": $active, "DecimalPlaces": $decimal_places, "DisplayedAs": $displayed_as, "RoundingMode": $rounding_mode, "UomName": $uom_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Entity-Ids": $zuora_entity_ids, "Zuora-Track-Id": $zuora_track_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: ({"rejectUnknownFields": $reject_unknown_fields} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"rejectUnknownFields": $reject_unknown_fields} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # CRUD: Delete a unit of measure
@@ -10290,12 +13324,23 @@ export def "object-unit-of-measure delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/unit-of-measure/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/unit-of-measure/{id}") $auth.query)
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Entity-Ids": $zuora_entity_ids, "Zuora-Track-Id": $zuora_track_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # CRUD: Retrieve a unit of measure
@@ -10322,12 +13367,23 @@ export def "object-unit-of-measure get" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/unit-of-measure/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/unit-of-measure/{id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Entity-Ids": $zuora_entity_ids, "Zuora-Track-Id": $zuora_track_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"fields": $fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"fields": $fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # CRUD: Update a unit of measure
@@ -10359,14 +13415,25 @@ export def "object-unit-of-measure update" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "rejectUnknownFields" $reject_unknown_fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/unit-of-measure/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/unit-of-measure/{id}") $qp $auth.query)
   let req_body = {"Active": $active, "DecimalPlaces": $decimal_places, "DisplayedAs": $displayed_as, "RoundingMode": $rounding_mode, "UomName": $uom_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Entity-Ids": $zuora_entity_ids, "Zuora-Track-Id": $zuora_track_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: ({"rejectUnknownFields": $reject_unknown_fields} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"rejectUnknownFields": $reject_unknown_fields} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # CRUD: Create a usage record
@@ -10404,14 +13471,25 @@ export def "object-usage create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "rejectUnknownFields" $reject_unknown_fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v1/object/usage" $qp)
+  let full_url = (build-url $base "/v1/object/usage" $qp $auth.query)
   let req_body = {"AccountId": $account_id, "AccountNumber": $account_number, "ChargeId": $charge_id, "ChargeNumber": $charge_number, "Description": $description, "EndDateTime": $end_date_time, "Quantity": $quantity, "StartDateTime": $start_date_time, "SubmissionDateTime": $submission_date_time, "SubscriptionId": $subscription_id, "SubscriptionNumber": $subscription_number, "UOM": $uom} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Entity-Ids": $zuora_entity_ids, "Zuora-Track-Id": $zuora_track_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: ({"rejectUnknownFields": $reject_unknown_fields} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"rejectUnknownFields": $reject_unknown_fields} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # CRUD: Delete a usage record
@@ -10435,12 +13513,23 @@ export def "object-usage delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/usage/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/usage/{id}") $auth.query)
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Entity-Ids": $zuora_entity_ids, "Zuora-Track-Id": $zuora_track_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # CRUD: Retrieve a usage record
@@ -10467,12 +13556,23 @@ export def "object-usage get" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/usage/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/usage/{id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Entity-Ids": $zuora_entity_ids, "Zuora-Track-Id": $zuora_track_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"fields": $fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"fields": $fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # CRUD: Update a usage record
@@ -10505,14 +13605,25 @@ export def "object-usage update" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "rejectUnknownFields" $reject_unknown_fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/usage/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/object/usage/{id}") $qp $auth.query)
   let req_body = {"EndDateTime": $end_date_time, "Quantity": $quantity, "RbeStatus": $rbe_status, "StartDateTime": $start_date_time, "SubmissionDateTime": $submission_date_time, "UOM": $uom} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Entity-Ids": $zuora_entity_ids, "Zuora-Track-Id": $zuora_track_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: ({"rejectUnknownFields": $reject_unknown_fields} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"rejectUnknownFields": $reject_unknown_fields} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Generate a billing preview
@@ -10541,14 +13652,25 @@ export def "operations-billing-preview create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v1/operations/billing-preview")
+  let full_url = (build-url $base "/v1/operations/billing-preview" $auth.query)
   let req_body = {"accountId": $account_id, "assumeRenewal": $assume_renewal, "chargeTypeToExclude": $charge_type_to_exclude, "includingEvergreenSubscription": $including_evergreen_subscription, "targetDate": $target_date} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Invoice and collect
@@ -10580,14 +13702,25 @@ export def "operations-invoice-collect create-transaction-payment" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v1/operations/invoice-collect")
+  let full_url = (build-url $base "/v1/operations/invoice-collect" $auth.query)
   let req_body = {"accountKey": $account_key, "documentDate": $document_date, "invoiceDate": $invoice_date, "invoiceId": $invoice_id, "invoiceTargetDate": $invoice_target_date, "paymentGateway": $payment_gateway, "targetDate": $target_date} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids, "zuora-version": $zuora_version} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Update order line items
@@ -10614,14 +13747,25 @@ export def "order-line-items-bulk create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v1/order-line-items/bulk")
+  let full_url = (build-url $base "/v1/order-line-items/bulk" $auth.query)
   let req_body = {"orderLineItems": $order_line_items, "processingOptions": $processing_options} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve an order line item
@@ -10646,12 +13790,23 @@ export def "order-line-items get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({item_id: (encode-path-segment $item_id)} | format pattern "/v1/order-line-items/{item_id}"))
+  let full_url = (build-url $base ({item_id: (encode-path-segment $item_id)} | format pattern "/v1/order-line-items/{item_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update an order line item
@@ -10697,14 +13852,25 @@ export def "order-line-items update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({item_id: (encode-path-segment $item_id)} | format pattern "/v1/order-line-items/{item_id}"))
+  let full_url = (build-url $base ({item_id: (encode-path-segment $item_id)} | format pattern "/v1/order-line-items/{item_id}") $auth.query)
   let req_body = {"UOM": $uom, "accountingCode": $accounting_code, "amountPerUnit": $amount_per_unit, "billTargetDate": $bill_target_date, "customFields": $custom_fields, "deferredRevenueAccountingCode": $deferred_revenue_accounting_code, "description": $description, "itemName": $item_name, "itemNumber": $item_number, "itemState": $item_state, "itemType": $item_type, "listPricePerUnit": $list_price_per_unit, "productCode": $product_code, "purchaseOrderNumber": $purchase_order_number, "quantity": $quantity, "recognizedRevenueAccountingCode": $recognized_revenue_accounting_code, "revenueRecognitionRule": $revenue_recognition_rule, "taxCode": $tax_code, "taxMode": $tax_mode, "transactionDate": $transaction_date} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # List orders
@@ -10733,12 +13899,23 @@ export def "orders get-list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "dateFilterOption" $date_filter_option "scalar") (serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v1/orders" $qp)
+  let full_url = (build-url $base "/v1/orders" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "pageSize": $page_size, "dateFilterOption": $date_filter_option, "startDate": $start_date, "endDate": $end_date} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"page": $page, "pageSize": $page_size, "dateFilterOption": $date_filter_option, "startDate": $start_date, "endDate": $end_date} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create an order
@@ -10777,14 +13954,25 @@ export def "orders create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "returnIds" $return_ids "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v1/orders" $qp)
+  let full_url = (build-url $base "/v1/orders" $qp $auth.query)
   let req_body = {"customFields": $custom_fields, "description": $description, "existingAccountNumber": $existing_account_number, "newAccount": $new_account, "orderDate": $order_date, "orderLineItems": $order_line_items, "orderNumber": $order_number, "processingOptions": $processing_options, "subscriptions": $subscriptions} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids, "zuora-version": $zuora_version} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: ({"returnIds": $return_ids} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"returnIds": $return_ids} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # List orders of an invoice owner
@@ -10815,12 +14003,23 @@ export def "orders-invoice-owner get" [
   let base = ($base_url | default $BASE_URL)
   if ($account_number | is-empty) { error make --unspanned { msg: "path parameter 'accountNumber' must be non-empty" } }
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "dateFilterOption" $date_filter_option "scalar") (serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_number: (encode-path-segment $account_number)} | format pattern "/v1/orders/invoiceOwner/{account_number}") $qp)
+  let full_url = (build-url $base ({account_number: (encode-path-segment $account_number)} | format pattern "/v1/orders/invoiceOwner/{account_number}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "pageSize": $page_size, "dateFilterOption": $date_filter_option, "startDate": $start_date, "endDate": $end_date} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"page": $page, "pageSize": $page_size, "dateFilterOption": $date_filter_option, "startDate": $start_date, "endDate": $end_date} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Preview an order
@@ -10857,14 +14056,25 @@ export def "orders-preview create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v1/orders/preview")
+  let full_url = (build-url $base "/v1/orders/preview" $auth.query)
   let req_body = {"customFields": $custom_fields, "description": $description, "existingAccountNumber": $existing_account_number, "orderDate": $order_date, "orderLineItems": $order_line_items, "orderNumber": $order_number, "previewAccountInfo": $preview_account_info, "previewOptions": $preview_options, "subscriptions": $subscriptions} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # List orders by subscription number
@@ -10895,12 +14105,23 @@ export def "orders-subscription get-by-number" [
   let base = ($base_url | default $BASE_URL)
   if ($subscription_number | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionNumber' must be non-empty" } }
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "dateFilterOption" $date_filter_option "scalar") (serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_number: (encode-path-segment $subscription_number)} | format pattern "/v1/orders/subscription/{subscription_number}") $qp)
+  let full_url = (build-url $base ({subscription_number: (encode-path-segment $subscription_number)} | format pattern "/v1/orders/subscription/{subscription_number}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "pageSize": $page_size, "dateFilterOption": $date_filter_option, "startDate": $start_date, "endDate": $end_date} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"page": $page, "pageSize": $page_size, "dateFilterOption": $date_filter_option, "startDate": $start_date, "endDate": $end_date} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List orders of a subscription owner
@@ -10931,12 +14152,23 @@ export def "orders-subscription-owner get" [
   let base = ($base_url | default $BASE_URL)
   if ($account_number | is-empty) { error make --unspanned { msg: "path parameter 'accountNumber' must be non-empty" } }
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "dateFilterOption" $date_filter_option "scalar") (serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_number: (encode-path-segment $account_number)} | format pattern "/v1/orders/subscriptionOwner/{account_number}") $qp)
+  let full_url = (build-url $base ({account_number: (encode-path-segment $account_number)} | format pattern "/v1/orders/subscriptionOwner/{account_number}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "pageSize": $page_size, "dateFilterOption": $date_filter_option, "startDate": $start_date, "endDate": $end_date} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"page": $page, "pageSize": $page_size, "dateFilterOption": $date_filter_option, "startDate": $start_date, "endDate": $end_date} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List subscription terms
@@ -10965,12 +14197,23 @@ export def "orders-term get-subscription" [
   let base = ($base_url | default $BASE_URL)
   if ($subscription_number | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionNumber' must be non-empty" } }
   let qp = [(serialize-qp "version" $version "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_number: (encode-path-segment $subscription_number)} | format pattern "/v1/orders/term/{subscription_number}") $qp)
+  let full_url = (build-url $base ({subscription_number: (encode-path-segment $subscription_number)} | format pattern "/v1/orders/term/{subscription_number}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"version": $version, "page": $page, "pageSize": $page_size} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"version": $version, "page": $page, "pageSize": $page_size} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Delete an order
@@ -10995,12 +14238,23 @@ export def "orders delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($order_number | is-empty) { error make --unspanned { msg: "path parameter 'orderNumber' must be non-empty" } }
-  let full_url = (build-url $base ({order_number: (encode-path-segment $order_number)} | format pattern "/v1/orders/{order_number}"))
+  let full_url = (build-url $base ({order_number: (encode-path-segment $order_number)} | format pattern "/v1/orders/{order_number}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve an order
@@ -11025,12 +14279,23 @@ export def "orders get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($order_number | is-empty) { error make --unspanned { msg: "path parameter 'orderNumber' must be non-empty" } }
-  let full_url = (build-url $base ({order_number: (encode-path-segment $order_number)} | format pattern "/v1/orders/{order_number}"))
+  let full_url = (build-url $base ({order_number: (encode-path-segment $order_number)} | format pattern "/v1/orders/{order_number}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update order custom fields
@@ -11059,14 +14324,25 @@ export def "orders-custom-fields update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($order_number | is-empty) { error make --unspanned { msg: "path parameter 'orderNumber' must be non-empty" } }
-  let full_url = (build-url $base ({order_number: (encode-path-segment $order_number)} | format pattern "/v1/orders/{order_number}/customFields"))
+  let full_url = (build-url $base ({order_number: (encode-path-segment $order_number)} | format pattern "/v1/orders/{order_number}/customFields") $auth.query)
   let req_body = {"customFields": $custom_fields, "subscriptions": $subscriptions} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # List order metrics for an evergreen subscription
@@ -11096,12 +14372,23 @@ export def "orders-evergreen-metrics get-metricsfor-subscription" [
   if ($order_number | is-empty) { error make --unspanned { msg: "path parameter 'orderNumber' must be non-empty" } }
   if ($subscription_number | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionNumber' must be non-empty" } }
   let qp = [(serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({order_number: (encode-path-segment $order_number), subscription_number: (encode-path-segment $subscription_number)} | format pattern "/v1/orders/{order_number}/evergreenMetrics/{subscription_number}") $qp)
+  let full_url = (build-url $base ({order_number: (encode-path-segment $order_number), subscription_number: (encode-path-segment $subscription_number)} | format pattern "/v1/orders/{order_number}/evergreenMetrics/{subscription_number}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"startDate": $start_date, "endDate": $end_date} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"startDate": $start_date, "endDate": $end_date} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List ramp metrics by order number
@@ -11126,12 +14413,23 @@ export def "orders-ramp-metrics get-by-number" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($order_number | is-empty) { error make --unspanned { msg: "path parameter 'orderNumber' must be non-empty" } }
-  let full_url = (build-url $base ({order_number: (encode-path-segment $order_number)} | format pattern "/v1/orders/{order_number}/ramp-metrics"))
+  let full_url = (build-url $base ({order_number: (encode-path-segment $order_number)} | format pattern "/v1/orders/{order_number}/ramp-metrics") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update order action trigger dates
@@ -11159,14 +14457,25 @@ export def "orders-trigger-dates update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($order_number | is-empty) { error make --unspanned { msg: "path parameter 'orderNumber' must be non-empty" } }
-  let full_url = (build-url $base ({order_number: (encode-path-segment $order_number)} | format pattern "/v1/orders/{order_number}/triggerDates"))
+  let full_url = (build-url $base ({order_number: (encode-path-segment $order_number)} | format pattern "/v1/orders/{order_number}/triggerDates") $auth.query)
   let req_body = {"subscriptions": $subscriptions} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Create a payment method
@@ -11232,14 +14541,25 @@ export def "payment-methods create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v1/payment-methods")
+  let full_url = (build-url $base "/v1/payment-methods" $auth.query)
   let req_body = {"type": $type, "BAID": $baid, "email": $email, "preapprovalKey": $preapproval_key, "cardHolderInfo": $card_holder_info, "cardNumber": $card_number, "cardType": $card_type, "checkDuplicated": $check_duplicated, "expirationMonth": $expiration_month, "expirationYear": $expiration_year, "mitConsentAgreementRef": $mit_consent_agreement_ref, "mitConsentAgreementSrc": $mit_consent_agreement_src, "mitNetworkTransactionId": $mit_network_transaction_id, "mitProfileAction": $mit_profile_action, "mitProfileAgreedOn": $mit_profile_agreed_on, "mitProfileType": $mit_profile_type, "securityCode": $security_code, "addressLine1": $address_line1, "addressLine2": $address_line2, "bankABACode": $bank_aba_code, "bankAccountName": $bank_account_name, "bankAccountNumber": $bank_account_number, "bankAccountType": $bank_account_type, "bankName": $bank_name, "city": $city, "country": $country, "phone": $phone, "state": $state, "zipCode": $zip_code, "accountKey": $account_key, "authGateway": $auth_gateway, "makeDefault": $make_default, "IBAN": $iban, "accountHolderInfo": $account_holder_info, "accountNumber": $account_number, "bankCode": $bank_code, "branchCode": $branch_code, "businessIdentificationCode": $business_identification_code, "currencyCode": $currency_code, "identityNumber": $identity_number} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Create a credit card payment method
@@ -11281,14 +14601,25 @@ export def "payment-methods-credit-cards create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v1/payment-methods/credit-cards")
+  let full_url = (build-url $base "/v1/payment-methods/credit-cards" $auth.query)
   let req_body = {"accountKey": $account_key, "cardHolderInfo": $card_holder_info, "creditCardNumber": $credit_card_number, "creditCardType": $credit_card_type, "defaultPaymentMethod": $default_payment_method, "expirationMonth": $expiration_month, "expirationYear": $expiration_year, "gatewayOptions": $gateway_options, "mitConsentAgreementRef": $mit_consent_agreement_ref, "mitConsentAgreementSrc": $mit_consent_agreement_src, "mitNetworkTransactionId": $mit_network_transaction_id, "mitProfileAction": $mit_profile_action, "mitProfileAgreedOn": $mit_profile_agreed_on, "mitProfileType": $mit_profile_type, "numConsecutiveFailures": $num_consecutive_failures, "securityCode": $security_code} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # List all credit card payment methods of an account
@@ -11315,12 +14646,23 @@ export def "payment-methods-credit-cards-accounts get" [
   let base = ($base_url | default $BASE_URL)
   if ($account_key | is-empty) { error make --unspanned { msg: "path parameter 'account-key' must be non-empty" } }
   let qp = [(serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_key: (encode-path-segment $account_key)} | format pattern "/v1/payment-methods/credit-cards/accounts/{account_key}") $qp)
+  let full_url = (build-url $base ({account_key: (encode-path-segment $account_key)} | format pattern "/v1/payment-methods/credit-cards/accounts/{account_key}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"pageSize": $page_size} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"pageSize": $page_size} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update a credit card payment method
@@ -11362,14 +14704,25 @@ export def "payment-methods-credit-cards update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($payment_method_id | is-empty) { error make --unspanned { msg: "path parameter 'payment-method-id' must be non-empty" } }
-  let full_url = (build-url $base ({payment_method_id: (encode-path-segment $payment_method_id)} | format pattern "/v1/payment-methods/credit-cards/{payment_method_id}"))
+  let full_url = (build-url $base ({payment_method_id: (encode-path-segment $payment_method_id)} | format pattern "/v1/payment-methods/credit-cards/{payment_method_id}") $auth.query)
   let req_body = {"addressLine1": $address_line1, "addressLine2": $address_line2, "cardHolderName": $card_holder_name, "city": $city, "country": $country, "defaultPaymentMethod": $default_payment_method, "email": $email, "expirationMonth": $expiration_month, "expirationYear": $expiration_year, "gatewayOptions": $gateway_options, "numConsecutiveFailures": $num_consecutive_failures, "phone": $phone, "securityCode": $security_code, "state": $state, "zipCode": $zip_code} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Create an Apple Pay payment method
@@ -11405,14 +14758,25 @@ export def "payment-methods-decryption create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v1/payment-methods/decryption")
+  let full_url = (build-url $base "/v1/payment-methods/decryption" $auth.query)
   let req_body = {"accountID": $account_id, "cardHolderInfo": $card_holder_info, "integrationType": $integration_type, "invoiceId": $invoice_id, "merchantID": $merchant_id, "mitConsentAgreementSrc": $mit_consent_agreement_src, "mitProfileAction": $mit_profile_action, "mitProfileType": $mit_profile_type, "paymentGateway": $payment_gateway, "paymentToken": $payment_token, "processPayment": $process_payment} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Delete a payment method
@@ -11437,12 +14801,23 @@ export def "payment-methods delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($payment_method_id | is-empty) { error make --unspanned { msg: "path parameter 'payment-method-id' must be non-empty" } }
-  let full_url = (build-url $base ({payment_method_id: (encode-path-segment $payment_method_id)} | format pattern "/v1/payment-methods/{payment_method_id}"))
+  let full_url = (build-url $base ({payment_method_id: (encode-path-segment $payment_method_id)} | format pattern "/v1/payment-methods/{payment_method_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve a payment method
@@ -11467,12 +14842,23 @@ export def "payment-methods get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($payment_method_id | is-empty) { error make --unspanned { msg: "path parameter 'payment-method-id' must be non-empty" } }
-  let full_url = (build-url $base ({payment_method_id: (encode-path-segment $payment_method_id)} | format pattern "/v1/payment-methods/{payment_method_id}"))
+  let full_url = (build-url $base ({payment_method_id: (encode-path-segment $payment_method_id)} | format pattern "/v1/payment-methods/{payment_method_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update a payment method
@@ -11507,14 +14893,25 @@ export def "payment-methods update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($payment_method_id | is-empty) { error make --unspanned { msg: "path parameter 'payment-method-id' must be non-empty" } }
-  let full_url = (build-url $base ({payment_method_id: (encode-path-segment $payment_method_id)} | format pattern "/v1/payment-methods/{payment_method_id}"))
+  let full_url = (build-url $base ({payment_method_id: (encode-path-segment $payment_method_id)} | format pattern "/v1/payment-methods/{payment_method_id}") $auth.query)
   let req_body = {"accountHolderInfo": $account_holder_info, "authGateway": $auth_gateway, "currencyCode": $currency_code, "gatewayOptions": $gateway_options, "expirationMonth": $expiration_month, "expirationYear": $expiration_year, "securityCode": $security_code} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Create authorization
@@ -11546,14 +14943,25 @@ export def "payment-methods-authorize create-authorization" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($payment_method_id | is-empty) { error make --unspanned { msg: "path parameter 'payment-method-id' must be non-empty" } }
-  let full_url = (build-url $base ({payment_method_id: (encode-path-segment $payment_method_id)} | format pattern "/v1/payment-methods/{payment_method_id}/authorize"))
+  let full_url = (build-url $base ({payment_method_id: (encode-path-segment $payment_method_id)} | format pattern "/v1/payment-methods/{payment_method_id}/authorize") $auth.query)
   let req_body = {"accountId": $account_id, "accountNumber": $account_number, "amount": $amount, "gatewayOrderId": $gateway_order_id, "mitTransactionSource": $mit_transaction_source, "softDescriptor": $soft_descriptor, "softDescriptorPhone": $soft_descriptor_phone} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # List stored credential profiles of a payment method
@@ -11580,12 +14988,23 @@ export def "payment-methods-profiles get-stored-credential" [
   let base = ($base_url | default $BASE_URL)
   if ($payment_method_id | is-empty) { error make --unspanned { msg: "path parameter 'payment-method-id' must be non-empty" } }
   let qp = [(serialize-qp "includeAll" $include_all "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({payment_method_id: (encode-path-segment $payment_method_id)} | format pattern "/v1/payment-methods/{payment_method_id}/profiles") $qp)
+  let full_url = (build-url $base ({payment_method_id: (encode-path-segment $payment_method_id)} | format pattern "/v1/payment-methods/{payment_method_id}/profiles") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"includeAll": $include_all} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"includeAll": $include_all} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a stored credential profile
@@ -11620,14 +15039,25 @@ export def "payment-methods-profiles create-stored-credential" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($payment_method_id | is-empty) { error make --unspanned { msg: "path parameter 'payment-method-id' must be non-empty" } }
-  let full_url = (build-url $base ({payment_method_id: (encode-path-segment $payment_method_id)} | format pattern "/v1/payment-methods/{payment_method_id}/profiles"))
+  let full_url = (build-url $base ({payment_method_id: (encode-path-segment $payment_method_id)} | format pattern "/v1/payment-methods/{payment_method_id}/profiles") $auth.query)
   let req_body = {"action": $action, "agreedOn": $agreed_on, "authGateway": $auth_gateway, "cardSecurityCode": $card_security_code, "consentAgreementRef": $consent_agreement_ref, "consentAgreementSrc": $consent_agreement_src, "networkTransactionId": $network_transaction_id, "status": $status, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Cancel a stored credential profile
@@ -11654,12 +15084,23 @@ export def "payment-methods-profiles-cancel create-stored-credential" [
   let base = ($base_url | default $BASE_URL)
   if ($payment_method_id | is-empty) { error make --unspanned { msg: "path parameter 'payment-method-id' must be non-empty" } }
   if ($profile_number | is-empty) { error make --unspanned { msg: "path parameter 'profile-number' must be non-empty" } }
-  let full_url = (build-url $base ({payment_method_id: (encode-path-segment $payment_method_id), profile_number: (encode-path-segment $profile_number)} | format pattern "/v1/payment-methods/{payment_method_id}/profiles/{profile_number}/cancel"))
+  let full_url = (build-url $base ({payment_method_id: (encode-path-segment $payment_method_id), profile_number: (encode-path-segment $profile_number)} | format pattern "/v1/payment-methods/{payment_method_id}/profiles/{profile_number}/cancel") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Expire a stored credential profile
@@ -11686,12 +15127,23 @@ export def "payment-methods-profiles-expire create-stored-credential" [
   let base = ($base_url | default $BASE_URL)
   if ($payment_method_id | is-empty) { error make --unspanned { msg: "path parameter 'payment-method-id' must be non-empty" } }
   if ($profile_number | is-empty) { error make --unspanned { msg: "path parameter 'profile-number' must be non-empty" } }
-  let full_url = (build-url $base ({payment_method_id: (encode-path-segment $payment_method_id), profile_number: (encode-path-segment $profile_number)} | format pattern "/v1/payment-methods/{payment_method_id}/profiles/{profile_number}/expire"))
+  let full_url = (build-url $base ({payment_method_id: (encode-path-segment $payment_method_id), profile_number: (encode-path-segment $profile_number)} | format pattern "/v1/payment-methods/{payment_method_id}/profiles/{profile_number}/expire") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Scrub a payment method
@@ -11716,12 +15168,23 @@ export def "payment-methods-scrub update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($payment_method_id | is-empty) { error make --unspanned { msg: "path parameter 'payment-method-id' must be non-empty" } }
-  let full_url = (build-url $base ({payment_method_id: (encode-path-segment $payment_method_id)} | format pattern "/v1/payment-methods/{payment_method_id}/scrub"))
+  let full_url = (build-url $base ({payment_method_id: (encode-path-segment $payment_method_id)} | format pattern "/v1/payment-methods/{payment_method_id}/scrub") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Verify a payment method
@@ -11751,14 +15214,25 @@ export def "payment-methods-verify update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($payment_method_id | is-empty) { error make --unspanned { msg: "path parameter 'payment-method-id' must be non-empty" } }
-  let full_url = (build-url $base ({payment_method_id: (encode-path-segment $payment_method_id)} | format pattern "/v1/payment-methods/{payment_method_id}/verify"))
+  let full_url = (build-url $base ({payment_method_id: (encode-path-segment $payment_method_id)} | format pattern "/v1/payment-methods/{payment_method_id}/verify") $auth.query)
   let req_body = {"currencyCode": $currency_code, "gatewayOptions": $gateway_options, "paymentGatewayName": $payment_gateway_name, "securityCode": $security_code} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Cancel authorization
@@ -11788,14 +15262,25 @@ export def "payment-methods-void-authorize create-cancel-authorization" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($payment_method_id | is-empty) { error make --unspanned { msg: "path parameter 'payment-method-id' must be non-empty" } }
-  let full_url = (build-url $base ({payment_method_id: (encode-path-segment $payment_method_id)} | format pattern "/v1/payment-methods/{payment_method_id}/voidAuthorize"))
+  let full_url = (build-url $base ({payment_method_id: (encode-path-segment $payment_method_id)} | format pattern "/v1/payment-methods/{payment_method_id}/voidAuthorize") $auth.query)
   let req_body = {"accountId": $account_id, "accountNumber": $account_number, "gatewayOrderId": $gateway_order_id, "paymentGatewayId": $payment_gateway_id, "transactionId": $transaction_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # List payment runs
@@ -11826,12 +15311,23 @@ export def "payment-runs list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pageSize" $page_size "scalar") (serialize-qp "createdById" $created_by_id "scalar") (serialize-qp "createdDate" $created_date "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "targetDate" $target_date "scalar") (serialize-qp "updatedById" $updated_by_id "scalar") (serialize-qp "updatedDate" $updated_date "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v1/payment-runs" $qp)
+  let full_url = (build-url $base "/v1/payment-runs" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"pageSize": $page_size, "createdById": $created_by_id, "createdDate": $created_date, "status": $status, "targetDate": $target_date, "updatedById": $updated_by_id, "updatedDate": $updated_date, "sort": $qp_sort} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"pageSize": $page_size, "createdById": $created_by_id, "createdDate": $created_date, "status": $status, "targetDate": $target_date, "updatedById": $updated_by_id, "updatedDate": $updated_date, "sort": $qp_sort} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a payment run
@@ -11871,14 +15367,25 @@ export def "payment-runs create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v1/payment-runs")
+  let full_url = (build-url $base "/v1/payment-runs" $auth.query)
   let req_body = {"accountId": $account_id, "applyCreditBalance": $apply_credit_balance, "autoApplyCreditMemo": $auto_apply_credit_memo, "autoApplyUnappliedPayment": $auto_apply_unapplied_payment, "batch": $batch, "billCycleDay": $bill_cycle_day, "billingRunId": $billing_run_id, "collectPayment": $collect_payment, "consolidatedPayment": $consolidated_payment, "currency": $currency, "data": $data, "paymentGatewayId": $payment_gateway_id, "processPaymentWithClosedPM": $process_payment_with_closed_pm, "runDate": $run_date, "targetDate": $target_date} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Delete a payment run
@@ -11901,12 +15408,23 @@ export def "payment-runs delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($payment_run_id | is-empty) { error make --unspanned { msg: "path parameter 'paymentRunId' must be non-empty" } }
-  let full_url = (build-url $base ({payment_run_id: (encode-path-segment $payment_run_id)} | format pattern "/v1/payment-runs/{payment_run_id}"))
+  let full_url = (build-url $base ({payment_run_id: (encode-path-segment $payment_run_id)} | format pattern "/v1/payment-runs/{payment_run_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve a payment run
@@ -11930,12 +15448,23 @@ export def "payment-runs get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($payment_run_id | is-empty) { error make --unspanned { msg: "path parameter 'paymentRunId' must be non-empty" } }
-  let full_url = (build-url $base ({payment_run_id: (encode-path-segment $payment_run_id)} | format pattern "/v1/payment-runs/{payment_run_id}"))
+  let full_url = (build-url $base ({payment_run_id: (encode-path-segment $payment_run_id)} | format pattern "/v1/payment-runs/{payment_run_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update a payment run
@@ -11975,14 +15504,25 @@ export def "payment-runs update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($payment_run_id | is-empty) { error make --unspanned { msg: "path parameter 'paymentRunId' must be non-empty" } }
-  let full_url = (build-url $base ({payment_run_id: (encode-path-segment $payment_run_id)} | format pattern "/v1/payment-runs/{payment_run_id}"))
+  let full_url = (build-url $base ({payment_run_id: (encode-path-segment $payment_run_id)} | format pattern "/v1/payment-runs/{payment_run_id}") $auth.query)
   let req_body = {"accountId": $account_id, "applyCreditBalance": $apply_credit_balance, "autoApplyCreditMemo": $auto_apply_credit_memo, "autoApplyUnappliedPayment": $auto_apply_unapplied_payment, "batch": $batch, "billCycleDay": $bill_cycle_day, "billingRunId": $billing_run_id, "collectPayment": $collect_payment, "consolidatedPayment": $consolidated_payment, "currency": $currency, "paymentGatewayId": $payment_gateway_id, "processPaymentWithClosedPM": $process_payment_with_closed_pm, "runDate": $run_date, "targetDate": $target_date} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve payment run data
@@ -12005,12 +15545,23 @@ export def "payment-runs-data get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($payment_run_id | is-empty) { error make --unspanned { msg: "path parameter 'paymentRunId' must be non-empty" } }
-  let full_url = (build-url $base ({payment_run_id: (encode-path-segment $payment_run_id)} | format pattern "/v1/payment-runs/{payment_run_id}/data"))
+  let full_url = (build-url $base ({payment_run_id: (encode-path-segment $payment_run_id)} | format pattern "/v1/payment-runs/{payment_run_id}/data") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve a payment run summary
@@ -12033,12 +15584,23 @@ export def "payment-runs-summary get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($payment_run_id | is-empty) { error make --unspanned { msg: "path parameter 'paymentRunId' must be non-empty" } }
-  let full_url = (build-url $base ({payment_run_id: (encode-path-segment $payment_run_id)} | format pattern "/v1/payment-runs/{payment_run_id}/summary"))
+  let full_url = (build-url $base ({payment_run_id: (encode-path-segment $payment_run_id)} | format pattern "/v1/payment-runs/{payment_run_id}/summary") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List all payment gateways
@@ -12061,12 +15623,23 @@ export def "paymentgateways get" [
 ]: nothing -> record<paymentgateways: table<id: string, isActive: bool, isDefault: bool, name: string, type: string>, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v1/paymentgateways")
+  let full_url = (build-url $base "/v1/paymentgateways" $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List payments
@@ -12107,12 +15680,23 @@ export def "payments get-list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pageSize" $page_size "scalar") (serialize-qp "accountId" $account_id "scalar") (serialize-qp "amount" $amount "scalar") (serialize-qp "appliedAmount" $applied_amount "scalar") (serialize-qp "createdById" $created_by_id "scalar") (serialize-qp "createdDate" $created_date "scalar") (serialize-qp "creditBalanceAmount" $credit_balance_amount "scalar") (serialize-qp "currency" $currency "scalar") (serialize-qp "effectiveDate" $effective_date "scalar") (serialize-qp "number" $number "scalar") (serialize-qp "refundAmount" $refund_amount "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "unappliedAmount" $unapplied_amount "scalar") (serialize-qp "updatedById" $updated_by_id "scalar") (serialize-qp "updatedDate" $updated_date "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v1/payments" $qp)
+  let full_url = (build-url $base "/v1/payments" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"pageSize": $page_size, "accountId": $account_id, "amount": $amount, "appliedAmount": $applied_amount, "createdById": $created_by_id, "createdDate": $created_date, "creditBalanceAmount": $credit_balance_amount, "currency": $currency, "effectiveDate": $effective_date, "number": $number, "refundAmount": $refund_amount, "status": $status, "type": $type, "unappliedAmount": $unapplied_amount, "updatedById": $updated_by_id, "updatedDate": $updated_date, "sort": $qp_sort} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"pageSize": $page_size, "accountId": $account_id, "amount": $amount, "appliedAmount": $applied_amount, "createdById": $created_by_id, "createdDate": $created_date, "creditBalanceAmount": $credit_balance_amount, "currency": $currency, "effectiveDate": $effective_date, "number": $number, "refundAmount": $refund_amount, "status": $status, "type": $type, "unappliedAmount": $unapplied_amount, "updatedById": $updated_by_id, "updatedDate": $updated_date, "sort": $qp_sort} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a payment
@@ -12164,14 +15748,25 @@ export def "payments create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v1/payments")
+  let full_url = (build-url $base "/v1/payments" $auth.query)
   let req_body = {"accountId": $account_id, "amount": $amount, "authTransactionId": $auth_transaction_id, "comment": $comment, "currency": $currency, "debitMemos": $debit_memos, "effectiveDate": $effective_date, "financeInformation": $finance_information, "gatewayId": $gateway_id, "gatewayOptions": $gateway_options, "gatewayOrderId": $gateway_order_id, "invoices": $invoices, "mitTransactionSource": $mit_transaction_source, "paymentMethodId": $payment_method_id, "referenceId": $reference_id, "softDescriptor": $soft_descriptor, "softDescriptorPhone": $soft_descriptor_phone, "standalone": $standalone, "type": $type, "IntegrationId__NS": $integration_id_ns, "IntegrationStatus__NS": $integration_status_ns, "Origin__NS": $origin_ns, "SyncDate__NS": $sync_date_ns, "Transaction__NS": $transaction_ns} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Delete a payment
@@ -12196,12 +15791,23 @@ export def "payments delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($payment_id | is-empty) { error make --unspanned { msg: "path parameter 'paymentId' must be non-empty" } }
-  let full_url = (build-url $base ({payment_id: (encode-path-segment $payment_id)} | format pattern "/v1/payments/{payment_id}"))
+  let full_url = (build-url $base ({payment_id: (encode-path-segment $payment_id)} | format pattern "/v1/payments/{payment_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve a payment
@@ -12226,12 +15832,23 @@ export def "payments get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($payment_id | is-empty) { error make --unspanned { msg: "path parameter 'paymentId' must be non-empty" } }
-  let full_url = (build-url $base ({payment_id: (encode-path-segment $payment_id)} | format pattern "/v1/payments/{payment_id}"))
+  let full_url = (build-url $base ({payment_id: (encode-path-segment $payment_id)} | format pattern "/v1/payments/{payment_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update a payment
@@ -12266,14 +15883,25 @@ export def "payments update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($payment_id | is-empty) { error make --unspanned { msg: "path parameter 'paymentId' must be non-empty" } }
-  let full_url = (build-url $base ({payment_id: (encode-path-segment $payment_id)} | format pattern "/v1/payments/{payment_id}"))
+  let full_url = (build-url $base ({payment_id: (encode-path-segment $payment_id)} | format pattern "/v1/payments/{payment_id}") $auth.query)
   let req_body = {"comment": $comment, "financeInformation": $finance_information, "referenceId": $reference_id, "IntegrationId__NS": $integration_id_ns, "IntegrationStatus__NS": $integration_status_ns, "Origin__NS": $origin_ns, "SyncDate__NS": $sync_date_ns, "Transaction__NS": $transaction_ns} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Apply a payment
@@ -12304,14 +15932,25 @@ export def "payments-apply update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($payment_id | is-empty) { error make --unspanned { msg: "path parameter 'paymentId' must be non-empty" } }
-  let full_url = (build-url $base ({payment_id: (encode-path-segment $payment_id)} | format pattern "/v1/payments/{payment_id}/apply"))
+  let full_url = (build-url $base ({payment_id: (encode-path-segment $payment_id)} | format pattern "/v1/payments/{payment_id}/apply") $auth.query)
   let req_body = {"debitMemos": $debit_memos, "effectiveDate": $effective_date, "invoices": $invoices} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Cancel a payment
@@ -12336,12 +15975,23 @@ export def "payments-cancel update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($payment_id | is-empty) { error make --unspanned { msg: "path parameter 'paymentId' must be non-empty" } }
-  let full_url = (build-url $base ({payment_id: (encode-path-segment $payment_id)} | format pattern "/v1/payments/{payment_id}/cancel"))
+  let full_url = (build-url $base ({payment_id: (encode-path-segment $payment_id)} | format pattern "/v1/payments/{payment_id}/cancel") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req null $insecure $raw $allow_errors $full [200]
 }
 
 # List all parts of a payment
@@ -12368,12 +16018,23 @@ export def "payments-parts list" [
   let base = ($base_url | default $BASE_URL)
   if ($payment_id | is-empty) { error make --unspanned { msg: "path parameter 'paymentId' must be non-empty" } }
   let qp = [(serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({payment_id: (encode-path-segment $payment_id)} | format pattern "/v1/payments/{payment_id}/parts") $qp)
+  let full_url = (build-url $base ({payment_id: (encode-path-segment $payment_id)} | format pattern "/v1/payments/{payment_id}/parts") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"pageSize": $page_size} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"pageSize": $page_size} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve a payment part
@@ -12400,12 +16061,23 @@ export def "payments-parts get" [
   let base = ($base_url | default $BASE_URL)
   if ($payment_id | is-empty) { error make --unspanned { msg: "path parameter 'paymentId' must be non-empty" } }
   if ($partid | is-empty) { error make --unspanned { msg: "path parameter 'partid' must be non-empty" } }
-  let full_url = (build-url $base ({payment_id: (encode-path-segment $payment_id), partid: (encode-path-segment $partid)} | format pattern "/v1/payments/{payment_id}/parts/{partid}"))
+  let full_url = (build-url $base ({payment_id: (encode-path-segment $payment_id), partid: (encode-path-segment $partid)} | format pattern "/v1/payments/{payment_id}/parts/{partid}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List all payment part items
@@ -12434,12 +16106,23 @@ export def "payments-parts-itemparts list" [
   if ($payment_id | is-empty) { error make --unspanned { msg: "path parameter 'paymentId' must be non-empty" } }
   if ($partid | is-empty) { error make --unspanned { msg: "path parameter 'partid' must be non-empty" } }
   let qp = [(serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({payment_id: (encode-path-segment $payment_id), partid: (encode-path-segment $partid)} | format pattern "/v1/payments/{payment_id}/parts/{partid}/itemparts") $qp)
+  let full_url = (build-url $base ({payment_id: (encode-path-segment $payment_id), partid: (encode-path-segment $partid)} | format pattern "/v1/payments/{payment_id}/parts/{partid}/itemparts") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"pageSize": $page_size} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"pageSize": $page_size} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve a payment part item
@@ -12468,12 +16151,23 @@ export def "payments-parts-itemparts get-item" [
   if ($payment_id | is-empty) { error make --unspanned { msg: "path parameter 'paymentId' must be non-empty" } }
   if ($partid | is-empty) { error make --unspanned { msg: "path parameter 'partid' must be non-empty" } }
   if ($itempartid | is-empty) { error make --unspanned { msg: "path parameter 'itempartid' must be non-empty" } }
-  let full_url = (build-url $base ({payment_id: (encode-path-segment $payment_id), partid: (encode-path-segment $partid), itempartid: (encode-path-segment $itempartid)} | format pattern "/v1/payments/{payment_id}/parts/{partid}/itemparts/{itempartid}"))
+  let full_url = (build-url $base ({payment_id: (encode-path-segment $payment_id), partid: (encode-path-segment $partid), itempartid: (encode-path-segment $itempartid)} | format pattern "/v1/payments/{payment_id}/parts/{partid}/itemparts/{itempartid}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Refund a payment
@@ -12518,14 +16212,25 @@ export def "payments-refunds create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($payment_id | is-empty) { error make --unspanned { msg: "path parameter 'paymentId' must be non-empty" } }
-  let full_url = (build-url $base ({payment_id: (encode-path-segment $payment_id)} | format pattern "/v1/payments/{payment_id}/refunds"))
+  let full_url = (build-url $base ({payment_id: (encode-path-segment $payment_id)} | format pattern "/v1/payments/{payment_id}/refunds") $auth.query)
   let req_body = {"comment": $comment, "financeInformation": $finance_information, "gatewayOptions": $gateway_options, "methodType": $method_type, "reasonCode": $reason_code, "referenceId": $reference_id, "refundDate": $refund_date, "secondRefundReferenceId": $second_refund_reference_id, "softDescriptor": $soft_descriptor, "softDescriptorPhone": $soft_descriptor_phone, "totalAmount": $total_amount, "type": $type, "IntegrationId__NS": $integration_id_ns, "IntegrationStatus__NS": $integration_status_ns, "Origin__NS": $origin_ns, "SyncDate__NS": $sync_date_ns, "SynctoNetSuite__NS": $syncto_net_suite_ns} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Transfer a payment
@@ -12552,14 +16257,25 @@ export def "payments-transfer update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($payment_id | is-empty) { error make --unspanned { msg: "path parameter 'paymentId' must be non-empty" } }
-  let full_url = (build-url $base ({payment_id: (encode-path-segment $payment_id)} | format pattern "/v1/payments/{payment_id}/transfer"))
+  let full_url = (build-url $base ({payment_id: (encode-path-segment $payment_id)} | format pattern "/v1/payments/{payment_id}/transfer") $auth.query)
   let req_body = {"accountId": $account_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Unapply a payment
@@ -12590,14 +16306,25 @@ export def "payments-unapply update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($payment_id | is-empty) { error make --unspanned { msg: "path parameter 'paymentId' must be non-empty" } }
-  let full_url = (build-url $base ({payment_id: (encode-path-segment $payment_id)} | format pattern "/v1/payments/{payment_id}/unapply"))
+  let full_url = (build-url $base ({payment_id: (encode-path-segment $payment_id)} | format pattern "/v1/payments/{payment_id}/unapply") $auth.query)
   let req_body = {"debitMemos": $debit_memos, "effectiveDate": $effective_date, "invoices": $invoices} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Generate a quote document
@@ -12635,14 +16362,25 @@ export def "quotes-document create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v1/quotes/document")
+  let full_url = (build-url $base "/v1/quotes/document" $auth.query)
   let req_body = {"apiuser": $apiuser, "documentType": $document_type, "locale": $locale, "password": $password, "quoteId": $quote_id, "sandbox": $sandbox, "serverUrl": $server_url, "sessionId": $session_id, "templateId": $template_id, "token": $body_token, "useSFDCLocale": $use_sfdc_locale, "username": $username, "zquotesMajorVersion": $zquotes_major_version, "zquotesMinorVersion": $zquotes_minor_version} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve a ramp
@@ -12667,12 +16405,23 @@ export def "ramps get-by-number" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($ramp_number | is-empty) { error make --unspanned { msg: "path parameter 'rampNumber' must be non-empty" } }
-  let full_url = (build-url $base ({ramp_number: (encode-path-segment $ramp_number)} | format pattern "/v1/ramps/{ramp_number}"))
+  let full_url = (build-url $base ({ramp_number: (encode-path-segment $ramp_number)} | format pattern "/v1/ramps/{ramp_number}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List all ramp metrics of a ramp
@@ -12697,12 +16446,23 @@ export def "ramps-ramp-metrics get-by-number" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($ramp_number | is-empty) { error make --unspanned { msg: "path parameter 'rampNumber' must be non-empty" } }
-  let full_url = (build-url $base ({ramp_number: (encode-path-segment $ramp_number)} | format pattern "/v1/ramps/{ramp_number}/ramp-metrics"))
+  let full_url = (build-url $base ({ramp_number: (encode-path-segment $ramp_number)} | format pattern "/v1/ramps/{ramp_number}/ramp-metrics") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List all product rate plans of a product
@@ -12730,12 +16490,23 @@ export def "rateplan-product-rate-plan get" [
   let base = ($base_url | default $BASE_URL)
   if ($product_id | is-empty) { error make --unspanned { msg: "path parameter 'product_id' must be non-empty" } }
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({product_id: (encode-path-segment $product_id)} | format pattern "/v1/rateplan/{product_id}/productRatePlan") $qp)
+  let full_url = (build-url $base ({product_id: (encode-path-segment $product_id)} | format pattern "/v1/rateplan/{product_id}/productRatePlan") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "pageSize": $page_size} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"page": $page, "pageSize": $page_size} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List refunds
@@ -12773,12 +16544,23 @@ export def "refunds list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pageSize" $page_size "scalar") (serialize-qp "accountId" $account_id "scalar") (serialize-qp "amount" $amount "scalar") (serialize-qp "createdById" $created_by_id "scalar") (serialize-qp "createdDate" $created_date "scalar") (serialize-qp "methodType" $method_type "scalar") (serialize-qp "number" $number "scalar") (serialize-qp "paymentId" $payment_id "scalar") (serialize-qp "refundDate" $refund_date "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "updatedById" $updated_by_id "scalar") (serialize-qp "updatedDate" $updated_date "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v1/refunds" $qp)
+  let full_url = (build-url $base "/v1/refunds" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"pageSize": $page_size, "accountId": $account_id, "amount": $amount, "createdById": $created_by_id, "createdDate": $created_date, "methodType": $method_type, "number": $number, "paymentId": $payment_id, "refundDate": $refund_date, "status": $status, "type": $type, "updatedById": $updated_by_id, "updatedDate": $updated_date, "sort": $qp_sort} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"pageSize": $page_size, "accountId": $account_id, "amount": $amount, "createdById": $created_by_id, "createdDate": $created_date, "methodType": $method_type, "number": $number, "paymentId": $payment_id, "refundDate": $refund_date, "status": $status, "type": $type, "updatedById": $updated_by_id, "updatedDate": $updated_date, "sort": $qp_sort} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Reconcile a refund
@@ -12808,14 +16590,25 @@ export def "refunds-reconcile create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($refund_id | is-empty) { error make --unspanned { msg: "path parameter 'refund-id' must be non-empty" } }
-  let full_url = (build-url $base ({refund_id: (encode-path-segment $refund_id)} | format pattern "/v1/refunds/{refund_id}/reconcile"))
+  let full_url = (build-url $base ({refund_id: (encode-path-segment $refund_id)} | format pattern "/v1/refunds/{refund_id}/reconcile") $auth.query)
   let req_body = {"action": $action, "actionDate": $action_date, "gatewayReconciliationReason": $gateway_reconciliation_reason, "gatewayReconciliationStatus": $gateway_reconciliation_status, "payoutId": $payout_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Delete a refund
@@ -12840,12 +16633,23 @@ export def "refunds delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($refund_id | is-empty) { error make --unspanned { msg: "path parameter 'refundId' must be non-empty" } }
-  let full_url = (build-url $base ({refund_id: (encode-path-segment $refund_id)} | format pattern "/v1/refunds/{refund_id}"))
+  let full_url = (build-url $base ({refund_id: (encode-path-segment $refund_id)} | format pattern "/v1/refunds/{refund_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve a refund
@@ -12870,12 +16674,23 @@ export def "refunds get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($refund_id | is-empty) { error make --unspanned { msg: "path parameter 'refundId' must be non-empty" } }
-  let full_url = (build-url $base ({refund_id: (encode-path-segment $refund_id)} | format pattern "/v1/refunds/{refund_id}"))
+  let full_url = (build-url $base ({refund_id: (encode-path-segment $refund_id)} | format pattern "/v1/refunds/{refund_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update a refund
@@ -12911,14 +16726,25 @@ export def "refunds update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($refund_id | is-empty) { error make --unspanned { msg: "path parameter 'refundId' must be non-empty" } }
-  let full_url = (build-url $base ({refund_id: (encode-path-segment $refund_id)} | format pattern "/v1/refunds/{refund_id}"))
+  let full_url = (build-url $base ({refund_id: (encode-path-segment $refund_id)} | format pattern "/v1/refunds/{refund_id}") $auth.query)
   let req_body = {"comment": $comment, "financeInformation": $finance_information, "reasonCode": $reason_code, "referenceId": $reference_id, "IntegrationId__NS": $integration_id_ns, "IntegrationStatus__NS": $integration_status_ns, "Origin__NS": $origin_ns, "SyncDate__NS": $sync_date_ns, "SynctoNetSuite__NS": $syncto_net_suite_ns} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Cancel a refund
@@ -12943,12 +16769,23 @@ export def "refunds-cancel update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($refund_id | is-empty) { error make --unspanned { msg: "path parameter 'refundId' must be non-empty" } }
-  let full_url = (build-url $base ({refund_id: (encode-path-segment $refund_id)} | format pattern "/v1/refunds/{refund_id}/cancel"))
+  let full_url = (build-url $base ({refund_id: (encode-path-segment $refund_id)} | format pattern "/v1/refunds/{refund_id}/cancel") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req null $insecure $raw $allow_errors $full [200]
 }
 
 # List all parts of a refund
@@ -12973,12 +16810,23 @@ export def "refunds-parts list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($refund_id | is-empty) { error make --unspanned { msg: "path parameter 'refundId' must be non-empty" } }
-  let full_url = (build-url $base ({refund_id: (encode-path-segment $refund_id)} | format pattern "/v1/refunds/{refund_id}/parts"))
+  let full_url = (build-url $base ({refund_id: (encode-path-segment $refund_id)} | format pattern "/v1/refunds/{refund_id}/parts") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve a refund part
@@ -13005,12 +16853,23 @@ export def "refunds-parts get" [
   let base = ($base_url | default $BASE_URL)
   if ($refund_id | is-empty) { error make --unspanned { msg: "path parameter 'refundId' must be non-empty" } }
   if ($refundpartid | is-empty) { error make --unspanned { msg: "path parameter 'refundpartid' must be non-empty" } }
-  let full_url = (build-url $base ({refund_id: (encode-path-segment $refund_id), refundpartid: (encode-path-segment $refundpartid)} | format pattern "/v1/refunds/{refund_id}/parts/{refundpartid}"))
+  let full_url = (build-url $base ({refund_id: (encode-path-segment $refund_id), refundpartid: (encode-path-segment $refundpartid)} | format pattern "/v1/refunds/{refund_id}/parts/{refundpartid}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List all refund part items
@@ -13039,12 +16898,23 @@ export def "refunds-parts-itemparts list" [
   if ($refund_id | is-empty) { error make --unspanned { msg: "path parameter 'refundId' must be non-empty" } }
   if ($refundpartid | is-empty) { error make --unspanned { msg: "path parameter 'refundpartid' must be non-empty" } }
   let qp = [(serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({refund_id: (encode-path-segment $refund_id), refundpartid: (encode-path-segment $refundpartid)} | format pattern "/v1/refunds/{refund_id}/parts/{refundpartid}/itemparts") $qp)
+  let full_url = (build-url $base ({refund_id: (encode-path-segment $refund_id), refundpartid: (encode-path-segment $refundpartid)} | format pattern "/v1/refunds/{refund_id}/parts/{refundpartid}/itemparts") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"pageSize": $page_size} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"pageSize": $page_size} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve a refund part item
@@ -13073,12 +16943,23 @@ export def "refunds-parts-itemparts get-item" [
   if ($refund_id | is-empty) { error make --unspanned { msg: "path parameter 'refundId' must be non-empty" } }
   if ($refundpartid | is-empty) { error make --unspanned { msg: "path parameter 'refundpartid' must be non-empty" } }
   if ($itempartid | is-empty) { error make --unspanned { msg: "path parameter 'itempartid' must be non-empty" } }
-  let full_url = (build-url $base ({refund_id: (encode-path-segment $refund_id), refundpartid: (encode-path-segment $refundpartid), itempartid: (encode-path-segment $itempartid)} | format pattern "/v1/refunds/{refund_id}/parts/{refundpartid}/itemparts/{itempartid}"))
+  let full_url = (build-url $base ({refund_id: (encode-path-segment $refund_id), refundpartid: (encode-path-segment $refundpartid), itempartid: (encode-path-segment $itempartid)} | format pattern "/v1/refunds/{refund_id}/parts/{refundpartid}/itemparts/{itempartid}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List all revenue events of a revenue schedule
@@ -13105,12 +16986,23 @@ export def "revenue-events-revenue-schedules get" [
   let base = ($base_url | default $BASE_URL)
   if ($rs_number | is-empty) { error make --unspanned { msg: "path parameter 'rs-number' must be non-empty" } }
   let qp = [(serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({rs_number: (encode-path-segment $rs_number)} | format pattern "/v1/revenue-events/revenue-schedules/{rs_number}") $qp)
+  let full_url = (build-url $base ({rs_number: (encode-path-segment $rs_number)} | format pattern "/v1/revenue-events/revenue-schedules/{rs_number}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"pageSize": $page_size} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"pageSize": $page_size} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve a revenue event
@@ -13135,12 +17027,23 @@ export def "revenue-events get-details" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($event_number | is-empty) { error make --unspanned { msg: "path parameter 'event-number' must be non-empty" } }
-  let full_url = (build-url $base ({event_number: (encode-path-segment $event_number)} | format pattern "/v1/revenue-events/{event_number}"))
+  let full_url = (build-url $base ({event_number: (encode-path-segment $event_number)} | format pattern "/v1/revenue-events/{event_number}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List revenue items by charge revenue summary number
@@ -13167,12 +17070,23 @@ export def "revenue-items-charge-revenue-summaries get-by-summary" [
   let base = ($base_url | default $BASE_URL)
   if ($crs_number | is-empty) { error make --unspanned { msg: "path parameter 'crs-number' must be non-empty" } }
   let qp = [(serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({crs_number: (encode-path-segment $crs_number)} | format pattern "/v1/revenue-items/charge-revenue-summaries/{crs_number}") $qp)
+  let full_url = (build-url $base ({crs_number: (encode-path-segment $crs_number)} | format pattern "/v1/revenue-items/charge-revenue-summaries/{crs_number}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"pageSize": $page_size} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"pageSize": $page_size} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List revenue items by revenue event number
@@ -13199,12 +17113,23 @@ export def "revenue-items-revenue-events get-by-charge" [
   let base = ($base_url | default $BASE_URL)
   if ($event_number | is-empty) { error make --unspanned { msg: "path parameter 'event-number' must be non-empty" } }
   let qp = [(serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({event_number: (encode-path-segment $event_number)} | format pattern "/v1/revenue-items/revenue-events/{event_number}") $qp)
+  let full_url = (build-url $base ({event_number: (encode-path-segment $event_number)} | format pattern "/v1/revenue-items/revenue-events/{event_number}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"pageSize": $page_size} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"pageSize": $page_size} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update custom fields on revenue items by revenue event number
@@ -13232,14 +17157,25 @@ export def "revenue-items-revenue-events update-custom-fieldson" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($event_number | is-empty) { error make --unspanned { msg: "path parameter 'event-number' must be non-empty" } }
-  let full_url = (build-url $base ({event_number: (encode-path-segment $event_number)} | format pattern "/v1/revenue-items/revenue-events/{event_number}"))
+  let full_url = (build-url $base ({event_number: (encode-path-segment $event_number)} | format pattern "/v1/revenue-items/revenue-events/{event_number}") $auth.query)
   let req_body = {"revenueItems": $revenue_items} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # List all revenue items of a revenue schedule
@@ -13266,12 +17202,23 @@ export def "revenue-items-revenue-schedules get" [
   let base = ($base_url | default $BASE_URL)
   if ($rs_number | is-empty) { error make --unspanned { msg: "path parameter 'rs-number' must be non-empty" } }
   let qp = [(serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({rs_number: (encode-path-segment $rs_number)} | format pattern "/v1/revenue-items/revenue-schedules/{rs_number}") $qp)
+  let full_url = (build-url $base ({rs_number: (encode-path-segment $rs_number)} | format pattern "/v1/revenue-items/revenue-schedules/{rs_number}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"pageSize": $page_size} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"pageSize": $page_size} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update custom fields on revenue items by revenue schedule number
@@ -13299,14 +17246,25 @@ export def "revenue-items-revenue-schedules update-custom-fieldson" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($rs_number | is-empty) { error make --unspanned { msg: "path parameter 'rs-number' must be non-empty" } }
-  let full_url = (build-url $base ({rs_number: (encode-path-segment $rs_number)} | format pattern "/v1/revenue-items/revenue-schedules/{rs_number}"))
+  let full_url = (build-url $base ({rs_number: (encode-path-segment $rs_number)} | format pattern "/v1/revenue-items/revenue-schedules/{rs_number}") $auth.query)
   let req_body = {"revenueItems": $revenue_items} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve a revenue recognition rule by product rate plan charge ID
@@ -13331,12 +17289,23 @@ export def "revenue-recognition-rules-product-charges get-rec-ruleby-rate-plan" 
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($charge_key | is-empty) { error make --unspanned { msg: "path parameter 'charge-key' must be non-empty" } }
-  let full_url = (build-url $base ({charge_key: (encode-path-segment $charge_key)} | format pattern "/v1/revenue-recognition-rules/product-charges/{charge_key}"))
+  let full_url = (build-url $base ({charge_key: (encode-path-segment $charge_key)} | format pattern "/v1/revenue-recognition-rules/product-charges/{charge_key}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve a revenue recognition rule by subscription charge ID
@@ -13361,12 +17330,23 @@ export def "revenue-recognition-rules-subscription-charges get-rec" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($charge_key | is-empty) { error make --unspanned { msg: "path parameter 'charge-key' must be non-empty" } }
-  let full_url = (build-url $base ({charge_key: (encode-path-segment $charge_key)} | format pattern "/v1/revenue-recognition-rules/subscription-charges/{charge_key}"))
+  let full_url = (build-url $base ({charge_key: (encode-path-segment $charge_key)} | format pattern "/v1/revenue-recognition-rules/subscription-charges/{charge_key}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve a revenue schedule by credit memo item ID
@@ -13391,12 +17371,23 @@ export def "revenue-schedules-credit-memo-items get-r-sby" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($cmi_id | is-empty) { error make --unspanned { msg: "path parameter 'cmi-id' must be non-empty" } }
-  let full_url = (build-url $base ({cmi_id: (encode-path-segment $cmi_id)} | format pattern "/v1/revenue-schedules/credit-memo-items/{cmi_id}"))
+  let full_url = (build-url $base ({cmi_id: (encode-path-segment $cmi_id)} | format pattern "/v1/revenue-schedules/credit-memo-items/{cmi_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a revenue schedule for a credit memo item (manual distribution)
@@ -13426,14 +17417,25 @@ export def "revenue-schedules-credit-memo-items create-r-sfor-manual-distributio
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($cmi_id | is-empty) { error make --unspanned { msg: "path parameter 'cmi-id' must be non-empty" } }
-  let full_url = (build-url $base ({cmi_id: (encode-path-segment $cmi_id)} | format pattern "/v1/revenue-schedules/credit-memo-items/{cmi_id}"))
+  let full_url = (build-url $base ({cmi_id: (encode-path-segment $cmi_id)} | format pattern "/v1/revenue-schedules/credit-memo-items/{cmi_id}") $auth.query)
   let req_body = {"notes": $notes, "revenueDistributions": $revenue_distributions, "revenueEvent": $revenue_event} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Create a revenue schedule for a credit memo item (distribute by date range)
@@ -13464,14 +17466,25 @@ export def "revenue-schedules-credit-memo-items-distribute-revenue-with-date-ran
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($cmi_id | is-empty) { error make --unspanned { msg: "path parameter 'cmi-id' must be non-empty" } }
-  let full_url = (build-url $base ({cmi_id: (encode-path-segment $cmi_id)} | format pattern "/v1/revenue-schedules/credit-memo-items/{cmi_id}/distribute-revenue-with-date-range"))
+  let full_url = (build-url $base ({cmi_id: (encode-path-segment $cmi_id)} | format pattern "/v1/revenue-schedules/credit-memo-items/{cmi_id}/distribute-revenue-with-date-range") $auth.query)
   let req_body = {"distributionType": $distribution_type, "notes": $notes, "recognitionEnd": $recognition_end, "recognitionStart": $recognition_start, "revenueEvent": $revenue_event} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve a revenue schedule by debit memo item ID
@@ -13496,12 +17509,23 @@ export def "revenue-schedules-debit-memo-items get-r-sby" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($dmi_id | is-empty) { error make --unspanned { msg: "path parameter 'dmi-id' must be non-empty" } }
-  let full_url = (build-url $base ({dmi_id: (encode-path-segment $dmi_id)} | format pattern "/v1/revenue-schedules/debit-memo-items/{dmi_id}"))
+  let full_url = (build-url $base ({dmi_id: (encode-path-segment $dmi_id)} | format pattern "/v1/revenue-schedules/debit-memo-items/{dmi_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a revenue schedule for a debit memo item (distribute by date range)
@@ -13531,14 +17555,25 @@ export def "revenue-schedules-debit-memo-items create-r-sfor-manual-distribution
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($dmi_id | is-empty) { error make --unspanned { msg: "path parameter 'dmi-id' must be non-empty" } }
-  let full_url = (build-url $base ({dmi_id: (encode-path-segment $dmi_id)} | format pattern "/v1/revenue-schedules/debit-memo-items/{dmi_id}"))
+  let full_url = (build-url $base ({dmi_id: (encode-path-segment $dmi_id)} | format pattern "/v1/revenue-schedules/debit-memo-items/{dmi_id}") $auth.query)
   let req_body = {"notes": $notes, "revenueDistributions": $revenue_distributions, "revenueEvent": $revenue_event} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Create a revenue schedule for a debit memo item (distribute by date range)
@@ -13569,14 +17604,25 @@ export def "revenue-schedules-debit-memo-items-distribute-revenue-with-date-rang
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($dmi_id | is-empty) { error make --unspanned { msg: "path parameter 'dmi-id' must be non-empty" } }
-  let full_url = (build-url $base ({dmi_id: (encode-path-segment $dmi_id)} | format pattern "/v1/revenue-schedules/debit-memo-items/{dmi_id}/distribute-revenue-with-date-range"))
+  let full_url = (build-url $base ({dmi_id: (encode-path-segment $dmi_id)} | format pattern "/v1/revenue-schedules/debit-memo-items/{dmi_id}/distribute-revenue-with-date-range") $auth.query)
   let req_body = {"distributionType": $distribution_type, "notes": $notes, "recognitionEnd": $recognition_end, "recognitionStart": $recognition_start, "revenueEvent": $revenue_event} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve a revenue schedule by invoice item adjustment key
@@ -13601,12 +17647,23 @@ export def "revenue-schedules-invoice-item-adjustments get-r-sby" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($invoice_item_adj_key | is-empty) { error make --unspanned { msg: "path parameter 'invoice-item-adj-key' must be non-empty" } }
-  let full_url = (build-url $base ({invoice_item_adj_key: (encode-path-segment $invoice_item_adj_key)} | format pattern "/v1/revenue-schedules/invoice-item-adjustments/{invoice_item_adj_key}"))
+  let full_url = (build-url $base ({invoice_item_adj_key: (encode-path-segment $invoice_item_adj_key)} | format pattern "/v1/revenue-schedules/invoice-item-adjustments/{invoice_item_adj_key}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a revenue schedule for an invoice item adjustment (manual distribution)
@@ -13636,14 +17693,25 @@ export def "revenue-schedules-invoice-item-adjustments create-r-sfor-manual-dist
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($invoice_item_adj_key | is-empty) { error make --unspanned { msg: "path parameter 'invoice-item-adj-key' must be non-empty" } }
-  let full_url = (build-url $base ({invoice_item_adj_key: (encode-path-segment $invoice_item_adj_key)} | format pattern "/v1/revenue-schedules/invoice-item-adjustments/{invoice_item_adj_key}"))
+  let full_url = (build-url $base ({invoice_item_adj_key: (encode-path-segment $invoice_item_adj_key)} | format pattern "/v1/revenue-schedules/invoice-item-adjustments/{invoice_item_adj_key}") $auth.query)
   let req_body = {"notes": $notes, "revenueDistributions": $revenue_distributions, "revenueEvent": $revenue_event} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Create a revenue schedule for an invoice item adjustment (distribute by date range)
@@ -13674,14 +17742,25 @@ export def "revenue-schedules-invoice-item-adjustments-distribute-revenue-with-d
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($invoice_item_adj_key | is-empty) { error make --unspanned { msg: "path parameter 'invoice-item-adj-key' must be non-empty" } }
-  let full_url = (build-url $base ({invoice_item_adj_key: (encode-path-segment $invoice_item_adj_key)} | format pattern "/v1/revenue-schedules/invoice-item-adjustments/{invoice_item_adj_key}/distribute-revenue-with-date-range"))
+  let full_url = (build-url $base ({invoice_item_adj_key: (encode-path-segment $invoice_item_adj_key)} | format pattern "/v1/revenue-schedules/invoice-item-adjustments/{invoice_item_adj_key}/distribute-revenue-with-date-range") $auth.query)
   let req_body = {"distributionType": $distribution_type, "notes": $notes, "recognitionEnd": $recognition_end, "recognitionStart": $recognition_start, "revenueEvent": $revenue_event} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve a revenue schedule by invoice item ID
@@ -13706,12 +17785,23 @@ export def "revenue-schedules-invoice-items get-r-sby" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($invoice_item_id | is-empty) { error make --unspanned { msg: "path parameter 'invoice-item-id' must be non-empty" } }
-  let full_url = (build-url $base ({invoice_item_id: (encode-path-segment $invoice_item_id)} | format pattern "/v1/revenue-schedules/invoice-items/{invoice_item_id}"))
+  let full_url = (build-url $base ({invoice_item_id: (encode-path-segment $invoice_item_id)} | format pattern "/v1/revenue-schedules/invoice-items/{invoice_item_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a revenue schedule for an invoice item (manual distribution)
@@ -13741,14 +17831,25 @@ export def "revenue-schedules-invoice-items create-r-sfor-manual-distribution" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($invoice_item_id | is-empty) { error make --unspanned { msg: "path parameter 'invoice-item-id' must be non-empty" } }
-  let full_url = (build-url $base ({invoice_item_id: (encode-path-segment $invoice_item_id)} | format pattern "/v1/revenue-schedules/invoice-items/{invoice_item_id}"))
+  let full_url = (build-url $base ({invoice_item_id: (encode-path-segment $invoice_item_id)} | format pattern "/v1/revenue-schedules/invoice-items/{invoice_item_id}") $auth.query)
   let req_body = {"notes": $notes, "revenueDistributions": $revenue_distributions, "revenueEvent": $revenue_event} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Create a revenue schedule for an invoice item (distribute by date range)
@@ -13779,14 +17880,25 @@ export def "revenue-schedules-invoice-items-distribute-revenue-with-date-range c
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($invoice_item_id | is-empty) { error make --unspanned { msg: "path parameter 'invoice-item-id' must be non-empty" } }
-  let full_url = (build-url $base ({invoice_item_id: (encode-path-segment $invoice_item_id)} | format pattern "/v1/revenue-schedules/invoice-items/{invoice_item_id}/distribute-revenue-with-date-range"))
+  let full_url = (build-url $base ({invoice_item_id: (encode-path-segment $invoice_item_id)} | format pattern "/v1/revenue-schedules/invoice-items/{invoice_item_id}/distribute-revenue-with-date-range") $auth.query)
   let req_body = {"distributionType": $distribution_type, "notes": $notes, "recognitionEnd": $recognition_end, "recognitionStart": $recognition_start, "revenueEvent": $revenue_event} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # List revenue schedules of a product charge by charge ID and account key
@@ -13815,12 +17927,23 @@ export def "revenue-schedules-product-charges get-r-sby-and-billing" [
   if ($charge_key | is-empty) { error make --unspanned { msg: "path parameter 'charge-key' must be non-empty" } }
   if ($account_key | is-empty) { error make --unspanned { msg: "path parameter 'account-key' must be non-empty" } }
   let qp = [(serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({charge_key: (encode-path-segment $charge_key), account_key: (encode-path-segment $account_key)} | format pattern "/v1/revenue-schedules/product-charges/{charge_key}/{account_key}") $qp)
+  let full_url = (build-url $base ({charge_key: (encode-path-segment $charge_key), account_key: (encode-path-segment $account_key)} | format pattern "/v1/revenue-schedules/product-charges/{charge_key}/{account_key}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"pageSize": $page_size} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"pageSize": $page_size} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List revenue schedules by subscription charge key
@@ -13847,12 +17970,23 @@ export def "revenue-schedules-subscription-charges get-r-sfor-subsc" [
   let base = ($base_url | default $BASE_URL)
   if ($charge_key | is-empty) { error make --unspanned { msg: "path parameter 'charge-key' must be non-empty" } }
   let qp = [(serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({charge_key: (encode-path-segment $charge_key)} | format pattern "/v1/revenue-schedules/subscription-charges/{charge_key}") $qp)
+  let full_url = (build-url $base ({charge_key: (encode-path-segment $charge_key)} | format pattern "/v1/revenue-schedules/subscription-charges/{charge_key}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"pageSize": $page_size} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"pageSize": $page_size} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a revenue schedule by subscription charge key
@@ -13890,14 +18024,25 @@ export def "revenue-schedules-subscription-charges create-r-sfor-subsc" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($charge_key | is-empty) { error make --unspanned { msg: "path parameter 'charge-key' must be non-empty" } }
-  let full_url = (build-url $base ({charge_key: (encode-path-segment $charge_key)} | format pattern "/v1/revenue-schedules/subscription-charges/{charge_key}"))
+  let full_url = (build-url $base ({charge_key: (encode-path-segment $charge_key)} | format pattern "/v1/revenue-schedules/subscription-charges/{charge_key}") $auth.query)
   let req_body = {"amount": $amount, "deferredRevenueAccountingCode": $deferred_revenue_accounting_code, "deferredRevenueAccountingCodeType": $deferred_revenue_accounting_code_type, "notes": $notes, "overrideChargeAccountingCodes": $override_charge_accounting_codes, "recognizedRevenueAccountingCode": $recognized_revenue_accounting_code, "recognizedRevenueAccountingCodeType": $recognized_revenue_accounting_code_type, "referenceId": $reference_id, "revenueDistributions": $revenue_distributions, "revenueEvent": $revenue_event, "revenueScheduleDate": $revenue_schedule_date} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Delete a revenue schedule
@@ -13922,12 +18067,23 @@ export def "revenue-schedules delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($rs_number | is-empty) { error make --unspanned { msg: "path parameter 'rs-number' must be non-empty" } }
-  let full_url = (build-url $base ({rs_number: (encode-path-segment $rs_number)} | format pattern "/v1/revenue-schedules/{rs_number}"))
+  let full_url = (build-url $base ({rs_number: (encode-path-segment $rs_number)} | format pattern "/v1/revenue-schedules/{rs_number}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # List all details of a revenue schedule
@@ -13952,12 +18108,23 @@ export def "revenue-schedules get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($rs_number | is-empty) { error make --unspanned { msg: "path parameter 'rs-number' must be non-empty" } }
-  let full_url = (build-url $base ({rs_number: (encode-path-segment $rs_number)} | format pattern "/v1/revenue-schedules/{rs_number}"))
+  let full_url = (build-url $base ({rs_number: (encode-path-segment $rs_number)} | format pattern "/v1/revenue-schedules/{rs_number}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update a revenue schedule
@@ -13985,14 +18152,25 @@ export def "revenue-schedules-basic-information update-get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($rs_number | is-empty) { error make --unspanned { msg: "path parameter 'rs-number' must be non-empty" } }
-  let full_url = (build-url $base ({rs_number: (encode-path-segment $rs_number)} | format pattern "/v1/revenue-schedules/{rs_number}/basic-information"))
+  let full_url = (build-url $base ({rs_number: (encode-path-segment $rs_number)} | format pattern "/v1/revenue-schedules/{rs_number}/basic-information") $auth.query)
   let req_body = {"notes": $notes, "referenceId": $reference_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Distribute revenue across accounting periods
@@ -14023,14 +18201,25 @@ export def "revenue-schedules-distribute-revenue-across-accounting-periods updat
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($rs_number | is-empty) { error make --unspanned { msg: "path parameter 'rs-number' must be non-empty" } }
-  let full_url = (build-url $base ({rs_number: (encode-path-segment $rs_number)} | format pattern "/v1/revenue-schedules/{rs_number}/distribute-revenue-across-accounting-periods"))
+  let full_url = (build-url $base ({rs_number: (encode-path-segment $rs_number)} | format pattern "/v1/revenue-schedules/{rs_number}/distribute-revenue-across-accounting-periods") $auth.query)
   let req_body = {"eventType": $event_type, "eventTypeSystemId": $event_type_system_id, "notes": $notes, "revenueDistributions": $revenue_distributions} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Distribute revenue on a specific date
@@ -14063,14 +18252,25 @@ export def "revenue-schedules-distribute-revenue-on-specific-date update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($rs_number | is-empty) { error make --unspanned { msg: "path parameter 'rs-number' must be non-empty" } }
-  let full_url = (build-url $base ({rs_number: (encode-path-segment $rs_number)} | format pattern "/v1/revenue-schedules/{rs_number}/distribute-revenue-on-specific-date"))
+  let full_url = (build-url $base ({rs_number: (encode-path-segment $rs_number)} | format pattern "/v1/revenue-schedules/{rs_number}/distribute-revenue-on-specific-date") $auth.query)
   let req_body = {"amount": $amount, "distributeOn": $distribute_on, "distributionType": $distribution_type, "eventType": $event_type, "eventTypeSystemId": $event_type_system_id, "notes": $notes, "percentage": $percentage} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Distribute revenue in a recognition period
@@ -14102,14 +18302,25 @@ export def "revenue-schedules-distribute-revenue-with-date-range update-by-recog
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($rs_number | is-empty) { error make --unspanned { msg: "path parameter 'rs-number' must be non-empty" } }
-  let full_url = (build-url $base ({rs_number: (encode-path-segment $rs_number)} | format pattern "/v1/revenue-schedules/{rs_number}/distribute-revenue-with-date-range"))
+  let full_url = (build-url $base ({rs_number: (encode-path-segment $rs_number)} | format pattern "/v1/revenue-schedules/{rs_number}/distribute-revenue-with-date-range") $auth.query)
   let req_body = {"distributionType": $distribution_type, "eventType": $event_type, "eventTypeSystemId": $event_type_system_id, "notes": $notes, "recognitionEnd": $recognition_end, "recognitionStart": $recognition_start} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Update a Zuora Revenue accounting code
@@ -14141,14 +18352,25 @@ export def "revpro-accounting-codes update-rev-pro" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v1/revpro-accounting-codes")
+  let full_url = (build-url $base "/v1/revpro-accounting-codes" $auth.query)
   let req_body = {"adjustmentLiabilityAccount": $adjustment_liability_account, "adjustmentRevenueAccount": $adjustment_revenue_account, "contractAssetAccount": $contract_asset_account, "contractLiabilityAccount": $contract_liability_account, "productRatePlanChargeId": $product_rate_plan_charge_id, "recognizedRevenueAccount": $recognized_revenue_account, "unbilledReceivablesAccount": $unbilled_receivables_account} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Entity-Ids": $zuora_entity_ids, "Authorization": $authorization, "Zuora-Track-Id": $zuora_track_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Generate an RSA signature
@@ -14175,14 +18397,25 @@ export def "rsa-signatures create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v1/rsa-signatures")
+  let full_url = (build-url $base "/v1/rsa-signatures" $auth.query)
   let req_body = {"method": $method, "pageId": $page_id, "uri": $uri} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Decrypt an RSA signature
@@ -14209,14 +18442,25 @@ export def "rsa-signatures-decrypt create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v1/rsa-signatures/decrypt")
+  let full_url = (build-url $base "/v1/rsa-signatures/decrypt" $auth.query)
   let req_body = {"method": $method, "publicKey": $public_key, "signature": $signature} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # List sequence sets
@@ -14243,12 +18487,23 @@ export def "sequence-sets list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pageSize" $page_size "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "name" $name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v1/sequence-sets" $qp)
+  let full_url = (build-url $base "/v1/sequence-sets" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Entity-Ids": $zuora_entity_ids, "Zuora-Track-Id": $zuora_track_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"pageSize": $page_size, "page": $page, "name": $name} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"pageSize": $page_size, "page": $page, "name": $name} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create sequence sets
@@ -14274,14 +18529,25 @@ export def "sequence-sets create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v1/sequence-sets")
+  let full_url = (build-url $base "/v1/sequence-sets" $auth.query)
   let req_body = {"sequenceSets": $sequence_sets} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Entity-Ids": $zuora_entity_ids, "Zuora-Track-Id": $zuora_track_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Delete a sequence set
@@ -14306,12 +18572,23 @@ export def "sequence-sets delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/sequence-sets/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/sequence-sets/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Entity-Ids": $zuora_entity_ids, "Zuora-Track-Id": $zuora_track_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve a sequence set
@@ -14336,12 +18613,23 @@ export def "sequence-sets get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/sequence-sets/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/sequence-sets/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Entity-Ids": $zuora_entity_ids, "Zuora-Track-Id": $zuora_track_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update a sequence set
@@ -14378,14 +18666,25 @@ export def "sequence-sets update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/sequence-sets/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/sequence-sets/{id}") $auth.query)
   let req_body = {"creditMemo": $credit_memo, "debitMemo": $debit_memo, "invoice": $invoice, "name": $name, "payment": $payment, "refund": $refund} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Entity-Ids": $zuora_entity_ids, "Zuora-Track-Id": $zuora_track_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve a revenue automation start date
@@ -14408,12 +18707,23 @@ export def "settings-finance-revenue-automation-start-date get" [
 ]: nothing -> record<startDate: string, success: bool, updatedBy: string, updatedOn: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v1/settings/finance/revenue-automation-start-date")
+  let full_url = (build-url $base "/v1/settings/finance/revenue-automation-start-date" $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a subscription
@@ -14479,14 +18789,25 @@ export def "subscriptions create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v1/subscriptions")
+  let full_url = (build-url $base "/v1/subscriptions" $auth.query)
   let req_body = {"accountKey": $account_key, "applicationOrder": $application_order, "applyCredit": $apply_credit, "applyCreditBalance": $apply_credit_balance, "autoRenew": $auto_renew, "collect": $collect, "contractEffectiveDate": $contract_effective_date, "customerAcceptanceDate": $customer_acceptance_date, "documentDate": $document_date, "gatewayId": $gateway_id, "initialTerm": $initial_term, "initialTermPeriodType": $initial_term_period_type, "invoice": $invoice, "invoiceCollect": $invoice_collect, "invoiceOwnerAccountKey": $invoice_owner_account_key, "invoiceSeparately": $invoice_separately, "invoiceTargetDate": $invoice_target_date, "notes": $notes, "paymentMethodId": $payment_method_id, "renewalSetting": $renewal_setting, "renewalTerm": $renewal_term, "renewalTermPeriodType": $renewal_term_period_type, "runBilling": $run_billing, "serviceActivationDate": $service_activation_date, "subscribeToRatePlans": $subscribe_to_rate_plans, "subscriptionNumber": $subscription_number, "targetDate": $target_date, "termStartDate": $term_start_date, "termType": $term_type, "CpqBundleJsonId__QT": $cpq_bundle_json_id_qt, "OpportunityCloseDate__QT": $opportunity_close_date_qt, "OpportunityName__QT": $opportunity_name_qt, "QuoteBusinessType__QT": $quote_business_type_qt, "QuoteNumber__QT": $quote_number_qt, "QuoteType__QT": $quote_type_qt, "IntegrationId__NS": $integration_id_ns, "IntegrationStatus__NS": $integration_status_ns, "Project__NS": $project_ns, "SalesOrder__NS": $sales_order_ns, "SyncDate__NS": $sync_date_ns} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids, "zuora-version": $zuora_version} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # List subscriptions by account key
@@ -14514,12 +18835,23 @@ export def "subscriptions-accounts get" [
   let base = ($base_url | default $BASE_URL)
   if ($account_key | is-empty) { error make --unspanned { msg: "path parameter 'account-key' must be non-empty" } }
   let qp = [(serialize-qp "pageSize" $page_size "scalar") (serialize-qp "charge-detail" $charge_detail "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_key: (encode-path-segment $account_key)} | format pattern "/v1/subscriptions/accounts/{account_key}") $qp)
+  let full_url = (build-url $base ({account_key: (encode-path-segment $account_key)} | format pattern "/v1/subscriptions/accounts/{account_key}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"pageSize": $page_size, "charge-detail": $charge_detail} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"pageSize": $page_size, "charge-detail": $charge_detail} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Preview a subscription
@@ -14562,14 +18894,25 @@ export def "subscriptions-preview create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v1/subscriptions/preview")
+  let full_url = (build-url $base "/v1/subscriptions/preview" $auth.query)
   let req_body = {"accountKey": $account_key, "contractEffectiveDate": $contract_effective_date, "customerAcceptanceDate": $customer_acceptance_date, "includeExistingDraftDocItems": $include_existing_draft_doc_items, "includeExistingDraftInvoiceItems": $include_existing_draft_invoice_items, "initialTerm": $initial_term, "initialTermPeriodType": $initial_term_period_type, "invoiceOwnerAccountKey": $invoice_owner_account_key, "invoiceTargetDate": $invoice_target_date, "notes": $notes, "previewAccountInfo": $preview_account_info, "previewType": $preview_type, "serviceActivationDate": $service_activation_date, "subscribeToRatePlans": $subscribe_to_rate_plans, "targetDate": $target_date, "termStartDate": $term_start_date, "termType": $term_type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids, "zuora-version": $zuora_version} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve a subscription by key
@@ -14596,12 +18939,23 @@ export def "subscriptions get" [
   let base = ($base_url | default $BASE_URL)
   if ($subscription_key | is-empty) { error make --unspanned { msg: "path parameter 'subscription-key' must be non-empty" } }
   let qp = [(serialize-qp "charge-detail" $charge_detail "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_key: (encode-path-segment $subscription_key)} | format pattern "/v1/subscriptions/{subscription_key}") $qp)
+  let full_url = (build-url $base ({subscription_key: (encode-path-segment $subscription_key)} | format pattern "/v1/subscriptions/{subscription_key}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"charge-detail": $charge_detail} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"charge-detail": $charge_detail} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update a subscription
@@ -14669,14 +19023,25 @@ export def "subscriptions update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_key | is-empty) { error make --unspanned { msg: "path parameter 'subscription-key' must be non-empty" } }
-  let full_url = (build-url $base ({subscription_key: (encode-path-segment $subscription_key)} | format pattern "/v1/subscriptions/{subscription_key}"))
+  let full_url = (build-url $base ({subscription_key: (encode-path-segment $subscription_key)} | format pattern "/v1/subscriptions/{subscription_key}") $auth.query)
   let req_body = {"add": $add, "applicationOrder": $application_order, "applyCredit": $apply_credit, "applyCreditBalance": $apply_credit_balance, "autoRenew": $auto_renew, "collect": $collect, "currentTerm": $current_term, "currentTermPeriodType": $current_term_period_type, "documentDate": $document_date, "includeExistingDraftDocItems": $include_existing_draft_doc_items, "includeExistingDraftInvoiceItems": $include_existing_draft_invoice_items, "invoice": $invoice, "invoiceCollect": $invoice_collect, "invoiceSeparately": $invoice_separately, "invoiceTargetDate": $invoice_target_date, "notes": $notes, "preview": $preview, "previewType": $preview_type, "remove": $remove, "renewalSetting": $renewal_setting, "renewalTerm": $renewal_term, "renewalTermPeriodType": $renewal_term_period_type, "runBilling": $run_billing, "targetDate": $target_date, "termStartDate": $term_start_date, "termType": $term_type, "update": $update, "CpqBundleJsonId__QT": $cpq_bundle_json_id_qt, "OpportunityCloseDate__QT": $opportunity_close_date_qt, "OpportunityName__QT": $opportunity_name_qt, "QuoteBusinessType__QT": $quote_business_type_qt, "QuoteNumber__QT": $quote_number_qt, "QuoteType__QT": $quote_type_qt, "IntegrationId__NS": $integration_id_ns, "IntegrationStatus__NS": $integration_status_ns, "Project__NS": $project_ns, "SalesOrder__NS": $sales_order_ns, "SyncDate__NS": $sync_date_ns} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids, "zuora-version": $zuora_version} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Cancel a subscription
@@ -14716,14 +19081,25 @@ export def "subscriptions-cancel update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_key | is-empty) { error make --unspanned { msg: "path parameter 'subscription-key' must be non-empty" } }
-  let full_url = (build-url $base ({subscription_key: (encode-path-segment $subscription_key)} | format pattern "/v1/subscriptions/{subscription_key}/cancel"))
+  let full_url = (build-url $base ({subscription_key: (encode-path-segment $subscription_key)} | format pattern "/v1/subscriptions/{subscription_key}/cancel") $auth.query)
   let req_body = {"applicationOrder": $application_order, "applyCredit": $apply_credit, "applyCreditBalance": $apply_credit_balance, "cancellationEffectiveDate": $cancellation_effective_date, "cancellationPolicy": $cancellation_policy, "collect": $collect, "contractEffectiveDate": $contract_effective_date, "documentDate": $document_date, "invoice": $invoice, "invoiceCollect": $invoice_collect, "invoiceTargetDate": $invoice_target_date, "runBilling": $run_billing, "targetDate": $target_date} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids, "zuora-version": $zuora_version} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Renew a subscription
@@ -14760,14 +19136,25 @@ export def "subscriptions-renew update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_key | is-empty) { error make --unspanned { msg: "path parameter 'subscription-key' must be non-empty" } }
-  let full_url = (build-url $base ({subscription_key: (encode-path-segment $subscription_key)} | format pattern "/v1/subscriptions/{subscription_key}/renew"))
+  let full_url = (build-url $base ({subscription_key: (encode-path-segment $subscription_key)} | format pattern "/v1/subscriptions/{subscription_key}/renew") $auth.query)
   let req_body = {"applicationOrder": $application_order, "applyCredit": $apply_credit, "applyCreditBalance": $apply_credit_balance, "collect": $collect, "documentDate": $document_date, "invoice": $invoice, "invoiceCollect": $invoice_collect, "invoiceTargetDate": $invoice_target_date, "runBilling": $run_billing, "targetDate": $target_date} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids, "zuora-version": $zuora_version} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Resume a subscription
@@ -14810,14 +19197,25 @@ export def "subscriptions-resume update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_key | is-empty) { error make --unspanned { msg: "path parameter 'subscription-key' must be non-empty" } }
-  let full_url = (build-url $base ({subscription_key: (encode-path-segment $subscription_key)} | format pattern "/v1/subscriptions/{subscription_key}/resume"))
+  let full_url = (build-url $base ({subscription_key: (encode-path-segment $subscription_key)} | format pattern "/v1/subscriptions/{subscription_key}/resume") $auth.query)
   let req_body = {"applicationOrder": $application_order, "applyCredit": $apply_credit, "applyCreditBalance": $apply_credit_balance, "collect": $collect, "contractEffectiveDate": $contract_effective_date, "documentDate": $document_date, "extendsTerm": $extends_term, "invoice": $invoice, "invoiceCollect": $invoice_collect, "invoiceTargetDate": $invoice_target_date, "resumePeriods": $resume_periods, "resumePeriodsType": $resume_periods_type, "resumePolicy": $resume_policy, "resumeSpecificDate": $resume_specific_date, "runBilling": $run_billing, "targetDate": $target_date} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids, "zuora-version": $zuora_version} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Suspend a subscription
@@ -14865,14 +19263,25 @@ export def "subscriptions-suspend update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_key | is-empty) { error make --unspanned { msg: "path parameter 'subscription-key' must be non-empty" } }
-  let full_url = (build-url $base ({subscription_key: (encode-path-segment $subscription_key)} | format pattern "/v1/subscriptions/{subscription_key}/suspend"))
+  let full_url = (build-url $base ({subscription_key: (encode-path-segment $subscription_key)} | format pattern "/v1/subscriptions/{subscription_key}/suspend") $auth.query)
   let req_body = {"applicationOrder": $application_order, "applyCredit": $apply_credit, "applyCreditBalance": $apply_credit_balance, "collect": $collect, "contractEffectiveDate": $contract_effective_date, "documentDate": $document_date, "extendsTerm": $extends_term, "invoice": $invoice, "invoiceCollect": $invoice_collect, "invoiceTargetDate": $invoice_target_date, "resume": $resume, "resumePeriods": $resume_periods, "resumePeriodsType": $resume_periods_type, "resumePolicy": $resume_policy, "resumeSpecificDate": $resume_specific_date, "runBilling": $run_billing, "suspendPeriods": $suspend_periods, "suspendPeriodsType": $suspend_periods_type, "suspendPolicy": $suspend_policy, "suspendSpecificDate": $suspend_specific_date, "targetDate": $target_date} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids, "zuora-version": $zuora_version} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve a subscription by key and version
@@ -14901,12 +19310,23 @@ export def "subscriptions-versions get-by-and" [
   if ($subscription_key | is-empty) { error make --unspanned { msg: "path parameter 'subscription-key' must be non-empty" } }
   if ($version | is-empty) { error make --unspanned { msg: "path parameter 'version' must be non-empty" } }
   let qp = [(serialize-qp "charge-detail" $charge_detail "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_key: (encode-path-segment $subscription_key), version: (encode-path-segment $version)} | format pattern "/v1/subscriptions/{subscription_key}/versions/{version}") $qp)
+  let full_url = (build-url $base ({subscription_key: (encode-path-segment $subscription_key), version: (encode-path-segment $version)} | format pattern "/v1/subscriptions/{subscription_key}/versions/{version}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"charge-detail": $charge_detail} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"charge-detail": $charge_detail} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List ramp metrics by subscription key
@@ -14931,12 +19351,23 @@ export def "subscriptions-ramp-metrics get-by-key" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_key | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionKey' must be non-empty" } }
-  let full_url = (build-url $base ({subscription_key: (encode-path-segment $subscription_key)} | format pattern "/v1/subscriptions/{subscription_key}/ramp-metrics"))
+  let full_url = (build-url $base ({subscription_key: (encode-path-segment $subscription_key)} | format pattern "/v1/subscriptions/{subscription_key}/ramp-metrics") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve a ramp by subscription key
@@ -14961,12 +19392,23 @@ export def "subscriptions-ramps get-by-key" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_key | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionKey' must be non-empty" } }
-  let full_url = (build-url $base ({subscription_key: (encode-path-segment $subscription_key)} | format pattern "/v1/subscriptions/{subscription_key}/ramps"))
+  let full_url = (build-url $base ({subscription_key: (encode-path-segment $subscription_key)} | format pattern "/v1/subscriptions/{subscription_key}/ramps") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update subscription custom fields
@@ -14995,14 +19437,25 @@ export def "subscriptions-custom-fields update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_number | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionNumber' must be non-empty" } }
-  let full_url = (build-url $base ({subscription_number: (encode-path-segment $subscription_number)} | format pattern "/v1/subscriptions/{subscription_number}/customFields"))
+  let full_url = (build-url $base ({subscription_number: (encode-path-segment $subscription_number)} | format pattern "/v1/subscriptions/{subscription_number}/customFields") $auth.query)
   let req_body = {"customFields": $custom_fields, "ratePlans": $rate_plans} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Update subscription custom fields of a subscription version
@@ -15033,14 +19486,25 @@ export def "subscriptions-versions-custom-fields update-of-specified" [
   let base = ($base_url | default $BASE_URL)
   if ($subscription_number | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionNumber' must be non-empty" } }
   if ($version | is-empty) { error make --unspanned { msg: "path parameter 'version' must be non-empty" } }
-  let full_url = (build-url $base ({subscription_number: (encode-path-segment $subscription_number), version: (encode-path-segment $version)} | format pattern "/v1/subscriptions/{subscription_number}/versions/{version}/customFields"))
+  let full_url = (build-url $base ({subscription_number: (encode-path-segment $subscription_number), version: (encode-path-segment $version)} | format pattern "/v1/subscriptions/{subscription_number}/versions/{version}/customFields") $auth.query)
   let req_body = {"customFields": $custom_fields, "ratePlans": $rate_plans} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Delete a taxation item
@@ -15065,12 +19529,23 @@ export def "taxationitems delete-taxation-item" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/taxationitems/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/taxationitems/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve a taxation item
@@ -15095,12 +19570,23 @@ export def "taxationitems get-taxation-item" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/taxationitems/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/taxationitems/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update a taxation item
@@ -15139,14 +19625,25 @@ export def "taxationitems update-taxation-item" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/taxationitems/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/taxationitems/{id}") $auth.query)
   let req_body = {"exemptAmount": $exempt_amount, "financeInformation": $finance_information, "jurisdiction": $jurisdiction, "locationCode": $location_code, "name": $name, "taxAmount": $tax_amount, "taxCode": $tax_code, "taxCodeDescription": $tax_code_description, "taxDate": $tax_date, "taxRate": $tax_rate, "taxRateDescription": $tax_rate_description, "taxRateType": $tax_rate_type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # List all invoices for an account
@@ -15173,12 +19670,23 @@ export def "transactions-invoices-accounts get" [
   let base = ($base_url | default $BASE_URL)
   if ($account_key | is-empty) { error make --unspanned { msg: "path parameter 'account-key' must be non-empty" } }
   let qp = [(serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_key: (encode-path-segment $account_key)} | format pattern "/v1/transactions/invoices/accounts/{account_key}") $qp)
+  let full_url = (build-url $base ({account_key: (encode-path-segment $account_key)} | format pattern "/v1/transactions/invoices/accounts/{account_key}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"pageSize": $page_size} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"pageSize": $page_size} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List all payments for an account
@@ -15205,12 +19713,23 @@ export def "transactions-payments-accounts get" [
   let base = ($base_url | default $BASE_URL)
   if ($account_key | is-empty) { error make --unspanned { msg: "path parameter 'account-key' must be non-empty" } }
   let qp = [(serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_key: (encode-path-segment $account_key)} | format pattern "/v1/transactions/payments/accounts/{account_key}") $qp)
+  let full_url = (build-url $base ({account_key: (encode-path-segment $account_key)} | format pattern "/v1/transactions/payments/accounts/{account_key}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"pageSize": $page_size} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"pageSize": $page_size} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Upload a usage file
@@ -15235,7 +19754,7 @@ export def "usage create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v1/usage")
+  let full_url = (build-url $base "/v1/usage" $auth.query)
   let req_body = {"file": $file} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
@@ -15244,7 +19763,18 @@ export def "usage create" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body ["file"] $dry_run)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: $mp.content_type
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $mp.body $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve a usage record
@@ -15271,12 +19801,23 @@ export def "usage-accounts get" [
   let base = ($base_url | default $BASE_URL)
   if ($account_key | is-empty) { error make --unspanned { msg: "path parameter 'account-key' must be non-empty" } }
   let qp = [(serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_key: (encode-path-segment $account_key)} | format pattern "/v1/usage/accounts/{account_key}") $qp)
+  let full_url = (build-url $base ({account_key: (encode-path-segment $account_key)} | format pattern "/v1/usage/accounts/{account_key}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"pageSize": $page_size} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"pageSize": $page_size} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Multi-entity: Accept user access
@@ -15301,12 +19842,23 @@ export def "users-accept-access update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
-  let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/v1/users/{username}/accept-access"))
+  let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/v1/users/{username}/accept-access") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Multi-entity: List all entities that a user can access
@@ -15331,12 +19883,23 @@ export def "users-accessible-entities get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
-  let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/v1/users/{username}/accessible-entities"))
+  let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/v1/users/{username}/accessible-entities") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Multi-entity: Deny user access
@@ -15361,12 +19924,23 @@ export def "users-deny-access update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
-  let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/v1/users/{username}/deny-access"))
+  let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/v1/users/{username}/deny-access") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Multi-entity: Send user access requests
@@ -15393,14 +19967,25 @@ export def "users-request-access update-send" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
-  let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/v1/users/{username}/request-access"))
+  let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/v1/users/{username}/request-access") $auth.query)
   let req_body = {"targetEntityIds": $target_entity_ids} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id, "Zuora-Entity-Ids": $zuora_entity_ids} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # List workflows
@@ -15432,12 +20017,23 @@ export def "workflows list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "callout_trigger" $callout_trigger "scalar") (serialize-qp "interval" $interval "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "ondemand_trigger" $ondemand_trigger "scalar") (serialize-qp "scheduled_trigger" $scheduled_trigger "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "page_length" $page_length "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/workflows" $qp)
+  let full_url = (build-url $base "/workflows" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Zuora-Entity-Ids": $zuora_entity_ids, "Zuora-Track-Id": $zuora_track_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"callout_trigger": $callout_trigger, "interval": $interval, "name": $name, "ondemand_trigger": $ondemand_trigger, "scheduled_trigger": $scheduled_trigger, "page": $page, "page_length": $page_length} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"callout_trigger": $callout_trigger, "interval": $interval, "name": $name, "ondemand_trigger": $ondemand_trigger, "scheduled_trigger": $scheduled_trigger, "page": $page, "page_length": $page_length} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Import a workflow
@@ -15466,14 +20062,25 @@ export def "workflows-import create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/workflows/import")
+  let full_url = (build-url $base "/workflows/import" $auth.query)
   let req_body = {"linkages": $linkages, "tasks": $tasks, "workflow": $workflow} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve workflow task usage
@@ -15501,12 +20108,23 @@ export def "workflows-metrics-json get-usages" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar") (serialize-qp "metrics" $metrics "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/workflows/metrics.json" $qp)
+  let full_url = (build-url $base "/workflows/metrics.json" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Zuora-Entity-Ids": $zuora_entity_ids, "Zuora-Track-Id": $zuora_track_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"startDate": $start_date, "endDate": $end_date, "metrics": $metrics} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"startDate": $start_date, "endDate": $end_date, "metrics": $metrics} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List workflow tasks
@@ -15542,12 +20160,23 @@ export def "workflows-tasks list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "instance" $instance "scalar") (serialize-qp "action_type" $action_type "scalar") (serialize-qp "object" $object "scalar") (serialize-qp "object_id" $object_id "scalar") (serialize-qp "call_type" $call_type "scalar") (serialize-qp "workflow_id" $workflow_id "scalar") (serialize-qp "tags" $tags "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "page_length" $page_length "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/workflows/tasks" $qp)
+  let full_url = (build-url $base "/workflows/tasks" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Zuora-Entity-Ids": $zuora_entity_ids, "Zuora-Track-Id": $zuora_track_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"id": $id, "name": $name, "instance": $instance, "action_type": $action_type, "object": $object, "object_id": $object_id, "call_type": $call_type, "workflow_id": $workflow_id, "tags": $tags, "page": $page, "page_length": $page_length} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"id": $id, "name": $name, "instance": $instance, "action_type": $action_type, "object": $object, "object_id": $object_id, "call_type": $call_type, "workflow_id": $workflow_id, "tags": $tags, "page": $page, "page_length": $page_length} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update workflow tasks
@@ -15574,14 +20203,25 @@ export def "workflows-tasks-batch-update update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/workflows/tasks/batch_update")
+  let full_url = (build-url $base "/workflows/tasks/batch_update" $auth.query)
   let req_body = {"data": $data} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Zuora-Entity-Ids": $zuora_entity_ids, "Zuora-Track-Id": $zuora_track_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve a workflow task
@@ -15607,12 +20247,23 @@ export def "workflows-tasks get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($task_id | is-empty) { error make --unspanned { msg: "path parameter 'task_id' must be non-empty" } }
-  let full_url = (build-url $base ({task_id: (encode-path-segment $task_id)} | format pattern "/workflows/tasks/{task_id}"))
+  let full_url = (build-url $base ({task_id: (encode-path-segment $task_id)} | format pattern "/workflows/tasks/{task_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Zuora-Entity-Ids": $zuora_entity_ids, "Zuora-Track-Id": $zuora_track_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Rerun a workflow task
@@ -15638,12 +20289,23 @@ export def "workflows-tasks-rerun create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($task_id | is-empty) { error make --unspanned { msg: "path parameter 'task_id' must be non-empty" } }
-  let full_url = (build-url $base ({task_id: (encode-path-segment $task_id)} | format pattern "/workflows/tasks/{task_id}/rerun"))
+  let full_url = (build-url $base ({task_id: (encode-path-segment $task_id)} | format pattern "/workflows/tasks/{task_id}/rerun") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Zuora-Entity-Ids": $zuora_entity_ids, "Zuora-Track-Id": $zuora_track_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Delete a workflow
@@ -15669,12 +20331,23 @@ export def "workflows delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($workflow_id | is-empty) { error make --unspanned { msg: "path parameter 'workflow_id' must be non-empty" } }
-  let full_url = (build-url $base ({workflow_id: (encode-path-segment $workflow_id)} | format pattern "/workflows/{workflow_id}"))
+  let full_url = (build-url $base ({workflow_id: (encode-path-segment $workflow_id)} | format pattern "/workflows/{workflow_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Zuora-Entity-Ids": $zuora_entity_ids, "Zuora-Track-Id": $zuora_track_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve a workflow
@@ -15700,12 +20373,23 @@ export def "workflows get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($workflow_id | is-empty) { error make --unspanned { msg: "path parameter 'workflow_id' must be non-empty" } }
-  let full_url = (build-url $base ({workflow_id: (encode-path-segment $workflow_id)} | format pattern "/workflows/{workflow_id}"))
+  let full_url = (build-url $base ({workflow_id: (encode-path-segment $workflow_id)} | format pattern "/workflows/{workflow_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Zuora-Entity-Ids": $zuora_entity_ids, "Zuora-Track-Id": $zuora_track_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update a workflow definition
@@ -15740,14 +20424,25 @@ export def "workflows update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($workflow_id | is-empty) { error make --unspanned { msg: "path parameter 'workflow_id' must be non-empty" } }
-  let full_url = (build-url $base ({workflow_id: (encode-path-segment $workflow_id)} | format pattern "/workflows/{workflow_id}"))
+  let full_url = (build-url $base ({workflow_id: (encode-path-segment $workflow_id)} | format pattern "/workflows/{workflow_id}") $auth.query)
   let req_body = {"callout_trigger": $callout_trigger, "description": $description, "interval": $interval, "name": $name, "ondemand_trigger": $ondemand_trigger, "priority": $priority, "scheduled_trigger": $scheduled_trigger, "status": $status, "timezone": $timezone} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Entity-Ids": $zuora_entity_ids, "Authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Export a workflow
@@ -15771,12 +20466,23 @@ export def "workflows-export get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($workflow_id | is-empty) { error make --unspanned { msg: "path parameter 'workflow_id' must be non-empty" } }
-  let full_url = (build-url $base ({workflow_id: (encode-path-segment $workflow_id)} | format pattern "/workflows/{workflow_id}/export"))
+  let full_url = (build-url $base ({workflow_id: (encode-path-segment $workflow_id)} | format pattern "/workflows/{workflow_id}/export") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Zuora-Track-Id": $zuora_track_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Run a workflow
@@ -15804,12 +20510,23 @@ export def "workflows-run create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($workflow_id | is-empty) { error make --unspanned { msg: "path parameter 'workflow_id' must be non-empty" } }
-  let full_url = (build-url $base ({workflow_id: (encode-path-segment $workflow_id)} | format pattern "/workflows/{workflow_id}/run"))
+  let full_url = (build-url $base ({workflow_id: (encode-path-segment $workflow_id)} | format pattern "/workflows/{workflow_id}/run") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Zuora-Entity-Ids": $zuora_entity_ids, "Zuora-Track-Id": $zuora_track_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; charset=utf-8" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; charset=utf-8"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }

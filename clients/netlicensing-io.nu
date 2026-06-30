@@ -8,7 +8,7 @@ const BASE_URL = "https://go.netlicensing.io/core/v2/rest"
 # `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
 # where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o LABS64_NETLICENSING_RESTFUL_API_TEST_CENTER_TOKEN | default "" }
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o LABS64_NETLICENSING_RESTFUL_API_TEST_CENTER_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
@@ -42,14 +42,11 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
-# Trick: `url encode --all` over-encodes, then we decode the four unreserved
-# punctuation chars back. Pre-existing %XX sequences in the input survive
-# because `url encode --all` first turns their % into %25.
 def encode-path-segment [v: any]: nothing -> string {
   $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
-# Serialize an array-typed path parameter (issue 49.A). OpenAPI 3 `style: simple`
+# Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
 # (the default for path params) and Swagger 2 `collectionFormat: csv` both join
 # the elements with a literal comma WITHIN the single path segment, each element
 # RFC-3986-encoded individually (so a comma inside an element stays %2C). Without
@@ -60,51 +57,51 @@ def encode-path-array [v: any]: nothing -> string {
   if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
 }
 
-# Build URL from base, path, and optional query string
-def build-url [base: string, path: string, query?: string]: nothing -> string {
+# Build the request URL from base, path, and any number of pre-encoded query
+# fragments (param serializer output and/or the auth query). Each fragment is an
+# `&`-joinable `key=value` string already percent-encoded by its producer; empty
+# fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
+# delimiters are hand-spliced — and any query already on the base URL is merged in.
+def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
   let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
-  let result = ($parsed | upsert path $full_path)
-  if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
+  let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
+  $parsed | upsert path $full_path | upsert query $query | url join
 }
 
-# Build the dry-run record returned by --dry-run. Shape:
-#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
-#    auth: {scheme, location}}
-# `meta` carries logical-form data (the query record by spec name, the pre-serialization
-# body) that do-request itself cannot reconstruct from its wire-format args.
-def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
-  let m = ($meta | default {})
-  {
-    dry_run: true
-    method: $method
-    url: $url
-    query: ($m | get -o query | default {})
-    headers: $auth.headers
-    body: ($m | get -o body)
-    content_type: $content_type
-    timeout: $timeout
-    auth: {scheme: $auth.scheme, location: $auth.location}
-  }
+# Success policy: did this response succeed? Single source of truth, consulted by
+# handle-response and the HEAD header-unwrap. Empty ok_codes means the spec listed
+# none, so fall back to < 400. Otherwise: any 2xx, plus documented success codes.
+def status-ok [status: int, ok_codes: list<int>]: nothing -> bool {
+  if ($ok_codes | is-empty) { $status < 400 } else { ($status >= 200 and $status < 300) or ($status in $ok_codes) }
 }
 
-# Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
-  let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
-  let timeout = ($max_time | default 30min)
-  let ct = ($content_type | default "application/json")
-  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
-  let resp = match $method {
-    "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
-  }
-  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
-  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
+# Unwrap a `--full` HTTP response into the user-facing value. Response arrives
+# via pipeline; ok_codes gates the error throw (see status-ok).
+def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: record -> any {
+  let resp = $in
+  if $allow_errors { return $resp }
+  if not (status-ok $resp.status $ok_codes) { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } }
+  if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
+  if $resp.status == 204 { return null }
+  $resp.body
+}
+
+# GET — bodyless, honours --raw
+def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+}
+
+# POST — body + content-type
+def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# DELETE — body via --data
+def send-delete [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http delete --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url } else { http delete --headers $req.headers --content-type $req.content_type --data $body --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url }
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 def base-url-completer [] { ["https://go.netlicensing.io/core/v2/rest"] }
@@ -162,10 +159,21 @@ export def "license list" [
 ]: nothing -> table<infos: any, items: any> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/license")
+  let full_url = (build-url $base "/license" $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create License
@@ -201,13 +209,24 @@ export def "license create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/license")
+  let full_url = (build-url $base "/license" $auth.query)
   let req_body = {"active": $active, "currency": $currency, "hidden": $hidden, "licenseTemplateNumber": $license_template_number, "licenseeNumber": $licensee_number, "name": $name, "number": $number, "parentfeature": $parentfeature, "price": $price, "quantity": $quantity, "startDate": $start_date, "timeVolume": $time_volume, "timeVolumePeriod": $time_volume_period, "usedQuantity": $used_quantity} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/x-www-form-urlencoded"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Delete License
@@ -230,10 +249,21 @@ export def "license delete" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($license_number | is-empty) { error make --unspanned { msg: "path parameter 'licenseNumber' must be non-empty" } }
-  let full_url = (build-url $base ({license_number: (encode-path-segment $license_number)} | format pattern "/license/{license_number}"))
+  let full_url = (build-url $base ({license_number: (encode-path-segment $license_number)} | format pattern "/license/{license_number}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Get License
@@ -256,10 +286,21 @@ export def "license get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($license_number | is-empty) { error make --unspanned { msg: "path parameter 'licenseNumber' must be non-empty" } }
-  let full_url = (build-url $base ({license_number: (encode-path-segment $license_number)} | format pattern "/license/{license_number}"))
+  let full_url = (build-url $base ({license_number: (encode-path-segment $license_number)} | format pattern "/license/{license_number}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update License
@@ -295,13 +336,24 @@ export def "license update" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($license_number | is-empty) { error make --unspanned { msg: "path parameter 'licenseNumber' must be non-empty" } }
-  let full_url = (build-url $base ({license_number: (encode-path-segment $license_number)} | format pattern "/license/{license_number}"))
+  let full_url = (build-url $base ({license_number: (encode-path-segment $license_number)} | format pattern "/license/{license_number}") $auth.query)
   let req_body = {"active": $active, "currency": $currency, "hidden": $hidden, "name": $name, "number": $number, "parentfeature": $parentfeature, "price": $price, "quantity": $quantity, "startDate": $start_date, "timeVolume": $time_volume, "timeVolumePeriod": $time_volume_period, "usedQuantity": $used_quantity} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/x-www-form-urlencoded"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # List Licensees
@@ -322,10 +374,21 @@ export def "licensee list" [
 ]: nothing -> table<infos: any, items: any> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/licensee")
+  let full_url = (build-url $base "/licensee" $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create Licensee
@@ -352,13 +415,24 @@ export def "licensee create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/licensee")
+  let full_url = (build-url $base "/licensee" $auth.query)
   let req_body = {"active": $active, "markedForTransfer": $marked_for_transfer, "name": $name, "number": $number, "productNumber": $product_number} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/x-www-form-urlencoded"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Delete Licensee
@@ -383,10 +457,21 @@ export def "licensee delete" [
   let base = ($base_url | default $BASE_URL)
   if ($licensee_number | is-empty) { error make --unspanned { msg: "path parameter 'licenseeNumber' must be non-empty" } }
   let qp = [(serialize-qp "forceCascade" $force_cascade "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({licensee_number: (encode-path-segment $licensee_number)} | format pattern "/licensee/{licensee_number}") $qp)
+  let full_url = (build-url $base ({licensee_number: (encode-path-segment $licensee_number)} | format pattern "/licensee/{licensee_number}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"forceCascade": $force_cascade} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"forceCascade": $force_cascade} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Get Licensee
@@ -409,10 +494,21 @@ export def "licensee get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($licensee_number | is-empty) { error make --unspanned { msg: "path parameter 'licenseeNumber' must be non-empty" } }
-  let full_url = (build-url $base ({licensee_number: (encode-path-segment $licensee_number)} | format pattern "/licensee/{licensee_number}"))
+  let full_url = (build-url $base ({licensee_number: (encode-path-segment $licensee_number)} | format pattern "/licensee/{licensee_number}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update Licensee
@@ -440,13 +536,24 @@ export def "licensee update" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($licensee_number | is-empty) { error make --unspanned { msg: "path parameter 'licenseeNumber' must be non-empty" } }
-  let full_url = (build-url $base ({licensee_number: (encode-path-segment $licensee_number)} | format pattern "/licensee/{licensee_number}"))
+  let full_url = (build-url $base ({licensee_number: (encode-path-segment $licensee_number)} | format pattern "/licensee/{licensee_number}") $auth.query)
   let req_body = {"active": $active, "markedForTransfer": $marked_for_transfer, "name": $name, "number": $number} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/x-www-form-urlencoded"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Transfer Licenses
@@ -471,13 +578,24 @@ export def "licensee-transfer create-licenses" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($licensee_number | is-empty) { error make --unspanned { msg: "path parameter 'licenseeNumber' must be non-empty" } }
-  let full_url = (build-url $base ({licensee_number: (encode-path-segment $licensee_number)} | format pattern "/licensee/{licensee_number}/transfer"))
+  let full_url = (build-url $base ({licensee_number: (encode-path-segment $licensee_number)} | format pattern "/licensee/{licensee_number}/transfer") $auth.query)
   let req_body = {"sourceLicenseeNumber": $source_licensee_number} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/x-www-form-urlencoded"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Validate Licensee
@@ -507,13 +625,24 @@ export def "licensee-validate validate" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($licensee_number | is-empty) { error make --unspanned { msg: "path parameter 'licenseeNumber' must be non-empty" } }
-  let full_url = (build-url $base ({licensee_number: (encode-path-segment $licensee_number)} | format pattern "/licensee/{licensee_number}/validate"))
+  let full_url = (build-url $base ({licensee_number: (encode-path-segment $licensee_number)} | format pattern "/licensee/{licensee_number}/validate") $auth.query)
   let req_body = {"action": $action, "licenseeName": $licensee_name, "nodeSecret": $node_secret, "productModuleNumber": $product_module_number, "productNumber": $product_number, "sessionId": $session_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/x-www-form-urlencoded"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # List License Templates
@@ -534,10 +663,21 @@ export def "licensetemplate list-license-templates" [
 ]: nothing -> table<infos: any, items: any> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/licensetemplate")
+  let full_url = (build-url $base "/licensetemplate" $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create License Template
@@ -574,13 +714,24 @@ export def "licensetemplate create-license-template" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/licensetemplate")
+  let full_url = (build-url $base "/licensetemplate" $auth.query)
   let req_body = {"active": $active, "automatic": $automatic, "currency": $currency, "hidden": $hidden, "hideLicenses": $hide_licenses, "licenseType": $license_type, "maxSessions": $max_sessions, "name": $name, "number": $number, "price": $price, "productModuleNumber": $product_module_number, "quantity": $quantity, "quota": $quota, "timeVolume": $time_volume, "timeVolumePeriod": $time_volume_period} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/x-www-form-urlencoded"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Delete License Template
@@ -605,10 +756,21 @@ export def "licensetemplate delete-license-template" [
   let base = ($base_url | default $BASE_URL)
   if ($license_template_number | is-empty) { error make --unspanned { msg: "path parameter 'licenseTemplateNumber' must be non-empty" } }
   let qp = [(serialize-qp "forceCascade" $force_cascade "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({license_template_number: (encode-path-segment $license_template_number)} | format pattern "/licensetemplate/{license_template_number}") $qp)
+  let full_url = (build-url $base ({license_template_number: (encode-path-segment $license_template_number)} | format pattern "/licensetemplate/{license_template_number}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"forceCascade": $force_cascade} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"forceCascade": $force_cascade} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Get License Template
@@ -631,10 +793,21 @@ export def "licensetemplate get-license-template" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($license_template_number | is-empty) { error make --unspanned { msg: "path parameter 'licenseTemplateNumber' must be non-empty" } }
-  let full_url = (build-url $base ({license_template_number: (encode-path-segment $license_template_number)} | format pattern "/licensetemplate/{license_template_number}"))
+  let full_url = (build-url $base ({license_template_number: (encode-path-segment $license_template_number)} | format pattern "/licensetemplate/{license_template_number}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update License Template
@@ -672,13 +845,24 @@ export def "licensetemplate update-license-template" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($license_template_number | is-empty) { error make --unspanned { msg: "path parameter 'licenseTemplateNumber' must be non-empty" } }
-  let full_url = (build-url $base ({license_template_number: (encode-path-segment $license_template_number)} | format pattern "/licensetemplate/{license_template_number}"))
+  let full_url = (build-url $base ({license_template_number: (encode-path-segment $license_template_number)} | format pattern "/licensetemplate/{license_template_number}") $auth.query)
   let req_body = {"active": $active, "automatic": $automatic, "currency": $currency, "hidden": $hidden, "hideLicenses": $hide_licenses, "licenseType": $license_type, "maxSessions": $max_sessions, "name": $name, "number": $number, "price": $price, "quantity": $quantity, "quota": $quota, "timeVolume": $time_volume, "timeVolumePeriod": $time_volume_period} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/x-www-form-urlencoded"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # List Payment Methods
@@ -699,10 +883,21 @@ export def "paymentmethod list-payment-methods" [
 ]: nothing -> table<infos: any, items: any> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/paymentmethod")
+  let full_url = (build-url $base "/paymentmethod" $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get Payment Method
@@ -725,10 +920,21 @@ export def "paymentmethod get-payment-method" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($payment_method_number | is-empty) { error make --unspanned { msg: "path parameter 'paymentMethodNumber' must be non-empty" } }
-  let full_url = (build-url $base ({payment_method_number: (encode-path-segment $payment_method_number)} | format pattern "/paymentmethod/{payment_method_number}"))
+  let full_url = (build-url $base ({payment_method_number: (encode-path-segment $payment_method_number)} | format pattern "/paymentmethod/{payment_method_number}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update Payment Method
@@ -754,13 +960,24 @@ export def "paymentmethod update-payment-method" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($payment_method_number | is-empty) { error make --unspanned { msg: "path parameter 'paymentMethodNumber' must be non-empty" } }
-  let full_url = (build-url $base ({payment_method_number: (encode-path-segment $payment_method_number)} | format pattern "/paymentmethod/{payment_method_number}"))
+  let full_url = (build-url $base ({payment_method_number: (encode-path-segment $payment_method_number)} | format pattern "/paymentmethod/{payment_method_number}") $auth.query)
   let req_body = {"active": $active, "paypal.subject": $paypal_subject} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/x-www-form-urlencoded"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # List Products
@@ -781,10 +998,21 @@ export def "product list" [
 ]: nothing -> table<infos: any, items: any> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/product")
+  let full_url = (build-url $base "/product" $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create Product
@@ -814,13 +1042,24 @@ export def "product create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/product")
+  let full_url = (build-url $base "/product" $auth.query)
   let req_body = {"active": $active, "description": $description, "licenseeAutoCreate": $licensee_auto_create, "licensingInfo": $licensing_info, "name": $name, "number": $number, "vatMode": $vat_mode, "version": $version} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/x-www-form-urlencoded"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Delete Product
@@ -845,10 +1084,21 @@ export def "product delete" [
   let base = ($base_url | default $BASE_URL)
   if ($product_number | is-empty) { error make --unspanned { msg: "path parameter 'productNumber' must be non-empty" } }
   let qp = [(serialize-qp "forceCascade" $force_cascade "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({product_number: (encode-path-segment $product_number)} | format pattern "/product/{product_number}") $qp)
+  let full_url = (build-url $base ({product_number: (encode-path-segment $product_number)} | format pattern "/product/{product_number}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"forceCascade": $force_cascade} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"forceCascade": $force_cascade} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Get Product
@@ -871,10 +1121,21 @@ export def "product get-number" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($product_number | is-empty) { error make --unspanned { msg: "path parameter 'productNumber' must be non-empty" } }
-  let full_url = (build-url $base ({product_number: (encode-path-segment $product_number)} | format pattern "/product/{product_number}"))
+  let full_url = (build-url $base ({product_number: (encode-path-segment $product_number)} | format pattern "/product/{product_number}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update Product
@@ -906,13 +1167,24 @@ export def "product update" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($product_number | is-empty) { error make --unspanned { msg: "path parameter 'productNumber' must be non-empty" } }
-  let full_url = (build-url $base ({product_number: (encode-path-segment $product_number)} | format pattern "/product/{product_number}"))
+  let full_url = (build-url $base ({product_number: (encode-path-segment $product_number)} | format pattern "/product/{product_number}") $auth.query)
   let req_body = {"active": $active, "description": $description, "licenseeAutoCreate": $licensee_auto_create, "licensingInfo": $licensing_info, "name": $name, "number": $number, "vatMode": $vat_mode, "version": $version} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/x-www-form-urlencoded"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # List Product Modules
@@ -933,10 +1205,21 @@ export def "productmodule list-product-modules" [
 ]: nothing -> table<infos: any, items: any> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/productmodule")
+  let full_url = (build-url $base "/productmodule" $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create Product Module
@@ -968,13 +1251,24 @@ export def "productmodule create-product-module" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/productmodule")
+  let full_url = (build-url $base "/productmodule" $auth.query)
   let req_body = {"active": $active, "licenseTemplate": $license_template, "licensingModel": $licensing_model, "maxCheckoutValidity": $max_checkout_validity, "name": $name, "nodeSecretMode": $node_secret_mode, "number": $number, "productNumber": $product_number, "redThreshold": $red_threshold, "yellowThreshold": $yellow_threshold} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/x-www-form-urlencoded"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Delete Product Module
@@ -999,10 +1293,21 @@ export def "productmodule delete-product-module" [
   let base = ($base_url | default $BASE_URL)
   if ($product_module_number | is-empty) { error make --unspanned { msg: "path parameter 'productModuleNumber' must be non-empty" } }
   let qp = [(serialize-qp "forceCascade" $force_cascade "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({product_module_number: (encode-path-segment $product_module_number)} | format pattern "/productmodule/{product_module_number}") $qp)
+  let full_url = (build-url $base ({product_module_number: (encode-path-segment $product_module_number)} | format pattern "/productmodule/{product_module_number}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"forceCascade": $force_cascade} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"forceCascade": $force_cascade} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Get Product Module
@@ -1025,10 +1330,21 @@ export def "productmodule get-product-module" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($product_module_number | is-empty) { error make --unspanned { msg: "path parameter 'productModuleNumber' must be non-empty" } }
-  let full_url = (build-url $base ({product_module_number: (encode-path-segment $product_module_number)} | format pattern "/productmodule/{product_module_number}"))
+  let full_url = (build-url $base ({product_module_number: (encode-path-segment $product_module_number)} | format pattern "/productmodule/{product_module_number}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update Product Module
@@ -1061,13 +1377,24 @@ export def "productmodule update-product-module" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($product_module_number | is-empty) { error make --unspanned { msg: "path parameter 'productModuleNumber' must be non-empty" } }
-  let full_url = (build-url $base ({product_module_number: (encode-path-segment $product_module_number)} | format pattern "/productmodule/{product_module_number}"))
+  let full_url = (build-url $base ({product_module_number: (encode-path-segment $product_module_number)} | format pattern "/productmodule/{product_module_number}") $auth.query)
   let req_body = {"active": $active, "licenseTemplate": $license_template, "licensingModel": $licensing_model, "maxCheckoutValidity": $max_checkout_validity, "name": $name, "nodeSecretMode": $node_secret_mode, "number": $number, "redThreshold": $red_threshold, "yellowThreshold": $yellow_threshold} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/x-www-form-urlencoded"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # List Tokens
@@ -1088,10 +1415,21 @@ export def "token list" [
 ]: nothing -> table<infos: any, items: any> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/token")
+  let full_url = (build-url $base "/token" $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create token
@@ -1126,13 +1464,24 @@ export def "token create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/token")
+  let full_url = (build-url $base "/token" $auth.query)
   let req_body = {"action": $action, "apiKeyRole": $api_key_role, "cancelURL": $cancel_url, "cancelURLTitle": $cancel_url_title, "licenseTemplateNumber": $license_template_number, "licenseeNumber": $licensee_number, "predefinedShoppingItem": $predefined_shopping_item, "privateKey": $private_key, "productNumber": $product_number, "successURL": $success_url, "successURLTitle": $success_url_title, "tokenType": $token_type, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/x-www-form-urlencoded"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Delete token
@@ -1155,10 +1504,21 @@ export def "token delete" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($token_number | is-empty) { error make --unspanned { msg: "path parameter 'tokenNumber' must be non-empty" } }
-  let full_url = (build-url $base ({token_number: (encode-path-segment $token_number)} | format pattern "/token/{token_number}"))
+  let full_url = (build-url $base ({token_number: (encode-path-segment $token_number)} | format pattern "/token/{token_number}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Get token
@@ -1181,10 +1541,21 @@ export def "token get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($token_number | is-empty) { error make --unspanned { msg: "path parameter 'tokenNumber' must be non-empty" } }
-  let full_url = (build-url $base ({token_number: (encode-path-segment $token_number)} | format pattern "/token/{token_number}"))
+  let full_url = (build-url $base ({token_number: (encode-path-segment $token_number)} | format pattern "/token/{token_number}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List Transactions
@@ -1205,10 +1576,21 @@ export def "transaction list" [
 ]: nothing -> table<infos: any, items: any> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/transaction")
+  let full_url = (build-url $base "/transaction" $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create Transaction
@@ -1238,13 +1620,24 @@ export def "transaction create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/transaction")
+  let full_url = (build-url $base "/transaction" $auth.query)
   let req_body = {"active": $active, "dateClosed": $date_closed, "dateCreated": $date_created, "licenseeNumber": $licensee_number, "number": $number, "paymentMethod": $payment_method, "source": $body_source, "status": $status} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/x-www-form-urlencoded"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Get Transaction
@@ -1267,10 +1660,21 @@ export def "transaction get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($transaction_number | is-empty) { error make --unspanned { msg: "path parameter 'transactionNumber' must be non-empty" } }
-  let full_url = (build-url $base ({transaction_number: (encode-path-segment $transaction_number)} | format pattern "/transaction/{transaction_number}"))
+  let full_url = (build-url $base ({transaction_number: (encode-path-segment $transaction_number)} | format pattern "/transaction/{transaction_number}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update Transaction
@@ -1301,13 +1705,24 @@ export def "transaction update" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($transaction_number | is-empty) { error make --unspanned { msg: "path parameter 'transactionNumber' must be non-empty" } }
-  let full_url = (build-url $base ({transaction_number: (encode-path-segment $transaction_number)} | format pattern "/transaction/{transaction_number}"))
+  let full_url = (build-url $base ({transaction_number: (encode-path-segment $transaction_number)} | format pattern "/transaction/{transaction_number}") $auth.query)
   let req_body = {"active": $active, "dateClosed": $date_closed, "dateCreated": $date_created, "number": $number, "paymentMethod": $payment_method, "source": $body_source, "status": $status} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/x-www-form-urlencoded"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # List License Types
@@ -1328,10 +1743,21 @@ export def "utility-license-types get" [
 ]: nothing -> record<infos: any, items: any> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/utility/licenseTypes")
+  let full_url = (build-url $base "/utility/licenseTypes" $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List Licensing Models
@@ -1352,8 +1778,19 @@ export def "utility-licensing-models get" [
 ]: nothing -> record<infos: any, items: any> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/utility/licensingModels")
+  let full_url = (build-url $base "/utility/licensingModels" $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }

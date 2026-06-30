@@ -8,7 +8,7 @@ const BASE_URL = "http://localhost/v1"
 # `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
 # where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o OPENFEC_TOKEN | default "" }
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o OPENFEC_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
@@ -52,14 +52,11 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
-# Trick: `url encode --all` over-encodes, then we decode the four unreserved
-# punctuation chars back. Pre-existing %XX sequences in the input survive
-# because `url encode --all` first turns their % into %25.
 def encode-path-segment [v: any]: nothing -> string {
   $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
-# Serialize an array-typed path parameter (issue 49.A). OpenAPI 3 `style: simple`
+# Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
 # (the default for path params) and Swagger 2 `collectionFormat: csv` both join
 # the elements with a literal comma WITHIN the single path segment, each element
 # RFC-3986-encoded individually (so a comma inside an element stays %2C). Without
@@ -70,51 +67,39 @@ def encode-path-array [v: any]: nothing -> string {
   if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
 }
 
-# Build URL from base, path, and optional query string
-def build-url [base: string, path: string, query?: string]: nothing -> string {
+# Build the request URL from base, path, and any number of pre-encoded query
+# fragments (param serializer output and/or the auth query). Each fragment is an
+# `&`-joinable `key=value` string already percent-encoded by its producer; empty
+# fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
+# delimiters are hand-spliced — and any query already on the base URL is merged in.
+def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
   let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
-  let result = ($parsed | upsert path $full_path)
-  if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
+  let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
+  $parsed | upsert path $full_path | upsert query $query | url join
 }
 
-# Build the dry-run record returned by --dry-run. Shape:
-#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
-#    auth: {scheme, location}}
-# `meta` carries logical-form data (the query record by spec name, the pre-serialization
-# body) that do-request itself cannot reconstruct from its wire-format args.
-def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
-  let m = ($meta | default {})
-  {
-    dry_run: true
-    method: $method
-    url: $url
-    query: ($m | get -o query | default {})
-    headers: $auth.headers
-    body: ($m | get -o body)
-    content_type: $content_type
-    timeout: $timeout
-    auth: {scheme: $auth.scheme, location: $auth.location}
-  }
+# Success policy: did this response succeed? Single source of truth, consulted by
+# handle-response and the HEAD header-unwrap. Empty ok_codes means the spec listed
+# none, so fall back to < 400. Otherwise: any 2xx, plus documented success codes.
+def status-ok [status: int, ok_codes: list<int>]: nothing -> bool {
+  if ($ok_codes | is-empty) { $status < 400 } else { ($status >= 200 and $status < 300) or ($status in $ok_codes) }
 }
 
-# Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
-  let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
-  let timeout = ($max_time | default 30min)
-  let ct = ($content_type | default "application/json")
-  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
-  let resp = match $method {
-    "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
-  }
-  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
-  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
+# Unwrap a `--full` HTTP response into the user-facing value. Response arrives
+# via pipeline; ok_codes gates the error throw (see status-ok).
+def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: record -> any {
+  let resp = $in
+  if $allow_errors { return $resp }
+  if not (status-ok $resp.status $ok_codes) { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } }
+  if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
+  if $resp.status == 204 { return null }
+  $resp.body
+}
+
+# GET — bodyless, honours --raw
+def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
 }
 
 def base-url-completer [] { ["http://localhost/v1"] }
@@ -192,10 +177,21 @@ export def "audit-case get" [
   let auth = (merge-auth [(build-auth ($token_apikeyheaderauth | default ($env | get -o OPENFEC_APIKEYHEADERAUTH_TOKEN | default "")) "x-api-key") (build-auth ($token_apikeyqueryauth | default ($env | get -o OPENFEC_APIKEYQUERYAUTH_TOKEN | default "")) "query-api_key") (build-auth ($token_apikey | default ($env | get -o OPENFEC_APIKEY_TOKEN | default "")) "query-api_key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "audit_case_id" $audit_case_id "multi") (serialize-qp "cycle" $cycle "multi") (serialize-qp "sub_category_id" $sub_category_id "scalar") (serialize-qp "sort_nulls_last" $sort_nulls_last "scalar") (serialize-qp "sort_hide_null" $sort_hide_null "scalar") (serialize-qp "min_election_cycle" $min_election_cycle "scalar") (serialize-qp "audit_id" $audit_id "multi") (serialize-qp "q" $q "multi") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "max_election_cycle" $max_election_cycle "scalar") (serialize-qp "candidate_id" $candidate_id "multi") (serialize-qp "committee_type" $committee_type "multi") (serialize-qp "qq" $qq "multi") (serialize-qp "page" $page "scalar") (serialize-qp "committee_id" $committee_id "multi") (serialize-qp "api_key" $api_key "scalar") (serialize-qp "committee_designation" $committee_designation "scalar") (serialize-qp "primary_category_id" $primary_category_id "scalar") (serialize-qp "sort_null_only" $sort_null_only "scalar") (serialize-qp "sort" $qp_sort "multi")] | flatten | str join "&"
-  let full_url = (build-url $base "/audit-case/" $qp)
+  let full_url = (build-url $base "/audit-case/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"audit_case_id": $audit_case_id, "cycle": $cycle, "sub_category_id": $sub_category_id, "sort_nulls_last": $sort_nulls_last, "sort_hide_null": $sort_hide_null, "min_election_cycle": $min_election_cycle, "audit_id": $audit_id, "q": $q, "per_page": $per_page, "max_election_cycle": $max_election_cycle, "candidate_id": $candidate_id, "committee_type": $committee_type, "qq": $qq, "page": $page, "committee_id": $committee_id, "api_key": $api_key, "committee_designation": $committee_designation, "primary_category_id": $primary_category_id, "sort_null_only": $sort_null_only, "sort": $qp_sort} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"audit_case_id": $audit_case_id, "cycle": $cycle, "sub_category_id": $sub_category_id, "sort_nulls_last": $sort_nulls_last, "sort_hide_null": $sort_hide_null, "min_election_cycle": $min_election_cycle, "audit_id": $audit_id, "q": $q, "per_page": $per_page, "max_election_cycle": $max_election_cycle, "candidate_id": $candidate_id, "committee_type": $committee_type, "qq": $qq, "page": $page, "committee_id": $committee_id, "api_key": $api_key, "committee_designation": $committee_designation, "primary_category_id": $primary_category_id, "sort_null_only": $sort_null_only, "sort": $qp_sort} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # This lists the options for the categories and subcategories available in the /audit-search/ endpoint.
@@ -225,10 +221,21 @@ export def "audit-category get" [
   let auth = (merge-auth [(build-auth ($token_apikeyheaderauth | default ($env | get -o OPENFEC_APIKEYHEADERAUTH_TOKEN | default "")) "x-api-key") (build-auth ($token_apikeyqueryauth | default ($env | get -o OPENFEC_APIKEYQUERYAUTH_TOKEN | default "")) "query-api_key") (build-auth ($token_apikey | default ($env | get -o OPENFEC_APIKEY_TOKEN | default "")) "query-api_key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "sort_nulls_last" $sort_nulls_last "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "primary_category_name" $primary_category_name "multi") (serialize-qp "sort_hide_null" $sort_hide_null "scalar") (serialize-qp "api_key" $api_key "scalar") (serialize-qp "primary_category_id" $primary_category_id "multi") (serialize-qp "sort_null_only" $sort_null_only "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/audit-category/" $qp)
+  let full_url = (build-url $base "/audit-category/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"sort_nulls_last": $sort_nulls_last, "page": $page, "primary_category_name": $primary_category_name, "sort_hide_null": $sort_hide_null, "api_key": $api_key, "primary_category_id": $primary_category_id, "sort_null_only": $sort_null_only, "per_page": $per_page, "sort": $qp_sort} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"sort_nulls_last": $sort_nulls_last, "page": $page, "primary_category_name": $primary_category_name, "sort_hide_null": $sort_hide_null, "api_key": $api_key, "primary_category_id": $primary_category_id, "sort_null_only": $sort_null_only, "per_page": $per_page, "sort": $qp_sort} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # This lists the options for the primary categories available in the /audit-search/ endpoint.
@@ -258,10 +265,21 @@ export def "audit-primary-category get" [
   let auth = (merge-auth [(build-auth ($token_apikeyheaderauth | default ($env | get -o OPENFEC_APIKEYHEADERAUTH_TOKEN | default "")) "x-api-key") (build-auth ($token_apikeyqueryauth | default ($env | get -o OPENFEC_APIKEYQUERYAUTH_TOKEN | default "")) "query-api_key") (build-auth ($token_apikey | default ($env | get -o OPENFEC_APIKEY_TOKEN | default "")) "query-api_key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "sort_nulls_last" $sort_nulls_last "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "primary_category_name" $primary_category_name "multi") (serialize-qp "sort_hide_null" $sort_hide_null "scalar") (serialize-qp "api_key" $api_key "scalar") (serialize-qp "primary_category_id" $primary_category_id "multi") (serialize-qp "sort_null_only" $sort_null_only "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/audit-primary-category/" $qp)
+  let full_url = (build-url $base "/audit-primary-category/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"sort_nulls_last": $sort_nulls_last, "page": $page, "primary_category_name": $primary_category_name, "sort_hide_null": $sort_hide_null, "api_key": $api_key, "primary_category_id": $primary_category_id, "sort_null_only": $sort_null_only, "per_page": $per_page, "sort": $qp_sort} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"sort_nulls_last": $sort_nulls_last, "page": $page, "primary_category_name": $primary_category_name, "sort_hide_null": $sort_hide_null, "api_key": $api_key, "primary_category_id": $primary_category_id, "sort_null_only": $sort_null_only, "per_page": $per_page, "sort": $qp_sort} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Combines the election and reporting dates with Commission meetings, conferences, outreach, Advisory Opinions, rules, litigation dates and other events into one calendar. State and report type filtering is no longer available.
@@ -297,10 +315,21 @@ export def "calendar-dates get" [
   let auth = (merge-auth [(build-auth ($token_apikeyheaderauth | default ($env | get -o OPENFEC_APIKEYHEADERAUTH_TOKEN | default "")) "x-api-key") (build-auth ($token_apikeyqueryauth | default ($env | get -o OPENFEC_APIKEYQUERYAUTH_TOKEN | default "")) "query-api_key") (build-auth ($token_apikey | default ($env | get -o OPENFEC_APIKEY_TOKEN | default "")) "query-api_key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "sort_nulls_last" $sort_nulls_last "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "min_start_date" $min_start_date "scalar") (serialize-qp "calendar_category_id" $calendar_category_id "multi") (serialize-qp "sort_hide_null" $sort_hide_null "scalar") (serialize-qp "api_key" $api_key "scalar") (serialize-qp "min_end_date" $min_end_date "scalar") (serialize-qp "event_id" $event_id "scalar") (serialize-qp "sort_null_only" $sort_null_only "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "description" $description "multi") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "max_end_date" $max_end_date "scalar") (serialize-qp "summary" $summary "multi") (serialize-qp "max_start_date" $max_start_date "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/calendar-dates/" $qp)
+  let full_url = (build-url $base "/calendar-dates/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"sort_nulls_last": $sort_nulls_last, "page": $page, "min_start_date": $min_start_date, "calendar_category_id": $calendar_category_id, "sort_hide_null": $sort_hide_null, "api_key": $api_key, "min_end_date": $min_end_date, "event_id": $event_id, "sort_null_only": $sort_null_only, "per_page": $per_page, "description": $description, "sort": $qp_sort, "max_end_date": $max_end_date, "summary": $summary, "max_start_date": $max_start_date} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"sort_nulls_last": $sort_nulls_last, "page": $page, "min_start_date": $min_start_date, "calendar_category_id": $calendar_category_id, "sort_hide_null": $sort_hide_null, "api_key": $api_key, "min_end_date": $min_end_date, "event_id": $event_id, "sort_null_only": $sort_null_only, "per_page": $per_page, "description": $description, "sort": $qp_sort, "max_end_date": $max_end_date, "summary": $summary, "max_start_date": $max_start_date} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Returns CSV or ICS for downloading directly into calendar applications like Google, Outlook or other applications. Combines the election and reporting dates with Commission meetings, conferences, outreach, Advisory Opinions, rules, litigation dates and other events into one calendar. State filtering now applies to elections, reports and reporting periods. Presidential pre-primary report due dates are not shown on even years. Filers generally opt to file monthly rather than submit over 50 pre-primary election reports. All reporting deadlines are available at /reporting-dates/ for reference. This is [the sql function](https://github.com/fecgov/openFEC/blob/develop/data/migrations/V40__omnibus_dates.sql) that creates the calendar.
@@ -337,10 +366,21 @@ export def "calendar-dates-export get" [
   let auth = (merge-auth [(build-auth ($token_apikeyheaderauth | default ($env | get -o OPENFEC_APIKEYHEADERAUTH_TOKEN | default "")) "x-api-key") (build-auth ($token_apikeyqueryauth | default ($env | get -o OPENFEC_APIKEYQUERYAUTH_TOKEN | default "")) "query-api_key") (build-auth ($token_apikey | default ($env | get -o OPENFEC_APIKEY_TOKEN | default "")) "query-api_key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "renderer" $renderer "scalar") (serialize-qp "sort_nulls_last" $sort_nulls_last "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "min_start_date" $min_start_date "scalar") (serialize-qp "calendar_category_id" $calendar_category_id "multi") (serialize-qp "sort_hide_null" $sort_hide_null "scalar") (serialize-qp "api_key" $api_key "scalar") (serialize-qp "min_end_date" $min_end_date "scalar") (serialize-qp "event_id" $event_id "scalar") (serialize-qp "sort_null_only" $sort_null_only "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "description" $description "multi") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "max_end_date" $max_end_date "scalar") (serialize-qp "summary" $summary "multi") (serialize-qp "max_start_date" $max_start_date "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/calendar-dates/export/" $qp)
+  let full_url = (build-url $base "/calendar-dates/export/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"renderer": $renderer, "sort_nulls_last": $sort_nulls_last, "page": $page, "min_start_date": $min_start_date, "calendar_category_id": $calendar_category_id, "sort_hide_null": $sort_hide_null, "api_key": $api_key, "min_end_date": $min_end_date, "event_id": $event_id, "sort_null_only": $sort_null_only, "per_page": $per_page, "description": $description, "sort": $qp_sort, "max_end_date": $max_end_date, "summary": $summary, "max_start_date": $max_start_date} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"renderer": $renderer, "sort_nulls_last": $sort_nulls_last, "page": $page, "min_start_date": $min_start_date, "calendar_category_id": $calendar_category_id, "sort_hide_null": $sort_hide_null, "api_key": $api_key, "min_end_date": $min_end_date, "event_id": $event_id, "sort_null_only": $sort_null_only, "per_page": $per_page, "description": $description, "sort": $qp_sort, "max_end_date": $max_end_date, "summary": $summary, "max_start_date": $max_start_date} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # This endpoint is useful for finding detailed information about a particular candidate. Use the `candidate_id` to find the most recent information about that candidate.
@@ -382,10 +422,21 @@ export def "candidate get" [
   let base = ($base_url | default $BASE_URL)
   if ($candidate_id | is-empty) { error make --unspanned { msg: "path parameter 'candidate_id' must be non-empty" } }
   let qp = [(serialize-qp "office" $office "multi") (serialize-qp "candidate_status" $candidate_status "multi") (serialize-qp "cycle" $cycle "multi") (serialize-qp "sort_nulls_last" $sort_nulls_last "scalar") (serialize-qp "state" $state "multi") (serialize-qp "district" $district "multi") (serialize-qp "year" $year "scalar") (serialize-qp "name" $name "multi") (serialize-qp "sort_hide_null" $sort_hide_null "scalar") (serialize-qp "federal_funds_flag" $federal_funds_flag "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "has_raised_funds" $has_raised_funds "scalar") (serialize-qp "election_year" $election_year "multi") (serialize-qp "api_key" $api_key "scalar") (serialize-qp "sort_null_only" $sort_null_only "scalar") (serialize-qp "incumbent_challenge" $incumbent_challenge "multi") (serialize-qp "party" $party "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({candidate_id: (encode-path-segment $candidate_id)} | format pattern "/candidate/{candidate_id}/") $qp)
+  let full_url = (build-url $base ({candidate_id: (encode-path-segment $candidate_id)} | format pattern "/candidate/{candidate_id}/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"office": $office, "candidate_status": $candidate_status, "cycle": $cycle, "sort_nulls_last": $sort_nulls_last, "state": $state, "district": $district, "year": $year, "name": $name, "sort_hide_null": $sort_hide_null, "federal_funds_flag": $federal_funds_flag, "per_page": $per_page, "page": $page, "sort": $qp_sort, "has_raised_funds": $has_raised_funds, "election_year": $election_year, "api_key": $api_key, "sort_null_only": $sort_null_only, "incumbent_challenge": $incumbent_challenge, "party": $party} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"office": $office, "candidate_status": $candidate_status, "cycle": $cycle, "sort_nulls_last": $sort_nulls_last, "state": $state, "district": $district, "year": $year, "name": $name, "sort_hide_null": $sort_hide_null, "federal_funds_flag": $federal_funds_flag, "per_page": $per_page, "page": $page, "sort": $qp_sort, "has_raised_funds": $has_raised_funds, "election_year": $election_year, "api_key": $api_key, "sort_null_only": $sort_null_only, "incumbent_challenge": $incumbent_challenge, "party": $party} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # This endpoint is useful for finding detailed information about a particular committee or filer. Use the `committee_id` to find the most recent information about the committee.
@@ -421,10 +472,21 @@ export def "candidate-committees get" [
   let base = ($base_url | default $BASE_URL)
   if ($candidate_id | is-empty) { error make --unspanned { msg: "path parameter 'candidate_id' must be non-empty" } }
   let qp = [(serialize-qp "designation" $designation "multi") (serialize-qp "committee_type" $committee_type "multi") (serialize-qp "page" $page "scalar") (serialize-qp "filing_frequency" $filing_frequency "multi") (serialize-qp "cycle" $cycle "multi") (serialize-qp "sort_hide_null" $sort_hide_null "scalar") (serialize-qp "year" $year "multi") (serialize-qp "sort_nulls_last" $sort_nulls_last "scalar") (serialize-qp "api_key" $api_key "scalar") (serialize-qp "sort_null_only" $sort_null_only "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "organization_type" $organization_type "multi") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({candidate_id: (encode-path-segment $candidate_id)} | format pattern "/candidate/{candidate_id}/committees/") $qp)
+  let full_url = (build-url $base ({candidate_id: (encode-path-segment $candidate_id)} | format pattern "/candidate/{candidate_id}/committees/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"designation": $designation, "committee_type": $committee_type, "page": $page, "filing_frequency": $filing_frequency, "cycle": $cycle, "sort_hide_null": $sort_hide_null, "year": $year, "sort_nulls_last": $sort_nulls_last, "api_key": $api_key, "sort_null_only": $sort_null_only, "per_page": $per_page, "organization_type": $organization_type, "sort": $qp_sort} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"designation": $designation, "committee_type": $committee_type, "page": $page, "filing_frequency": $filing_frequency, "cycle": $cycle, "sort_hide_null": $sort_hide_null, "year": $year, "sort_nulls_last": $sort_nulls_last, "api_key": $api_key, "sort_null_only": $sort_null_only, "per_page": $per_page, "organization_type": $organization_type, "sort": $qp_sort} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Explore a filer's characteristics over time. This can be particularly useful if the committees change treasurers, designation, or `committee_type`.
@@ -456,10 +518,21 @@ export def "candidate-committees-history list" [
   let base = ($base_url | default $BASE_URL)
   if ($candidate_id | is-empty) { error make --unspanned { msg: "path parameter 'candidate_id' must be non-empty" } }
   let qp = [(serialize-qp "designation" $designation "multi") (serialize-qp "sort_nulls_last" $sort_nulls_last "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "sort_hide_null" $sort_hide_null "scalar") (serialize-qp "election_full" $election_full "scalar") (serialize-qp "api_key" $api_key "scalar") (serialize-qp "sort_null_only" $sort_null_only "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({candidate_id: (encode-path-segment $candidate_id)} | format pattern "/candidate/{candidate_id}/committees/history/") $qp)
+  let full_url = (build-url $base ({candidate_id: (encode-path-segment $candidate_id)} | format pattern "/candidate/{candidate_id}/committees/history/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"designation": $designation, "sort_nulls_last": $sort_nulls_last, "page": $page, "sort_hide_null": $sort_hide_null, "election_full": $election_full, "api_key": $api_key, "sort_null_only": $sort_null_only, "per_page": $per_page, "sort": $qp_sort} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"designation": $designation, "sort_nulls_last": $sort_nulls_last, "page": $page, "sort_hide_null": $sort_hide_null, "election_full": $election_full, "api_key": $api_key, "sort_null_only": $sort_null_only, "per_page": $per_page, "sort": $qp_sort} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Explore a filer's characteristics over time. This can be particularly useful if the committees change treasurers, designation, or `committee_type`.
@@ -493,10 +566,21 @@ export def "candidate-committees-history get" [
   if ($candidate_id | is-empty) { error make --unspanned { msg: "path parameter 'candidate_id' must be non-empty" } }
   if ($cycle | is-empty) { error make --unspanned { msg: "path parameter 'cycle' must be non-empty" } }
   let qp = [(serialize-qp "designation" $designation "multi") (serialize-qp "sort_nulls_last" $sort_nulls_last "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "sort_hide_null" $sort_hide_null "scalar") (serialize-qp "election_full" $election_full "scalar") (serialize-qp "api_key" $api_key "scalar") (serialize-qp "sort_null_only" $sort_null_only "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({candidate_id: (encode-path-segment $candidate_id), cycle: (encode-path-segment $cycle)} | format pattern "/candidate/{candidate_id}/committees/history/{cycle}/") $qp)
+  let full_url = (build-url $base ({candidate_id: (encode-path-segment $candidate_id), cycle: (encode-path-segment $cycle)} | format pattern "/candidate/{candidate_id}/committees/history/{cycle}/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"designation": $designation, "sort_nulls_last": $sort_nulls_last, "page": $page, "sort_hide_null": $sort_hide_null, "election_full": $election_full, "api_key": $api_key, "sort_null_only": $sort_null_only, "per_page": $per_page, "sort": $qp_sort} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"designation": $designation, "sort_nulls_last": $sort_nulls_last, "page": $page, "sort_hide_null": $sort_hide_null, "election_full": $election_full, "api_key": $api_key, "sort_null_only": $sort_null_only, "per_page": $per_page, "sort": $qp_sort} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # All official records and reports filed by or delivered to the FEC. Note: because the filings data includes many records, counts for large result sets are approximate; you will want to page through the records until no records are returned.
@@ -548,10 +632,21 @@ export def "candidate-filings get" [
   let base = ($base_url | default $BASE_URL)
   if ($candidate_id | is-empty) { error make --unspanned { msg: "path parameter 'candidate_id' must be non-empty" } }
   let qp = [(serialize-qp "office" $office "multi") (serialize-qp "file_number" $file_number "multi") (serialize-qp "form_category" $form_category "multi") (serialize-qp "cycle" $cycle "multi") (serialize-qp "district" $district "multi") (serialize-qp "document_type" $document_type "multi") (serialize-qp "sort_hide_null" $sort_hide_null "scalar") (serialize-qp "state" $state "multi") (serialize-qp "amendment_indicator" $amendment_indicator "multi") (serialize-qp "sort_nulls_last" $sort_nulls_last "scalar") (serialize-qp "is_amended" $is_amended "scalar") (serialize-qp "filer_type" $filer_type "scalar") (serialize-qp "max_receipt_date" $max_receipt_date "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "primary_general_indicator" $primary_general_indicator "multi") (serialize-qp "request_type" $request_type "multi") (serialize-qp "report_year" $report_year "multi") (serialize-qp "form_type" $form_type "multi") (serialize-qp "committee_type" $committee_type "scalar") (serialize-qp "beginning_image_number" $beginning_image_number "multi") (serialize-qp "page" $page "scalar") (serialize-qp "sort" $qp_sort "multi") (serialize-qp "api_key" $api_key "scalar") (serialize-qp "min_receipt_date" $min_receipt_date "scalar") (serialize-qp "sort_null_only" $sort_null_only "scalar") (serialize-qp "q_filer" $q_filer "multi") (serialize-qp "report_type" $report_type "multi") (serialize-qp "party" $party "multi") (serialize-qp "most_recent" $most_recent "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({candidate_id: (encode-path-segment $candidate_id)} | format pattern "/candidate/{candidate_id}/filings/") $qp)
+  let full_url = (build-url $base ({candidate_id: (encode-path-segment $candidate_id)} | format pattern "/candidate/{candidate_id}/filings/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"office": $office, "file_number": $file_number, "form_category": $form_category, "cycle": $cycle, "district": $district, "document_type": $document_type, "sort_hide_null": $sort_hide_null, "state": $state, "amendment_indicator": $amendment_indicator, "sort_nulls_last": $sort_nulls_last, "is_amended": $is_amended, "filer_type": $filer_type, "max_receipt_date": $max_receipt_date, "per_page": $per_page, "primary_general_indicator": $primary_general_indicator, "request_type": $request_type, "report_year": $report_year, "form_type": $form_type, "committee_type": $committee_type, "beginning_image_number": $beginning_image_number, "page": $page, "sort": $qp_sort, "api_key": $api_key, "min_receipt_date": $min_receipt_date, "sort_null_only": $sort_null_only, "q_filer": $q_filer, "report_type": $report_type, "party": $party, "most_recent": $most_recent} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"office": $office, "file_number": $file_number, "form_category": $form_category, "cycle": $cycle, "district": $district, "document_type": $document_type, "sort_hide_null": $sort_hide_null, "state": $state, "amendment_indicator": $amendment_indicator, "sort_nulls_last": $sort_nulls_last, "is_amended": $is_amended, "filer_type": $filer_type, "max_receipt_date": $max_receipt_date, "per_page": $per_page, "primary_general_indicator": $primary_general_indicator, "request_type": $request_type, "report_year": $report_year, "form_type": $form_type, "committee_type": $committee_type, "beginning_image_number": $beginning_image_number, "page": $page, "sort": $qp_sort, "api_key": $api_key, "min_receipt_date": $min_receipt_date, "sort_null_only": $sort_null_only, "q_filer": $q_filer, "report_type": $report_type, "party": $party, "most_recent": $most_recent} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Find out a candidate's characteristics over time. This is particularly useful if the candidate runs for the same office in different districts or you want to know more about a candidate's previous races. This information is organized by `candidate_id`, so it won't help you find a candidate who ran for different offices over time; candidates get a new ID for each office.
@@ -582,10 +677,21 @@ export def "candidate-history list" [
   let base = ($base_url | default $BASE_URL)
   if ($candidate_id | is-empty) { error make --unspanned { msg: "path parameter 'candidate_id' must be non-empty" } }
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "sort_nulls_last" $sort_nulls_last "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort_null_only" $sort_null_only "scalar") (serialize-qp "sort_hide_null" $sort_hide_null "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "election_full" $election_full "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({candidate_id: (encode-path-segment $candidate_id)} | format pattern "/candidate/{candidate_id}/history/") $qp)
+  let full_url = (build-url $base ({candidate_id: (encode-path-segment $candidate_id)} | format pattern "/candidate/{candidate_id}/history/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api_key": $api_key, "sort_nulls_last": $sort_nulls_last, "per_page": $per_page, "sort_null_only": $sort_null_only, "sort_hide_null": $sort_hide_null, "sort": $qp_sort, "election_full": $election_full, "page": $page} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api_key": $api_key, "sort_nulls_last": $sort_nulls_last, "per_page": $per_page, "sort_null_only": $sort_null_only, "sort_hide_null": $sort_hide_null, "sort": $qp_sort, "election_full": $election_full, "page": $page} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Find out a candidate's characteristics over time. This is particularly useful if the candidate runs for the same office in different districts or you want to know more about a candidate's previous races. This information is organized by `candidate_id`, so it won't help you find a candidate who ran for different offices over time; candidates get a new ID for each office.
@@ -618,10 +724,21 @@ export def "candidate-history get" [
   if ($candidate_id | is-empty) { error make --unspanned { msg: "path parameter 'candidate_id' must be non-empty" } }
   if ($cycle | is-empty) { error make --unspanned { msg: "path parameter 'cycle' must be non-empty" } }
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "sort_nulls_last" $sort_nulls_last "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort_null_only" $sort_null_only "scalar") (serialize-qp "sort_hide_null" $sort_hide_null "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "election_full" $election_full "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({candidate_id: (encode-path-segment $candidate_id), cycle: (encode-path-segment $cycle)} | format pattern "/candidate/{candidate_id}/history/{cycle}/") $qp)
+  let full_url = (build-url $base ({candidate_id: (encode-path-segment $candidate_id), cycle: (encode-path-segment $cycle)} | format pattern "/candidate/{candidate_id}/history/{cycle}/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api_key": $api_key, "sort_nulls_last": $sort_nulls_last, "per_page": $per_page, "sort_null_only": $sort_null_only, "sort_hide_null": $sort_hide_null, "sort": $qp_sort, "election_full": $election_full, "page": $page} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api_key": $api_key, "sort_nulls_last": $sort_nulls_last, "per_page": $per_page, "sort_null_only": $sort_null_only, "sort_hide_null": $sort_hide_null, "sort": $qp_sort, "election_full": $election_full, "page": $page} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # This endpoint provides information about a committee's Form 3, Form 3X, or Form 3P financial reports, which are aggregated by two-year period. We refer to two-year periods as a `cycle`. The cycle is named after the even-numbered year and includes the year before it. To obtain totals from 2013 and 2014, you would use 2014. In odd-numbered years, the current cycle is the next year — for example, in 2015, the current cycle is 2016. For presidential and Senate candidates, multiple two-year cycles exist between elections.
@@ -653,10 +770,21 @@ export def "candidate-totals get" [
   let base = ($base_url | default $BASE_URL)
   if ($candidate_id | is-empty) { error make --unspanned { msg: "path parameter 'candidate_id' must be non-empty" } }
   let qp = [(serialize-qp "sort_nulls_last" $sort_nulls_last "scalar") (serialize-qp "cycle" $cycle "multi") (serialize-qp "page" $page "scalar") (serialize-qp "sort_hide_null" $sort_hide_null "scalar") (serialize-qp "election_full" $election_full "scalar") (serialize-qp "api_key" $api_key "scalar") (serialize-qp "sort_null_only" $sort_null_only "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({candidate_id: (encode-path-segment $candidate_id)} | format pattern "/candidate/{candidate_id}/totals/") $qp)
+  let full_url = (build-url $base ({candidate_id: (encode-path-segment $candidate_id)} | format pattern "/candidate/{candidate_id}/totals/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"sort_nulls_last": $sort_nulls_last, "cycle": $cycle, "page": $page, "sort_hide_null": $sort_hide_null, "election_full": $election_full, "api_key": $api_key, "sort_null_only": $sort_null_only, "per_page": $per_page, "sort": $qp_sort} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"sort_nulls_last": $sort_nulls_last, "cycle": $cycle, "page": $page, "sort_hide_null": $sort_hide_null, "election_full": $election_full, "api_key": $api_key, "sort_null_only": $sort_null_only, "per_page": $per_page, "sort": $qp_sort} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Fetch basic information about candidates, and use parameters to filter results to the candidates you're looking for. Each result reflects a unique FEC candidate ID. That ID is particular to the candidate for a particular office sought. If a candidate runs for the same office multiple times, the ID stays the same. If the same person runs for another office — for example, a House candidate runs for a Senate office — that candidate will get a unique ID for each office.
@@ -701,10 +829,21 @@ export def "candidates get" [
   let auth = (merge-auth [(build-auth ($token_apikeyheaderauth | default ($env | get -o OPENFEC_APIKEYHEADERAUTH_TOKEN | default "")) "x-api-key") (build-auth ($token_apikeyqueryauth | default ($env | get -o OPENFEC_APIKEYQUERYAUTH_TOKEN | default "")) "query-api_key") (build-auth ($token_apikey | default ($env | get -o OPENFEC_APIKEY_TOKEN | default "")) "query-api_key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "office" $office "multi") (serialize-qp "candidate_status" $candidate_status "multi") (serialize-qp "cycle" $cycle "multi") (serialize-qp "district" $district "multi") (serialize-qp "sort_nulls_last" $sort_nulls_last "scalar") (serialize-qp "sort_hide_null" $sort_hide_null "scalar") (serialize-qp "year" $year "scalar") (serialize-qp "state" $state "multi") (serialize-qp "name" $name "multi") (serialize-qp "is_active_candidate" $is_active_candidate "scalar") (serialize-qp "q" $q "multi") (serialize-qp "federal_funds_flag" $federal_funds_flag "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "candidate_id" $candidate_id "multi") (serialize-qp "min_first_file_date" $min_first_file_date "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "has_raised_funds" $has_raised_funds "scalar") (serialize-qp "election_year" $election_year "multi") (serialize-qp "api_key" $api_key "scalar") (serialize-qp "incumbent_challenge" $incumbent_challenge "multi") (serialize-qp "sort_null_only" $sort_null_only "scalar") (serialize-qp "max_first_file_date" $max_first_file_date "scalar") (serialize-qp "party" $party "multi")] | flatten | str join "&"
-  let full_url = (build-url $base "/candidates/" $qp)
+  let full_url = (build-url $base "/candidates/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"office": $office, "candidate_status": $candidate_status, "cycle": $cycle, "district": $district, "sort_nulls_last": $sort_nulls_last, "sort_hide_null": $sort_hide_null, "year": $year, "state": $state, "name": $name, "is_active_candidate": $is_active_candidate, "q": $q, "federal_funds_flag": $federal_funds_flag, "per_page": $per_page, "candidate_id": $candidate_id, "min_first_file_date": $min_first_file_date, "page": $page, "sort": $qp_sort, "has_raised_funds": $has_raised_funds, "election_year": $election_year, "api_key": $api_key, "incumbent_challenge": $incumbent_challenge, "sort_null_only": $sort_null_only, "max_first_file_date": $max_first_file_date, "party": $party} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"office": $office, "candidate_status": $candidate_status, "cycle": $cycle, "district": $district, "sort_nulls_last": $sort_nulls_last, "sort_hide_null": $sort_hide_null, "year": $year, "state": $state, "name": $name, "is_active_candidate": $is_active_candidate, "q": $q, "federal_funds_flag": $federal_funds_flag, "per_page": $per_page, "candidate_id": $candidate_id, "min_first_file_date": $min_first_file_date, "page": $page, "sort": $qp_sort, "has_raised_funds": $has_raised_funds, "election_year": $election_year, "api_key": $api_key, "incumbent_challenge": $incumbent_challenge, "sort_null_only": $sort_null_only, "max_first_file_date": $max_first_file_date, "party": $party} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Fetch basic information about candidates and their principal committees. Each result reflects a unique FEC candidate ID. That ID is assigned to the candidate for a particular office sought. If a candidate runs for the same office over time, that ID stays the same. If the same person runs for multiple offices — for example, a House candidate runs for a Senate office — that candidate will get a unique ID for each office. The candidate endpoints primarily use data from FEC registration [Form 1](https://www.fec.gov/pdf/forms/fecfrm1.pdf) for committee information and [Form 2](https://www.fec.gov/pdf/forms/fecfrm2.pdf) for candidate information.
@@ -749,10 +888,21 @@ export def "candidates-search get" [
   let auth = (merge-auth [(build-auth ($token_apikeyheaderauth | default ($env | get -o OPENFEC_APIKEYHEADERAUTH_TOKEN | default "")) "x-api-key") (build-auth ($token_apikeyqueryauth | default ($env | get -o OPENFEC_APIKEYQUERYAUTH_TOKEN | default "")) "query-api_key") (build-auth ($token_apikey | default ($env | get -o OPENFEC_APIKEY_TOKEN | default "")) "query-api_key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "office" $office "multi") (serialize-qp "candidate_status" $candidate_status "multi") (serialize-qp "cycle" $cycle "multi") (serialize-qp "district" $district "multi") (serialize-qp "sort_nulls_last" $sort_nulls_last "scalar") (serialize-qp "sort_hide_null" $sort_hide_null "scalar") (serialize-qp "year" $year "scalar") (serialize-qp "state" $state "multi") (serialize-qp "name" $name "multi") (serialize-qp "is_active_candidate" $is_active_candidate "scalar") (serialize-qp "q" $q "multi") (serialize-qp "federal_funds_flag" $federal_funds_flag "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "candidate_id" $candidate_id "multi") (serialize-qp "min_first_file_date" $min_first_file_date "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "has_raised_funds" $has_raised_funds "scalar") (serialize-qp "election_year" $election_year "multi") (serialize-qp "api_key" $api_key "scalar") (serialize-qp "incumbent_challenge" $incumbent_challenge "multi") (serialize-qp "sort_null_only" $sort_null_only "scalar") (serialize-qp "max_first_file_date" $max_first_file_date "scalar") (serialize-qp "party" $party "multi")] | flatten | str join "&"
-  let full_url = (build-url $base "/candidates/search/" $qp)
+  let full_url = (build-url $base "/candidates/search/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"office": $office, "candidate_status": $candidate_status, "cycle": $cycle, "district": $district, "sort_nulls_last": $sort_nulls_last, "sort_hide_null": $sort_hide_null, "year": $year, "state": $state, "name": $name, "is_active_candidate": $is_active_candidate, "q": $q, "federal_funds_flag": $federal_funds_flag, "per_page": $per_page, "candidate_id": $candidate_id, "min_first_file_date": $min_first_file_date, "page": $page, "sort": $qp_sort, "has_raised_funds": $has_raised_funds, "election_year": $election_year, "api_key": $api_key, "incumbent_challenge": $incumbent_challenge, "sort_null_only": $sort_null_only, "max_first_file_date": $max_first_file_date, "party": $party} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"office": $office, "candidate_status": $candidate_status, "cycle": $cycle, "district": $district, "sort_nulls_last": $sort_nulls_last, "sort_hide_null": $sort_hide_null, "year": $year, "state": $state, "name": $name, "is_active_candidate": $is_active_candidate, "q": $q, "federal_funds_flag": $federal_funds_flag, "per_page": $per_page, "candidate_id": $candidate_id, "min_first_file_date": $min_first_file_date, "page": $page, "sort": $qp_sort, "has_raised_funds": $has_raised_funds, "election_year": $election_year, "api_key": $api_key, "incumbent_challenge": $incumbent_challenge, "sort_null_only": $sort_null_only, "max_first_file_date": $max_first_file_date, "party": $party} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Aggregated candidate receipts and disbursements grouped by cycle.
@@ -800,10 +950,21 @@ export def "candidates-totals get" [
   let auth = (merge-auth [(build-auth ($token_apikeyheaderauth | default ($env | get -o OPENFEC_APIKEYHEADERAUTH_TOKEN | default "")) "x-api-key") (build-auth ($token_apikeyqueryauth | default ($env | get -o OPENFEC_APIKEYQUERYAUTH_TOKEN | default "")) "query-api_key") (build-auth ($token_apikey | default ($env | get -o OPENFEC_APIKEY_TOKEN | default "")) "query-api_key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "office" $office "multi") (serialize-qp "min_receipts" $min_receipts "scalar") (serialize-qp "cycle" $cycle "multi") (serialize-qp "district" $district "multi") (serialize-qp "max_receipts" $max_receipts "scalar") (serialize-qp "sort_hide_null" $sort_hide_null "scalar") (serialize-qp "state" $state "multi") (serialize-qp "max_debts_owed_by_committee" $max_debts_owed_by_committee "scalar") (serialize-qp "sort_nulls_last" $sort_nulls_last "scalar") (serialize-qp "min_debts_owed_by_committee" $min_debts_owed_by_committee "scalar") (serialize-qp "is_active_candidate" $is_active_candidate "scalar") (serialize-qp "q" $q "multi") (serialize-qp "federal_funds_flag" $federal_funds_flag "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "max_cash_on_hand_end_period" $max_cash_on_hand_end_period "scalar") (serialize-qp "max_disbursements" $max_disbursements "scalar") (serialize-qp "candidate_id" $candidate_id "multi") (serialize-qp "page" $page "scalar") (serialize-qp "has_raised_funds" $has_raised_funds "scalar") (serialize-qp "election_full" $election_full "scalar") (serialize-qp "election_year" $election_year "multi") (serialize-qp "api_key" $api_key "scalar") (serialize-qp "sort_null_only" $sort_null_only "scalar") (serialize-qp "min_cash_on_hand_end_period" $min_cash_on_hand_end_period "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "party" $party "multi") (serialize-qp "min_disbursements" $min_disbursements "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/candidates/totals/" $qp)
+  let full_url = (build-url $base "/candidates/totals/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"office": $office, "min_receipts": $min_receipts, "cycle": $cycle, "district": $district, "max_receipts": $max_receipts, "sort_hide_null": $sort_hide_null, "state": $state, "max_debts_owed_by_committee": $max_debts_owed_by_committee, "sort_nulls_last": $sort_nulls_last, "min_debts_owed_by_committee": $min_debts_owed_by_committee, "is_active_candidate": $is_active_candidate, "q": $q, "federal_funds_flag": $federal_funds_flag, "per_page": $per_page, "max_cash_on_hand_end_period": $max_cash_on_hand_end_period, "max_disbursements": $max_disbursements, "candidate_id": $candidate_id, "page": $page, "has_raised_funds": $has_raised_funds, "election_full": $election_full, "election_year": $election_year, "api_key": $api_key, "sort_null_only": $sort_null_only, "min_cash_on_hand_end_period": $min_cash_on_hand_end_period, "sort": $qp_sort, "party": $party, "min_disbursements": $min_disbursements} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"office": $office, "min_receipts": $min_receipts, "cycle": $cycle, "district": $district, "max_receipts": $max_receipts, "sort_hide_null": $sort_hide_null, "state": $state, "max_debts_owed_by_committee": $max_debts_owed_by_committee, "sort_nulls_last": $sort_nulls_last, "min_debts_owed_by_committee": $min_debts_owed_by_committee, "is_active_candidate": $is_active_candidate, "q": $q, "federal_funds_flag": $federal_funds_flag, "per_page": $per_page, "max_cash_on_hand_end_period": $max_cash_on_hand_end_period, "max_disbursements": $max_disbursements, "candidate_id": $candidate_id, "page": $page, "has_raised_funds": $has_raised_funds, "election_full": $election_full, "election_year": $election_year, "api_key": $api_key, "sort_null_only": $sort_null_only, "min_cash_on_hand_end_period": $min_cash_on_hand_end_period, "sort": $qp_sort, "party": $party, "min_disbursements": $min_disbursements} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Candidate total receipts and disbursements aggregated by `aggregate_by`.
@@ -841,10 +1002,21 @@ export def "candidates-totals-aggregates get" [
   let auth = (merge-auth [(build-auth ($token_apikeyheaderauth | default ($env | get -o OPENFEC_APIKEYHEADERAUTH_TOKEN | default "")) "x-api-key") (build-auth ($token_apikeyqueryauth | default ($env | get -o OPENFEC_APIKEYQUERYAUTH_TOKEN | default "")) "query-api_key") (build-auth ($token_apikey | default ($env | get -o OPENFEC_APIKEY_TOKEN | default "")) "query-api_key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "office" $office "scalar") (serialize-qp "sort_nulls_last" $sort_nulls_last "scalar") (serialize-qp "district" $district "multi") (serialize-qp "state" $state "multi") (serialize-qp "min_election_cycle" $min_election_cycle "scalar") (serialize-qp "sort_hide_null" $sort_hide_null "scalar") (serialize-qp "is_active_candidate" $is_active_candidate "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "max_election_cycle" $max_election_cycle "scalar") (serialize-qp "aggregate_by" $aggregate_by "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "election_year" $election_year "multi") (serialize-qp "election_full" $election_full "scalar") (serialize-qp "api_key" $api_key "scalar") (serialize-qp "sort_null_only" $sort_null_only "scalar") (serialize-qp "sort" $qp_sort "multi") (serialize-qp "party" $party "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/candidates/totals/aggregates/" $qp)
+  let full_url = (build-url $base "/candidates/totals/aggregates/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"office": $office, "sort_nulls_last": $sort_nulls_last, "district": $district, "state": $state, "min_election_cycle": $min_election_cycle, "sort_hide_null": $sort_hide_null, "is_active_candidate": $is_active_candidate, "per_page": $per_page, "max_election_cycle": $max_election_cycle, "aggregate_by": $aggregate_by, "page": $page, "election_year": $election_year, "election_full": $election_full, "api_key": $api_key, "sort_null_only": $sort_null_only, "sort": $qp_sort, "party": $party} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"office": $office, "sort_nulls_last": $sort_nulls_last, "district": $district, "state": $state, "min_election_cycle": $min_election_cycle, "sort_hide_null": $sort_hide_null, "is_active_candidate": $is_active_candidate, "per_page": $per_page, "max_election_cycle": $max_election_cycle, "aggregate_by": $aggregate_by, "page": $page, "election_year": $election_year, "election_full": $election_full, "api_key": $api_key, "sort_null_only": $sort_null_only, "sort": $qp_sort, "party": $party} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Aggregated candidate receipts and disbursements grouped by office by cycle.
@@ -878,10 +1050,21 @@ export def "candidates-totals-by-office get" [
   let auth = (merge-auth [(build-auth ($token_apikeyheaderauth | default ($env | get -o OPENFEC_APIKEYHEADERAUTH_TOKEN | default "")) "x-api-key") (build-auth ($token_apikeyqueryauth | default ($env | get -o OPENFEC_APIKEYQUERYAUTH_TOKEN | default "")) "query-api_key") (build-auth ($token_apikey | default ($env | get -o OPENFEC_APIKEY_TOKEN | default "")) "query-api_key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "office" $office "scalar") (serialize-qp "sort_nulls_last" $sort_nulls_last "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "min_election_cycle" $min_election_cycle "scalar") (serialize-qp "sort_hide_null" $sort_hide_null "scalar") (serialize-qp "election_year" $election_year "multi") (serialize-qp "election_full" $election_full "scalar") (serialize-qp "api_key" $api_key "scalar") (serialize-qp "is_active_candidate" $is_active_candidate "scalar") (serialize-qp "sort_null_only" $sort_null_only "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "max_election_cycle" $max_election_cycle "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/candidates/totals/by_office/" $qp)
+  let full_url = (build-url $base "/candidates/totals/by_office/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"office": $office, "sort_nulls_last": $sort_nulls_last, "page": $page, "min_election_cycle": $min_election_cycle, "sort_hide_null": $sort_hide_null, "election_year": $election_year, "election_full": $election_full, "api_key": $api_key, "is_active_candidate": $is_active_candidate, "sort_null_only": $sort_null_only, "per_page": $per_page, "max_election_cycle": $max_election_cycle, "sort": $qp_sort} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"office": $office, "sort_nulls_last": $sort_nulls_last, "page": $page, "min_election_cycle": $min_election_cycle, "sort_hide_null": $sort_hide_null, "election_year": $election_year, "election_full": $election_full, "api_key": $api_key, "is_active_candidate": $is_active_candidate, "sort_null_only": $sort_null_only, "per_page": $per_page, "max_election_cycle": $max_election_cycle, "sort": $qp_sort} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Aggregated candidate receipts and disbursements grouped by office by party by cycle.
@@ -913,10 +1096,21 @@ export def "candidates-totals-by-office-by-party get" [
   let auth = (merge-auth [(build-auth ($token_apikeyheaderauth | default ($env | get -o OPENFEC_APIKEYHEADERAUTH_TOKEN | default "")) "x-api-key") (build-auth ($token_apikeyqueryauth | default ($env | get -o OPENFEC_APIKEYQUERYAUTH_TOKEN | default "")) "query-api_key") (build-auth ($token_apikey | default ($env | get -o OPENFEC_APIKEY_TOKEN | default "")) "query-api_key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "office" $office "scalar") (serialize-qp "sort_nulls_last" $sort_nulls_last "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "sort_hide_null" $sort_hide_null "scalar") (serialize-qp "election_year" $election_year "multi") (serialize-qp "election_full" $election_full "scalar") (serialize-qp "api_key" $api_key "scalar") (serialize-qp "is_active_candidate" $is_active_candidate "scalar") (serialize-qp "sort_null_only" $sort_null_only "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/candidates/totals/by_office/by_party/" $qp)
+  let full_url = (build-url $base "/candidates/totals/by_office/by_party/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"office": $office, "sort_nulls_last": $sort_nulls_last, "page": $page, "sort_hide_null": $sort_hide_null, "election_year": $election_year, "election_full": $election_full, "api_key": $api_key, "is_active_candidate": $is_active_candidate, "sort_null_only": $sort_null_only, "per_page": $per_page, "sort": $qp_sort} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"office": $office, "sort_nulls_last": $sort_nulls_last, "page": $page, "sort_hide_null": $sort_hide_null, "election_year": $election_year, "election_full": $election_full, "api_key": $api_key, "is_active_candidate": $is_active_candidate, "sort_null_only": $sort_null_only, "per_page": $per_page, "sort": $qp_sort} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # This endpoint is useful for finding detailed information about a particular committee or filer. Use the `committee_id` to find the most recent information about the committee.
@@ -952,10 +1146,21 @@ export def "committee get" [
   let base = ($base_url | default $BASE_URL)
   if ($committee_id | is-empty) { error make --unspanned { msg: "path parameter 'committee_id' must be non-empty" } }
   let qp = [(serialize-qp "designation" $designation "multi") (serialize-qp "committee_type" $committee_type "multi") (serialize-qp "page" $page "scalar") (serialize-qp "filing_frequency" $filing_frequency "multi") (serialize-qp "cycle" $cycle "multi") (serialize-qp "sort_hide_null" $sort_hide_null "scalar") (serialize-qp "year" $year "multi") (serialize-qp "sort_nulls_last" $sort_nulls_last "scalar") (serialize-qp "api_key" $api_key "scalar") (serialize-qp "sort_null_only" $sort_null_only "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "organization_type" $organization_type "multi") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({committee_id: (encode-path-segment $committee_id)} | format pattern "/committee/{committee_id}/") $qp)
+  let full_url = (build-url $base ({committee_id: (encode-path-segment $committee_id)} | format pattern "/committee/{committee_id}/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"designation": $designation, "committee_type": $committee_type, "page": $page, "filing_frequency": $filing_frequency, "cycle": $cycle, "sort_hide_null": $sort_hide_null, "year": $year, "sort_nulls_last": $sort_nulls_last, "api_key": $api_key, "sort_null_only": $sort_null_only, "per_page": $per_page, "organization_type": $organization_type, "sort": $qp_sort} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"designation": $designation, "committee_type": $committee_type, "page": $page, "filing_frequency": $filing_frequency, "cycle": $cycle, "sort_hide_null": $sort_hide_null, "year": $year, "sort_nulls_last": $sort_nulls_last, "api_key": $api_key, "sort_null_only": $sort_null_only, "per_page": $per_page, "organization_type": $organization_type, "sort": $qp_sort} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # This endpoint is useful for finding detailed information about a particular candidate. Use the `candidate_id` to find the most recent information about that candidate.
@@ -997,10 +1202,21 @@ export def "committee-candidates get" [
   let base = ($base_url | default $BASE_URL)
   if ($committee_id | is-empty) { error make --unspanned { msg: "path parameter 'committee_id' must be non-empty" } }
   let qp = [(serialize-qp "office" $office "multi") (serialize-qp "candidate_status" $candidate_status "multi") (serialize-qp "cycle" $cycle "multi") (serialize-qp "sort_nulls_last" $sort_nulls_last "scalar") (serialize-qp "state" $state "multi") (serialize-qp "district" $district "multi") (serialize-qp "year" $year "scalar") (serialize-qp "name" $name "multi") (serialize-qp "sort_hide_null" $sort_hide_null "scalar") (serialize-qp "federal_funds_flag" $federal_funds_flag "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "has_raised_funds" $has_raised_funds "scalar") (serialize-qp "election_year" $election_year "multi") (serialize-qp "api_key" $api_key "scalar") (serialize-qp "sort_null_only" $sort_null_only "scalar") (serialize-qp "incumbent_challenge" $incumbent_challenge "multi") (serialize-qp "party" $party "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({committee_id: (encode-path-segment $committee_id)} | format pattern "/committee/{committee_id}/candidates/") $qp)
+  let full_url = (build-url $base ({committee_id: (encode-path-segment $committee_id)} | format pattern "/committee/{committee_id}/candidates/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"office": $office, "candidate_status": $candidate_status, "cycle": $cycle, "sort_nulls_last": $sort_nulls_last, "state": $state, "district": $district, "year": $year, "name": $name, "sort_hide_null": $sort_hide_null, "federal_funds_flag": $federal_funds_flag, "per_page": $per_page, "page": $page, "sort": $qp_sort, "has_raised_funds": $has_raised_funds, "election_year": $election_year, "api_key": $api_key, "sort_null_only": $sort_null_only, "incumbent_challenge": $incumbent_challenge, "party": $party} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"office": $office, "candidate_status": $candidate_status, "cycle": $cycle, "sort_nulls_last": $sort_nulls_last, "state": $state, "district": $district, "year": $year, "name": $name, "sort_hide_null": $sort_hide_null, "federal_funds_flag": $federal_funds_flag, "per_page": $per_page, "page": $page, "sort": $qp_sort, "has_raised_funds": $has_raised_funds, "election_year": $election_year, "api_key": $api_key, "sort_null_only": $sort_null_only, "incumbent_challenge": $incumbent_challenge, "party": $party} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Find out a candidate's characteristics over time. This is particularly useful if the candidate runs for the same office in different districts or you want to know more about a candidate's previous races. This information is organized by `candidate_id`, so it won't help you find a candidate who ran for different offices over time; candidates get a new ID for each office.
@@ -1031,10 +1247,21 @@ export def "committee-candidates-history list" [
   let base = ($base_url | default $BASE_URL)
   if ($committee_id | is-empty) { error make --unspanned { msg: "path parameter 'committee_id' must be non-empty" } }
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "sort_nulls_last" $sort_nulls_last "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort_null_only" $sort_null_only "scalar") (serialize-qp "sort_hide_null" $sort_hide_null "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "election_full" $election_full "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({committee_id: (encode-path-segment $committee_id)} | format pattern "/committee/{committee_id}/candidates/history/") $qp)
+  let full_url = (build-url $base ({committee_id: (encode-path-segment $committee_id)} | format pattern "/committee/{committee_id}/candidates/history/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api_key": $api_key, "sort_nulls_last": $sort_nulls_last, "per_page": $per_page, "sort_null_only": $sort_null_only, "sort_hide_null": $sort_hide_null, "sort": $qp_sort, "election_full": $election_full, "page": $page} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api_key": $api_key, "sort_nulls_last": $sort_nulls_last, "per_page": $per_page, "sort_null_only": $sort_null_only, "sort_hide_null": $sort_hide_null, "sort": $qp_sort, "election_full": $election_full, "page": $page} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Find out a candidate's characteristics over time. This is particularly useful if the candidate runs for the same office in different districts or you want to know more about a candidate's previous races. This information is organized by `candidate_id`, so it won't help you find a candidate who ran for different offices over time; candidates get a new ID for each office.
@@ -1067,10 +1294,21 @@ export def "committee-candidates-history get" [
   if ($committee_id | is-empty) { error make --unspanned { msg: "path parameter 'committee_id' must be non-empty" } }
   if ($cycle | is-empty) { error make --unspanned { msg: "path parameter 'cycle' must be non-empty" } }
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "sort_nulls_last" $sort_nulls_last "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort_null_only" $sort_null_only "scalar") (serialize-qp "sort_hide_null" $sort_hide_null "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "election_full" $election_full "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({committee_id: (encode-path-segment $committee_id), cycle: (encode-path-segment $cycle)} | format pattern "/committee/{committee_id}/candidates/history/{cycle}/") $qp)
+  let full_url = (build-url $base ({committee_id: (encode-path-segment $committee_id), cycle: (encode-path-segment $cycle)} | format pattern "/committee/{committee_id}/candidates/history/{cycle}/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api_key": $api_key, "sort_nulls_last": $sort_nulls_last, "per_page": $per_page, "sort_null_only": $sort_null_only, "sort_hide_null": $sort_hide_null, "sort": $qp_sort, "election_full": $election_full, "page": $page} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api_key": $api_key, "sort_nulls_last": $sort_nulls_last, "per_page": $per_page, "sort_null_only": $sort_null_only, "sort_hide_null": $sort_hide_null, "sort": $qp_sort, "election_full": $election_full, "page": $page} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # All official records and reports filed by or delivered to the FEC. Note: because the filings data includes many records, counts for large result sets are approximate; you will want to page through the records until no records are returned.
@@ -1122,10 +1360,21 @@ export def "committee-filings get" [
   let base = ($base_url | default $BASE_URL)
   if ($committee_id | is-empty) { error make --unspanned { msg: "path parameter 'committee_id' must be non-empty" } }
   let qp = [(serialize-qp "office" $office "multi") (serialize-qp "file_number" $file_number "multi") (serialize-qp "form_category" $form_category "multi") (serialize-qp "cycle" $cycle "multi") (serialize-qp "district" $district "multi") (serialize-qp "document_type" $document_type "multi") (serialize-qp "sort_hide_null" $sort_hide_null "scalar") (serialize-qp "state" $state "multi") (serialize-qp "amendment_indicator" $amendment_indicator "multi") (serialize-qp "sort_nulls_last" $sort_nulls_last "scalar") (serialize-qp "is_amended" $is_amended "scalar") (serialize-qp "filer_type" $filer_type "scalar") (serialize-qp "max_receipt_date" $max_receipt_date "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "primary_general_indicator" $primary_general_indicator "multi") (serialize-qp "request_type" $request_type "multi") (serialize-qp "report_year" $report_year "multi") (serialize-qp "form_type" $form_type "multi") (serialize-qp "committee_type" $committee_type "scalar") (serialize-qp "beginning_image_number" $beginning_image_number "multi") (serialize-qp "page" $page "scalar") (serialize-qp "sort" $qp_sort "multi") (serialize-qp "api_key" $api_key "scalar") (serialize-qp "min_receipt_date" $min_receipt_date "scalar") (serialize-qp "sort_null_only" $sort_null_only "scalar") (serialize-qp "q_filer" $q_filer "multi") (serialize-qp "report_type" $report_type "multi") (serialize-qp "party" $party "multi") (serialize-qp "most_recent" $most_recent "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({committee_id: (encode-path-segment $committee_id)} | format pattern "/committee/{committee_id}/filings/") $qp)
+  let full_url = (build-url $base ({committee_id: (encode-path-segment $committee_id)} | format pattern "/committee/{committee_id}/filings/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"office": $office, "file_number": $file_number, "form_category": $form_category, "cycle": $cycle, "district": $district, "document_type": $document_type, "sort_hide_null": $sort_hide_null, "state": $state, "amendment_indicator": $amendment_indicator, "sort_nulls_last": $sort_nulls_last, "is_amended": $is_amended, "filer_type": $filer_type, "max_receipt_date": $max_receipt_date, "per_page": $per_page, "primary_general_indicator": $primary_general_indicator, "request_type": $request_type, "report_year": $report_year, "form_type": $form_type, "committee_type": $committee_type, "beginning_image_number": $beginning_image_number, "page": $page, "sort": $qp_sort, "api_key": $api_key, "min_receipt_date": $min_receipt_date, "sort_null_only": $sort_null_only, "q_filer": $q_filer, "report_type": $report_type, "party": $party, "most_recent": $most_recent} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"office": $office, "file_number": $file_number, "form_category": $form_category, "cycle": $cycle, "district": $district, "document_type": $document_type, "sort_hide_null": $sort_hide_null, "state": $state, "amendment_indicator": $amendment_indicator, "sort_nulls_last": $sort_nulls_last, "is_amended": $is_amended, "filer_type": $filer_type, "max_receipt_date": $max_receipt_date, "per_page": $per_page, "primary_general_indicator": $primary_general_indicator, "request_type": $request_type, "report_year": $report_year, "form_type": $form_type, "committee_type": $committee_type, "beginning_image_number": $beginning_image_number, "page": $page, "sort": $qp_sort, "api_key": $api_key, "min_receipt_date": $min_receipt_date, "sort_null_only": $sort_null_only, "q_filer": $q_filer, "report_type": $report_type, "party": $party, "most_recent": $most_recent} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Explore a filer's characteristics over time. This can be particularly useful if the committees change treasurers, designation, or `committee_type`.
@@ -1157,10 +1406,21 @@ export def "committee-history list" [
   let base = ($base_url | default $BASE_URL)
   if ($committee_id | is-empty) { error make --unspanned { msg: "path parameter 'committee_id' must be non-empty" } }
   let qp = [(serialize-qp "designation" $designation "multi") (serialize-qp "sort_nulls_last" $sort_nulls_last "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "sort_hide_null" $sort_hide_null "scalar") (serialize-qp "election_full" $election_full "scalar") (serialize-qp "api_key" $api_key "scalar") (serialize-qp "sort_null_only" $sort_null_only "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({committee_id: (encode-path-segment $committee_id)} | format pattern "/committee/{committee_id}/history/") $qp)
+  let full_url = (build-url $base ({committee_id: (encode-path-segment $committee_id)} | format pattern "/committee/{committee_id}/history/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"designation": $designation, "sort_nulls_last": $sort_nulls_last, "page": $page, "sort_hide_null": $sort_hide_null, "election_full": $election_full, "api_key": $api_key, "sort_null_only": $sort_null_only, "per_page": $per_page, "sort": $qp_sort} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"designation": $designation, "sort_nulls_last": $sort_nulls_last, "page": $page, "sort_hide_null": $sort_hide_null, "election_full": $election_full, "api_key": $api_key, "sort_null_only": $sort_null_only, "per_page": $per_page, "sort": $qp_sort} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Explore a filer's characteristics over time. This can be particularly useful if the committees change treasurers, designation, or `committee_type`.
@@ -1194,10 +1454,21 @@ export def "committee-history get" [
   if ($committee_id | is-empty) { error make --unspanned { msg: "path parameter 'committee_id' must be non-empty" } }
   if ($cycle | is-empty) { error make --unspanned { msg: "path parameter 'cycle' must be non-empty" } }
   let qp = [(serialize-qp "designation" $designation "multi") (serialize-qp "sort_nulls_last" $sort_nulls_last "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "sort_hide_null" $sort_hide_null "scalar") (serialize-qp "election_full" $election_full "scalar") (serialize-qp "api_key" $api_key "scalar") (serialize-qp "sort_null_only" $sort_null_only "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({committee_id: (encode-path-segment $committee_id), cycle: (encode-path-segment $cycle)} | format pattern "/committee/{committee_id}/history/{cycle}/") $qp)
+  let full_url = (build-url $base ({committee_id: (encode-path-segment $committee_id), cycle: (encode-path-segment $cycle)} | format pattern "/committee/{committee_id}/history/{cycle}/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"designation": $designation, "sort_nulls_last": $sort_nulls_last, "page": $page, "sort_hide_null": $sort_hide_null, "election_full": $election_full, "api_key": $api_key, "sort_null_only": $sort_null_only, "per_page": $per_page, "sort": $qp_sort} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"designation": $designation, "sort_nulls_last": $sort_nulls_last, "page": $page, "sort_hide_null": $sort_hide_null, "election_full": $election_full, "api_key": $api_key, "sort_null_only": $sort_null_only, "per_page": $per_page, "sort": $qp_sort} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Each report represents the summary information from Form 3, Form 3X and Form 3P. These reports have key statistics that illuminate the financial status of a given committee. Things like cash on hand, debts owed by committee, total receipts, and total disbursements are especially helpful for understanding a committee's financial dealings. By default, this endpoint includes both amended and final versions of each report. To restrict to only the final versions of each report, use `is_amended=false`; to retrieve only reports that have been amended, use `is_amended=true`. Several different reporting structures exist, depending on the type of organization that submits financial information. To see an example of these reporting requirements, look at the summary and detailed summary pages of Form 3, Form 3X, and Form 3P. DISCLAIMER: The field labels contained within this resource are subject to change. We are attempting to succinctly label these fields while conveying clear meaning to ensure accessibility for all users.
@@ -1248,10 +1519,21 @@ export def "committee-reports get" [
   let base = ($base_url | default $BASE_URL)
   if ($committee_id | is-empty) { error make --unspanned { msg: "path parameter 'committee_id' must be non-empty" } }
   let qp = [(serialize-qp "min_debts_owed_amount" $min_debts_owed_amount "scalar") (serialize-qp "max_disbursements_amount" $max_disbursements_amount "scalar") (serialize-qp "max_total_contributions" $max_total_contributions "scalar") (serialize-qp "max_debts_owed_expenditures" $max_debts_owed_expenditures "scalar") (serialize-qp "cycle" $cycle "multi") (serialize-qp "sort_nulls_last" $sort_nulls_last "scalar") (serialize-qp "sort_hide_null" $sort_hide_null "scalar") (serialize-qp "year" $year "multi") (serialize-qp "max_receipts_amount" $max_receipts_amount "scalar") (serialize-qp "max_cash_on_hand_end_period_amount" $max_cash_on_hand_end_period_amount "scalar") (serialize-qp "is_amended" $is_amended "scalar") (serialize-qp "min_disbursements_amount" $min_disbursements_amount "scalar") (serialize-qp "max_party_coordinated_expenditures" $max_party_coordinated_expenditures "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "max_independent_expenditures" $max_independent_expenditures "scalar") (serialize-qp "min_receipts_amount" $min_receipts_amount "scalar") (serialize-qp "min_party_coordinated_expenditures" $min_party_coordinated_expenditures "scalar") (serialize-qp "candidate_id" $candidate_id "scalar") (serialize-qp "beginning_image_number" $beginning_image_number "multi") (serialize-qp "page" $page "scalar") (serialize-qp "type" $type "multi") (serialize-qp "sort" $qp_sort "multi") (serialize-qp "min_total_contributions" $min_total_contributions "scalar") (serialize-qp "api_key" $api_key "scalar") (serialize-qp "min_cash_on_hand_end_period_amount" $min_cash_on_hand_end_period_amount "scalar") (serialize-qp "sort_null_only" $sort_null_only "scalar") (serialize-qp "min_independent_expenditures" $min_independent_expenditures "scalar") (serialize-qp "report_type" $report_type "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({committee_id: (encode-path-segment $committee_id)} | format pattern "/committee/{committee_id}/reports/") $qp)
+  let full_url = (build-url $base ({committee_id: (encode-path-segment $committee_id)} | format pattern "/committee/{committee_id}/reports/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"min_debts_owed_amount": $min_debts_owed_amount, "max_disbursements_amount": $max_disbursements_amount, "max_total_contributions": $max_total_contributions, "max_debts_owed_expenditures": $max_debts_owed_expenditures, "cycle": $cycle, "sort_nulls_last": $sort_nulls_last, "sort_hide_null": $sort_hide_null, "year": $year, "max_receipts_amount": $max_receipts_amount, "max_cash_on_hand_end_period_amount": $max_cash_on_hand_end_period_amount, "is_amended": $is_amended, "min_disbursements_amount": $min_disbursements_amount, "max_party_coordinated_expenditures": $max_party_coordinated_expenditures, "per_page": $per_page, "max_independent_expenditures": $max_independent_expenditures, "min_receipts_amount": $min_receipts_amount, "min_party_coordinated_expenditures": $min_party_coordinated_expenditures, "candidate_id": $candidate_id, "beginning_image_number": $beginning_image_number, "page": $page, "type": $type, "sort": $qp_sort, "min_total_contributions": $min_total_contributions, "api_key": $api_key, "min_cash_on_hand_end_period_amount": $min_cash_on_hand_end_period_amount, "sort_null_only": $sort_null_only, "min_independent_expenditures": $min_independent_expenditures, "report_type": $report_type} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"min_debts_owed_amount": $min_debts_owed_amount, "max_disbursements_amount": $max_disbursements_amount, "max_total_contributions": $max_total_contributions, "max_debts_owed_expenditures": $max_debts_owed_expenditures, "cycle": $cycle, "sort_nulls_last": $sort_nulls_last, "sort_hide_null": $sort_hide_null, "year": $year, "max_receipts_amount": $max_receipts_amount, "max_cash_on_hand_end_period_amount": $max_cash_on_hand_end_period_amount, "is_amended": $is_amended, "min_disbursements_amount": $min_disbursements_amount, "max_party_coordinated_expenditures": $max_party_coordinated_expenditures, "per_page": $per_page, "max_independent_expenditures": $max_independent_expenditures, "min_receipts_amount": $min_receipts_amount, "min_party_coordinated_expenditures": $min_party_coordinated_expenditures, "candidate_id": $candidate_id, "beginning_image_number": $beginning_image_number, "page": $page, "type": $type, "sort": $qp_sort, "min_total_contributions": $min_total_contributions, "api_key": $api_key, "min_cash_on_hand_end_period_amount": $min_cash_on_hand_end_period_amount, "sort_null_only": $sort_null_only, "min_independent_expenditures": $min_independent_expenditures, "report_type": $report_type} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # This endpoint provides information about a committee's Form 3, Form 3X, or Form 3P financial reports, which are aggregated by two-year period. We refer to two-year periods as a `cycle`. The cycle is named after the even-numbered year and includes the year before it. To obtain totals from 2013 and 2014, you would use 2014. In odd-numbered years, the current cycle is the next year — for example, in 2015, the current cycle is 2016. For presidential and Senate candidates, multiple two-year cycles exist between elections.
@@ -1282,10 +1564,21 @@ export def "committee-totals get" [
   let base = ($base_url | default $BASE_URL)
   if ($committee_id | is-empty) { error make --unspanned { msg: "path parameter 'committee_id' must be non-empty" } }
   let qp = [(serialize-qp "cycle" $cycle "multi") (serialize-qp "sort_nulls_last" $sort_nulls_last "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort_null_only" $sort_null_only "scalar") (serialize-qp "sort_hide_null" $sort_hide_null "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "api_key" $api_key "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({committee_id: (encode-path-segment $committee_id)} | format pattern "/committee/{committee_id}/totals/") $qp)
+  let full_url = (build-url $base ({committee_id: (encode-path-segment $committee_id)} | format pattern "/committee/{committee_id}/totals/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cycle": $cycle, "sort_nulls_last": $sort_nulls_last, "per_page": $per_page, "sort_null_only": $sort_null_only, "sort_hide_null": $sort_hide_null, "sort": $qp_sort, "api_key": $api_key, "page": $page} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"cycle": $cycle, "sort_nulls_last": $sort_nulls_last, "per_page": $per_page, "sort_null_only": $sort_null_only, "sort_hide_null": $sort_hide_null, "sort": $qp_sort, "api_key": $api_key, "page": $page} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Fetch basic information about committees and filers. Use parameters to filter for particular characteristics.
@@ -1332,10 +1625,21 @@ export def "committees get" [
   let auth = (merge-auth [(build-auth ($token_apikeyheaderauth | default ($env | get -o OPENFEC_APIKEYHEADERAUTH_TOKEN | default "")) "x-api-key") (build-auth ($token_apikeyqueryauth | default ($env | get -o OPENFEC_APIKEYQUERYAUTH_TOKEN | default "")) "query-api_key") (build-auth ($token_apikey | default ($env | get -o OPENFEC_APIKEY_TOKEN | default "")) "query-api_key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "designation" $designation "multi") (serialize-qp "max_first_f1_date" $max_first_f1_date "scalar") (serialize-qp "min_first_f1_date" $min_first_f1_date "scalar") (serialize-qp "cycle" $cycle "multi") (serialize-qp "filing_frequency" $filing_frequency "multi") (serialize-qp "sort_nulls_last" $sort_nulls_last "scalar") (serialize-qp "sort_hide_null" $sort_hide_null "scalar") (serialize-qp "year" $year "multi") (serialize-qp "state" $state "multi") (serialize-qp "sponsor_candidate_id" $sponsor_candidate_id "multi") (serialize-qp "q" $q "multi") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "min_last_f1_date" $min_last_f1_date "scalar") (serialize-qp "candidate_id" $candidate_id "multi") (serialize-qp "committee_type" $committee_type "multi") (serialize-qp "min_first_file_date" $min_first_file_date "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "committee_id" $committee_id "multi") (serialize-qp "api_key" $api_key "scalar") (serialize-qp "sort_null_only" $sort_null_only "scalar") (serialize-qp "max_last_f1_date" $max_last_f1_date "scalar") (serialize-qp "treasurer_name" $treasurer_name "multi") (serialize-qp "organization_type" $organization_type "multi") (serialize-qp "max_first_file_date" $max_first_file_date "scalar") (serialize-qp "party" $party "multi")] | flatten | str join "&"
-  let full_url = (build-url $base "/committees/" $qp)
+  let full_url = (build-url $base "/committees/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"designation": $designation, "max_first_f1_date": $max_first_f1_date, "min_first_f1_date": $min_first_f1_date, "cycle": $cycle, "filing_frequency": $filing_frequency, "sort_nulls_last": $sort_nulls_last, "sort_hide_null": $sort_hide_null, "year": $year, "state": $state, "sponsor_candidate_id": $sponsor_candidate_id, "q": $q, "per_page": $per_page, "min_last_f1_date": $min_last_f1_date, "candidate_id": $candidate_id, "committee_type": $committee_type, "min_first_file_date": $min_first_file_date, "page": $page, "sort": $qp_sort, "committee_id": $committee_id, "api_key": $api_key, "sort_null_only": $sort_null_only, "max_last_f1_date": $max_last_f1_date, "treasurer_name": $treasurer_name, "organization_type": $organization_type, "max_first_file_date": $max_first_file_date, "party": $party} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"designation": $designation, "max_first_f1_date": $max_first_f1_date, "min_first_f1_date": $min_first_f1_date, "cycle": $cycle, "filing_frequency": $filing_frequency, "sort_nulls_last": $sort_nulls_last, "sort_hide_null": $sort_hide_null, "year": $year, "state": $state, "sponsor_candidate_id": $sponsor_candidate_id, "q": $q, "per_page": $per_page, "min_last_f1_date": $min_last_f1_date, "candidate_id": $candidate_id, "committee_type": $committee_type, "min_first_file_date": $min_first_file_date, "page": $page, "sort": $qp_sort, "committee_id": $committee_id, "api_key": $api_key, "sort_null_only": $sort_null_only, "max_last_f1_date": $max_last_f1_date, "treasurer_name": $treasurer_name, "organization_type": $organization_type, "max_first_file_date": $max_first_file_date, "party": $party} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # 52 U.S.C. 30118 allows "communications by a corporation to its stockholders and executive or administrative personnel and their families or by a labor organization to its members and their families on any subject," including the express advocacy of the election or defeat of any Federal candidate. The costs of such communications must be reported to the Federal Election Commission under certain circumstances.
@@ -1374,10 +1678,21 @@ export def "communication-costs get" [
   let auth = (merge-auth [(build-auth ($token_apikeyheaderauth | default ($env | get -o OPENFEC_APIKEYHEADERAUTH_TOKEN | default "")) "x-api-key") (build-auth ($token_apikeyqueryauth | default ($env | get -o OPENFEC_APIKEYQUERYAUTH_TOKEN | default "")) "query-api_key") (build-auth ($token_apikey | default ($env | get -o OPENFEC_APIKEY_TOKEN | default "")) "query-api_key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "max_amount" $max_amount "scalar") (serialize-qp "max_image_number" $max_image_number "scalar") (serialize-qp "sort_nulls_last" $sort_nulls_last "scalar") (serialize-qp "support_oppose_indicator" $support_oppose_indicator "multi") (serialize-qp "sort_hide_null" $sort_hide_null "scalar") (serialize-qp "line_number" $line_number "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "candidate_id" $candidate_id "multi") (serialize-qp "page" $page "scalar") (serialize-qp "min_date" $min_date "scalar") (serialize-qp "committee_id" $committee_id "multi") (serialize-qp "api_key" $api_key "scalar") (serialize-qp "min_amount" $min_amount "scalar") (serialize-qp "min_image_number" $min_image_number "scalar") (serialize-qp "sort_null_only" $sort_null_only "scalar") (serialize-qp "image_number" $image_number "multi") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "max_date" $max_date "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/communication_costs/" $qp)
+  let full_url = (build-url $base "/communication_costs/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"max_amount": $max_amount, "max_image_number": $max_image_number, "sort_nulls_last": $sort_nulls_last, "support_oppose_indicator": $support_oppose_indicator, "sort_hide_null": $sort_hide_null, "line_number": $line_number, "per_page": $per_page, "candidate_id": $candidate_id, "page": $page, "min_date": $min_date, "committee_id": $committee_id, "api_key": $api_key, "min_amount": $min_amount, "min_image_number": $min_image_number, "sort_null_only": $sort_null_only, "image_number": $image_number, "sort": $qp_sort, "max_date": $max_date} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"max_amount": $max_amount, "max_image_number": $max_image_number, "sort_nulls_last": $sort_nulls_last, "support_oppose_indicator": $support_oppose_indicator, "sort_hide_null": $sort_hide_null, "line_number": $line_number, "per_page": $per_page, "candidate_id": $candidate_id, "page": $page, "min_date": $min_date, "committee_id": $committee_id, "api_key": $api_key, "min_amount": $min_amount, "min_image_number": $min_image_number, "sort_null_only": $sort_null_only, "image_number": $image_number, "sort": $qp_sort, "max_date": $max_date} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Communication cost aggregated by candidate ID and committee ID.
@@ -1409,10 +1724,21 @@ export def "communication-costs-aggregates get" [
   let auth = (merge-auth [(build-auth ($token_apikeyheaderauth | default ($env | get -o OPENFEC_APIKEYHEADERAUTH_TOKEN | default "")) "x-api-key") (build-auth ($token_apikeyqueryauth | default ($env | get -o OPENFEC_APIKEYQUERYAUTH_TOKEN | default "")) "query-api_key") (build-auth ($token_apikey | default ($env | get -o OPENFEC_APIKEY_TOKEN | default "")) "query-api_key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "candidate_id" $candidate_id "multi") (serialize-qp "page" $page "scalar") (serialize-qp "cycle" $cycle "multi") (serialize-qp "support_oppose_indicator" $support_oppose_indicator "scalar") (serialize-qp "sort_hide_null" $sort_hide_null "scalar") (serialize-qp "sort_nulls_last" $sort_nulls_last "scalar") (serialize-qp "committee_id" $committee_id "multi") (serialize-qp "api_key" $api_key "scalar") (serialize-qp "sort_null_only" $sort_null_only "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/communication_costs/aggregates/" $qp)
+  let full_url = (build-url $base "/communication_costs/aggregates/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"candidate_id": $candidate_id, "page": $page, "cycle": $cycle, "support_oppose_indicator": $support_oppose_indicator, "sort_hide_null": $sort_hide_null, "sort_nulls_last": $sort_nulls_last, "committee_id": $committee_id, "api_key": $api_key, "sort_null_only": $sort_null_only, "per_page": $per_page, "sort": $qp_sort} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"candidate_id": $candidate_id, "page": $page, "cycle": $cycle, "support_oppose_indicator": $support_oppose_indicator, "sort_hide_null": $sort_hide_null, "sort_nulls_last": $sort_nulls_last, "committee_id": $committee_id, "api_key": $api_key, "sort_null_only": $sort_null_only, "per_page": $per_page, "sort": $qp_sort} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Communication cost aggregated by candidate ID and committee ID.
@@ -1447,10 +1773,21 @@ export def "communication-costs-by-candidate get" [
   let auth = (merge-auth [(build-auth ($token_apikeyheaderauth | default ($env | get -o OPENFEC_APIKEYHEADERAUTH_TOKEN | default "")) "x-api-key") (build-auth ($token_apikeyqueryauth | default ($env | get -o OPENFEC_APIKEYQUERYAUTH_TOKEN | default "")) "query-api_key") (build-auth ($token_apikey | default ($env | get -o OPENFEC_APIKEY_TOKEN | default "")) "query-api_key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "office" $office "scalar") (serialize-qp "candidate_id" $candidate_id "multi") (serialize-qp "cycle" $cycle "multi") (serialize-qp "district" $district "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "support_oppose" $support_oppose "scalar") (serialize-qp "election_full" $election_full "scalar") (serialize-qp "sort_hide_null" $sort_hide_null "scalar") (serialize-qp "sort_nulls_last" $sort_nulls_last "scalar") (serialize-qp "api_key" $api_key "scalar") (serialize-qp "sort_null_only" $sort_null_only "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/communication_costs/by_candidate/" $qp)
+  let full_url = (build-url $base "/communication_costs/by_candidate/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"office": $office, "candidate_id": $candidate_id, "cycle": $cycle, "district": $district, "state": $state, "page": $page, "support_oppose": $support_oppose, "election_full": $election_full, "sort_hide_null": $sort_hide_null, "sort_nulls_last": $sort_nulls_last, "api_key": $api_key, "sort_null_only": $sort_null_only, "per_page": $per_page, "sort": $qp_sort} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"office": $office, "candidate_id": $candidate_id, "cycle": $cycle, "district": $district, "state": $state, "page": $page, "support_oppose": $support_oppose, "election_full": $election_full, "sort_hide_null": $sort_hide_null, "sort_nulls_last": $sort_nulls_last, "api_key": $api_key, "sort_null_only": $sort_null_only, "per_page": $per_page, "sort": $qp_sort} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Total communications costs aggregated across committees on supported or opposed candidates by cycle or candidate election year.
@@ -1481,10 +1818,21 @@ export def "communication-costs-totals-by-candidate get" [
   let auth = (merge-auth [(build-auth ($token_apikeyheaderauth | default ($env | get -o OPENFEC_APIKEYHEADERAUTH_TOKEN | default "")) "x-api-key") (build-auth ($token_apikeyqueryauth | default ($env | get -o OPENFEC_APIKEYQUERYAUTH_TOKEN | default "")) "query-api_key") (build-auth ($token_apikey | default ($env | get -o OPENFEC_APIKEY_TOKEN | default "")) "query-api_key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "candidate_id" $candidate_id "multi") (serialize-qp "sort_nulls_last" $sort_nulls_last "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "cycle" $cycle "multi") (serialize-qp "sort_hide_null" $sort_hide_null "scalar") (serialize-qp "election_full" $election_full "scalar") (serialize-qp "api_key" $api_key "scalar") (serialize-qp "sort_null_only" $sort_null_only "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/communication_costs/totals/by_candidate/" $qp)
+  let full_url = (build-url $base "/communication_costs/totals/by_candidate/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"candidate_id": $candidate_id, "sort_nulls_last": $sort_nulls_last, "page": $page, "cycle": $cycle, "sort_hide_null": $sort_hide_null, "election_full": $election_full, "api_key": $api_key, "sort_null_only": $sort_null_only, "per_page": $per_page, "sort": $qp_sort} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"candidate_id": $candidate_id, "sort_nulls_last": $sort_nulls_last, "page": $page, "cycle": $cycle, "sort_hide_null": $sort_hide_null, "election_full": $election_full, "api_key": $api_key, "sort_null_only": $sort_null_only, "per_page": $per_page, "sort": $qp_sort} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Basic information about electronic files coming into the FEC, posted as they are received.
@@ -1517,10 +1865,21 @@ export def "efile-filings get" [
   let auth = (merge-auth [(build-auth ($token_apikeyheaderauth | default ($env | get -o OPENFEC_APIKEYHEADERAUTH_TOKEN | default "")) "x-api-key") (build-auth ($token_apikeyqueryauth | default ($env | get -o OPENFEC_APIKEYQUERYAUTH_TOKEN | default "")) "query-api_key") (build-auth ($token_apikey | default ($env | get -o OPENFEC_APIKEY_TOKEN | default "")) "query-api_key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "file_number" $file_number "multi") (serialize-qp "sort_nulls_last" $sort_nulls_last "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort_hide_null" $sort_hide_null "scalar") (serialize-qp "committee_id" $committee_id "multi") (serialize-qp "api_key" $api_key "scalar") (serialize-qp "min_receipt_date" $min_receipt_date "scalar") (serialize-qp "max_receipt_date" $max_receipt_date "scalar") (serialize-qp "q_filer" $q_filer "multi") (serialize-qp "sort_null_only" $sort_null_only "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/efile/filings/" $qp)
+  let full_url = (build-url $base "/efile/filings/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"file_number": $file_number, "sort_nulls_last": $sort_nulls_last, "page": $page, "per_page": $per_page, "sort_hide_null": $sort_hide_null, "committee_id": $committee_id, "api_key": $api_key, "min_receipt_date": $min_receipt_date, "max_receipt_date": $max_receipt_date, "q_filer": $q_filer, "sort_null_only": $sort_null_only, "sort": $qp_sort} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"file_number": $file_number, "sort_nulls_last": $sort_nulls_last, "page": $page, "per_page": $per_page, "sort_hide_null": $sort_hide_null, "committee_id": $committee_id, "api_key": $api_key, "min_receipt_date": $min_receipt_date, "max_receipt_date": $max_receipt_date, "q_filer": $q_filer, "sort_null_only": $sort_null_only, "sort": $qp_sort} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Key financial data reported periodically by committees as they are reported. This feed includes summary information from the the House F3 reports, the presidential F3p reports and the PAC and party F3x reports. Generally, committees file reports on a quarterly or monthly basis, but some must also submit a report 12 days before primary elections. Therefore, during the primary season, the period covered by this file may be different for different committees. These totals also incorporate any changes made by committees, if any report covering the period is amended. DISCLAIMER: The field labels contained within this resource are subject to change. We are attempting to succinctly label these fields while conveying clear meaning to ensure accessibility for all users.
@@ -1553,10 +1912,21 @@ export def "efile-reports-house-senate get" [
   let auth = (merge-auth [(build-auth ($token_apikeyheaderauth | default ($env | get -o OPENFEC_APIKEYHEADERAUTH_TOKEN | default "")) "x-api-key") (build-auth ($token_apikeyqueryauth | default ($env | get -o OPENFEC_APIKEYQUERYAUTH_TOKEN | default "")) "query-api_key") (build-auth ($token_apikey | default ($env | get -o OPENFEC_APIKEY_TOKEN | default "")) "query-api_key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "file_number" $file_number "multi") (serialize-qp "sort_nulls_last" $sort_nulls_last "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort_hide_null" $sort_hide_null "scalar") (serialize-qp "committee_id" $committee_id "multi") (serialize-qp "api_key" $api_key "scalar") (serialize-qp "min_receipt_date" $min_receipt_date "scalar") (serialize-qp "max_receipt_date" $max_receipt_date "scalar") (serialize-qp "q_filer" $q_filer "multi") (serialize-qp "sort_null_only" $sort_null_only "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/efile/reports/house-senate/" $qp)
+  let full_url = (build-url $base "/efile/reports/house-senate/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"file_number": $file_number, "sort_nulls_last": $sort_nulls_last, "page": $page, "per_page": $per_page, "sort_hide_null": $sort_hide_null, "committee_id": $committee_id, "api_key": $api_key, "min_receipt_date": $min_receipt_date, "max_receipt_date": $max_receipt_date, "q_filer": $q_filer, "sort_null_only": $sort_null_only, "sort": $qp_sort} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"file_number": $file_number, "sort_nulls_last": $sort_nulls_last, "page": $page, "per_page": $per_page, "sort_hide_null": $sort_hide_null, "committee_id": $committee_id, "api_key": $api_key, "min_receipt_date": $min_receipt_date, "max_receipt_date": $max_receipt_date, "q_filer": $q_filer, "sort_null_only": $sort_null_only, "sort": $qp_sort} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Key financial data reported periodically by committees as they are reported. This feed includes summary information from the the House F3 reports, the presidential F3p reports and the PAC and party F3x reports. Generally, committees file reports on a quarterly or monthly basis, but some must also submit a report 12 days before primary elections. Therefore, during the primary season, the period covered by this file may be different for different committees. These totals also incorporate any changes made by committees, if any report covering the period is amended. DISCLAIMER: The field labels contained within this resource are subject to change. We are attempting to succinctly label these fields while conveying clear meaning to ensure accessibility for all users.
@@ -1589,10 +1959,21 @@ export def "efile-reports-pac-party get" [
   let auth = (merge-auth [(build-auth ($token_apikeyheaderauth | default ($env | get -o OPENFEC_APIKEYHEADERAUTH_TOKEN | default "")) "x-api-key") (build-auth ($token_apikeyqueryauth | default ($env | get -o OPENFEC_APIKEYQUERYAUTH_TOKEN | default "")) "query-api_key") (build-auth ($token_apikey | default ($env | get -o OPENFEC_APIKEY_TOKEN | default "")) "query-api_key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "file_number" $file_number "multi") (serialize-qp "sort_nulls_last" $sort_nulls_last "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort_hide_null" $sort_hide_null "scalar") (serialize-qp "committee_id" $committee_id "multi") (serialize-qp "api_key" $api_key "scalar") (serialize-qp "min_receipt_date" $min_receipt_date "scalar") (serialize-qp "max_receipt_date" $max_receipt_date "scalar") (serialize-qp "q_filer" $q_filer "multi") (serialize-qp "sort_null_only" $sort_null_only "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/efile/reports/pac-party/" $qp)
+  let full_url = (build-url $base "/efile/reports/pac-party/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"file_number": $file_number, "sort_nulls_last": $sort_nulls_last, "page": $page, "per_page": $per_page, "sort_hide_null": $sort_hide_null, "committee_id": $committee_id, "api_key": $api_key, "min_receipt_date": $min_receipt_date, "max_receipt_date": $max_receipt_date, "q_filer": $q_filer, "sort_null_only": $sort_null_only, "sort": $qp_sort} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"file_number": $file_number, "sort_nulls_last": $sort_nulls_last, "page": $page, "per_page": $per_page, "sort_hide_null": $sort_hide_null, "committee_id": $committee_id, "api_key": $api_key, "min_receipt_date": $min_receipt_date, "max_receipt_date": $max_receipt_date, "q_filer": $q_filer, "sort_null_only": $sort_null_only, "sort": $qp_sort} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Key financial data reported periodically by committees as they are reported. This feed includes summary information from the the House F3 reports, the presidential F3p reports and the PAC and party F3x reports. Generally, committees file reports on a quarterly or monthly basis, but some must also submit a report 12 days before primary elections. Therefore, during the primary season, the period covered by this file may be different for different committees. These totals also incorporate any changes made by committees, if any report covering the period is amended. DISCLAIMER: The field labels contained within this resource are subject to change. We are attempting to succinctly label these fields while conveying clear meaning to ensure accessibility for all users.
@@ -1625,10 +2006,21 @@ export def "efile-reports-presidential get" [
   let auth = (merge-auth [(build-auth ($token_apikeyheaderauth | default ($env | get -o OPENFEC_APIKEYHEADERAUTH_TOKEN | default "")) "x-api-key") (build-auth ($token_apikeyqueryauth | default ($env | get -o OPENFEC_APIKEYQUERYAUTH_TOKEN | default "")) "query-api_key") (build-auth ($token_apikey | default ($env | get -o OPENFEC_APIKEY_TOKEN | default "")) "query-api_key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "file_number" $file_number "multi") (serialize-qp "sort_nulls_last" $sort_nulls_last "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort_hide_null" $sort_hide_null "scalar") (serialize-qp "committee_id" $committee_id "multi") (serialize-qp "api_key" $api_key "scalar") (serialize-qp "min_receipt_date" $min_receipt_date "scalar") (serialize-qp "max_receipt_date" $max_receipt_date "scalar") (serialize-qp "q_filer" $q_filer "multi") (serialize-qp "sort_null_only" $sort_null_only "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/efile/reports/presidential/" $qp)
+  let full_url = (build-url $base "/efile/reports/presidential/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"file_number": $file_number, "sort_nulls_last": $sort_nulls_last, "page": $page, "per_page": $per_page, "sort_hide_null": $sort_hide_null, "committee_id": $committee_id, "api_key": $api_key, "min_receipt_date": $min_receipt_date, "max_receipt_date": $max_receipt_date, "q_filer": $q_filer, "sort_null_only": $sort_null_only, "sort": $qp_sort} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"file_number": $file_number, "sort_nulls_last": $sort_nulls_last, "page": $page, "per_page": $per_page, "sort_hide_null": $sort_hide_null, "committee_id": $committee_id, "api_key": $api_key, "min_receipt_date": $min_receipt_date, "max_receipt_date": $max_receipt_date, "q_filer": $q_filer, "sort_null_only": $sort_null_only, "sort": $qp_sort} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # FEC election dates since 1995.
@@ -1670,10 +2062,21 @@ export def "election-dates get" [
   let auth = (merge-auth [(build-auth ($token_apikeyheaderauth | default ($env | get -o OPENFEC_APIKEYHEADERAUTH_TOKEN | default "")) "x-api-key") (build-auth ($token_apikeyqueryauth | default ($env | get -o OPENFEC_APIKEYQUERYAUTH_TOKEN | default "")) "query-api_key") (build-auth ($token_apikey | default ($env | get -o OPENFEC_APIKEY_TOKEN | default "")) "query-api_key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "max_update_date" $max_update_date "scalar") (serialize-qp "sort_nulls_last" $sort_nulls_last "scalar") (serialize-qp "sort_hide_null" $sort_hide_null "scalar") (serialize-qp "max_primary_general_date" $max_primary_general_date "scalar") (serialize-qp "min_update_date" $min_update_date "scalar") (serialize-qp "max_create_date" $max_create_date "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "min_election_date" $min_election_date "scalar") (serialize-qp "election_party" $election_party "multi") (serialize-qp "election_type_id" $election_type_id "multi") (serialize-qp "page" $page "scalar") (serialize-qp "min_create_date" $min_create_date "scalar") (serialize-qp "min_primary_general_date" $min_primary_general_date "scalar") (serialize-qp "election_year" $election_year "multi") (serialize-qp "api_key" $api_key "scalar") (serialize-qp "election_district" $election_district "multi") (serialize-qp "office_sought" $office_sought "multi") (serialize-qp "sort_null_only" $sort_null_only "scalar") (serialize-qp "max_election_date" $max_election_date "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "election_state" $election_state "multi")] | flatten | str join "&"
-  let full_url = (build-url $base "/election-dates/" $qp)
+  let full_url = (build-url $base "/election-dates/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"max_update_date": $max_update_date, "sort_nulls_last": $sort_nulls_last, "sort_hide_null": $sort_hide_null, "max_primary_general_date": $max_primary_general_date, "min_update_date": $min_update_date, "max_create_date": $max_create_date, "per_page": $per_page, "min_election_date": $min_election_date, "election_party": $election_party, "election_type_id": $election_type_id, "page": $page, "min_create_date": $min_create_date, "min_primary_general_date": $min_primary_general_date, "election_year": $election_year, "api_key": $api_key, "election_district": $election_district, "office_sought": $office_sought, "sort_null_only": $sort_null_only, "max_election_date": $max_election_date, "sort": $qp_sort, "election_state": $election_state} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"max_update_date": $max_update_date, "sort_nulls_last": $sort_nulls_last, "sort_hide_null": $sort_hide_null, "max_primary_general_date": $max_primary_general_date, "min_update_date": $min_update_date, "max_create_date": $max_create_date, "per_page": $per_page, "min_election_date": $min_election_date, "election_party": $election_party, "election_type_id": $election_type_id, "page": $page, "min_create_date": $min_create_date, "min_primary_general_date": $min_primary_general_date, "election_year": $election_year, "api_key": $api_key, "election_district": $election_district, "office_sought": $office_sought, "sort_null_only": $sort_null_only, "max_election_date": $max_election_date, "sort": $qp_sort, "election_state": $election_state} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # An electioneering communication is any broadcast, cable or satellite communication that fulfills each of the following conditions: _The communication refers to a clearly identified federal candidate._ _The communication is publicly distributed by a television station, radio station, cable television system or satellite system for a fee._ _The communication is distributed within 60 days prior to a general election or 30 days prior to a primary election to federal office._
@@ -1710,10 +2113,21 @@ export def "electioneering get" [
   let auth = (merge-auth [(build-auth ($token_apikeyheaderauth | default ($env | get -o OPENFEC_APIKEYHEADERAUTH_TOKEN | default "")) "x-api-key") (build-auth ($token_apikeyqueryauth | default ($env | get -o OPENFEC_APIKEYQUERYAUTH_TOKEN | default "")) "query-api_key") (build-auth ($token_apikey | default ($env | get -o OPENFEC_APIKEY_TOKEN | default "")) "query-api_key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "candidate_id" $candidate_id "multi") (serialize-qp "max_amount" $max_amount "scalar") (serialize-qp "sort_nulls_last" $sort_nulls_last "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "sort_hide_null" $sort_hide_null "scalar") (serialize-qp "committee_id" $committee_id "multi") (serialize-qp "min_date" $min_date "scalar") (serialize-qp "api_key" $api_key "scalar") (serialize-qp "min_amount" $min_amount "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort_null_only" $sort_null_only "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "report_year" $report_year "multi") (serialize-qp "last_index" $last_index "scalar") (serialize-qp "max_date" $max_date "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/electioneering/" $qp)
+  let full_url = (build-url $base "/electioneering/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"candidate_id": $candidate_id, "max_amount": $max_amount, "sort_nulls_last": $sort_nulls_last, "page": $page, "sort_hide_null": $sort_hide_null, "committee_id": $committee_id, "min_date": $min_date, "api_key": $api_key, "min_amount": $min_amount, "per_page": $per_page, "sort_null_only": $sort_null_only, "description": $description, "sort": $qp_sort, "report_year": $report_year, "last_index": $last_index, "max_date": $max_date} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"candidate_id": $candidate_id, "max_amount": $max_amount, "sort_nulls_last": $sort_nulls_last, "page": $page, "sort_hide_null": $sort_hide_null, "committee_id": $committee_id, "min_date": $min_date, "api_key": $api_key, "min_amount": $min_amount, "per_page": $per_page, "sort_null_only": $sort_null_only, "description": $description, "sort": $qp_sort, "report_year": $report_year, "last_index": $last_index, "max_date": $max_date} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Electioneering communications costs aggregates
@@ -1744,10 +2158,21 @@ export def "electioneering-aggregates get" [
   let auth = (merge-auth [(build-auth ($token_apikeyheaderauth | default ($env | get -o OPENFEC_APIKEYHEADERAUTH_TOKEN | default "")) "x-api-key") (build-auth ($token_apikeyqueryauth | default ($env | get -o OPENFEC_APIKEYQUERYAUTH_TOKEN | default "")) "query-api_key") (build-auth ($token_apikey | default ($env | get -o OPENFEC_APIKEY_TOKEN | default "")) "query-api_key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "candidate_id" $candidate_id "multi") (serialize-qp "sort_nulls_last" $sort_nulls_last "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "cycle" $cycle "multi") (serialize-qp "sort_hide_null" $sort_hide_null "scalar") (serialize-qp "committee_id" $committee_id "multi") (serialize-qp "api_key" $api_key "scalar") (serialize-qp "sort_null_only" $sort_null_only "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/electioneering/aggregates/" $qp)
+  let full_url = (build-url $base "/electioneering/aggregates/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"candidate_id": $candidate_id, "sort_nulls_last": $sort_nulls_last, "page": $page, "cycle": $cycle, "sort_hide_null": $sort_hide_null, "committee_id": $committee_id, "api_key": $api_key, "sort_null_only": $sort_null_only, "per_page": $per_page, "sort": $qp_sort} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"candidate_id": $candidate_id, "sort_nulls_last": $sort_nulls_last, "page": $page, "cycle": $cycle, "sort_hide_null": $sort_hide_null, "committee_id": $committee_id, "api_key": $api_key, "sort_null_only": $sort_null_only, "per_page": $per_page, "sort": $qp_sort} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Electioneering costs aggregated by candidate
@@ -1781,10 +2206,21 @@ export def "electioneering-by-candidate get" [
   let auth = (merge-auth [(build-auth ($token_apikeyheaderauth | default ($env | get -o OPENFEC_APIKEYHEADERAUTH_TOKEN | default "")) "x-api-key") (build-auth ($token_apikeyqueryauth | default ($env | get -o OPENFEC_APIKEYQUERYAUTH_TOKEN | default "")) "query-api_key") (build-auth ($token_apikey | default ($env | get -o OPENFEC_APIKEY_TOKEN | default "")) "query-api_key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "office" $office "scalar") (serialize-qp "candidate_id" $candidate_id "multi") (serialize-qp "cycle" $cycle "multi") (serialize-qp "district" $district "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "sort_hide_null" $sort_hide_null "scalar") (serialize-qp "election_full" $election_full "scalar") (serialize-qp "sort_nulls_last" $sort_nulls_last "scalar") (serialize-qp "api_key" $api_key "scalar") (serialize-qp "sort_null_only" $sort_null_only "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/electioneering/by_candidate/" $qp)
+  let full_url = (build-url $base "/electioneering/by_candidate/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"office": $office, "candidate_id": $candidate_id, "cycle": $cycle, "district": $district, "state": $state, "page": $page, "sort_hide_null": $sort_hide_null, "election_full": $election_full, "sort_nulls_last": $sort_nulls_last, "api_key": $api_key, "sort_null_only": $sort_null_only, "per_page": $per_page, "sort": $qp_sort} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"office": $office, "candidate_id": $candidate_id, "cycle": $cycle, "district": $district, "state": $state, "page": $page, "sort_hide_null": $sort_hide_null, "election_full": $election_full, "sort_nulls_last": $sort_nulls_last, "api_key": $api_key, "sort_null_only": $sort_null_only, "per_page": $per_page, "sort": $qp_sort} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Total electioneering communications spent on candidates by cycle or candidate election year
@@ -1815,10 +2251,21 @@ export def "electioneering-totals-by-candidate get" [
   let auth = (merge-auth [(build-auth ($token_apikeyheaderauth | default ($env | get -o OPENFEC_APIKEYHEADERAUTH_TOKEN | default "")) "x-api-key") (build-auth ($token_apikeyqueryauth | default ($env | get -o OPENFEC_APIKEYQUERYAUTH_TOKEN | default "")) "query-api_key") (build-auth ($token_apikey | default ($env | get -o OPENFEC_APIKEY_TOKEN | default "")) "query-api_key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "candidate_id" $candidate_id "multi") (serialize-qp "sort_nulls_last" $sort_nulls_last "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "cycle" $cycle "multi") (serialize-qp "sort_hide_null" $sort_hide_null "scalar") (serialize-qp "election_full" $election_full "scalar") (serialize-qp "api_key" $api_key "scalar") (serialize-qp "sort_null_only" $sort_null_only "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/electioneering/totals/by_candidate/" $qp)
+  let full_url = (build-url $base "/electioneering/totals/by_candidate/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"candidate_id": $candidate_id, "sort_nulls_last": $sort_nulls_last, "page": $page, "cycle": $cycle, "sort_hide_null": $sort_hide_null, "election_full": $election_full, "api_key": $api_key, "sort_null_only": $sort_null_only, "per_page": $per_page, "sort": $qp_sort} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"candidate_id": $candidate_id, "sort_nulls_last": $sort_nulls_last, "page": $page, "cycle": $cycle, "sort_hide_null": $sort_hide_null, "election_full": $election_full, "api_key": $api_key, "sort_null_only": $sort_null_only, "per_page": $per_page, "sort": $qp_sort} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Look at the top-level financial information for all candidates running for the same office. Choose a 2-year cycle, and `house`, `senate` or `presidential`. If you are looking for a Senate seat, you will need to select the state using a two-letter abbreviation. House races require state and a two-digit district number. Since this endpoint reflects financial information, it will only have candidates once they file financial reporting forms. Query the `/candidates` endpoint to retrieve an-up-to-date list of all the candidates that filed to run for a particular seat.
@@ -1851,10 +2298,21 @@ export def "elections get" [
   let auth = (merge-auth [(build-auth ($token_apikeyheaderauth | default ($env | get -o OPENFEC_APIKEYHEADERAUTH_TOKEN | default "")) "x-api-key") (build-auth ($token_apikeyqueryauth | default ($env | get -o OPENFEC_APIKEYQUERYAUTH_TOKEN | default "")) "query-api_key") (build-auth ($token_apikey | default ($env | get -o OPENFEC_APIKEY_TOKEN | default "")) "query-api_key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "office" $office "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "district" $district "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "cycle" $cycle "scalar") (serialize-qp "sort_hide_null" $sort_hide_null "scalar") (serialize-qp "election_full" $election_full "scalar") (serialize-qp "sort_nulls_last" $sort_nulls_last "scalar") (serialize-qp "api_key" $api_key "scalar") (serialize-qp "sort_null_only" $sort_null_only "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/elections/" $qp)
+  let full_url = (build-url $base "/elections/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"office": $office, "page": $page, "district": $district, "state": $state, "cycle": $cycle, "sort_hide_null": $sort_hide_null, "election_full": $election_full, "sort_nulls_last": $sort_nulls_last, "api_key": $api_key, "sort_null_only": $sort_null_only, "per_page": $per_page, "sort": $qp_sort} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"office": $office, "page": $page, "district": $district, "state": $state, "cycle": $cycle, "sort_hide_null": $sort_hide_null, "election_full": $election_full, "sort_nulls_last": $sort_nulls_last, "api_key": $api_key, "sort_null_only": $sort_null_only, "per_page": $per_page, "sort": $qp_sort} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # List elections by cycle, office, state, and district.
@@ -1887,10 +2345,21 @@ export def "elections-search get" [
   let auth = (merge-auth [(build-auth ($token_apikeyheaderauth | default ($env | get -o OPENFEC_APIKEYHEADERAUTH_TOKEN | default "")) "x-api-key") (build-auth ($token_apikeyqueryauth | default ($env | get -o OPENFEC_APIKEYQUERYAUTH_TOKEN | default "")) "query-api_key") (build-auth ($token_apikey | default ($env | get -o OPENFEC_APIKEY_TOKEN | default "")) "query-api_key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "office" $office "multi") (serialize-qp "cycle" $cycle "multi") (serialize-qp "district" $district "multi") (serialize-qp "zip" $zip "multi") (serialize-qp "state" $state "multi") (serialize-qp "sort_hide_null" $sort_hide_null "scalar") (serialize-qp "sort_nulls_last" $sort_nulls_last "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "api_key" $api_key "scalar") (serialize-qp "sort_null_only" $sort_null_only "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort" $qp_sort "multi")] | flatten | str join "&"
-  let full_url = (build-url $base "/elections/search/" $qp)
+  let full_url = (build-url $base "/elections/search/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"office": $office, "cycle": $cycle, "district": $district, "zip": $zip, "state": $state, "sort_hide_null": $sort_hide_null, "sort_nulls_last": $sort_nulls_last, "page": $page, "api_key": $api_key, "sort_null_only": $sort_null_only, "per_page": $per_page, "sort": $qp_sort} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"office": $office, "cycle": $cycle, "district": $district, "zip": $zip, "state": $state, "sort_hide_null": $sort_hide_null, "sort_nulls_last": $sort_nulls_last, "page": $page, "api_key": $api_key, "sort_null_only": $sort_null_only, "per_page": $per_page, "sort": $qp_sort} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # List elections by cycle, office, state, and district.
@@ -1917,10 +2386,21 @@ export def "elections-summary get" [
   let auth = (merge-auth [(build-auth ($token_apikeyheaderauth | default ($env | get -o OPENFEC_APIKEYHEADERAUTH_TOKEN | default "")) "x-api-key") (build-auth ($token_apikeyqueryauth | default ($env | get -o OPENFEC_APIKEYQUERYAUTH_TOKEN | default "")) "query-api_key") (build-auth ($token_apikey | default ($env | get -o OPENFEC_APIKEY_TOKEN | default "")) "query-api_key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "office" $office "scalar") (serialize-qp "cycle" $cycle "scalar") (serialize-qp "district" $district "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "api_key" $api_key "scalar") (serialize-qp "election_full" $election_full "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/elections/summary/" $qp)
+  let full_url = (build-url $base "/elections/summary/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"office": $office, "cycle": $cycle, "district": $district, "state": $state, "api_key": $api_key, "election_full": $election_full} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"office": $office, "cycle": $cycle, "district": $district, "state": $state, "api_key": $api_key, "election_full": $election_full} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # All official records and reports filed by or delivered to the FEC. Note: because the filings data includes many records, counts for large result sets are approximate; you will want to page through the records until no records are returned.
@@ -1972,10 +2452,21 @@ export def "filings get" [
   let auth = (merge-auth [(build-auth ($token_apikeyheaderauth | default ($env | get -o OPENFEC_APIKEYHEADERAUTH_TOKEN | default "")) "x-api-key") (build-auth ($token_apikeyqueryauth | default ($env | get -o OPENFEC_APIKEYQUERYAUTH_TOKEN | default "")) "query-api_key") (build-auth ($token_apikey | default ($env | get -o OPENFEC_APIKEY_TOKEN | default "")) "query-api_key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "office" $office "multi") (serialize-qp "file_number" $file_number "multi") (serialize-qp "form_category" $form_category "multi") (serialize-qp "cycle" $cycle "multi") (serialize-qp "district" $district "multi") (serialize-qp "document_type" $document_type "multi") (serialize-qp "sort_hide_null" $sort_hide_null "scalar") (serialize-qp "state" $state "multi") (serialize-qp "amendment_indicator" $amendment_indicator "multi") (serialize-qp "sort_nulls_last" $sort_nulls_last "scalar") (serialize-qp "is_amended" $is_amended "scalar") (serialize-qp "filer_type" $filer_type "scalar") (serialize-qp "max_receipt_date" $max_receipt_date "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "primary_general_indicator" $primary_general_indicator "multi") (serialize-qp "request_type" $request_type "multi") (serialize-qp "report_year" $report_year "multi") (serialize-qp "form_type" $form_type "multi") (serialize-qp "candidate_id" $candidate_id "multi") (serialize-qp "committee_type" $committee_type "scalar") (serialize-qp "beginning_image_number" $beginning_image_number "multi") (serialize-qp "page" $page "scalar") (serialize-qp "sort" $qp_sort "multi") (serialize-qp "committee_id" $committee_id "multi") (serialize-qp "api_key" $api_key "scalar") (serialize-qp "min_receipt_date" $min_receipt_date "scalar") (serialize-qp "sort_null_only" $sort_null_only "scalar") (serialize-qp "q_filer" $q_filer "multi") (serialize-qp "report_type" $report_type "multi") (serialize-qp "party" $party "multi") (serialize-qp "most_recent" $most_recent "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/filings/" $qp)
+  let full_url = (build-url $base "/filings/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"office": $office, "file_number": $file_number, "form_category": $form_category, "cycle": $cycle, "district": $district, "document_type": $document_type, "sort_hide_null": $sort_hide_null, "state": $state, "amendment_indicator": $amendment_indicator, "sort_nulls_last": $sort_nulls_last, "is_amended": $is_amended, "filer_type": $filer_type, "max_receipt_date": $max_receipt_date, "per_page": $per_page, "primary_general_indicator": $primary_general_indicator, "request_type": $request_type, "report_year": $report_year, "form_type": $form_type, "candidate_id": $candidate_id, "committee_type": $committee_type, "beginning_image_number": $beginning_image_number, "page": $page, "sort": $qp_sort, "committee_id": $committee_id, "api_key": $api_key, "min_receipt_date": $min_receipt_date, "sort_null_only": $sort_null_only, "q_filer": $q_filer, "report_type": $report_type, "party": $party, "most_recent": $most_recent} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"office": $office, "file_number": $file_number, "form_category": $form_category, "cycle": $cycle, "district": $district, "document_type": $document_type, "sort_hide_null": $sort_hide_null, "state": $state, "amendment_indicator": $amendment_indicator, "sort_nulls_last": $sort_nulls_last, "is_amended": $is_amended, "filer_type": $filer_type, "max_receipt_date": $max_receipt_date, "per_page": $per_page, "primary_general_indicator": $primary_general_indicator, "request_type": $request_type, "report_year": $report_year, "form_type": $form_type, "candidate_id": $candidate_id, "committee_type": $committee_type, "beginning_image_number": $beginning_image_number, "page": $page, "sort": $qp_sort, "committee_id": $committee_id, "api_key": $api_key, "min_receipt_date": $min_receipt_date, "sort_null_only": $sort_null_only, "q_filer": $q_filer, "report_type": $report_type, "party": $party, "most_recent": $most_recent} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Search legal documents by document type, or across all document types using keywords, parameter values and ranges.
@@ -2039,10 +2530,21 @@ export def "legal-search get" [
   let auth = (merge-auth [(build-auth ($token_apikeyheaderauth | default ($env | get -o OPENFEC_APIKEYHEADERAUTH_TOKEN | default "")) "x-api-key") (build-auth ($token_apikeyqueryauth | default ($env | get -o OPENFEC_APIKEYQUERYAUTH_TOKEN | default "")) "query-api_key") (build-auth ($token_apikey | default ($env | get -o OPENFEC_APIKEY_TOKEN | default "")) "query-api_key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "hits_returned" $hits_returned "scalar") (serialize-qp "af_report_year" $af_report_year "scalar") (serialize-qp "case_max_open_date" $case_max_open_date "scalar") (serialize-qp "ao_max_issue_date" $ao_max_issue_date "scalar") (serialize-qp "case_statutory_citation" $case_statutory_citation "multi") (serialize-qp "case_respondents" $case_respondents "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "ao_min_issue_date" $ao_min_issue_date "scalar") (serialize-qp "af_max_fd_date" $af_max_fd_date "scalar") (serialize-qp "from_hit" $from_hit "scalar") (serialize-qp "af_fd_fine_amount" $af_fd_fine_amount "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "api_key" $api_key "scalar") (serialize-qp "af_name" $af_name "multi") (serialize-qp "ao_requestor_type" $ao_requestor_type "multi") (serialize-qp "ao_statutory_citation" $ao_statutory_citation "multi") (serialize-qp "ao_entity_name" $ao_entity_name "multi") (serialize-qp "mur_type" $mur_type "scalar") (serialize-qp "ao_regulatory_citation" $ao_regulatory_citation "multi") (serialize-qp "af_committee_id" $af_committee_id "scalar") (serialize-qp "ao_requestor" $ao_requestor "scalar") (serialize-qp "case_citation_require_all" $case_citation_require_all "scalar") (serialize-qp "af_min_fd_date" $af_min_fd_date "scalar") (serialize-qp "ao_is_pending" $ao_is_pending "scalar") (serialize-qp "af_rtb_fine_amount" $af_rtb_fine_amount "scalar") (serialize-qp "case_election_cycles" $case_election_cycles "scalar") (serialize-qp "ao_category" $ao_category "multi") (serialize-qp "ao_citation_require_all" $ao_citation_require_all "scalar") (serialize-qp "case_dispositions" $case_dispositions "multi") (serialize-qp "af_max_rtb_date" $af_max_rtb_date "scalar") (serialize-qp "case_min_open_date" $case_min_open_date "scalar") (serialize-qp "case_max_close_date" $case_max_close_date "scalar") (serialize-qp "ao_min_request_date" $ao_min_request_date "scalar") (serialize-qp "ao_status" $ao_status "scalar") (serialize-qp "case_doc_category_id" $case_doc_category_id "multi") (serialize-qp "af_min_rtb_date" $af_min_rtb_date "scalar") (serialize-qp "ao_name" $ao_name "multi") (serialize-qp "case_regulatory_citation" $case_regulatory_citation "multi") (serialize-qp "ao_no" $ao_no "multi") (serialize-qp "case_min_close_date" $case_min_close_date "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "ao_max_request_date" $ao_max_request_date "scalar") (serialize-qp "case_no" $case_no "multi")] | flatten | str join "&"
-  let full_url = (build-url $base "/legal/search/" $qp)
+  let full_url = (build-url $base "/legal/search/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"hits_returned": $hits_returned, "af_report_year": $af_report_year, "case_max_open_date": $case_max_open_date, "ao_max_issue_date": $ao_max_issue_date, "case_statutory_citation": $case_statutory_citation, "case_respondents": $case_respondents, "q": $q, "ao_min_issue_date": $ao_min_issue_date, "af_max_fd_date": $af_max_fd_date, "from_hit": $from_hit, "af_fd_fine_amount": $af_fd_fine_amount, "type": $type, "api_key": $api_key, "af_name": $af_name, "ao_requestor_type": $ao_requestor_type, "ao_statutory_citation": $ao_statutory_citation, "ao_entity_name": $ao_entity_name, "mur_type": $mur_type, "ao_regulatory_citation": $ao_regulatory_citation, "af_committee_id": $af_committee_id, "ao_requestor": $ao_requestor, "case_citation_require_all": $case_citation_require_all, "af_min_fd_date": $af_min_fd_date, "ao_is_pending": $ao_is_pending, "af_rtb_fine_amount": $af_rtb_fine_amount, "case_election_cycles": $case_election_cycles, "ao_category": $ao_category, "ao_citation_require_all": $ao_citation_require_all, "case_dispositions": $case_dispositions, "af_max_rtb_date": $af_max_rtb_date, "case_min_open_date": $case_min_open_date, "case_max_close_date": $case_max_close_date, "ao_min_request_date": $ao_min_request_date, "ao_status": $ao_status, "case_doc_category_id": $case_doc_category_id, "af_min_rtb_date": $af_min_rtb_date, "ao_name": $ao_name, "case_regulatory_citation": $case_regulatory_citation, "ao_no": $ao_no, "case_min_close_date": $case_min_close_date, "sort": $qp_sort, "ao_max_request_date": $ao_max_request_date, "case_no": $case_no} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"hits_returned": $hits_returned, "af_report_year": $af_report_year, "case_max_open_date": $case_max_open_date, "ao_max_issue_date": $ao_max_issue_date, "case_statutory_citation": $case_statutory_citation, "case_respondents": $case_respondents, "q": $q, "ao_min_issue_date": $ao_min_issue_date, "af_max_fd_date": $af_max_fd_date, "from_hit": $from_hit, "af_fd_fine_amount": $af_fd_fine_amount, "type": $type, "api_key": $api_key, "af_name": $af_name, "ao_requestor_type": $ao_requestor_type, "ao_statutory_citation": $ao_statutory_citation, "ao_entity_name": $ao_entity_name, "mur_type": $mur_type, "ao_regulatory_citation": $ao_regulatory_citation, "af_committee_id": $af_committee_id, "ao_requestor": $ao_requestor, "case_citation_require_all": $case_citation_require_all, "af_min_fd_date": $af_min_fd_date, "ao_is_pending": $ao_is_pending, "af_rtb_fine_amount": $af_rtb_fine_amount, "case_election_cycles": $case_election_cycles, "ao_category": $ao_category, "ao_citation_require_all": $ao_citation_require_all, "case_dispositions": $case_dispositions, "af_max_rtb_date": $af_max_rtb_date, "case_min_open_date": $case_min_open_date, "case_max_close_date": $case_max_close_date, "ao_min_request_date": $ao_min_request_date, "ao_status": $ao_status, "case_doc_category_id": $case_doc_category_id, "af_min_rtb_date": $af_min_rtb_date, "ao_name": $ao_name, "case_regulatory_citation": $case_regulatory_citation, "ao_no": $ao_no, "case_min_close_date": $case_min_close_date, "sort": $qp_sort, "ao_max_request_date": $ao_max_request_date, "case_no": $case_no} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Search for candidates or committees by name. If you're looking for information on a particular person or group, using a name to find the `candidate_id` or `committee_id` on this endpoint can be a helpful first step.
@@ -2065,10 +2567,21 @@ export def "names-audit-candidates get" [
   let auth = (merge-auth [(build-auth ($token_apikeyheaderauth | default ($env | get -o OPENFEC_APIKEYHEADERAUTH_TOKEN | default "")) "x-api-key") (build-auth ($token_apikeyqueryauth | default ($env | get -o OPENFEC_APIKEYQUERYAUTH_TOKEN | default "")) "query-api_key") (build-auth ($token_apikey | default ($env | get -o OPENFEC_APIKEY_TOKEN | default "")) "query-api_key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "q" $q "multi")] | flatten | str join "&"
-  let full_url = (build-url $base "/names/audit_candidates/" $qp)
+  let full_url = (build-url $base "/names/audit_candidates/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api_key": $api_key, "q": $q} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api_key": $api_key, "q": $q} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Search for candidates or committees by name. If you're looking for information on a particular person or group, using a name to find the `candidate_id` or `committee_id` on this endpoint can be a helpful first step.
@@ -2091,10 +2604,21 @@ export def "names-audit-committees get" [
   let auth = (merge-auth [(build-auth ($token_apikeyheaderauth | default ($env | get -o OPENFEC_APIKEYHEADERAUTH_TOKEN | default "")) "x-api-key") (build-auth ($token_apikeyqueryauth | default ($env | get -o OPENFEC_APIKEYQUERYAUTH_TOKEN | default "")) "query-api_key") (build-auth ($token_apikey | default ($env | get -o OPENFEC_APIKEY_TOKEN | default "")) "query-api_key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "q" $q "multi")] | flatten | str join "&"
-  let full_url = (build-url $base "/names/audit_committees/" $qp)
+  let full_url = (build-url $base "/names/audit_committees/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api_key": $api_key, "q": $q} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api_key": $api_key, "q": $q} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Search for candidates or committees by name. If you're looking for information on a particular person or group, using a name to find the `candidate_id` or `committee_id` on this endpoint can be a helpful first step.
@@ -2117,10 +2641,21 @@ export def "names-candidates get" [
   let auth = (merge-auth [(build-auth ($token_apikeyheaderauth | default ($env | get -o OPENFEC_APIKEYHEADERAUTH_TOKEN | default "")) "x-api-key") (build-auth ($token_apikeyqueryauth | default ($env | get -o OPENFEC_APIKEYQUERYAUTH_TOKEN | default "")) "query-api_key") (build-auth ($token_apikey | default ($env | get -o OPENFEC_APIKEY_TOKEN | default "")) "query-api_key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "q" $q "multi")] | flatten | str join "&"
-  let full_url = (build-url $base "/names/candidates/" $qp)
+  let full_url = (build-url $base "/names/candidates/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api_key": $api_key, "q": $q} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api_key": $api_key, "q": $q} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Search for candidates or committees by name. If you're looking for information on a particular person or group, using a name to find the `candidate_id` or `committee_id` on this endpoint can be a helpful first step.
@@ -2143,10 +2678,21 @@ export def "names-committees get" [
   let auth = (merge-auth [(build-auth ($token_apikeyheaderauth | default ($env | get -o OPENFEC_APIKEYHEADERAUTH_TOKEN | default "")) "x-api-key") (build-auth ($token_apikeyqueryauth | default ($env | get -o OPENFEC_APIKEYQUERYAUTH_TOKEN | default "")) "query-api_key") (build-auth ($token_apikey | default ($env | get -o OPENFEC_APIKEY_TOKEN | default "")) "query-api_key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "q" $q "multi")] | flatten | str join "&"
-  let full_url = (build-url $base "/names/committees/" $qp)
+  let full_url = (build-url $base "/names/committees/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api_key": $api_key, "q": $q} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api_key": $api_key, "q": $q} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # The Operations log contains details of each report loaded into the database. It is primarily used as status check to determine when all of the data processes, from initial entry through review are complete.
@@ -2187,10 +2733,21 @@ export def "operations-log get" [
   let auth = (merge-auth [(build-auth ($token_apikeyheaderauth | default ($env | get -o OPENFEC_APIKEYHEADERAUTH_TOKEN | default "")) "x-api-key") (build-auth ($token_apikeyqueryauth | default ($env | get -o OPENFEC_APIKEYQUERYAUTH_TOKEN | default "")) "query-api_key") (build-auth ($token_apikey | default ($env | get -o OPENFEC_APIKEY_TOKEN | default "")) "query-api_key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "max_coverage_end_date" $max_coverage_end_date "scalar") (serialize-qp "sort_nulls_last" $sort_nulls_last "scalar") (serialize-qp "amendment_indicator" $amendment_indicator "multi") (serialize-qp "sort_hide_null" $sort_hide_null "scalar") (serialize-qp "max_receipt_date" $max_receipt_date "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "min_transaction_data_complete_date" $min_transaction_data_complete_date "scalar") (serialize-qp "form_type" $form_type "multi") (serialize-qp "max_transaction_data_complete_date" $max_transaction_data_complete_date "scalar") (serialize-qp "beginning_image_number" $beginning_image_number "multi") (serialize-qp "page" $page "scalar") (serialize-qp "min_coverage_end_date" $min_coverage_end_date "scalar") (serialize-qp "sort" $qp_sort "multi") (serialize-qp "api_key" $api_key "scalar") (serialize-qp "min_receipt_date" $min_receipt_date "scalar") (serialize-qp "sort_null_only" $sort_null_only "scalar") (serialize-qp "candidate_committee_id" $candidate_committee_id "multi") (serialize-qp "report_type" $report_type "multi") (serialize-qp "report_year" $report_year "multi") (serialize-qp "status_num" $status_num "multi")] | flatten | str join "&"
-  let full_url = (build-url $base "/operations-log/" $qp)
+  let full_url = (build-url $base "/operations-log/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"max_coverage_end_date": $max_coverage_end_date, "sort_nulls_last": $sort_nulls_last, "amendment_indicator": $amendment_indicator, "sort_hide_null": $sort_hide_null, "max_receipt_date": $max_receipt_date, "per_page": $per_page, "min_transaction_data_complete_date": $min_transaction_data_complete_date, "form_type": $form_type, "max_transaction_data_complete_date": $max_transaction_data_complete_date, "beginning_image_number": $beginning_image_number, "page": $page, "min_coverage_end_date": $min_coverage_end_date, "sort": $qp_sort, "api_key": $api_key, "min_receipt_date": $min_receipt_date, "sort_null_only": $sort_null_only, "candidate_committee_id": $candidate_committee_id, "report_type": $report_type, "report_year": $report_year, "status_num": $status_num} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"max_coverage_end_date": $max_coverage_end_date, "sort_nulls_last": $sort_nulls_last, "amendment_indicator": $amendment_indicator, "sort_hide_null": $sort_hide_null, "max_receipt_date": $max_receipt_date, "per_page": $per_page, "min_transaction_data_complete_date": $min_transaction_data_complete_date, "form_type": $form_type, "max_transaction_data_complete_date": $max_transaction_data_complete_date, "beginning_image_number": $beginning_image_number, "page": $page, "min_coverage_end_date": $min_coverage_end_date, "sort": $qp_sort, "api_key": $api_key, "min_receipt_date": $min_receipt_date, "sort_null_only": $sort_null_only, "candidate_committee_id": $candidate_committee_id, "report_type": $report_type, "report_year": $report_year, "status_num": $status_num} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Net receipts per candidate. Filter with `contributor_state='US'` for national totals
@@ -2220,10 +2777,21 @@ export def "presidential-contributions-by-candidate get" [
   let auth = (merge-auth [(build-auth ($token_apikeyheaderauth | default ($env | get -o OPENFEC_APIKEYHEADERAUTH_TOKEN | default "")) "x-api-key") (build-auth ($token_apikeyqueryauth | default ($env | get -o OPENFEC_APIKEYQUERYAUTH_TOKEN | default "")) "query-api_key") (build-auth ($token_apikey | default ($env | get -o OPENFEC_APIKEY_TOKEN | default "")) "query-api_key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "contributor_state" $contributor_state "multi") (serialize-qp "sort_nulls_last" $sort_nulls_last "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "sort_hide_null" $sort_hide_null "scalar") (serialize-qp "election_year" $election_year "multi") (serialize-qp "api_key" $api_key "scalar") (serialize-qp "sort_null_only" $sort_null_only "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/presidential/contributions/by_candidate/" $qp)
+  let full_url = (build-url $base "/presidential/contributions/by_candidate/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"contributor_state": $contributor_state, "sort_nulls_last": $sort_nulls_last, "page": $page, "sort_hide_null": $sort_hide_null, "election_year": $election_year, "api_key": $api_key, "sort_null_only": $sort_null_only, "per_page": $per_page, "sort": $qp_sort} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"contributor_state": $contributor_state, "sort_nulls_last": $sort_nulls_last, "page": $page, "sort_hide_null": $sort_hide_null, "election_year": $election_year, "api_key": $api_key, "sort_null_only": $sort_null_only, "per_page": $per_page, "sort": $qp_sort} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Contribution receipts by size per candidate. Filter by candidate_id, election_year and/or size
@@ -2254,10 +2822,21 @@ export def "presidential-contributions-by-size get" [
   let auth = (merge-auth [(build-auth ($token_apikeyheaderauth | default ($env | get -o OPENFEC_APIKEYHEADERAUTH_TOKEN | default "")) "x-api-key") (build-auth ($token_apikeyqueryauth | default ($env | get -o OPENFEC_APIKEYQUERYAUTH_TOKEN | default "")) "query-api_key") (build-auth ($token_apikey | default ($env | get -o OPENFEC_APIKEY_TOKEN | default "")) "query-api_key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "candidate_id" $candidate_id "multi") (serialize-qp "sort_nulls_last" $sort_nulls_last "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "sort_hide_null" $sort_hide_null "scalar") (serialize-qp "election_year" $election_year "multi") (serialize-qp "api_key" $api_key "scalar") (serialize-qp "size" $size "multi") (serialize-qp "sort_null_only" $sort_null_only "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/presidential/contributions/by_size/" $qp)
+  let full_url = (build-url $base "/presidential/contributions/by_size/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"candidate_id": $candidate_id, "sort_nulls_last": $sort_nulls_last, "page": $page, "sort_hide_null": $sort_hide_null, "election_year": $election_year, "api_key": $api_key, "size": $size, "sort_null_only": $sort_null_only, "per_page": $per_page, "sort": $qp_sort} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"candidate_id": $candidate_id, "sort_nulls_last": $sort_nulls_last, "page": $page, "sort_hide_null": $sort_hide_null, "election_year": $election_year, "api_key": $api_key, "size": $size, "sort_null_only": $sort_null_only, "per_page": $per_page, "sort": $qp_sort} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Contribution receipts by state per candidate. Filter by candidate_id and/or election_year
@@ -2287,10 +2866,21 @@ export def "presidential-contributions-by-state get" [
   let auth = (merge-auth [(build-auth ($token_apikeyheaderauth | default ($env | get -o OPENFEC_APIKEYHEADERAUTH_TOKEN | default "")) "x-api-key") (build-auth ($token_apikeyqueryauth | default ($env | get -o OPENFEC_APIKEYQUERYAUTH_TOKEN | default "")) "query-api_key") (build-auth ($token_apikey | default ($env | get -o OPENFEC_APIKEY_TOKEN | default "")) "query-api_key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "candidate_id" $candidate_id "multi") (serialize-qp "sort_nulls_last" $sort_nulls_last "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "sort_hide_null" $sort_hide_null "scalar") (serialize-qp "election_year" $election_year "multi") (serialize-qp "api_key" $api_key "scalar") (serialize-qp "sort_null_only" $sort_null_only "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/presidential/contributions/by_state/" $qp)
+  let full_url = (build-url $base "/presidential/contributions/by_state/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"candidate_id": $candidate_id, "sort_nulls_last": $sort_nulls_last, "page": $page, "sort_hide_null": $sort_hide_null, "election_year": $election_year, "api_key": $api_key, "sort_null_only": $sort_null_only, "per_page": $per_page, "sort": $qp_sort} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"candidate_id": $candidate_id, "sort_nulls_last": $sort_nulls_last, "page": $page, "sort_hide_null": $sort_hide_null, "election_year": $election_year, "api_key": $api_key, "sort_null_only": $sort_null_only, "per_page": $per_page, "sort": $qp_sort} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Coverage end date per candidate. Filter by candidate_id and/or election_year
@@ -2320,10 +2910,21 @@ export def "presidential-coverage-end-date get" [
   let auth = (merge-auth [(build-auth ($token_apikeyheaderauth | default ($env | get -o OPENFEC_APIKEYHEADERAUTH_TOKEN | default "")) "x-api-key") (build-auth ($token_apikeyqueryauth | default ($env | get -o OPENFEC_APIKEYQUERYAUTH_TOKEN | default "")) "query-api_key") (build-auth ($token_apikey | default ($env | get -o OPENFEC_APIKEY_TOKEN | default "")) "query-api_key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "candidate_id" $candidate_id "multi") (serialize-qp "sort_nulls_last" $sort_nulls_last "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "sort_hide_null" $sort_hide_null "scalar") (serialize-qp "election_year" $election_year "multi") (serialize-qp "api_key" $api_key "scalar") (serialize-qp "sort_null_only" $sort_null_only "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/presidential/coverage_end_date/" $qp)
+  let full_url = (build-url $base "/presidential/coverage_end_date/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"candidate_id": $candidate_id, "sort_nulls_last": $sort_nulls_last, "page": $page, "sort_hide_null": $sort_hide_null, "election_year": $election_year, "api_key": $api_key, "sort_null_only": $sort_null_only, "per_page": $per_page, "sort": $qp_sort} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"candidate_id": $candidate_id, "sort_nulls_last": $sort_nulls_last, "page": $page, "sort_hide_null": $sort_hide_null, "election_year": $election_year, "api_key": $api_key, "sort_null_only": $sort_null_only, "per_page": $per_page, "sort": $qp_sort} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Financial summary per candidate. Filter by candidate_id and/or election_year
@@ -2353,10 +2954,21 @@ export def "presidential-financial-summary get" [
   let auth = (merge-auth [(build-auth ($token_apikeyheaderauth | default ($env | get -o OPENFEC_APIKEYHEADERAUTH_TOKEN | default "")) "x-api-key") (build-auth ($token_apikeyqueryauth | default ($env | get -o OPENFEC_APIKEYQUERYAUTH_TOKEN | default "")) "query-api_key") (build-auth ($token_apikey | default ($env | get -o OPENFEC_APIKEY_TOKEN | default "")) "query-api_key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "candidate_id" $candidate_id "multi") (serialize-qp "sort_nulls_last" $sort_nulls_last "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "sort_hide_null" $sort_hide_null "scalar") (serialize-qp "election_year" $election_year "multi") (serialize-qp "api_key" $api_key "scalar") (serialize-qp "sort_null_only" $sort_null_only "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/presidential/financial_summary/" $qp)
+  let full_url = (build-url $base "/presidential/financial_summary/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"candidate_id": $candidate_id, "sort_nulls_last": $sort_nulls_last, "page": $page, "sort_hide_null": $sort_hide_null, "election_year": $election_year, "api_key": $api_key, "sort_null_only": $sort_null_only, "per_page": $per_page, "sort": $qp_sort} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"candidate_id": $candidate_id, "sort_nulls_last": $sort_nulls_last, "page": $page, "sort_hide_null": $sort_hide_null, "election_year": $election_year, "api_key": $api_key, "sort_null_only": $sort_null_only, "per_page": $per_page, "sort": $qp_sort} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Use this endpoint to look up the RAD Analyst for a committee. The mission of the Reports Analysis Division (RAD) is to ensure that campaigns and political committees file timely and accurate reports that fully disclose their financial activities. RAD is responsible for reviewing statements and financial reports filed by political committees participating in federal elections, providing assistance and guidance to the committees to properly file their reports, and for taking appropriate action to ensure compliance with the Federal Election Campaign Act (FECA).
@@ -2393,10 +3005,21 @@ export def "rad-analyst get" [
   let auth = (merge-auth [(build-auth ($token_apikeyheaderauth | default ($env | get -o OPENFEC_APIKEYHEADERAUTH_TOKEN | default "")) "x-api-key") (build-auth ($token_apikeyqueryauth | default ($env | get -o OPENFEC_APIKEYQUERYAUTH_TOKEN | default "")) "query-api_key") (build-auth ($token_apikey | default ($env | get -o OPENFEC_APIKEY_TOKEN | default "")) "query-api_key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "min_assignment_update_date" $min_assignment_update_date "scalar") (serialize-qp "max_assignment_update_date" $max_assignment_update_date "scalar") (serialize-qp "analyst_short_id" $analyst_short_id "multi") (serialize-qp "email" $email "multi") (serialize-qp "page" $page "scalar") (serialize-qp "sort_nulls_last" $sort_nulls_last "scalar") (serialize-qp "title" $title "multi") (serialize-qp "sort_hide_null" $sort_hide_null "scalar") (serialize-qp "committee_id" $committee_id "multi") (serialize-qp "name" $name "multi") (serialize-qp "telephone_ext" $telephone_ext "multi") (serialize-qp "api_key" $api_key "scalar") (serialize-qp "analyst_id" $analyst_id "multi") (serialize-qp "sort_null_only" $sort_null_only "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/rad-analyst/" $qp)
+  let full_url = (build-url $base "/rad-analyst/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"min_assignment_update_date": $min_assignment_update_date, "max_assignment_update_date": $max_assignment_update_date, "analyst_short_id": $analyst_short_id, "email": $email, "page": $page, "sort_nulls_last": $sort_nulls_last, "title": $title, "sort_hide_null": $sort_hide_null, "committee_id": $committee_id, "name": $name, "telephone_ext": $telephone_ext, "api_key": $api_key, "analyst_id": $analyst_id, "sort_null_only": $sort_null_only, "per_page": $per_page, "sort": $qp_sort} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"min_assignment_update_date": $min_assignment_update_date, "max_assignment_update_date": $max_assignment_update_date, "analyst_short_id": $analyst_short_id, "email": $email, "page": $page, "sort_nulls_last": $sort_nulls_last, "title": $title, "sort_hide_null": $sort_hide_null, "committee_id": $committee_id, "name": $name, "telephone_ext": $telephone_ext, "api_key": $api_key, "analyst_id": $analyst_id, "sort_null_only": $sort_null_only, "per_page": $per_page, "sort": $qp_sort} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # FEC election dates since 1995.
@@ -2432,10 +3055,21 @@ export def "reporting-dates get" [
   let auth = (merge-auth [(build-auth ($token_apikeyheaderauth | default ($env | get -o OPENFEC_APIKEYHEADERAUTH_TOKEN | default "")) "x-api-key") (build-auth ($token_apikeyqueryauth | default ($env | get -o OPENFEC_APIKEYQUERYAUTH_TOKEN | default "")) "query-api_key") (build-auth ($token_apikey | default ($env | get -o OPENFEC_APIKEY_TOKEN | default "")) "query-api_key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "max_update_date" $max_update_date "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "max_due_date" $max_due_date "scalar") (serialize-qp "min_create_date" $min_create_date "scalar") (serialize-qp "min_due_date" $min_due_date "scalar") (serialize-qp "sort_hide_null" $sort_hide_null "scalar") (serialize-qp "sort_nulls_last" $sort_nulls_last "scalar") (serialize-qp "api_key" $api_key "scalar") (serialize-qp "min_update_date" $min_update_date "scalar") (serialize-qp "max_create_date" $max_create_date "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort_null_only" $sort_null_only "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "report_year" $report_year "multi") (serialize-qp "report_type" $report_type "multi")] | flatten | str join "&"
-  let full_url = (build-url $base "/reporting-dates/" $qp)
+  let full_url = (build-url $base "/reporting-dates/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"max_update_date": $max_update_date, "page": $page, "max_due_date": $max_due_date, "min_create_date": $min_create_date, "min_due_date": $min_due_date, "sort_hide_null": $sort_hide_null, "sort_nulls_last": $sort_nulls_last, "api_key": $api_key, "min_update_date": $min_update_date, "max_create_date": $max_create_date, "per_page": $per_page, "sort_null_only": $sort_null_only, "sort": $qp_sort, "report_year": $report_year, "report_type": $report_type} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"max_update_date": $max_update_date, "page": $page, "max_due_date": $max_due_date, "min_create_date": $min_create_date, "min_due_date": $min_due_date, "sort_hide_null": $sort_hide_null, "sort_nulls_last": $sort_nulls_last, "api_key": $api_key, "min_update_date": $min_update_date, "max_create_date": $max_create_date, "per_page": $per_page, "sort_null_only": $sort_null_only, "sort": $qp_sort, "report_year": $report_year, "report_type": $report_type} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Each report represents the summary information from Form 3, Form 3X and Form 3P. These reports have key statistics that illuminate the financial status of a given committee. Things like cash on hand, debts owed by committee, total receipts, and total disbursements are especially helpful for understanding a committee's financial dealings. By default, this endpoint includes both amended and final versions of each report. To restrict to only the final versions of each report, use `is_amended=false`; to retrieve only reports that have been amended, use `is_amended=true`. Several different reporting structures exist, depending on the type of organization that submits financial information. To see an example of these reporting requirements, look at the summary and detailed summary pages of Form 3, Form 3X, and Form 3P. DISCLAIMER: The field labels contained within this resource are subject to change. We are attempting to succinctly label these fields while conveying clear meaning to ensure accessibility for all users.
@@ -2494,10 +3128,21 @@ export def "reports get" [
   let base = ($base_url | default $BASE_URL)
   if ($entity_type | is-empty) { error make --unspanned { msg: "path parameter 'entity_type' must be non-empty" } }
   let qp = [(serialize-qp "min_debts_owed_amount" $min_debts_owed_amount "scalar") (serialize-qp "max_debts_owed_expenditures" $max_debts_owed_expenditures "scalar") (serialize-qp "sort_hide_null" $sort_hide_null "scalar") (serialize-qp "year" $year "multi") (serialize-qp "max_cash_on_hand_end_period_amount" $max_cash_on_hand_end_period_amount "scalar") (serialize-qp "filer_type" $filer_type "scalar") (serialize-qp "max_party_coordinated_expenditures" $max_party_coordinated_expenditures "scalar") (serialize-qp "q_spender" $q_spender "multi") (serialize-qp "max_receipt_date" $max_receipt_date "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "max_independent_expenditures" $max_independent_expenditures "scalar") (serialize-qp "min_party_coordinated_expenditures" $min_party_coordinated_expenditures "scalar") (serialize-qp "committee_type" $committee_type "multi") (serialize-qp "page" $page "scalar") (serialize-qp "min_total_contributions" $min_total_contributions "scalar") (serialize-qp "api_key" $api_key "scalar") (serialize-qp "min_cash_on_hand_end_period_amount" $min_cash_on_hand_end_period_amount "scalar") (serialize-qp "min_receipt_date" $min_receipt_date "scalar") (serialize-qp "sort_null_only" $sort_null_only "scalar") (serialize-qp "min_independent_expenditures" $min_independent_expenditures "scalar") (serialize-qp "q_filer" $q_filer "multi") (serialize-qp "max_disbursements_amount" $max_disbursements_amount "scalar") (serialize-qp "max_total_contributions" $max_total_contributions "scalar") (serialize-qp "cycle" $cycle "multi") (serialize-qp "amendment_indicator" $amendment_indicator "multi") (serialize-qp "sort_nulls_last" $sort_nulls_last "scalar") (serialize-qp "max_receipts_amount" $max_receipts_amount "scalar") (serialize-qp "is_amended" $is_amended "scalar") (serialize-qp "min_disbursements_amount" $min_disbursements_amount "scalar") (serialize-qp "min_receipts_amount" $min_receipts_amount "scalar") (serialize-qp "candidate_id" $candidate_id "scalar") (serialize-qp "beginning_image_number" $beginning_image_number "multi") (serialize-qp "sort" $qp_sort "multi") (serialize-qp "committee_id" $committee_id "multi") (serialize-qp "report_type" $report_type "multi") (serialize-qp "most_recent" $most_recent "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({entity_type: (encode-path-segment $entity_type)} | format pattern "/reports/{entity_type}/") $qp)
+  let full_url = (build-url $base ({entity_type: (encode-path-segment $entity_type)} | format pattern "/reports/{entity_type}/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"min_debts_owed_amount": $min_debts_owed_amount, "max_debts_owed_expenditures": $max_debts_owed_expenditures, "sort_hide_null": $sort_hide_null, "year": $year, "max_cash_on_hand_end_period_amount": $max_cash_on_hand_end_period_amount, "filer_type": $filer_type, "max_party_coordinated_expenditures": $max_party_coordinated_expenditures, "q_spender": $q_spender, "max_receipt_date": $max_receipt_date, "per_page": $per_page, "max_independent_expenditures": $max_independent_expenditures, "min_party_coordinated_expenditures": $min_party_coordinated_expenditures, "committee_type": $committee_type, "page": $page, "min_total_contributions": $min_total_contributions, "api_key": $api_key, "min_cash_on_hand_end_period_amount": $min_cash_on_hand_end_period_amount, "min_receipt_date": $min_receipt_date, "sort_null_only": $sort_null_only, "min_independent_expenditures": $min_independent_expenditures, "q_filer": $q_filer, "max_disbursements_amount": $max_disbursements_amount, "max_total_contributions": $max_total_contributions, "cycle": $cycle, "amendment_indicator": $amendment_indicator, "sort_nulls_last": $sort_nulls_last, "max_receipts_amount": $max_receipts_amount, "is_amended": $is_amended, "min_disbursements_amount": $min_disbursements_amount, "min_receipts_amount": $min_receipts_amount, "candidate_id": $candidate_id, "beginning_image_number": $beginning_image_number, "sort": $qp_sort, "committee_id": $committee_id, "report_type": $report_type, "most_recent": $most_recent} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"min_debts_owed_amount": $min_debts_owed_amount, "max_debts_owed_expenditures": $max_debts_owed_expenditures, "sort_hide_null": $sort_hide_null, "year": $year, "max_cash_on_hand_end_period_amount": $max_cash_on_hand_end_period_amount, "filer_type": $filer_type, "max_party_coordinated_expenditures": $max_party_coordinated_expenditures, "q_spender": $q_spender, "max_receipt_date": $max_receipt_date, "per_page": $per_page, "max_independent_expenditures": $max_independent_expenditures, "min_party_coordinated_expenditures": $min_party_coordinated_expenditures, "committee_type": $committee_type, "page": $page, "min_total_contributions": $min_total_contributions, "api_key": $api_key, "min_cash_on_hand_end_period_amount": $min_cash_on_hand_end_period_amount, "min_receipt_date": $min_receipt_date, "sort_null_only": $sort_null_only, "min_independent_expenditures": $min_independent_expenditures, "q_filer": $q_filer, "max_disbursements_amount": $max_disbursements_amount, "max_total_contributions": $max_total_contributions, "cycle": $cycle, "amendment_indicator": $amendment_indicator, "sort_nulls_last": $sort_nulls_last, "max_receipts_amount": $max_receipts_amount, "is_amended": $is_amended, "min_disbursements_amount": $min_disbursements_amount, "min_receipts_amount": $min_receipts_amount, "candidate_id": $candidate_id, "beginning_image_number": $beginning_image_number, "sort": $qp_sort, "committee_id": $committee_id, "report_type": $report_type, "most_recent": $most_recent} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # This description is for both ​`/schedules​/schedule_a​/` and ​ `/schedules​/schedule_a​/{sub_id}​/`. This endpoint provides itemized receipts. Schedule A records describe itemized receipts, including contributions from individuals. If you are interested in contributions from an individual, use the `/schedules/schedule_a/` endpoint. For a more complete description of all Schedule A records visit [About receipts data](https://www.fec.gov/campaign-finance-data/about-campaign-finance-data/about-receipts-data/). If you are interested in our "is_individual" methodology visit our [methodology page](https://www.fec.gov/campaign-finance-data/about-campaign-finance-data/methodology/). ​The `/schedules​/schedule_a​/` endpoint is not paginated by page number. This endpoint uses keyset pagination to improve query performance and these indices are required to properly page through this large dataset. To request the next page, you should append the values found in the `last_indexes` object from pagination to the URL of your last request as additional parameters. For example, when sorting by `contribution_receipt_date`, you might receive a page of results with the two scenarios of following pagination information: case #1: ``` pagination: { pages: 2152643, per_page: 20, count: 43052850, last_indexes: { last_index: "230880619", last_contribution_receipt_date: "2014-01-01" } } ``` case #2 (results which include contribution_receipt_date = NULL): ``` pagination: { pages: 2152644, per_page: 20, count: 43052850, last_indexes: { last_index: "230880639", sort_null_only: True } } ``` To fetch the next page of sorted results, append `last_index=230880619` and `last_contribution_receipt_date=2014-01-01` to the URL and when reaching `contribution_receipt_date=NULL`, append `last_index=230880639` and `sort_null_only=True`. We strongly advise paging through these results using sort indices. The default sort is acending by `contribution_receipt_date` (`deprecated`, will be descending). If you do not page using sort indices, some transactions may be unintentionally filtered out. Calls to ​`/schedules​/schedule_a​/` may return many records. For large result sets, the record counts found in the pagination object are approximate; you will need to page through the records until no records are returned. To avoid throwing the "out of range" exception on the last page, one recommandation is to use total count and `per_page` to control the traverse loop of results. ​The `/schedules​/schedule_a​/{sub_id}​/` endpoint returns a single transaction, but it does include a pagination object class. Please ignore the information in that object class.
@@ -2550,10 +3195,21 @@ export def "schedules-schedule-a list" [
   let auth = (merge-auth [(build-auth ($token_apikeyheaderauth | default ($env | get -o OPENFEC_APIKEYHEADERAUTH_TOKEN | default "")) "x-api-key") (build-auth ($token_apikeyqueryauth | default ($env | get -o OPENFEC_APIKEYQUERYAUTH_TOKEN | default "")) "query-api_key") (build-auth ($token_apikey | default ($env | get -o OPENFEC_APIKEY_TOKEN | default "")) "query-api_key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "max_load_date" $max_load_date "scalar") (serialize-qp "max_amount" $max_amount "scalar") (serialize-qp "max_image_number" $max_image_number "scalar") (serialize-qp "contributor_occupation" $contributor_occupation "multi") (serialize-qp "recipient_committee_designation" $recipient_committee_designation "multi") (serialize-qp "sort_hide_null" $sort_hide_null "scalar") (serialize-qp "is_individual" $is_individual "scalar") (serialize-qp "line_number" $line_number "scalar") (serialize-qp "contributor_type" $contributor_type "multi") (serialize-qp "recipient_committee_type" $recipient_committee_type "multi") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "contributor_zip" $contributor_zip "multi") (serialize-qp "contributor_city" $contributor_city "multi") (serialize-qp "last_index" $last_index "scalar") (serialize-qp "last_contribution_receipt_amount" $last_contribution_receipt_amount "scalar") (serialize-qp "contributor_id" $contributor_id "multi") (serialize-qp "recipient_committee_org_type" $recipient_committee_org_type "multi") (serialize-qp "contributor_state" $contributor_state "multi") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "two_year_transaction_period" $two_year_transaction_period "multi") (serialize-qp "min_date" $min_date "scalar") (serialize-qp "committee_id" $committee_id "multi") (serialize-qp "contributor_employer" $contributor_employer "multi") (serialize-qp "min_load_date" $min_load_date "scalar") (serialize-qp "api_key" $api_key "scalar") (serialize-qp "last_contribution_receipt_date" $last_contribution_receipt_date "scalar") (serialize-qp "min_image_number" $min_image_number "scalar") (serialize-qp "contributor_name" $contributor_name "multi") (serialize-qp "sort_null_only" $sort_null_only "scalar") (serialize-qp "image_number" $image_number "multi") (serialize-qp "min_amount" $min_amount "scalar") (serialize-qp "max_date" $max_date "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/schedules/schedule_a/" $qp)
+  let full_url = (build-url $base "/schedules/schedule_a/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"max_load_date": $max_load_date, "max_amount": $max_amount, "max_image_number": $max_image_number, "contributor_occupation": $contributor_occupation, "recipient_committee_designation": $recipient_committee_designation, "sort_hide_null": $sort_hide_null, "is_individual": $is_individual, "line_number": $line_number, "contributor_type": $contributor_type, "recipient_committee_type": $recipient_committee_type, "per_page": $per_page, "contributor_zip": $contributor_zip, "contributor_city": $contributor_city, "last_index": $last_index, "last_contribution_receipt_amount": $last_contribution_receipt_amount, "contributor_id": $contributor_id, "recipient_committee_org_type": $recipient_committee_org_type, "contributor_state": $contributor_state, "sort": $qp_sort, "two_year_transaction_period": $two_year_transaction_period, "min_date": $min_date, "committee_id": $committee_id, "contributor_employer": $contributor_employer, "min_load_date": $min_load_date, "api_key": $api_key, "last_contribution_receipt_date": $last_contribution_receipt_date, "min_image_number": $min_image_number, "contributor_name": $contributor_name, "sort_null_only": $sort_null_only, "image_number": $image_number, "min_amount": $min_amount, "max_date": $max_date} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"max_load_date": $max_load_date, "max_amount": $max_amount, "max_image_number": $max_image_number, "contributor_occupation": $contributor_occupation, "recipient_committee_designation": $recipient_committee_designation, "sort_hide_null": $sort_hide_null, "is_individual": $is_individual, "line_number": $line_number, "contributor_type": $contributor_type, "recipient_committee_type": $recipient_committee_type, "per_page": $per_page, "contributor_zip": $contributor_zip, "contributor_city": $contributor_city, "last_index": $last_index, "last_contribution_receipt_amount": $last_contribution_receipt_amount, "contributor_id": $contributor_id, "recipient_committee_org_type": $recipient_committee_org_type, "contributor_state": $contributor_state, "sort": $qp_sort, "two_year_transaction_period": $two_year_transaction_period, "min_date": $min_date, "committee_id": $committee_id, "contributor_employer": $contributor_employer, "min_load_date": $min_load_date, "api_key": $api_key, "last_contribution_receipt_date": $last_contribution_receipt_date, "min_image_number": $min_image_number, "contributor_name": $contributor_name, "sort_null_only": $sort_null_only, "image_number": $image_number, "min_amount": $min_amount, "max_date": $max_date} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # This endpoint provides itemized individual contributions received by a committee, aggregated by the contributor’s employer name. If you are interested in our “is_individual” methodology, review the [methodology page](https://www.fec.gov/campaign-finance-data/about-campaign-finance-data/methodology). Unitemized individual contributions are not included.
@@ -2584,10 +3240,21 @@ export def "schedules-schedule-a-by-employer get" [
   let auth = (merge-auth [(build-auth ($token_apikeyheaderauth | default ($env | get -o OPENFEC_APIKEYHEADERAUTH_TOKEN | default "")) "x-api-key") (build-auth ($token_apikeyqueryauth | default ($env | get -o OPENFEC_APIKEYQUERYAUTH_TOKEN | default "")) "query-api_key") (build-auth ($token_apikey | default ($env | get -o OPENFEC_APIKEY_TOKEN | default "")) "query-api_key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "employer" $employer "multi") (serialize-qp "page" $page "scalar") (serialize-qp "sort_nulls_last" $sort_nulls_last "scalar") (serialize-qp "cycle" $cycle "multi") (serialize-qp "sort_hide_null" $sort_hide_null "scalar") (serialize-qp "committee_id" $committee_id "multi") (serialize-qp "api_key" $api_key "scalar") (serialize-qp "sort_null_only" $sort_null_only "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/schedules/schedule_a/by_employer/" $qp)
+  let full_url = (build-url $base "/schedules/schedule_a/by_employer/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"employer": $employer, "page": $page, "sort_nulls_last": $sort_nulls_last, "cycle": $cycle, "sort_hide_null": $sort_hide_null, "committee_id": $committee_id, "api_key": $api_key, "sort_null_only": $sort_null_only, "per_page": $per_page, "sort": $qp_sort} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"employer": $employer, "page": $page, "sort_nulls_last": $sort_nulls_last, "cycle": $cycle, "sort_hide_null": $sort_hide_null, "committee_id": $committee_id, "api_key": $api_key, "sort_null_only": $sort_null_only, "per_page": $per_page, "sort": $qp_sort} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # This endpoint provides itemized individual contributions received by a committee, aggregated by the contributor’s occupation. If you are interested in our “is_individual” methodology, review the [methodology page](https://www.fec.gov/campaign-finance-data/about-campaign-finance-data/methodology). Unitemized individual contributions are not included.
@@ -2618,10 +3285,21 @@ export def "schedules-schedule-a-by-occupation get" [
   let auth = (merge-auth [(build-auth ($token_apikeyheaderauth | default ($env | get -o OPENFEC_APIKEYHEADERAUTH_TOKEN | default "")) "x-api-key") (build-auth ($token_apikeyqueryauth | default ($env | get -o OPENFEC_APIKEYQUERYAUTH_TOKEN | default "")) "query-api_key") (build-auth ($token_apikey | default ($env | get -o OPENFEC_APIKEY_TOKEN | default "")) "query-api_key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "occupation" $occupation "multi") (serialize-qp "page" $page "scalar") (serialize-qp "sort_nulls_last" $sort_nulls_last "scalar") (serialize-qp "cycle" $cycle "multi") (serialize-qp "sort_hide_null" $sort_hide_null "scalar") (serialize-qp "committee_id" $committee_id "multi") (serialize-qp "api_key" $api_key "scalar") (serialize-qp "sort_null_only" $sort_null_only "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/schedules/schedule_a/by_occupation/" $qp)
+  let full_url = (build-url $base "/schedules/schedule_a/by_occupation/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"occupation": $occupation, "page": $page, "sort_nulls_last": $sort_nulls_last, "cycle": $cycle, "sort_hide_null": $sort_hide_null, "committee_id": $committee_id, "api_key": $api_key, "sort_null_only": $sort_null_only, "per_page": $per_page, "sort": $qp_sort} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"occupation": $occupation, "page": $page, "sort_nulls_last": $sort_nulls_last, "cycle": $cycle, "sort_hide_null": $sort_hide_null, "committee_id": $committee_id, "api_key": $api_key, "sort_null_only": $sort_null_only, "per_page": $per_page, "sort": $qp_sort} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # This endpoint provides individual contributions received by a committee, aggregated by size: ``` - $200 and under - $200.01 - $499.99 - $500 - $999.99 - $1000 - $1999.99 - $2000 + ``` The $200.00 and under category includes contributions of $200 or less combined with unitemized individual contributions.
@@ -2652,10 +3330,21 @@ export def "schedules-schedule-a-by-size get" [
   let auth = (merge-auth [(build-auth ($token_apikeyheaderauth | default ($env | get -o OPENFEC_APIKEYHEADERAUTH_TOKEN | default "")) "x-api-key") (build-auth ($token_apikeyqueryauth | default ($env | get -o OPENFEC_APIKEYQUERYAUTH_TOKEN | default "")) "query-api_key") (build-auth ($token_apikey | default ($env | get -o OPENFEC_APIKEY_TOKEN | default "")) "query-api_key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "sort_nulls_last" $sort_nulls_last "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "cycle" $cycle "multi") (serialize-qp "sort_hide_null" $sort_hide_null "scalar") (serialize-qp "committee_id" $committee_id "multi") (serialize-qp "api_key" $api_key "scalar") (serialize-qp "size" $size "multi") (serialize-qp "sort_null_only" $sort_null_only "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/schedules/schedule_a/by_size/" $qp)
+  let full_url = (build-url $base "/schedules/schedule_a/by_size/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"sort_nulls_last": $sort_nulls_last, "page": $page, "cycle": $cycle, "sort_hide_null": $sort_hide_null, "committee_id": $committee_id, "api_key": $api_key, "size": $size, "sort_null_only": $sort_null_only, "per_page": $per_page, "sort": $qp_sort} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"sort_nulls_last": $sort_nulls_last, "page": $page, "cycle": $cycle, "sort_hide_null": $sort_hide_null, "committee_id": $committee_id, "api_key": $api_key, "size": $size, "sort_null_only": $sort_null_only, "per_page": $per_page, "sort": $qp_sort} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # This endpoint provides itemized individual contributions received by a committee, aggregated by size of contribution and candidate. If you are interested in our “is_individual” methodology, review the [methodology page](https://www.fec.gov/campaign-finance-data/about-campaign-finance-data/methodology). Unitemized individual contributions are not included.
@@ -2686,10 +3375,21 @@ export def "schedules-schedule-a-by-size-by-candidate get" [
   let auth = (merge-auth [(build-auth ($token_apikeyheaderauth | default ($env | get -o OPENFEC_APIKEYHEADERAUTH_TOKEN | default "")) "x-api-key") (build-auth ($token_apikeyqueryauth | default ($env | get -o OPENFEC_APIKEYQUERYAUTH_TOKEN | default "")) "query-api_key") (build-auth ($token_apikey | default ($env | get -o OPENFEC_APIKEY_TOKEN | default "")) "query-api_key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "candidate_id" $candidate_id "multi") (serialize-qp "sort_nulls_last" $sort_nulls_last "scalar") (serialize-qp "cycle" $cycle "multi") (serialize-qp "page" $page "scalar") (serialize-qp "sort_hide_null" $sort_hide_null "scalar") (serialize-qp "election_full" $election_full "scalar") (serialize-qp "api_key" $api_key "scalar") (serialize-qp "sort_null_only" $sort_null_only "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/schedules/schedule_a/by_size/by_candidate/" $qp)
+  let full_url = (build-url $base "/schedules/schedule_a/by_size/by_candidate/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"candidate_id": $candidate_id, "sort_nulls_last": $sort_nulls_last, "cycle": $cycle, "page": $page, "sort_hide_null": $sort_hide_null, "election_full": $election_full, "api_key": $api_key, "sort_null_only": $sort_null_only, "per_page": $per_page, "sort": $qp_sort} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"candidate_id": $candidate_id, "sort_nulls_last": $sort_nulls_last, "cycle": $cycle, "page": $page, "sort_hide_null": $sort_hide_null, "election_full": $election_full, "api_key": $api_key, "sort_null_only": $sort_null_only, "per_page": $per_page, "sort": $qp_sort} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # This endpoint provides itemized individual contributions received by a committee, aggregated by the contributor’s state. If you are interested in our “is_individual” methodology, review the [methodology page](https://www.fec.gov/campaign-finance-data/about-campaign-finance-data/methodology). Unitemized individual contributions are not included.
@@ -2721,10 +3421,21 @@ export def "schedules-schedule-a-by-state get" [
   let auth = (merge-auth [(build-auth ($token_apikeyheaderauth | default ($env | get -o OPENFEC_APIKEYHEADERAUTH_TOKEN | default "")) "x-api-key") (build-auth ($token_apikeyqueryauth | default ($env | get -o OPENFEC_APIKEYQUERYAUTH_TOKEN | default "")) "query-api_key") (build-auth ($token_apikey | default ($env | get -o OPENFEC_APIKEY_TOKEN | default "")) "query-api_key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "hide_null" $hide_null "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "cycle" $cycle "multi") (serialize-qp "state" $state "multi") (serialize-qp "sort_hide_null" $sort_hide_null "scalar") (serialize-qp "sort_nulls_last" $sort_nulls_last "scalar") (serialize-qp "committee_id" $committee_id "multi") (serialize-qp "api_key" $api_key "scalar") (serialize-qp "sort_null_only" $sort_null_only "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/schedules/schedule_a/by_state/" $qp)
+  let full_url = (build-url $base "/schedules/schedule_a/by_state/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"hide_null": $hide_null, "page": $page, "cycle": $cycle, "state": $state, "sort_hide_null": $sort_hide_null, "sort_nulls_last": $sort_nulls_last, "committee_id": $committee_id, "api_key": $api_key, "sort_null_only": $sort_null_only, "per_page": $per_page, "sort": $qp_sort} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"hide_null": $hide_null, "page": $page, "cycle": $cycle, "state": $state, "sort_hide_null": $sort_hide_null, "sort_nulls_last": $sort_nulls_last, "committee_id": $committee_id, "api_key": $api_key, "sort_null_only": $sort_null_only, "per_page": $per_page, "sort": $qp_sort} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # This endpoint provides itemized individual contributions received by a committee, aggregated by contributor’s state and candidate. If you are interested in our “is_individual” methodology, review the [methodology page](https://www.fec.gov/campaign-finance-data/about-campaign-finance-data/methodology). Unitemized individual contributions are not included.
@@ -2755,10 +3466,21 @@ export def "schedules-schedule-a-by-state-by-candidate get" [
   let auth = (merge-auth [(build-auth ($token_apikeyheaderauth | default ($env | get -o OPENFEC_APIKEYHEADERAUTH_TOKEN | default "")) "x-api-key") (build-auth ($token_apikeyqueryauth | default ($env | get -o OPENFEC_APIKEYQUERYAUTH_TOKEN | default "")) "query-api_key") (build-auth ($token_apikey | default ($env | get -o OPENFEC_APIKEY_TOKEN | default "")) "query-api_key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "candidate_id" $candidate_id "multi") (serialize-qp "sort_nulls_last" $sort_nulls_last "scalar") (serialize-qp "cycle" $cycle "multi") (serialize-qp "page" $page "scalar") (serialize-qp "sort_hide_null" $sort_hide_null "scalar") (serialize-qp "election_full" $election_full "scalar") (serialize-qp "api_key" $api_key "scalar") (serialize-qp "sort_null_only" $sort_null_only "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/schedules/schedule_a/by_state/by_candidate/" $qp)
+  let full_url = (build-url $base "/schedules/schedule_a/by_state/by_candidate/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"candidate_id": $candidate_id, "sort_nulls_last": $sort_nulls_last, "cycle": $cycle, "page": $page, "sort_hide_null": $sort_hide_null, "election_full": $election_full, "api_key": $api_key, "sort_null_only": $sort_null_only, "per_page": $per_page, "sort": $qp_sort} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"candidate_id": $candidate_id, "sort_nulls_last": $sort_nulls_last, "cycle": $cycle, "page": $page, "sort_hide_null": $sort_hide_null, "election_full": $election_full, "api_key": $api_key, "sort_null_only": $sort_null_only, "per_page": $per_page, "sort": $qp_sort} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Itemized individual contributions aggregated by contributor’s state, candidate, committee type and cycle. If you are interested in our “is_individual” methodology, review the [methodology page](https://www.fec.gov/campaign-finance-data/about-campaign-finance-data/methodology). Unitemized individual contributions are not included.
@@ -2789,10 +3511,21 @@ export def "schedules-schedule-a-by-state-by-candidate-totals get" [
   let auth = (merge-auth [(build-auth ($token_apikeyheaderauth | default ($env | get -o OPENFEC_APIKEYHEADERAUTH_TOKEN | default "")) "x-api-key") (build-auth ($token_apikeyqueryauth | default ($env | get -o OPENFEC_APIKEYQUERYAUTH_TOKEN | default "")) "query-api_key") (build-auth ($token_apikey | default ($env | get -o OPENFEC_APIKEY_TOKEN | default "")) "query-api_key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "candidate_id" $candidate_id "multi") (serialize-qp "sort_nulls_last" $sort_nulls_last "scalar") (serialize-qp "cycle" $cycle "multi") (serialize-qp "page" $page "scalar") (serialize-qp "sort_hide_null" $sort_hide_null "scalar") (serialize-qp "election_full" $election_full "scalar") (serialize-qp "api_key" $api_key "scalar") (serialize-qp "sort_null_only" $sort_null_only "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/schedules/schedule_a/by_state/by_candidate/totals/" $qp)
+  let full_url = (build-url $base "/schedules/schedule_a/by_state/by_candidate/totals/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"candidate_id": $candidate_id, "sort_nulls_last": $sort_nulls_last, "cycle": $cycle, "page": $page, "sort_hide_null": $sort_hide_null, "election_full": $election_full, "api_key": $api_key, "sort_null_only": $sort_null_only, "per_page": $per_page, "sort": $qp_sort} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"candidate_id": $candidate_id, "sort_nulls_last": $sort_nulls_last, "cycle": $cycle, "page": $page, "sort_hide_null": $sort_hide_null, "election_full": $election_full, "api_key": $api_key, "sort_null_only": $sort_null_only, "per_page": $per_page, "sort": $qp_sort} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # This endpoint provides itemized individual contributions received by a committee, aggregated by contributor’s state, committee type and cycle. If you are interested in our “is_individual” methodology, review the [methodology page](https://www.fec.gov/campaign-finance-data/about-campaign-finance-data/methodology). Unitemized individual contributions are not included.
@@ -2823,10 +3556,21 @@ export def "schedules-schedule-a-by-state-totals get" [
   let auth = (merge-auth [(build-auth ($token_apikeyheaderauth | default ($env | get -o OPENFEC_APIKEYHEADERAUTH_TOKEN | default "")) "x-api-key") (build-auth ($token_apikeyqueryauth | default ($env | get -o OPENFEC_APIKEYQUERYAUTH_TOKEN | default "")) "query-api_key") (build-auth ($token_apikey | default ($env | get -o OPENFEC_APIKEY_TOKEN | default "")) "query-api_key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "committee_type" $committee_type "multi") (serialize-qp "cycle" $cycle "multi") (serialize-qp "page" $page "scalar") (serialize-qp "state" $state "multi") (serialize-qp "sort_hide_null" $sort_hide_null "scalar") (serialize-qp "sort_nulls_last" $sort_nulls_last "scalar") (serialize-qp "api_key" $api_key "scalar") (serialize-qp "sort_null_only" $sort_null_only "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/schedules/schedule_a/by_state/totals/" $qp)
+  let full_url = (build-url $base "/schedules/schedule_a/by_state/totals/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"committee_type": $committee_type, "cycle": $cycle, "page": $page, "state": $state, "sort_hide_null": $sort_hide_null, "sort_nulls_last": $sort_nulls_last, "api_key": $api_key, "sort_null_only": $sort_null_only, "per_page": $per_page, "sort": $qp_sort} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"committee_type": $committee_type, "cycle": $cycle, "page": $page, "state": $state, "sort_hide_null": $sort_hide_null, "sort_nulls_last": $sort_nulls_last, "api_key": $api_key, "sort_null_only": $sort_null_only, "per_page": $per_page, "sort": $qp_sort} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # This endpoint provides itemized individual contributions received by a committee, aggregated by the contributor’s ZIP code. If you are interested in our “is_individual” methodology, review the [methodology page](https://www.fec.gov/campaign-finance-data/about-campaign-finance-data/methodology). Unitemized individual contributions are not included.
@@ -2858,10 +3602,21 @@ export def "schedules-schedule-a-by-zip get" [
   let auth = (merge-auth [(build-auth ($token_apikeyheaderauth | default ($env | get -o OPENFEC_APIKEYHEADERAUTH_TOKEN | default "")) "x-api-key") (build-auth ($token_apikeyqueryauth | default ($env | get -o OPENFEC_APIKEYQUERYAUTH_TOKEN | default "")) "query-api_key") (build-auth ($token_apikey | default ($env | get -o OPENFEC_APIKEY_TOKEN | default "")) "query-api_key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "cycle" $cycle "multi") (serialize-qp "zip" $zip "multi") (serialize-qp "sort_hide_null" $sort_hide_null "scalar") (serialize-qp "state" $state "multi") (serialize-qp "committee_id" $committee_id "multi") (serialize-qp "sort_nulls_last" $sort_nulls_last "scalar") (serialize-qp "api_key" $api_key "scalar") (serialize-qp "sort_null_only" $sort_null_only "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/schedules/schedule_a/by_zip/" $qp)
+  let full_url = (build-url $base "/schedules/schedule_a/by_zip/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "cycle": $cycle, "zip": $zip, "sort_hide_null": $sort_hide_null, "state": $state, "committee_id": $committee_id, "sort_nulls_last": $sort_nulls_last, "api_key": $api_key, "sort_null_only": $sort_null_only, "per_page": $per_page, "sort": $qp_sort} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"page": $page, "cycle": $cycle, "zip": $zip, "sort_hide_null": $sort_hide_null, "state": $state, "committee_id": $committee_id, "sort_nulls_last": $sort_nulls_last, "api_key": $api_key, "sort_null_only": $sort_null_only, "per_page": $per_page, "sort": $qp_sort} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Efiling endpoints provide real-time campaign finance data received from electronic filers. Efiling endpoints only contain the most recent four months of data and don't contain the processed and coded data that you can find on other endpoints.
@@ -2903,10 +3658,21 @@ export def "schedules-schedule-a-efile get" [
   let auth = (merge-auth [(build-auth ($token_apikeyheaderauth | default ($env | get -o OPENFEC_APIKEYHEADERAUTH_TOKEN | default "")) "x-api-key") (build-auth ($token_apikeyqueryauth | default ($env | get -o OPENFEC_APIKEYQUERYAUTH_TOKEN | default "")) "query-api_key") (build-auth ($token_apikey | default ($env | get -o OPENFEC_APIKEY_TOKEN | default "")) "query-api_key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "max_amount" $max_amount "scalar") (serialize-qp "contributor_occupation" $contributor_occupation "multi") (serialize-qp "max_image_number" $max_image_number "scalar") (serialize-qp "sort_nulls_last" $sort_nulls_last "scalar") (serialize-qp "sort_hide_null" $sort_hide_null "scalar") (serialize-qp "line_number" $line_number "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "contributor_city" $contributor_city "multi") (serialize-qp "contributor_state" $contributor_state "multi") (serialize-qp "page" $page "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "committee_id" $committee_id "multi") (serialize-qp "min_date" $min_date "scalar") (serialize-qp "contributor_employer" $contributor_employer "multi") (serialize-qp "api_key" $api_key "scalar") (serialize-qp "contributor_name" $contributor_name "multi") (serialize-qp "min_image_number" $min_image_number "scalar") (serialize-qp "sort_null_only" $sort_null_only "scalar") (serialize-qp "image_number" $image_number "multi") (serialize-qp "min_amount" $min_amount "scalar") (serialize-qp "max_date" $max_date "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/schedules/schedule_a/efile/" $qp)
+  let full_url = (build-url $base "/schedules/schedule_a/efile/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"max_amount": $max_amount, "contributor_occupation": $contributor_occupation, "max_image_number": $max_image_number, "sort_nulls_last": $sort_nulls_last, "sort_hide_null": $sort_hide_null, "line_number": $line_number, "per_page": $per_page, "contributor_city": $contributor_city, "contributor_state": $contributor_state, "page": $page, "sort": $qp_sort, "committee_id": $committee_id, "min_date": $min_date, "contributor_employer": $contributor_employer, "api_key": $api_key, "contributor_name": $contributor_name, "min_image_number": $min_image_number, "sort_null_only": $sort_null_only, "image_number": $image_number, "min_amount": $min_amount, "max_date": $max_date} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"max_amount": $max_amount, "contributor_occupation": $contributor_occupation, "max_image_number": $max_image_number, "sort_nulls_last": $sort_nulls_last, "sort_hide_null": $sort_hide_null, "line_number": $line_number, "per_page": $per_page, "contributor_city": $contributor_city, "contributor_state": $contributor_state, "page": $page, "sort": $qp_sort, "committee_id": $committee_id, "min_date": $min_date, "contributor_employer": $contributor_employer, "api_key": $api_key, "contributor_name": $contributor_name, "min_image_number": $min_image_number, "sort_null_only": $sort_null_only, "image_number": $image_number, "min_amount": $min_amount, "max_date": $max_date} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # This description is for both ​`/schedules​/schedule_a​/` and ​ `/schedules​/schedule_a​/{sub_id}​/`. This endpoint provides itemized receipts. Schedule A records describe itemized receipts, including contributions from individuals. If you are interested in contributions from an individual, use the `/schedules/schedule_a/` endpoint. For a more complete description of all Schedule A records visit [About receipts data](https://www.fec.gov/campaign-finance-data/about-campaign-finance-data/about-receipts-data/). If you are interested in our "is_individual" methodology visit our [methodology page](https://www.fec.gov/campaign-finance-data/about-campaign-finance-data/methodology/). ​The `/schedules​/schedule_a​/` endpoint is not paginated by page number. This endpoint uses keyset pagination to improve query performance and these indices are required to properly page through this large dataset. To request the next page, you should append the values found in the `last_indexes` object from pagination to the URL of your last request as additional parameters. For example, when sorting by `contribution_receipt_date`, you might receive a page of results with the two scenarios of following pagination information: case #1: ``` pagination: { pages: 2152643, per_page: 20, count: 43052850, last_indexes: { last_index: "230880619", last_contribution_receipt_date: "2014-01-01" } } ``` case #2 (results which include contribution_receipt_date = NULL): ``` pagination: { pages: 2152644, per_page: 20, count: 43052850, last_indexes: { last_index: "230880639", sort_null_only: True } } ``` To fetch the next page of sorted results, append `last_index=230880619` and `last_contribution_receipt_date=2014-01-01` to the URL and when reaching `contribution_receipt_date=NULL`, append `last_index=230880639` and `sort_null_only=True`. We strongly advise paging through these results using sort indices. The default sort is acending by `contribution_receipt_date` (`deprecated`, will be descending). If you do not page using sort indices, some transactions may be unintentionally filtered out. Calls to ​`/schedules​/schedule_a​/` may return many records. For large result sets, the record counts found in the pagination object are approximate; you will need to page through the records until no records are returned. To avoid throwing the "out of range" exception on the last page, one recommandation is to use total count and `per_page` to control the traverse loop of results. ​The `/schedules​/schedule_a​/{sub_id}​/` endpoint returns a single transaction, but it does include a pagination object class. Please ignore the information in that object class.
@@ -2961,10 +3727,21 @@ export def "schedules-schedule-a get" [
   let base = ($base_url | default $BASE_URL)
   if ($sub_id | is-empty) { error make --unspanned { msg: "path parameter 'sub_id' must be non-empty" } }
   let qp = [(serialize-qp "max_load_date" $max_load_date "scalar") (serialize-qp "max_amount" $max_amount "scalar") (serialize-qp "max_image_number" $max_image_number "scalar") (serialize-qp "contributor_occupation" $contributor_occupation "multi") (serialize-qp "recipient_committee_designation" $recipient_committee_designation "multi") (serialize-qp "sort_hide_null" $sort_hide_null "scalar") (serialize-qp "is_individual" $is_individual "scalar") (serialize-qp "line_number" $line_number "scalar") (serialize-qp "contributor_type" $contributor_type "multi") (serialize-qp "recipient_committee_type" $recipient_committee_type "multi") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "contributor_zip" $contributor_zip "multi") (serialize-qp "contributor_city" $contributor_city "multi") (serialize-qp "last_index" $last_index "scalar") (serialize-qp "last_contribution_receipt_amount" $last_contribution_receipt_amount "scalar") (serialize-qp "contributor_id" $contributor_id "multi") (serialize-qp "recipient_committee_org_type" $recipient_committee_org_type "multi") (serialize-qp "contributor_state" $contributor_state "multi") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "two_year_transaction_period" $two_year_transaction_period "multi") (serialize-qp "min_date" $min_date "scalar") (serialize-qp "committee_id" $committee_id "multi") (serialize-qp "contributor_employer" $contributor_employer "multi") (serialize-qp "min_load_date" $min_load_date "scalar") (serialize-qp "api_key" $api_key "scalar") (serialize-qp "last_contribution_receipt_date" $last_contribution_receipt_date "scalar") (serialize-qp "min_image_number" $min_image_number "scalar") (serialize-qp "contributor_name" $contributor_name "multi") (serialize-qp "sort_null_only" $sort_null_only "scalar") (serialize-qp "image_number" $image_number "multi") (serialize-qp "min_amount" $min_amount "scalar") (serialize-qp "max_date" $max_date "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({sub_id: (encode-path-segment $sub_id)} | format pattern "/schedules/schedule_a/{sub_id}/") $qp)
+  let full_url = (build-url $base ({sub_id: (encode-path-segment $sub_id)} | format pattern "/schedules/schedule_a/{sub_id}/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"max_load_date": $max_load_date, "max_amount": $max_amount, "max_image_number": $max_image_number, "contributor_occupation": $contributor_occupation, "recipient_committee_designation": $recipient_committee_designation, "sort_hide_null": $sort_hide_null, "is_individual": $is_individual, "line_number": $line_number, "contributor_type": $contributor_type, "recipient_committee_type": $recipient_committee_type, "per_page": $per_page, "contributor_zip": $contributor_zip, "contributor_city": $contributor_city, "last_index": $last_index, "last_contribution_receipt_amount": $last_contribution_receipt_amount, "contributor_id": $contributor_id, "recipient_committee_org_type": $recipient_committee_org_type, "contributor_state": $contributor_state, "sort": $qp_sort, "two_year_transaction_period": $two_year_transaction_period, "min_date": $min_date, "committee_id": $committee_id, "contributor_employer": $contributor_employer, "min_load_date": $min_load_date, "api_key": $api_key, "last_contribution_receipt_date": $last_contribution_receipt_date, "min_image_number": $min_image_number, "contributor_name": $contributor_name, "sort_null_only": $sort_null_only, "image_number": $image_number, "min_amount": $min_amount, "max_date": $max_date} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"max_load_date": $max_load_date, "max_amount": $max_amount, "max_image_number": $max_image_number, "contributor_occupation": $contributor_occupation, "recipient_committee_designation": $recipient_committee_designation, "sort_hide_null": $sort_hide_null, "is_individual": $is_individual, "line_number": $line_number, "contributor_type": $contributor_type, "recipient_committee_type": $recipient_committee_type, "per_page": $per_page, "contributor_zip": $contributor_zip, "contributor_city": $contributor_city, "last_index": $last_index, "last_contribution_receipt_amount": $last_contribution_receipt_amount, "contributor_id": $contributor_id, "recipient_committee_org_type": $recipient_committee_org_type, "contributor_state": $contributor_state, "sort": $qp_sort, "two_year_transaction_period": $two_year_transaction_period, "min_date": $min_date, "committee_id": $committee_id, "contributor_employer": $contributor_employer, "min_load_date": $min_load_date, "api_key": $api_key, "last_contribution_receipt_date": $last_contribution_receipt_date, "min_image_number": $min_image_number, "contributor_name": $contributor_name, "sort_null_only": $sort_null_only, "image_number": $image_number, "min_amount": $min_amount, "max_date": $max_date} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Schedule B filings describe itemized disbursements. This data explains how committees and other filers spend their money. These figures are reported as part of forms F3, F3X and F3P. The data is divided in two-year periods, called `two_year_transaction_period`, which is derived from the `report_year` submitted of the corresponding form. If no value is supplied, the results will default to the most recent two-year period that is named after the ending, even-numbered year. Due to the large quantity of Schedule B filings, this endpoint is not paginated by page number. Instead, you can request the next page of results by adding the values in the `last_indexes` object from `pagination` to the URL of your last request. For example, when sorting by `disbursement_date`, you might receive a page of results with the following pagination information: ``` pagination: { pages: 965191, per_page: 20, count: 19303814, last_indexes: { last_index: "230906248", last_disbursement_date: "2014-07-04" } } ``` To fetch the next page of sorted results, append `last_index=230906248` and `last_disbursement_date=2014-07-04` to the URL. We strongly advise paging through these results by using the sort indices (defaults to sort by disbursement date, e.g. `last_disbursement_date`), otherwise some resources may be unintentionally filtered out. This resource uses keyset pagination to improve query performance and these indices are required to properly page through this large dataset. Note: because the Schedule B data includes many records, counts for large result sets are approximate; you will want to page through the records until no records are returned.
@@ -3012,10 +3789,21 @@ export def "schedules-schedule-b list" [
   let auth = (merge-auth [(build-auth ($token_apikeyheaderauth | default ($env | get -o OPENFEC_APIKEYHEADERAUTH_TOKEN | default "")) "x-api-key") (build-auth ($token_apikeyqueryauth | default ($env | get -o OPENFEC_APIKEYQUERYAUTH_TOKEN | default "")) "query-api_key") (build-auth ($token_apikey | default ($env | get -o OPENFEC_APIKEY_TOKEN | default "")) "query-api_key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "disbursement_description" $disbursement_description "multi") (serialize-qp "max_amount" $max_amount "scalar") (serialize-qp "max_image_number" $max_image_number "scalar") (serialize-qp "image_number" $image_number "multi") (serialize-qp "sort_hide_null" $sort_hide_null "scalar") (serialize-qp "last_disbursement_date" $last_disbursement_date "scalar") (serialize-qp "line_number" $line_number "scalar") (serialize-qp "spender_committee_designation" $spender_committee_designation "multi") (serialize-qp "last_disbursement_amount" $last_disbursement_amount "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "last_index" $last_index "scalar") (serialize-qp "spender_committee_type" $spender_committee_type "multi") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "two_year_transaction_period" $two_year_transaction_period "multi") (serialize-qp "min_date" $min_date "scalar") (serialize-qp "committee_id" $committee_id "multi") (serialize-qp "api_key" $api_key "scalar") (serialize-qp "disbursement_purpose_category" $disbursement_purpose_category "multi") (serialize-qp "recipient_name" $recipient_name "multi") (serialize-qp "recipient_state" $recipient_state "multi") (serialize-qp "recipient_city" $recipient_city "multi") (serialize-qp "min_image_number" $min_image_number "scalar") (serialize-qp "spender_committee_org_type" $spender_committee_org_type "multi") (serialize-qp "sort_null_only" $sort_null_only "scalar") (serialize-qp "recipient_committee_id" $recipient_committee_id "multi") (serialize-qp "min_amount" $min_amount "scalar") (serialize-qp "max_date" $max_date "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/schedules/schedule_b/" $qp)
+  let full_url = (build-url $base "/schedules/schedule_b/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"disbursement_description": $disbursement_description, "max_amount": $max_amount, "max_image_number": $max_image_number, "image_number": $image_number, "sort_hide_null": $sort_hide_null, "last_disbursement_date": $last_disbursement_date, "line_number": $line_number, "spender_committee_designation": $spender_committee_designation, "last_disbursement_amount": $last_disbursement_amount, "per_page": $per_page, "last_index": $last_index, "spender_committee_type": $spender_committee_type, "sort": $qp_sort, "two_year_transaction_period": $two_year_transaction_period, "min_date": $min_date, "committee_id": $committee_id, "api_key": $api_key, "disbursement_purpose_category": $disbursement_purpose_category, "recipient_name": $recipient_name, "recipient_state": $recipient_state, "recipient_city": $recipient_city, "min_image_number": $min_image_number, "spender_committee_org_type": $spender_committee_org_type, "sort_null_only": $sort_null_only, "recipient_committee_id": $recipient_committee_id, "min_amount": $min_amount, "max_date": $max_date} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"disbursement_description": $disbursement_description, "max_amount": $max_amount, "max_image_number": $max_image_number, "image_number": $image_number, "sort_hide_null": $sort_hide_null, "last_disbursement_date": $last_disbursement_date, "line_number": $line_number, "spender_committee_designation": $spender_committee_designation, "last_disbursement_amount": $last_disbursement_amount, "per_page": $per_page, "last_index": $last_index, "spender_committee_type": $spender_committee_type, "sort": $qp_sort, "two_year_transaction_period": $two_year_transaction_period, "min_date": $min_date, "committee_id": $committee_id, "api_key": $api_key, "disbursement_purpose_category": $disbursement_purpose_category, "recipient_name": $recipient_name, "recipient_state": $recipient_state, "recipient_city": $recipient_city, "min_image_number": $min_image_number, "spender_committee_org_type": $spender_committee_org_type, "sort_null_only": $sort_null_only, "recipient_committee_id": $recipient_committee_id, "min_amount": $min_amount, "max_date": $max_date} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Schedule B disbursements aggregated by disbursement purpose category. To avoid double counting, memoed items are not included. Purpose is a combination of transaction codes, category codes and disbursement description. Inspect the `disbursement_purpose` sql function within the migrations for more details.
@@ -3046,10 +3834,21 @@ export def "schedules-schedule-b-by-purpose get" [
   let auth = (merge-auth [(build-auth ($token_apikeyheaderauth | default ($env | get -o OPENFEC_APIKEYHEADERAUTH_TOKEN | default "")) "x-api-key") (build-auth ($token_apikeyqueryauth | default ($env | get -o OPENFEC_APIKEYQUERYAUTH_TOKEN | default "")) "query-api_key") (build-auth ($token_apikey | default ($env | get -o OPENFEC_APIKEY_TOKEN | default "")) "query-api_key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "purpose" $purpose "multi") (serialize-qp "sort_nulls_last" $sort_nulls_last "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "cycle" $cycle "multi") (serialize-qp "sort_hide_null" $sort_hide_null "scalar") (serialize-qp "committee_id" $committee_id "multi") (serialize-qp "api_key" $api_key "scalar") (serialize-qp "sort_null_only" $sort_null_only "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/schedules/schedule_b/by_purpose/" $qp)
+  let full_url = (build-url $base "/schedules/schedule_b/by_purpose/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"purpose": $purpose, "sort_nulls_last": $sort_nulls_last, "page": $page, "cycle": $cycle, "sort_hide_null": $sort_hide_null, "committee_id": $committee_id, "api_key": $api_key, "sort_null_only": $sort_null_only, "per_page": $per_page, "sort": $qp_sort} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"purpose": $purpose, "sort_nulls_last": $sort_nulls_last, "page": $page, "cycle": $cycle, "sort_hide_null": $sort_hide_null, "committee_id": $committee_id, "api_key": $api_key, "sort_null_only": $sort_null_only, "per_page": $per_page, "sort": $qp_sort} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Schedule B disbursements aggregated by recipient name. To avoid double counting, memoed items are not included.
@@ -3080,10 +3879,21 @@ export def "schedules-schedule-b-by-recipient get" [
   let auth = (merge-auth [(build-auth ($token_apikeyheaderauth | default ($env | get -o OPENFEC_APIKEYHEADERAUTH_TOKEN | default "")) "x-api-key") (build-auth ($token_apikeyqueryauth | default ($env | get -o OPENFEC_APIKEYQUERYAUTH_TOKEN | default "")) "query-api_key") (build-auth ($token_apikey | default ($env | get -o OPENFEC_APIKEY_TOKEN | default "")) "query-api_key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "sort_nulls_last" $sort_nulls_last "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "cycle" $cycle "multi") (serialize-qp "sort_hide_null" $sort_hide_null "scalar") (serialize-qp "committee_id" $committee_id "multi") (serialize-qp "api_key" $api_key "scalar") (serialize-qp "recipient_name" $recipient_name "multi") (serialize-qp "sort_null_only" $sort_null_only "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/schedules/schedule_b/by_recipient/" $qp)
+  let full_url = (build-url $base "/schedules/schedule_b/by_recipient/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"sort_nulls_last": $sort_nulls_last, "page": $page, "cycle": $cycle, "sort_hide_null": $sort_hide_null, "committee_id": $committee_id, "api_key": $api_key, "recipient_name": $recipient_name, "sort_null_only": $sort_null_only, "per_page": $per_page, "sort": $qp_sort} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"sort_nulls_last": $sort_nulls_last, "page": $page, "cycle": $cycle, "sort_hide_null": $sort_hide_null, "committee_id": $committee_id, "api_key": $api_key, "recipient_name": $recipient_name, "sort_null_only": $sort_null_only, "per_page": $per_page, "sort": $qp_sort} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Schedule B disbursements aggregated by recipient committee ID, if applicable. To avoid double counting, memoed items are not included.
@@ -3114,10 +3924,21 @@ export def "schedules-schedule-b-by-recipient-id get" [
   let auth = (merge-auth [(build-auth ($token_apikeyheaderauth | default ($env | get -o OPENFEC_APIKEYHEADERAUTH_TOKEN | default "")) "x-api-key") (build-auth ($token_apikeyqueryauth | default ($env | get -o OPENFEC_APIKEYQUERYAUTH_TOKEN | default "")) "query-api_key") (build-auth ($token_apikey | default ($env | get -o OPENFEC_APIKEY_TOKEN | default "")) "query-api_key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "sort_nulls_last" $sort_nulls_last "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "cycle" $cycle "multi") (serialize-qp "sort_hide_null" $sort_hide_null "scalar") (serialize-qp "committee_id" $committee_id "multi") (serialize-qp "api_key" $api_key "scalar") (serialize-qp "sort_null_only" $sort_null_only "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "recipient_id" $recipient_id "multi") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/schedules/schedule_b/by_recipient_id/" $qp)
+  let full_url = (build-url $base "/schedules/schedule_b/by_recipient_id/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"sort_nulls_last": $sort_nulls_last, "page": $page, "cycle": $cycle, "sort_hide_null": $sort_hide_null, "committee_id": $committee_id, "api_key": $api_key, "sort_null_only": $sort_null_only, "per_page": $per_page, "recipient_id": $recipient_id, "sort": $qp_sort} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"sort_nulls_last": $sort_nulls_last, "page": $page, "cycle": $cycle, "sort_hide_null": $sort_hide_null, "committee_id": $committee_id, "api_key": $api_key, "sort_null_only": $sort_null_only, "per_page": $per_page, "recipient_id": $recipient_id, "sort": $qp_sort} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Efiling endpoints provide real-time campaign finance data received from electronic filers. Efiling endpoints only contain the most recent four months of data and don't contain the processed and coded data that you can find on other endpoints.
@@ -3154,10 +3975,21 @@ export def "schedules-schedule-b-efile get" [
   let auth = (merge-auth [(build-auth ($token_apikeyheaderauth | default ($env | get -o OPENFEC_APIKEYHEADERAUTH_TOKEN | default "")) "x-api-key") (build-auth ($token_apikeyqueryauth | default ($env | get -o OPENFEC_APIKEYQUERYAUTH_TOKEN | default "")) "query-api_key") (build-auth ($token_apikey | default ($env | get -o OPENFEC_APIKEY_TOKEN | default "")) "query-api_key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "disbursement_description" $disbursement_description "multi") (serialize-qp "max_amount" $max_amount "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "sort_nulls_last" $sort_nulls_last "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "sort_hide_null" $sort_hide_null "scalar") (serialize-qp "committee_id" $committee_id "multi") (serialize-qp "min_date" $min_date "scalar") (serialize-qp "api_key" $api_key "scalar") (serialize-qp "recipient_state" $recipient_state "multi") (serialize-qp "recipient_city" $recipient_city "multi") (serialize-qp "sort_null_only" $sort_null_only "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "image_number" $image_number "multi") (serialize-qp "min_amount" $min_amount "scalar") (serialize-qp "max_date" $max_date "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/schedules/schedule_b/efile/" $qp)
+  let full_url = (build-url $base "/schedules/schedule_b/efile/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"disbursement_description": $disbursement_description, "max_amount": $max_amount, "page": $page, "sort_nulls_last": $sort_nulls_last, "sort": $qp_sort, "sort_hide_null": $sort_hide_null, "committee_id": $committee_id, "min_date": $min_date, "api_key": $api_key, "recipient_state": $recipient_state, "recipient_city": $recipient_city, "sort_null_only": $sort_null_only, "per_page": $per_page, "image_number": $image_number, "min_amount": $min_amount, "max_date": $max_date} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"disbursement_description": $disbursement_description, "max_amount": $max_amount, "page": $page, "sort_nulls_last": $sort_nulls_last, "sort": $qp_sort, "sort_hide_null": $sort_hide_null, "committee_id": $committee_id, "min_date": $min_date, "api_key": $api_key, "recipient_state": $recipient_state, "recipient_city": $recipient_city, "sort_null_only": $sort_null_only, "per_page": $per_page, "image_number": $image_number, "min_amount": $min_amount, "max_date": $max_date} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Schedule B filings describe itemized disbursements. This data explains how committees and other filers spend their money. These figures are reported as part of forms F3, F3X and F3P. The data is divided in two-year periods, called `two_year_transaction_period`, which is derived from the `report_year` submitted of the corresponding form. If no value is supplied, the results will default to the most recent two-year period that is named after the ending, even-numbered year. Due to the large quantity of Schedule B filings, this endpoint is not paginated by page number. Instead, you can request the next page of results by adding the values in the `last_indexes` object from `pagination` to the URL of your last request. For example, when sorting by `disbursement_date`, you might receive a page of results with the following pagination information: ``` pagination: { pages: 965191, per_page: 20, count: 19303814, last_indexes: { last_index: "230906248", last_disbursement_date: "2014-07-04" } } ``` To fetch the next page of sorted results, append `last_index=230906248` and `last_disbursement_date=2014-07-04` to the URL. We strongly advise paging through these results by using the sort indices (defaults to sort by disbursement date, e.g. `last_disbursement_date`), otherwise some resources may be unintentionally filtered out. This resource uses keyset pagination to improve query performance and these indices are required to properly page through this large dataset. Note: because the Schedule B data includes many records, counts for large result sets are approximate; you will want to page through the records until no records are returned.
@@ -3207,10 +4039,21 @@ export def "schedules-schedule-b get" [
   let base = ($base_url | default $BASE_URL)
   if ($sub_id | is-empty) { error make --unspanned { msg: "path parameter 'sub_id' must be non-empty" } }
   let qp = [(serialize-qp "disbursement_description" $disbursement_description "multi") (serialize-qp "max_amount" $max_amount "scalar") (serialize-qp "max_image_number" $max_image_number "scalar") (serialize-qp "image_number" $image_number "multi") (serialize-qp "sort_hide_null" $sort_hide_null "scalar") (serialize-qp "last_disbursement_date" $last_disbursement_date "scalar") (serialize-qp "line_number" $line_number "scalar") (serialize-qp "spender_committee_designation" $spender_committee_designation "multi") (serialize-qp "last_disbursement_amount" $last_disbursement_amount "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "last_index" $last_index "scalar") (serialize-qp "spender_committee_type" $spender_committee_type "multi") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "two_year_transaction_period" $two_year_transaction_period "multi") (serialize-qp "min_date" $min_date "scalar") (serialize-qp "committee_id" $committee_id "multi") (serialize-qp "api_key" $api_key "scalar") (serialize-qp "disbursement_purpose_category" $disbursement_purpose_category "multi") (serialize-qp "recipient_name" $recipient_name "multi") (serialize-qp "recipient_state" $recipient_state "multi") (serialize-qp "recipient_city" $recipient_city "multi") (serialize-qp "min_image_number" $min_image_number "scalar") (serialize-qp "spender_committee_org_type" $spender_committee_org_type "multi") (serialize-qp "sort_null_only" $sort_null_only "scalar") (serialize-qp "recipient_committee_id" $recipient_committee_id "multi") (serialize-qp "min_amount" $min_amount "scalar") (serialize-qp "max_date" $max_date "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({sub_id: (encode-path-segment $sub_id)} | format pattern "/schedules/schedule_b/{sub_id}/") $qp)
+  let full_url = (build-url $base ({sub_id: (encode-path-segment $sub_id)} | format pattern "/schedules/schedule_b/{sub_id}/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"disbursement_description": $disbursement_description, "max_amount": $max_amount, "max_image_number": $max_image_number, "image_number": $image_number, "sort_hide_null": $sort_hide_null, "last_disbursement_date": $last_disbursement_date, "line_number": $line_number, "spender_committee_designation": $spender_committee_designation, "last_disbursement_amount": $last_disbursement_amount, "per_page": $per_page, "last_index": $last_index, "spender_committee_type": $spender_committee_type, "sort": $qp_sort, "two_year_transaction_period": $two_year_transaction_period, "min_date": $min_date, "committee_id": $committee_id, "api_key": $api_key, "disbursement_purpose_category": $disbursement_purpose_category, "recipient_name": $recipient_name, "recipient_state": $recipient_state, "recipient_city": $recipient_city, "min_image_number": $min_image_number, "spender_committee_org_type": $spender_committee_org_type, "sort_null_only": $sort_null_only, "recipient_committee_id": $recipient_committee_id, "min_amount": $min_amount, "max_date": $max_date} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"disbursement_description": $disbursement_description, "max_amount": $max_amount, "max_image_number": $max_image_number, "image_number": $image_number, "sort_hide_null": $sort_hide_null, "last_disbursement_date": $last_disbursement_date, "line_number": $line_number, "spender_committee_designation": $spender_committee_designation, "last_disbursement_amount": $last_disbursement_amount, "per_page": $per_page, "last_index": $last_index, "spender_committee_type": $spender_committee_type, "sort": $qp_sort, "two_year_transaction_period": $two_year_transaction_period, "min_date": $min_date, "committee_id": $committee_id, "api_key": $api_key, "disbursement_purpose_category": $disbursement_purpose_category, "recipient_name": $recipient_name, "recipient_state": $recipient_state, "recipient_city": $recipient_city, "min_image_number": $min_image_number, "spender_committee_org_type": $spender_committee_org_type, "sort_null_only": $sort_null_only, "recipient_committee_id": $recipient_committee_id, "min_amount": $min_amount, "max_date": $max_date} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Schedule C shows all loans, endorsements and loan guarantees a committee receives or makes. The committee continues to report the loan until it is repaid.
@@ -3252,10 +4095,21 @@ export def "schedules-schedule-c list" [
   let auth = (merge-auth [(build-auth ($token_apikeyheaderauth | default ($env | get -o OPENFEC_APIKEYHEADERAUTH_TOKEN | default "")) "x-api-key") (build-auth ($token_apikeyqueryauth | default ($env | get -o OPENFEC_APIKEYQUERYAUTH_TOKEN | default "")) "query-api_key") (build-auth ($token_apikey | default ($env | get -o OPENFEC_APIKEY_TOKEN | default "")) "query-api_key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "min_incurred_date" $min_incurred_date "scalar") (serialize-qp "candidate_name" $candidate_name "multi") (serialize-qp "max_amount" $max_amount "scalar") (serialize-qp "max_image_number" $max_image_number "scalar") (serialize-qp "sort_nulls_last" $sort_nulls_last "scalar") (serialize-qp "sort_hide_null" $sort_hide_null "scalar") (serialize-qp "line_number" $line_number "scalar") (serialize-qp "max_incurred_date" $max_incurred_date "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "last_index" $last_index "scalar") (serialize-qp "loan_source_name" $loan_source_name "multi") (serialize-qp "page" $page "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "max_payment_to_date" $max_payment_to_date "scalar") (serialize-qp "min_payment_to_date" $min_payment_to_date "scalar") (serialize-qp "committee_id" $committee_id "multi") (serialize-qp "api_key" $api_key "scalar") (serialize-qp "min_image_number" $min_image_number "scalar") (serialize-qp "sort_null_only" $sort_null_only "scalar") (serialize-qp "image_number" $image_number "multi") (serialize-qp "min_amount" $min_amount "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/schedules/schedule_c/" $qp)
+  let full_url = (build-url $base "/schedules/schedule_c/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"min_incurred_date": $min_incurred_date, "candidate_name": $candidate_name, "max_amount": $max_amount, "max_image_number": $max_image_number, "sort_nulls_last": $sort_nulls_last, "sort_hide_null": $sort_hide_null, "line_number": $line_number, "max_incurred_date": $max_incurred_date, "per_page": $per_page, "last_index": $last_index, "loan_source_name": $loan_source_name, "page": $page, "sort": $qp_sort, "max_payment_to_date": $max_payment_to_date, "min_payment_to_date": $min_payment_to_date, "committee_id": $committee_id, "api_key": $api_key, "min_image_number": $min_image_number, "sort_null_only": $sort_null_only, "image_number": $image_number, "min_amount": $min_amount} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"min_incurred_date": $min_incurred_date, "candidate_name": $candidate_name, "max_amount": $max_amount, "max_image_number": $max_image_number, "sort_nulls_last": $sort_nulls_last, "sort_hide_null": $sort_hide_null, "line_number": $line_number, "max_incurred_date": $max_incurred_date, "per_page": $per_page, "last_index": $last_index, "loan_source_name": $loan_source_name, "page": $page, "sort": $qp_sort, "max_payment_to_date": $max_payment_to_date, "min_payment_to_date": $min_payment_to_date, "committee_id": $committee_id, "api_key": $api_key, "min_image_number": $min_image_number, "sort_null_only": $sort_null_only, "image_number": $image_number, "min_amount": $min_amount} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Schedule C shows all loans, endorsements and loan guarantees a committee receives or makes. The committee continues to report the loan until it is repaid.
@@ -3285,10 +4139,21 @@ export def "schedules-schedule-c get" [
   let base = ($base_url | default $BASE_URL)
   if ($sub_id | is-empty) { error make --unspanned { msg: "path parameter 'sub_id' must be non-empty" } }
   let qp = [(serialize-qp "sort_nulls_last" $sort_nulls_last "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort_null_only" $sort_null_only "scalar") (serialize-qp "sort_hide_null" $sort_hide_null "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "api_key" $api_key "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({sub_id: (encode-path-segment $sub_id)} | format pattern "/schedules/schedule_c/{sub_id}/") $qp)
+  let full_url = (build-url $base ({sub_id: (encode-path-segment $sub_id)} | format pattern "/schedules/schedule_c/{sub_id}/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"sort_nulls_last": $sort_nulls_last, "per_page": $per_page, "sort_null_only": $sort_null_only, "sort_hide_null": $sort_hide_null, "sort": $qp_sort, "api_key": $api_key, "page": $page} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"sort_nulls_last": $sort_nulls_last, "per_page": $per_page, "sort_null_only": $sort_null_only, "sort_hide_null": $sort_hide_null, "sort": $qp_sort, "api_key": $api_key, "page": $page} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Schedule D, it shows debts and obligations owed to or by the committee that are required to be disclosed.
@@ -3333,10 +4198,21 @@ export def "schedules-schedule-d list" [
   let auth = (merge-auth [(build-auth ($token_apikeyheaderauth | default ($env | get -o OPENFEC_APIKEYHEADERAUTH_TOKEN | default "")) "x-api-key") (build-auth ($token_apikeyqueryauth | default ($env | get -o OPENFEC_APIKEYQUERYAUTH_TOKEN | default "")) "query-api_key") (build-auth ($token_apikey | default ($env | get -o OPENFEC_APIKEY_TOKEN | default "")) "query-api_key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "creditor_debtor_name" $creditor_debtor_name "multi") (serialize-qp "max_image_number" $max_image_number "scalar") (serialize-qp "sort_nulls_last" $sort_nulls_last "scalar") (serialize-qp "max_amount_outstanding_beginning" $max_amount_outstanding_beginning "scalar") (serialize-qp "sort_hide_null" $sort_hide_null "scalar") (serialize-qp "min_payment_period" $min_payment_period "scalar") (serialize-qp "max_amount_incurred" $max_amount_incurred "scalar") (serialize-qp "nature_of_debt" $nature_of_debt "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "max_amount_outstanding_close" $max_amount_outstanding_close "scalar") (serialize-qp "candidate_id" $candidate_id "multi") (serialize-qp "page" $page "scalar") (serialize-qp "min_date" $min_date "scalar") (serialize-qp "committee_id" $committee_id "multi") (serialize-qp "min_amount_outstanding_close" $min_amount_outstanding_close "scalar") (serialize-qp "api_key" $api_key "scalar") (serialize-qp "max_payment_period" $max_payment_period "scalar") (serialize-qp "min_image_number" $min_image_number "scalar") (serialize-qp "min_amount_incurred" $min_amount_incurred "scalar") (serialize-qp "sort_null_only" $sort_null_only "scalar") (serialize-qp "image_number" $image_number "multi") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "min_amount_outstanding_beginning" $min_amount_outstanding_beginning "scalar") (serialize-qp "max_date" $max_date "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/schedules/schedule_d/" $qp)
+  let full_url = (build-url $base "/schedules/schedule_d/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"creditor_debtor_name": $creditor_debtor_name, "max_image_number": $max_image_number, "sort_nulls_last": $sort_nulls_last, "max_amount_outstanding_beginning": $max_amount_outstanding_beginning, "sort_hide_null": $sort_hide_null, "min_payment_period": $min_payment_period, "max_amount_incurred": $max_amount_incurred, "nature_of_debt": $nature_of_debt, "per_page": $per_page, "max_amount_outstanding_close": $max_amount_outstanding_close, "candidate_id": $candidate_id, "page": $page, "min_date": $min_date, "committee_id": $committee_id, "min_amount_outstanding_close": $min_amount_outstanding_close, "api_key": $api_key, "max_payment_period": $max_payment_period, "min_image_number": $min_image_number, "min_amount_incurred": $min_amount_incurred, "sort_null_only": $sort_null_only, "image_number": $image_number, "sort": $qp_sort, "min_amount_outstanding_beginning": $min_amount_outstanding_beginning, "max_date": $max_date} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"creditor_debtor_name": $creditor_debtor_name, "max_image_number": $max_image_number, "sort_nulls_last": $sort_nulls_last, "max_amount_outstanding_beginning": $max_amount_outstanding_beginning, "sort_hide_null": $sort_hide_null, "min_payment_period": $min_payment_period, "max_amount_incurred": $max_amount_incurred, "nature_of_debt": $nature_of_debt, "per_page": $per_page, "max_amount_outstanding_close": $max_amount_outstanding_close, "candidate_id": $candidate_id, "page": $page, "min_date": $min_date, "committee_id": $committee_id, "min_amount_outstanding_close": $min_amount_outstanding_close, "api_key": $api_key, "max_payment_period": $max_payment_period, "min_image_number": $min_image_number, "min_amount_incurred": $min_amount_incurred, "sort_null_only": $sort_null_only, "image_number": $image_number, "sort": $qp_sort, "min_amount_outstanding_beginning": $min_amount_outstanding_beginning, "max_date": $max_date} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Schedule D, it shows debts and obligations owed to or by the committee that are required to be disclosed.
@@ -3366,10 +4242,21 @@ export def "schedules-schedule-d get" [
   let base = ($base_url | default $BASE_URL)
   if ($sub_id | is-empty) { error make --unspanned { msg: "path parameter 'sub_id' must be non-empty" } }
   let qp = [(serialize-qp "sort_nulls_last" $sort_nulls_last "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort_null_only" $sort_null_only "scalar") (serialize-qp "sort_hide_null" $sort_hide_null "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "api_key" $api_key "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({sub_id: (encode-path-segment $sub_id)} | format pattern "/schedules/schedule_d/{sub_id}/") $qp)
+  let full_url = (build-url $base ({sub_id: (encode-path-segment $sub_id)} | format pattern "/schedules/schedule_d/{sub_id}/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"sort_nulls_last": $sort_nulls_last, "per_page": $per_page, "sort_null_only": $sort_null_only, "sort_hide_null": $sort_hide_null, "sort": $qp_sort, "api_key": $api_key, "page": $page} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"sort_nulls_last": $sort_nulls_last, "per_page": $per_page, "sort_null_only": $sort_null_only, "sort_hide_null": $sort_hide_null, "sort": $qp_sort, "api_key": $api_key, "page": $page} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Schedule E covers the line item expenditures for independent expenditures. For example, if a super PAC bought ads on TV to oppose a federal candidate, each ad purchase would be recorded here with the expenditure amount, name and id of the candidate, and whether the ad supported or opposed the candidate. An independent expenditure is an expenditure for a communication "expressly advocating the election or defeat of a clearly identified candidate that is not made in cooperation, consultation, or concert with, or at the request or suggestion of, a candidate, a candidate’s authorized committee, or their agents, or a political party or its agents." Aggregates by candidate do not include 24 and 48 hour reports. This ensures we don't double count expenditures and the totals are more accurate. You can still find the information from 24 and 48 hour reports in `/schedule/schedule_e/`. Due to the large quantity of Schedule E filings, this endpoint is not paginated by page number. Instead, you can request the next page of results by adding the values in the `last_indexes` object from `pagination` to the URL of your last request. For example, when sorting by `expenditure_amount`, you might receive a page of results with the following pagination information: ``` "pagination": { "count": 152623, "last_indexes": { "last_index": "3023037", "last_expenditure_amount": -17348.5 }, "per_page": 20, "pages": 7632 } } ``` To fetch the next page of sorted results, append `last_index=3023037` and `last_expenditure_amount=` to the URL. We strongly advise paging through these results by using the sort indices (defaults to sort by disbursement date, e.g. `last_disbursement_date`), otherwise some resources may be unintentionally filtered out. This resource uses keyset pagination to improve query performance and these indices are required to properly page through this large dataset. Note: because the Schedule E data includes many records, counts for large result sets are approximate; you will want to page through the records until no records are returned.
@@ -3426,10 +4313,21 @@ export def "schedules-schedule-e get" [
   let auth = (merge-auth [(build-auth ($token_apikeyheaderauth | default ($env | get -o OPENFEC_APIKEYHEADERAUTH_TOKEN | default "")) "x-api-key") (build-auth ($token_apikeyqueryauth | default ($env | get -o OPENFEC_APIKEYQUERYAUTH_TOKEN | default "")) "query-api_key") (build-auth ($token_apikey | default ($env | get -o OPENFEC_APIKEY_TOKEN | default "")) "query-api_key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "max_dissemination_date" $max_dissemination_date "scalar") (serialize-qp "sort_hide_null" $sort_hide_null "scalar") (serialize-qp "payee_name" $payee_name "multi") (serialize-qp "q_spender" $q_spender "multi") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "last_index" $last_index "scalar") (serialize-qp "min_dissemination_date" $min_dissemination_date "scalar") (serialize-qp "candidate_office_state" $candidate_office_state "multi") (serialize-qp "api_key" $api_key "scalar") (serialize-qp "filing_form" $filing_form "multi") (serialize-qp "sort_null_only" $sort_null_only "scalar") (serialize-qp "max_amount" $max_amount "scalar") (serialize-qp "max_image_number" $max_image_number "scalar") (serialize-qp "min_filing_date" $min_filing_date "scalar") (serialize-qp "cycle" $cycle "multi") (serialize-qp "sort_nulls_last" $sort_nulls_last "scalar") (serialize-qp "support_oppose_indicator" $support_oppose_indicator "multi") (serialize-qp "candidate_office" $candidate_office "multi") (serialize-qp "is_notice" $is_notice "multi") (serialize-qp "line_number" $line_number "scalar") (serialize-qp "last_expenditure_amount" $last_expenditure_amount "scalar") (serialize-qp "last_expenditure_date" $last_expenditure_date "scalar") (serialize-qp "candidate_id" $candidate_id "multi") (serialize-qp "last_office_total_ytd" $last_office_total_ytd "scalar") (serialize-qp "last_support_oppose_indicator" $last_support_oppose_indicator "scalar") (serialize-qp "min_date" $min_date "scalar") (serialize-qp "candidate_party" $candidate_party "multi") (serialize-qp "committee_id" $committee_id "multi") (serialize-qp "min_image_number" $min_image_number "scalar") (serialize-qp "max_filing_date" $max_filing_date "scalar") (serialize-qp "candidate_office_district" $candidate_office_district "multi") (serialize-qp "min_amount" $min_amount "scalar") (serialize-qp "image_number" $image_number "multi") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "max_date" $max_date "scalar") (serialize-qp "most_recent" $most_recent "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/schedules/schedule_e/" $qp)
+  let full_url = (build-url $base "/schedules/schedule_e/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"max_dissemination_date": $max_dissemination_date, "sort_hide_null": $sort_hide_null, "payee_name": $payee_name, "q_spender": $q_spender, "per_page": $per_page, "last_index": $last_index, "min_dissemination_date": $min_dissemination_date, "candidate_office_state": $candidate_office_state, "api_key": $api_key, "filing_form": $filing_form, "sort_null_only": $sort_null_only, "max_amount": $max_amount, "max_image_number": $max_image_number, "min_filing_date": $min_filing_date, "cycle": $cycle, "sort_nulls_last": $sort_nulls_last, "support_oppose_indicator": $support_oppose_indicator, "candidate_office": $candidate_office, "is_notice": $is_notice, "line_number": $line_number, "last_expenditure_amount": $last_expenditure_amount, "last_expenditure_date": $last_expenditure_date, "candidate_id": $candidate_id, "last_office_total_ytd": $last_office_total_ytd, "last_support_oppose_indicator": $last_support_oppose_indicator, "min_date": $min_date, "candidate_party": $candidate_party, "committee_id": $committee_id, "min_image_number": $min_image_number, "max_filing_date": $max_filing_date, "candidate_office_district": $candidate_office_district, "min_amount": $min_amount, "image_number": $image_number, "sort": $qp_sort, "max_date": $max_date, "most_recent": $most_recent} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"max_dissemination_date": $max_dissemination_date, "sort_hide_null": $sort_hide_null, "payee_name": $payee_name, "q_spender": $q_spender, "per_page": $per_page, "last_index": $last_index, "min_dissemination_date": $min_dissemination_date, "candidate_office_state": $candidate_office_state, "api_key": $api_key, "filing_form": $filing_form, "sort_null_only": $sort_null_only, "max_amount": $max_amount, "max_image_number": $max_image_number, "min_filing_date": $min_filing_date, "cycle": $cycle, "sort_nulls_last": $sort_nulls_last, "support_oppose_indicator": $support_oppose_indicator, "candidate_office": $candidate_office, "is_notice": $is_notice, "line_number": $line_number, "last_expenditure_amount": $last_expenditure_amount, "last_expenditure_date": $last_expenditure_date, "candidate_id": $candidate_id, "last_office_total_ytd": $last_office_total_ytd, "last_support_oppose_indicator": $last_support_oppose_indicator, "min_date": $min_date, "candidate_party": $candidate_party, "committee_id": $committee_id, "min_image_number": $min_image_number, "max_filing_date": $max_filing_date, "candidate_office_district": $candidate_office_district, "min_amount": $min_amount, "image_number": $image_number, "sort": $qp_sort, "max_date": $max_date, "most_recent": $most_recent} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Schedule E receipts aggregated by recipient candidate. To avoid double counting, memoed items are not included.
@@ -3465,10 +4363,21 @@ export def "schedules-schedule-e-by-candidate get" [
   let auth = (merge-auth [(build-auth ($token_apikeyheaderauth | default ($env | get -o OPENFEC_APIKEYHEADERAUTH_TOKEN | default "")) "x-api-key") (build-auth ($token_apikeyqueryauth | default ($env | get -o OPENFEC_APIKEYQUERYAUTH_TOKEN | default "")) "query-api_key") (build-auth ($token_apikey | default ($env | get -o OPENFEC_APIKEY_TOKEN | default "")) "query-api_key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "office" $office "scalar") (serialize-qp "candidate_id" $candidate_id "multi") (serialize-qp "cycle" $cycle "multi") (serialize-qp "district" $district "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "support_oppose" $support_oppose "scalar") (serialize-qp "election_full" $election_full "scalar") (serialize-qp "committee_id" $committee_id "multi") (serialize-qp "sort_hide_null" $sort_hide_null "scalar") (serialize-qp "sort_nulls_last" $sort_nulls_last "scalar") (serialize-qp "api_key" $api_key "scalar") (serialize-qp "sort_null_only" $sort_null_only "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/schedules/schedule_e/by_candidate/" $qp)
+  let full_url = (build-url $base "/schedules/schedule_e/by_candidate/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"office": $office, "candidate_id": $candidate_id, "cycle": $cycle, "district": $district, "state": $state, "page": $page, "support_oppose": $support_oppose, "election_full": $election_full, "committee_id": $committee_id, "sort_hide_null": $sort_hide_null, "sort_nulls_last": $sort_nulls_last, "api_key": $api_key, "sort_null_only": $sort_null_only, "per_page": $per_page, "sort": $qp_sort} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"office": $office, "candidate_id": $candidate_id, "cycle": $cycle, "district": $district, "state": $state, "page": $page, "support_oppose": $support_oppose, "election_full": $election_full, "committee_id": $committee_id, "sort_hide_null": $sort_hide_null, "sort_nulls_last": $sort_nulls_last, "api_key": $api_key, "sort_null_only": $sort_null_only, "per_page": $per_page, "sort": $qp_sort} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Efiling endpoints provide real-time campaign finance data received from electronic filers. Efiling endpoints only contain the most recent four months of data and don't contain the processed and coded data that you can find on other endpoints.
@@ -3518,10 +4427,21 @@ export def "schedules-schedule-e-efile get" [
   let auth = (merge-auth [(build-auth ($token_apikeyheaderauth | default ($env | get -o OPENFEC_APIKEYHEADERAUTH_TOKEN | default "")) "x-api-key") (build-auth ($token_apikeyqueryauth | default ($env | get -o OPENFEC_APIKEYQUERYAUTH_TOKEN | default "")) "query-api_key") (build-auth ($token_apikey | default ($env | get -o OPENFEC_APIKEY_TOKEN | default "")) "query-api_key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "spender_name" $spender_name "multi") (serialize-qp "min_expenditure_date" $min_expenditure_date "scalar") (serialize-qp "sort_nulls_last" $sort_nulls_last "scalar") (serialize-qp "max_dissemination_date" $max_dissemination_date "scalar") (serialize-qp "support_oppose_indicator" $support_oppose_indicator "multi") (serialize-qp "sort_hide_null" $sort_hide_null "scalar") (serialize-qp "candidate_office" $candidate_office "scalar") (serialize-qp "is_notice" $is_notice "scalar") (serialize-qp "payee_name" $payee_name "multi") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "candidate_search" $candidate_search "multi") (serialize-qp "max_expenditure_amount" $max_expenditure_amount "scalar") (serialize-qp "min_dissemination_date" $min_dissemination_date "scalar") (serialize-qp "min_filed_date" $min_filed_date "scalar") (serialize-qp "candidate_id" $candidate_id "multi") (serialize-qp "candidate_office_state" $candidate_office_state "multi") (serialize-qp "max_filed_date" $max_filed_date "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "min_expenditure_amount" $min_expenditure_amount "scalar") (serialize-qp "committee_id" $committee_id "multi") (serialize-qp "candidate_party" $candidate_party "multi") (serialize-qp "api_key" $api_key "scalar") (serialize-qp "max_expenditure_date" $max_expenditure_date "scalar") (serialize-qp "filing_form" $filing_form "multi") (serialize-qp "sort_null_only" $sort_null_only "scalar") (serialize-qp "candidate_office_district" $candidate_office_district "multi") (serialize-qp "image_number" $image_number "multi") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "most_recent" $most_recent "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/schedules/schedule_e/efile/" $qp)
+  let full_url = (build-url $base "/schedules/schedule_e/efile/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"spender_name": $spender_name, "min_expenditure_date": $min_expenditure_date, "sort_nulls_last": $sort_nulls_last, "max_dissemination_date": $max_dissemination_date, "support_oppose_indicator": $support_oppose_indicator, "sort_hide_null": $sort_hide_null, "candidate_office": $candidate_office, "is_notice": $is_notice, "payee_name": $payee_name, "per_page": $per_page, "candidate_search": $candidate_search, "max_expenditure_amount": $max_expenditure_amount, "min_dissemination_date": $min_dissemination_date, "min_filed_date": $min_filed_date, "candidate_id": $candidate_id, "candidate_office_state": $candidate_office_state, "max_filed_date": $max_filed_date, "page": $page, "min_expenditure_amount": $min_expenditure_amount, "committee_id": $committee_id, "candidate_party": $candidate_party, "api_key": $api_key, "max_expenditure_date": $max_expenditure_date, "filing_form": $filing_form, "sort_null_only": $sort_null_only, "candidate_office_district": $candidate_office_district, "image_number": $image_number, "sort": $qp_sort, "most_recent": $most_recent} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"spender_name": $spender_name, "min_expenditure_date": $min_expenditure_date, "sort_nulls_last": $sort_nulls_last, "max_dissemination_date": $max_dissemination_date, "support_oppose_indicator": $support_oppose_indicator, "sort_hide_null": $sort_hide_null, "candidate_office": $candidate_office, "is_notice": $is_notice, "payee_name": $payee_name, "per_page": $per_page, "candidate_search": $candidate_search, "max_expenditure_amount": $max_expenditure_amount, "min_dissemination_date": $min_dissemination_date, "min_filed_date": $min_filed_date, "candidate_id": $candidate_id, "candidate_office_state": $candidate_office_state, "max_filed_date": $max_filed_date, "page": $page, "min_expenditure_amount": $min_expenditure_amount, "committee_id": $committee_id, "candidate_party": $candidate_party, "api_key": $api_key, "max_expenditure_date": $max_expenditure_date, "filing_form": $filing_form, "sort_null_only": $sort_null_only, "candidate_office_district": $candidate_office_district, "image_number": $image_number, "sort": $qp_sort, "most_recent": $most_recent} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Total independent expenditure on supported or opposed candidates by cycle or candidate election year.
@@ -3552,10 +4472,21 @@ export def "schedules-schedule-e-totals-by-candidate get" [
   let auth = (merge-auth [(build-auth ($token_apikeyheaderauth | default ($env | get -o OPENFEC_APIKEYHEADERAUTH_TOKEN | default "")) "x-api-key") (build-auth ($token_apikeyqueryauth | default ($env | get -o OPENFEC_APIKEYQUERYAUTH_TOKEN | default "")) "query-api_key") (build-auth ($token_apikey | default ($env | get -o OPENFEC_APIKEY_TOKEN | default "")) "query-api_key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "candidate_id" $candidate_id "multi") (serialize-qp "sort_nulls_last" $sort_nulls_last "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "cycle" $cycle "multi") (serialize-qp "sort_hide_null" $sort_hide_null "scalar") (serialize-qp "election_full" $election_full "scalar") (serialize-qp "api_key" $api_key "scalar") (serialize-qp "sort_null_only" $sort_null_only "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/schedules/schedule_e/totals/by_candidate/" $qp)
+  let full_url = (build-url $base "/schedules/schedule_e/totals/by_candidate/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"candidate_id": $candidate_id, "sort_nulls_last": $sort_nulls_last, "page": $page, "cycle": $cycle, "sort_hide_null": $sort_hide_null, "election_full": $election_full, "api_key": $api_key, "sort_null_only": $sort_null_only, "per_page": $per_page, "sort": $qp_sort} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"candidate_id": $candidate_id, "sort_nulls_last": $sort_nulls_last, "page": $page, "cycle": $cycle, "sort_hide_null": $sort_hide_null, "election_full": $election_full, "api_key": $api_key, "sort_null_only": $sort_null_only, "per_page": $per_page, "sort": $qp_sort} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Schedule F, it shows all special expenditures a national or state party committee makes in connection with the general election campaigns of federal candidates. These coordinated party expenditures do not count against the contribution limits but are subject to other limits, these limits are detailed in Chapter 7 of the FEC Campaign Guide for Political Party Committees.
@@ -3595,10 +4526,21 @@ export def "schedules-schedule-f list" [
   let auth = (merge-auth [(build-auth ($token_apikeyheaderauth | default ($env | get -o OPENFEC_APIKEYHEADERAUTH_TOKEN | default "")) "x-api-key") (build-auth ($token_apikeyqueryauth | default ($env | get -o OPENFEC_APIKEYQUERYAUTH_TOKEN | default "")) "query-api_key") (build-auth ($token_apikey | default ($env | get -o OPENFEC_APIKEY_TOKEN | default "")) "query-api_key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "max_amount" $max_amount "scalar") (serialize-qp "max_image_number" $max_image_number "scalar") (serialize-qp "cycle" $cycle "multi") (serialize-qp "sort_nulls_last" $sort_nulls_last "scalar") (serialize-qp "sort_hide_null" $sort_hide_null "scalar") (serialize-qp "line_number" $line_number "scalar") (serialize-qp "payee_name" $payee_name "multi") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "candidate_id" $candidate_id "multi") (serialize-qp "page" $page "scalar") (serialize-qp "min_date" $min_date "scalar") (serialize-qp "committee_id" $committee_id "multi") (serialize-qp "api_key" $api_key "scalar") (serialize-qp "min_amount" $min_amount "scalar") (serialize-qp "min_image_number" $min_image_number "scalar") (serialize-qp "sort_null_only" $sort_null_only "scalar") (serialize-qp "image_number" $image_number "multi") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "max_date" $max_date "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/schedules/schedule_f/" $qp)
+  let full_url = (build-url $base "/schedules/schedule_f/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"max_amount": $max_amount, "max_image_number": $max_image_number, "cycle": $cycle, "sort_nulls_last": $sort_nulls_last, "sort_hide_null": $sort_hide_null, "line_number": $line_number, "payee_name": $payee_name, "per_page": $per_page, "candidate_id": $candidate_id, "page": $page, "min_date": $min_date, "committee_id": $committee_id, "api_key": $api_key, "min_amount": $min_amount, "min_image_number": $min_image_number, "sort_null_only": $sort_null_only, "image_number": $image_number, "sort": $qp_sort, "max_date": $max_date} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"max_amount": $max_amount, "max_image_number": $max_image_number, "cycle": $cycle, "sort_nulls_last": $sort_nulls_last, "sort_hide_null": $sort_hide_null, "line_number": $line_number, "payee_name": $payee_name, "per_page": $per_page, "candidate_id": $candidate_id, "page": $page, "min_date": $min_date, "committee_id": $committee_id, "api_key": $api_key, "min_amount": $min_amount, "min_image_number": $min_image_number, "sort_null_only": $sort_null_only, "image_number": $image_number, "sort": $qp_sort, "max_date": $max_date} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Schedule F, it shows all special expenditures a national or state party committee makes in connection with the general election campaigns of federal candidates. These coordinated party expenditures do not count against the contribution limits but are subject to other limits, these limits are detailed in Chapter 7 of the FEC Campaign Guide for Political Party Committees.
@@ -3624,10 +4566,21 @@ export def "schedules-schedule-f get" [
   let base = ($base_url | default $BASE_URL)
   if ($sub_id | is-empty) { error make --unspanned { msg: "path parameter 'sub_id' must be non-empty" } }
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "api_key" $api_key "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({sub_id: (encode-path-segment $sub_id)} | format pattern "/schedules/schedule_f/{sub_id}/") $qp)
+  let full_url = (build-url $base ({sub_id: (encode-path-segment $sub_id)} | format pattern "/schedules/schedule_f/{sub_id}/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"per_page": $per_page, "api_key": $api_key, "page": $page} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"per_page": $per_page, "api_key": $api_key, "page": $page} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # State laws and procedures govern elections for state or local offices as well as how candidates appear on election ballots. Contact the appropriate state election office for more information.
@@ -3656,10 +4609,21 @@ export def "state-election-office get" [
   let auth = (merge-auth [(build-auth ($token_apikeyheaderauth | default ($env | get -o OPENFEC_APIKEYHEADERAUTH_TOKEN | default "")) "x-api-key") (build-auth ($token_apikeyqueryauth | default ($env | get -o OPENFEC_APIKEYQUERYAUTH_TOKEN | default "")) "query-api_key") (build-auth ($token_apikey | default ($env | get -o OPENFEC_APIKEY_TOKEN | default "")) "query-api_key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "sort_null_only" $sort_null_only "scalar") (serialize-qp "sort_nulls_last" $sort_nulls_last "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "sort_hide_null" $sort_hide_null "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "api_key" $api_key "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/state-election-office/" $qp)
+  let full_url = (build-url $base "/state-election-office/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"sort_null_only": $sort_null_only, "sort_nulls_last": $sort_nulls_last, "per_page": $per_page, "state": $state, "sort_hide_null": $sort_hide_null, "sort": $qp_sort, "api_key": $api_key, "page": $page} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"sort_null_only": $sort_null_only, "sort_nulls_last": $sort_nulls_last, "per_page": $per_page, "state": $state, "sort_hide_null": $sort_hide_null, "sort": $qp_sort, "api_key": $api_key, "page": $page} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Provides cumulative receipt totals by entity type, over a two year cycle. Totals are adjusted to avoid double counting. This is [the sql](https://github.com/fecgov/openFEC/blob/develop/data/migrations/V41__large_aggregates.sql) that creates these calculations.
@@ -3688,10 +4652,21 @@ export def "totals-by-entity get" [
   let auth = (merge-auth [(build-auth ($token_apikeyheaderauth | default ($env | get -o OPENFEC_APIKEYHEADERAUTH_TOKEN | default "")) "x-api-key") (build-auth ($token_apikeyqueryauth | default ($env | get -o OPENFEC_APIKEYQUERYAUTH_TOKEN | default "")) "query-api_key") (build-auth ($token_apikey | default ($env | get -o OPENFEC_APIKEY_TOKEN | default "")) "query-api_key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "cycle" $cycle "scalar") (serialize-qp "sort_nulls_last" $sort_nulls_last "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort_null_only" $sort_null_only "scalar") (serialize-qp "sort_hide_null" $sort_hide_null "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "api_key" $api_key "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/totals/by_entity/" $qp)
+  let full_url = (build-url $base "/totals/by_entity/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cycle": $cycle, "sort_nulls_last": $sort_nulls_last, "per_page": $per_page, "sort_null_only": $sort_null_only, "sort_hide_null": $sort_hide_null, "sort": $qp_sort, "api_key": $api_key, "page": $page} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"cycle": $cycle, "sort_nulls_last": $sort_nulls_last, "per_page": $per_page, "sort_null_only": $sort_null_only, "sort_hide_null": $sort_hide_null, "sort": $qp_sort, "api_key": $api_key, "page": $page} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # This endpoint provides information about a committee's Form 3, Form 3X, or Form 3P financial reports, which are aggregated by two-year period. We refer to two-year periods as a `cycle`. The cycle is named after the even-numbered year and includes the year before it. To obtain totals from 2013 and 2014, you would use 2014. In odd-numbered years, the current cycle is the next year — for example, in 2015, the current cycle is 2016. For presidential and Senate candidates, multiple two-year cycles exist between elections.
@@ -3740,8 +4715,19 @@ export def "totals get" [
   let base = ($base_url | default $BASE_URL)
   if ($entity_type | is-empty) { error make --unspanned { msg: "path parameter 'entity_type' must be non-empty" } }
   let qp = [(serialize-qp "max_first_f1_date" $max_first_f1_date "scalar") (serialize-qp "min_receipts" $min_receipts "scalar") (serialize-qp "cycle" $cycle "multi") (serialize-qp "filing_frequency" $filing_frequency "multi") (serialize-qp "max_receipts" $max_receipts "scalar") (serialize-qp "sort_hide_null" $sort_hide_null "scalar") (serialize-qp "sort_nulls_last" $sort_nulls_last "scalar") (serialize-qp "min_last_debts_owed_by_committee" $min_last_debts_owed_by_committee "scalar") (serialize-qp "max_last_cash_on_hand_end_period" $max_last_cash_on_hand_end_period "scalar") (serialize-qp "treasurer_name" $treasurer_name "multi") (serialize-qp "sponsor_candidate_id" $sponsor_candidate_id "multi") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "max_disbursements" $max_disbursements "scalar") (serialize-qp "committee_state" $committee_state "multi") (serialize-qp "committee_type" $committee_type "multi") (serialize-qp "page" $page "scalar") (serialize-qp "max_last_debts_owed_by_committee" $max_last_debts_owed_by_committee "scalar") (serialize-qp "committee_id" $committee_id "multi") (serialize-qp "api_key" $api_key "scalar") (serialize-qp "committee_designation" $committee_designation "multi") (serialize-qp "sort_null_only" $sort_null_only "scalar") (serialize-qp "min_first_f1_date" $min_first_f1_date "scalar") (serialize-qp "organization_type" $organization_type "multi") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "min_disbursements" $min_disbursements "scalar") (serialize-qp "min_last_cash_on_hand_end_period" $min_last_cash_on_hand_end_period "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({entity_type: (encode-path-segment $entity_type)} | format pattern "/totals/{entity_type}/") $qp)
+  let full_url = (build-url $base ({entity_type: (encode-path-segment $entity_type)} | format pattern "/totals/{entity_type}/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"max_first_f1_date": $max_first_f1_date, "min_receipts": $min_receipts, "cycle": $cycle, "filing_frequency": $filing_frequency, "max_receipts": $max_receipts, "sort_hide_null": $sort_hide_null, "sort_nulls_last": $sort_nulls_last, "min_last_debts_owed_by_committee": $min_last_debts_owed_by_committee, "max_last_cash_on_hand_end_period": $max_last_cash_on_hand_end_period, "treasurer_name": $treasurer_name, "sponsor_candidate_id": $sponsor_candidate_id, "per_page": $per_page, "max_disbursements": $max_disbursements, "committee_state": $committee_state, "committee_type": $committee_type, "page": $page, "max_last_debts_owed_by_committee": $max_last_debts_owed_by_committee, "committee_id": $committee_id, "api_key": $api_key, "committee_designation": $committee_designation, "sort_null_only": $sort_null_only, "min_first_f1_date": $min_first_f1_date, "organization_type": $organization_type, "sort": $qp_sort, "min_disbursements": $min_disbursements, "min_last_cash_on_hand_end_period": $min_last_cash_on_hand_end_period} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"max_first_f1_date": $max_first_f1_date, "min_receipts": $min_receipts, "cycle": $cycle, "filing_frequency": $filing_frequency, "max_receipts": $max_receipts, "sort_hide_null": $sort_hide_null, "sort_nulls_last": $sort_nulls_last, "min_last_debts_owed_by_committee": $min_last_debts_owed_by_committee, "max_last_cash_on_hand_end_period": $max_last_cash_on_hand_end_period, "treasurer_name": $treasurer_name, "sponsor_candidate_id": $sponsor_candidate_id, "per_page": $per_page, "max_disbursements": $max_disbursements, "committee_state": $committee_state, "committee_type": $committee_type, "page": $page, "max_last_debts_owed_by_committee": $max_last_debts_owed_by_committee, "committee_id": $committee_id, "api_key": $api_key, "committee_designation": $committee_designation, "sort_null_only": $sort_null_only, "min_first_f1_date": $min_first_f1_date, "organization_type": $organization_type, "sort": $qp_sort, "min_disbursements": $min_disbursements, "min_last_cash_on_hand_end_period": $min_last_cash_on_hand_end_period} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }

@@ -8,7 +8,7 @@ const BASE_URL = "https://api.math.tools"
 # `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
 # where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o NUMBERS_API_TOKEN | default "" }
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o NUMBERS_API_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
@@ -41,14 +41,11 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
-# Trick: `url encode --all` over-encodes, then we decode the four unreserved
-# punctuation chars back. Pre-existing %XX sequences in the input survive
-# because `url encode --all` first turns their % into %25.
 def encode-path-segment [v: any]: nothing -> string {
   $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
-# Serialize an array-typed path parameter (issue 49.A). OpenAPI 3 `style: simple`
+# Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
 # (the default for path params) and Swagger 2 `collectionFormat: csv` both join
 # the elements with a literal comma WITHIN the single path segment, each element
 # RFC-3986-encoded individually (so a comma inside an element stays %2C). Without
@@ -59,51 +56,39 @@ def encode-path-array [v: any]: nothing -> string {
   if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
 }
 
-# Build URL from base, path, and optional query string
-def build-url [base: string, path: string, query?: string]: nothing -> string {
+# Build the request URL from base, path, and any number of pre-encoded query
+# fragments (param serializer output and/or the auth query). Each fragment is an
+# `&`-joinable `key=value` string already percent-encoded by its producer; empty
+# fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
+# delimiters are hand-spliced — and any query already on the base URL is merged in.
+def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
   let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
-  let result = ($parsed | upsert path $full_path)
-  if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
+  let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
+  $parsed | upsert path $full_path | upsert query $query | url join
 }
 
-# Build the dry-run record returned by --dry-run. Shape:
-#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
-#    auth: {scheme, location}}
-# `meta` carries logical-form data (the query record by spec name, the pre-serialization
-# body) that do-request itself cannot reconstruct from its wire-format args.
-def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
-  let m = ($meta | default {})
-  {
-    dry_run: true
-    method: $method
-    url: $url
-    query: ($m | get -o query | default {})
-    headers: $auth.headers
-    body: ($m | get -o body)
-    content_type: $content_type
-    timeout: $timeout
-    auth: {scheme: $auth.scheme, location: $auth.location}
-  }
+# Success policy: did this response succeed? Single source of truth, consulted by
+# handle-response and the HEAD header-unwrap. Empty ok_codes means the spec listed
+# none, so fall back to < 400. Otherwise: any 2xx, plus documented success codes.
+def status-ok [status: int, ok_codes: list<int>]: nothing -> bool {
+  if ($ok_codes | is-empty) { $status < 400 } else { ($status >= 200 and $status < 300) or ($status in $ok_codes) }
 }
 
-# Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
-  let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
-  let timeout = ($max_time | default 30min)
-  let ct = ($content_type | default "application/json")
-  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
-  let resp = match $method {
-    "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
-  }
-  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
-  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
+# Unwrap a `--full` HTTP response into the user-facing value. Response arrives
+# via pipeline; ok_codes gates the error throw (see status-ok).
+def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: record -> any {
+  let resp = $in
+  if $allow_errors { return $resp }
+  if not (status-ok $resp.status $ok_codes) { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } }
+  if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
+  if $resp.status == 204 { return null }
+  $resp.body
+}
+
+# GET — bodyless, honours --raw
+def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
 }
 
 def base-url-completer [] { ["https://api.math.tools" "http://api.math.tools"] }
@@ -153,10 +138,21 @@ export def "numbers-base get" [
   let auth = (build-auth $token ($auth_scheme | default "x-mathtools-api-secret"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "number" $number "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/numbers/base" $qp)
+  let full_url = (build-url $base "/numbers/base" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"number": $number, "from": $qp_from, "to": $qp_to} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"number": $number, "from": $qp_from, "to": $qp_to} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Convert a given number to binary
@@ -178,10 +174,21 @@ export def "numbers-base-binary get" [
   let auth = (build-auth $token ($auth_scheme | default "x-mathtools-api-secret"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "number" $number "scalar") (serialize-qp "from" $qp_from "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/numbers/base/binary" $qp)
+  let full_url = (build-url $base "/numbers/base/binary" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"number": $number, "from": $qp_from} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"number": $number, "from": $qp_from} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Convert a given number to hexadecimal
@@ -203,10 +210,21 @@ export def "numbers-base-hex get" [
   let auth = (build-auth $token ($auth_scheme | default "x-mathtools-api-secret"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "number" $number "scalar") (serialize-qp "from" $qp_from "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/numbers/base/hex" $qp)
+  let full_url = (build-url $base "/numbers/base/hex" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"number": $number, "from": $qp_from} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"number": $number, "from": $qp_from} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Convert a given number to octal
@@ -228,10 +246,21 @@ export def "numbers-base-octal get" [
   let auth = (build-auth $token ($auth_scheme | default "x-mathtools-api-secret"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "number" $number "scalar") (serialize-qp "from" $qp_from "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/numbers/base/octal" $qp)
+  let full_url = (build-url $base "/numbers/base/octal" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"number": $number, "from": $qp_from} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"number": $number, "from": $qp_from} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get the cardinal of the given number
@@ -253,10 +282,21 @@ export def "numbers-cardinal get" [
   let auth = (build-auth $token ($auth_scheme | default "x-mathtools-api-secret"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "number" $number "scalar") (serialize-qp "language" $language "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/numbers/cardinal" $qp)
+  let full_url = (build-url $base "/numbers/cardinal" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"number": $number, "language": $language} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"number": $number, "language": $language} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Spells out the number as a currency
@@ -278,10 +318,21 @@ export def "numbers-currency get" [
   let auth = (build-auth $token ($auth_scheme | default "x-mathtools-api-secret"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "number" $number "scalar") (serialize-qp "language" $language "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/numbers/currency" $qp)
+  let full_url = (build-url $base "/numbers/currency" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"number": $number, "language": $language} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"number": $number, "language": $language} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get a random fact about a number
@@ -302,10 +353,21 @@ export def "numbers-fact get" [
   let auth = (build-auth $token ($auth_scheme | default "x-mathtools-api-secret"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "number" $number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/numbers/fact" $qp)
+  let full_url = (build-url $base "/numbers/fact" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"number": $number} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"number": $number} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Checks whether a given number is a cube number or not.
@@ -326,10 +388,21 @@ export def "numbers-is-cube get" [
   let auth = (build-auth $token ($auth_scheme | default "x-mathtools-api-secret"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "number" $number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/numbers/is-cube" $qp)
+  let full_url = (build-url $base "/numbers/is-cube" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"number": $number} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"number": $number} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Checks whether a given number is a palindrome number or not.
@@ -350,10 +423,21 @@ export def "numbers-is-palindrome get" [
   let auth = (build-auth $token ($auth_scheme | default "x-mathtools-api-secret"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "number" $number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/numbers/is-palindrome" $qp)
+  let full_url = (build-url $base "/numbers/is-palindrome" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"number": $number} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"number": $number} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Checks whether a given number is a square number or not.
@@ -374,10 +458,21 @@ export def "numbers-is-square get" [
   let auth = (build-auth $token ($auth_scheme | default "x-mathtools-api-secret"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "number" $number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/numbers/is-square" $qp)
+  let full_url = (build-url $base "/numbers/is-square" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"number": $number} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"number": $number} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Checks whether a given number is a triangle number or not.
@@ -398,10 +493,21 @@ export def "numbers-is-triangle get" [
   let auth = (build-auth $token ($auth_scheme | default "x-mathtools-api-secret"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "number" $number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/numbers/is-triangle" $qp)
+  let full_url = (build-url $base "/numbers/is-triangle" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"number": $number} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"number": $number} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get the number of the day for current day
@@ -420,10 +526,21 @@ export def "numbers-nod get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-mathtools-api-secret"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/numbers/nod")
+  let full_url = (build-url $base "/numbers/nod" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Convert base 10 representation of a given number to chinese numeral.
@@ -444,10 +561,21 @@ export def "numbers-numeral-chinese get" [
   let auth = (build-auth $token ($auth_scheme | default "x-mathtools-api-secret"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "number" $number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/numbers/numeral/chinese" $qp)
+  let full_url = (build-url $base "/numbers/numeral/chinese" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"number": $number} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"number": $number} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Convert base 10 representation of a given number to egyptian numeral.
@@ -468,10 +596,21 @@ export def "numbers-numeral-egyptian get" [
   let auth = (build-auth $token ($auth_scheme | default "x-mathtools-api-secret"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "number" $number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/numbers/numeral/egyptian" $qp)
+  let full_url = (build-url $base "/numbers/numeral/egyptian" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"number": $number} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"number": $number} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Convert base 10 representation of a given number to roman numeral.
@@ -492,10 +631,21 @@ export def "numbers-numeral-roman get" [
   let auth = (build-auth $token ($auth_scheme | default "x-mathtools-api-secret"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "number" $number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/numbers/numeral/roman" $qp)
+  let full_url = (build-url $base "/numbers/numeral/roman" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"number": $number} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"number": $number} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get the ordinal of the given number
@@ -516,10 +666,21 @@ export def "numbers-ordinal get" [
   let auth = (build-auth $token ($auth_scheme | default "x-mathtools-api-secret"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "number" $number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/numbers/ordinal" $qp)
+  let full_url = (build-url $base "/numbers/ordinal" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"number": $number} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"number": $number} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get digits of pi (Ï€)
@@ -541,10 +702,21 @@ export def "numbers-pi get" [
   let auth = (build-auth $token ($auth_scheme | default "x-mathtools-api-secret"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/numbers/pi" $qp)
+  let full_url = (build-url $base "/numbers/pi" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"from": $qp_from, "to": $qp_to} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"from": $qp_from, "to": $qp_to} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get the prime factors of a given number.
@@ -565,10 +737,21 @@ export def "numbers-prime-factors get" [
   let auth = (build-auth $token ($auth_scheme | default "x-mathtools-api-secret"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "number" $number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/numbers/prime/factors" $qp)
+  let full_url = (build-url $base "/numbers/prime/factors" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"number": $number} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"number": $number} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Checks whether a given number is a known fermat prime number or not.
@@ -589,10 +772,21 @@ export def "numbers-prime-is-fermat-prime get" [
   let auth = (build-auth $token ($auth_scheme | default "x-mathtools-api-secret"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "number" $number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/numbers/prime/is-fermat-prime" $qp)
+  let full_url = (build-url $base "/numbers/prime/is-fermat-prime" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"number": $number} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"number": $number} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Checks whether a given number is a known fibonacci prime number or not.
@@ -613,10 +807,21 @@ export def "numbers-prime-is-fibonacci-prime get" [
   let auth = (build-auth $token ($auth_scheme | default "x-mathtools-api-secret"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "number" $number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/numbers/prime/is-fibonacci-prime" $qp)
+  let full_url = (build-url $base "/numbers/prime/is-fibonacci-prime" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"number": $number} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"number": $number} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Checks whether a given number is a known mersenne prime number or not.
@@ -637,10 +842,21 @@ export def "numbers-prime-is-mersenne-prime get" [
   let auth = (build-auth $token ($auth_scheme | default "x-mathtools-api-secret"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "number" $number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/numbers/prime/is-mersenne-prime" $qp)
+  let full_url = (build-url $base "/numbers/prime/is-mersenne-prime" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"number": $number} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"number": $number} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Checks whether a given number is a known partition prime number or not.
@@ -661,10 +877,21 @@ export def "numbers-prime-is-partition-prime get" [
   let auth = (build-auth $token ($auth_scheme | default "x-mathtools-api-secret"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "number" $number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/numbers/prime/is-partition-prime" $qp)
+  let full_url = (build-url $base "/numbers/prime/is-partition-prime" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"number": $number} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"number": $number} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Checks whether a given number is a known pell prime number or not.
@@ -685,10 +912,21 @@ export def "numbers-prime-is-pell-prime get" [
   let auth = (build-auth $token ($auth_scheme | default "x-mathtools-api-secret"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "number" $number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/numbers/prime/is-pell-prime" $qp)
+  let full_url = (build-url $base "/numbers/prime/is-pell-prime" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"number": $number} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"number": $number} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Checks whether a given number is a perfect number or not.
@@ -709,10 +947,21 @@ export def "numbers-prime-is-perfect get" [
   let auth = (build-auth $token ($auth_scheme | default "x-mathtools-api-secret"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "number" $number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/numbers/prime/is-perfect" $qp)
+  let full_url = (build-url $base "/numbers/prime/is-perfect" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"number": $number} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"number": $number} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Checks whether a given number is a known prime number or not.
@@ -733,10 +982,21 @@ export def "numbers-prime-is-prime get" [
   let auth = (build-auth $token ($auth_scheme | default "x-mathtools-api-secret"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "number" $number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/numbers/prime/is-prime" $qp)
+  let full_url = (build-url $base "/numbers/prime/is-prime" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"number": $number} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"number": $number} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Generate random number(s)
@@ -759,8 +1019,19 @@ export def "numbers-random get" [
   let auth = (build-auth $token ($auth_scheme | default "x-mathtools-api-secret"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "min" $min "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "total" $total "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/numbers/random" $qp)
+  let full_url = (build-url $base "/numbers/random" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"min": $min, "max": $max, "total": $total} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"min": $min, "max": $max, "total": $total} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }

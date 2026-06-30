@@ -8,7 +8,7 @@ const BASE_URL = "https://www.bungie.net/Platform"
 # `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
 # where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o BUNGIE_NET_API_TOKEN | default "" }
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o BUNGIE_NET_API_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
@@ -42,14 +42,11 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
-# Trick: `url encode --all` over-encodes, then we decode the four unreserved
-# punctuation chars back. Pre-existing %XX sequences in the input survive
-# because `url encode --all` first turns their % into %25.
 def encode-path-segment [v: any]: nothing -> string {
   $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
-# Serialize an array-typed path parameter (issue 49.A). OpenAPI 3 `style: simple`
+# Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
 # (the default for path params) and Swagger 2 `collectionFormat: csv` both join
 # the elements with a literal comma WITHIN the single path segment, each element
 # RFC-3986-encoded individually (so a comma inside an element stays %2C). Without
@@ -60,51 +57,45 @@ def encode-path-array [v: any]: nothing -> string {
   if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
 }
 
-# Build URL from base, path, and optional query string
-def build-url [base: string, path: string, query?: string]: nothing -> string {
+# Build the request URL from base, path, and any number of pre-encoded query
+# fragments (param serializer output and/or the auth query). Each fragment is an
+# `&`-joinable `key=value` string already percent-encoded by its producer; empty
+# fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
+# delimiters are hand-spliced — and any query already on the base URL is merged in.
+def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
   let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
-  let result = ($parsed | upsert path $full_path)
-  if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
+  let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
+  $parsed | upsert path $full_path | upsert query $query | url join
 }
 
-# Build the dry-run record returned by --dry-run. Shape:
-#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
-#    auth: {scheme, location}}
-# `meta` carries logical-form data (the query record by spec name, the pre-serialization
-# body) that do-request itself cannot reconstruct from its wire-format args.
-def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
-  let m = ($meta | default {})
-  {
-    dry_run: true
-    method: $method
-    url: $url
-    query: ($m | get -o query | default {})
-    headers: $auth.headers
-    body: ($m | get -o body)
-    content_type: $content_type
-    timeout: $timeout
-    auth: {scheme: $auth.scheme, location: $auth.location}
-  }
+# Success policy: did this response succeed? Single source of truth, consulted by
+# handle-response and the HEAD header-unwrap. Empty ok_codes means the spec listed
+# none, so fall back to < 400. Otherwise: any 2xx, plus documented success codes.
+def status-ok [status: int, ok_codes: list<int>]: nothing -> bool {
+  if ($ok_codes | is-empty) { $status < 400 } else { ($status >= 200 and $status < 300) or ($status in $ok_codes) }
 }
 
-# Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
-  let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
-  let timeout = ($max_time | default 30min)
-  let ct = ($content_type | default "application/json")
-  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
-  let resp = match $method {
-    "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
-  }
-  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
-  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
+# Unwrap a `--full` HTTP response into the user-facing value. Response arrives
+# via pipeline; ok_codes gates the error throw (see status-ok).
+def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: record -> any {
+  let resp = $in
+  if $allow_errors { return $resp }
+  if not (status-ok $resp.status $ok_codes) { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } }
+  if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
+  if $resp.status == 204 { return null }
+  $resp.body
+}
+
+# GET — bodyless, honours --raw
+def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+}
+
+# POST — body + content-type
+def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 def base-url-completer [] { ["https://www.bungie.net/Platform"] }
@@ -156,10 +147,21 @@ export def "app-api-usage get-application" [
   let base = ($base_url | default $BASE_URL)
   if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'applicationId' must be non-empty" } }
   let qp = [(serialize-qp "end" $end "scalar") (serialize-qp "start" $start "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({application_id: (encode-path-segment $application_id)} | format pattern "/App/ApiUsage/{application_id}/") $qp)
+  let full_url = (build-url $base ({application_id: (encode-path-segment $application_id)} | format pattern "/App/ApiUsage/{application_id}/") $qp $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"end": $end, "start": $start} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"end": $end, "start": $start} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get list of applications created by Bungie.
@@ -179,10 +181,21 @@ export def "app-first-party get-bungie-applications" [
 ]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: table<applicationId: int, creationDate: string, firstPublished: string, link: string, name: string, origin: string, overrideAuthorizeViewName: string, redirectUrl: string, scope: int, status: int, statusChanged: string, team: list>, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/App/FirstParty/")
+  let full_url = (build-url $base "/App/FirstParty/" $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns community content.
@@ -208,10 +221,21 @@ export def "community-content-get get" [
   if ($sort | is-empty) { error make --unspanned { msg: "path parameter 'sort' must be non-empty" } }
   if ($media_filter | is-empty) { error make --unspanned { msg: "path parameter 'mediaFilter' must be non-empty" } }
   if ($page | is-empty) { error make --unspanned { msg: "path parameter 'page' must be non-empty" } }
-  let full_url = (build-url $base ({sort: (encode-path-segment $sort), media_filter: (encode-path-segment $media_filter), page: (encode-path-segment $page)} | format pattern "/CommunityContent/Get/{sort}/{media_filter}/{page}/"))
+  let full_url = (build-url $base ({sort: (encode-path-segment $sort), media_filter: (encode-path-segment $media_filter), page: (encode-path-segment $page)} | format pattern "/CommunityContent/Get/{sort}/{media_filter}/{page}/") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns a content item referenced by id
@@ -237,10 +261,21 @@ export def "content-get-content-by-id get" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($locale | is-empty) { error make --unspanned { msg: "path parameter 'locale' must be non-empty" } }
   let qp = [(serialize-qp "head" $head "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id), locale: (encode-path-segment $locale)} | format pattern "/Content/GetContentById/{id}/{locale}/") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id), locale: (encode-path-segment $locale)} | format pattern "/Content/GetContentById/{id}/{locale}/") $qp $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"head": $head} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"head": $head} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the newest item that matches a given tag and Content Type.
@@ -268,10 +303,21 @@ export def "content-get-content-by-tag-and-type get" [
   if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
   if ($locale | is-empty) { error make --unspanned { msg: "path parameter 'locale' must be non-empty" } }
   let qp = [(serialize-qp "head" $head "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({tag: (encode-path-segment $tag), type: (encode-path-segment $type), locale: (encode-path-segment $locale)} | format pattern "/Content/GetContentByTagAndType/{tag}/{type}/{locale}/") $qp)
+  let full_url = (build-url $base ({tag: (encode-path-segment $tag), type: (encode-path-segment $type), locale: (encode-path-segment $locale)} | format pattern "/Content/GetContentByTagAndType/{tag}/{type}/{locale}/") $qp $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"head": $head} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"head": $head} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets an object describing a particular variant of content.
@@ -293,10 +339,21 @@ export def "content-get-content-type get" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
-  let full_url = (build-url $base ({type: (encode-path-segment $type)} | format pattern "/Content/GetContentType/{type}/"))
+  let full_url = (build-url $base ({type: (encode-path-segment $type)} | format pattern "/Content/GetContentType/{type}/") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns a JSON string response that is the RSS feed for news articles.
@@ -321,10 +378,21 @@ export def "content-rss-news-articles get" [
   let base = ($base_url | default $BASE_URL)
   if ($page_token | is-empty) { error make --unspanned { msg: "path parameter 'pageToken' must be non-empty" } }
   let qp = [(serialize-qp "categoryfilter" $categoryfilter "scalar") (serialize-qp "includebody" $includebody "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({page_token: (encode-path-segment $page_token)} | format pattern "/Content/Rss/NewsArticles/{page_token}/") $qp)
+  let full_url = (build-url $base ({page_token: (encode-path-segment $page_token)} | format pattern "/Content/Rss/NewsArticles/{page_token}/") $qp $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"categoryfilter": $categoryfilter, "includebody": $includebody} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"categoryfilter": $categoryfilter, "includebody": $includebody} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets content based on querystring information passed in. Provides basic search and text search capabilities.
@@ -353,10 +421,21 @@ export def "content-search list-with-text" [
   let base = ($base_url | default $BASE_URL)
   if ($locale | is-empty) { error make --unspanned { msg: "path parameter 'locale' must be non-empty" } }
   let qp = [(serialize-qp "ctype" $ctype "scalar") (serialize-qp "currentpage" $currentpage "scalar") (serialize-qp "head" $head "scalar") (serialize-qp "searchtext" $searchtext "scalar") (serialize-qp "source" $qp_source "scalar") (serialize-qp "tag" $tag "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({locale: (encode-path-segment $locale)} | format pattern "/Content/Search/{locale}/") $qp)
+  let full_url = (build-url $base ({locale: (encode-path-segment $locale)} | format pattern "/Content/Search/{locale}/") $qp $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"ctype": $ctype, "currentpage": $currentpage, "head": $head, "searchtext": $searchtext, "source": $qp_source, "tag": $tag} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"ctype": $ctype, "currentpage": $currentpage, "head": $head, "searchtext": $searchtext, "source": $qp_source, "tag": $tag} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Searches for Content Items that match the given Tag and Content Type.
@@ -386,10 +465,21 @@ export def "content-search-content-by-tag-and-type list" [
   if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
   if ($locale | is-empty) { error make --unspanned { msg: "path parameter 'locale' must be non-empty" } }
   let qp = [(serialize-qp "currentpage" $currentpage "scalar") (serialize-qp "head" $head "scalar") (serialize-qp "itemsperpage" $itemsperpage "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({tag: (encode-path-segment $tag), type: (encode-path-segment $type), locale: (encode-path-segment $locale)} | format pattern "/Content/SearchContentByTagAndType/{tag}/{type}/{locale}/") $qp)
+  let full_url = (build-url $base ({tag: (encode-path-segment $tag), type: (encode-path-segment $type), locale: (encode-path-segment $locale)} | format pattern "/Content/SearchContentByTagAndType/{tag}/{type}/{locale}/") $qp $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"currentpage": $currentpage, "head": $head, "itemsperpage": $itemsperpage} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"currentpage": $currentpage, "head": $head, "itemsperpage": $itemsperpage} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Search for Help Articles.
@@ -413,10 +503,21 @@ export def "content-search-help-articles list" [
   let base = ($base_url | default $BASE_URL)
   if ($searchtext | is-empty) { error make --unspanned { msg: "path parameter 'searchtext' must be non-empty" } }
   if ($size | is-empty) { error make --unspanned { msg: "path parameter 'size' must be non-empty" } }
-  let full_url = (build-url $base ({searchtext: (encode-path-segment $searchtext), size: (encode-path-segment $size)} | format pattern "/Content/SearchHelpArticles/{searchtext}/{size}/"))
+  let full_url = (build-url $base ({searchtext: (encode-path-segment $searchtext), size: (encode-path-segment $size)} | format pattern "/Content/SearchHelpArticles/{searchtext}/{size}/") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Equip an item. You must have a valid Destiny Account, and either be in a social space, in orbit, or offline.
@@ -436,10 +537,21 @@ export def "destiny2-actions-items-equip-item create" [
 ]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: int, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/Destiny2/Actions/Items/EquipItem/")
+  let full_url = (build-url $base "/Destiny2/Actions/Items/EquipItem/" $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Equip a list of items by itemInstanceIds. You must have a valid Destiny Account, and either be in a social space, in orbit, or offline. Any items not found on your character will be ignored.
@@ -459,10 +571,21 @@ export def "destiny2-actions-items-equip-items create" [
 ]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: record<equipResults: list<record>>, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/Destiny2/Actions/Items/EquipItems/")
+  let full_url = (build-url $base "/Destiny2/Actions/Items/EquipItems/" $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Insert a plug into a socketed item. I know how it sounds, but I assure you it's much more G-rated than you might be guessing. We haven't decided yet whether this will be able to insert plugs that have side effects, but if we do it will require special scope permission for an application attempting to do so. You must have a valid Destiny Account, and either be in a social space, in orbit, or offline. Request must include proof of permission for 'InsertPlugs' from the account owner.
@@ -482,10 +605,21 @@ export def "destiny2-actions-items-insert-socket-plug create" [
 ]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: record<addedInventoryItems: list<record>, item: record<characterId: int, instance: record, item: record, objectives: record, perks: record, plugObjectives: record, renderData: record, reusablePlugs: record, sockets: record, stats: record, talentGrid: record>, removedInventoryItems: list<record>>, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/Destiny2/Actions/Items/InsertSocketPlug/")
+  let full_url = (build-url $base "/Destiny2/Actions/Items/InsertSocketPlug/" $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Insert a 'free' plug into an item's socket. This does not require 'Advanced Write Action' authorization and is available to 3rd-party apps, but will only work on 'free and reversible' socket actions (Perks, Armor Mods, Shaders, Ornaments, etc.). You must have a valid Destiny Account, and the character must either be in a social space, in orbit, or offline.
@@ -505,10 +639,21 @@ export def "destiny2-actions-items-insert-socket-plug-free create" [
 ]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: record<addedInventoryItems: list<record>, item: record<characterId: int, instance: record, item: record, objectives: record, perks: record, plugObjectives: record, renderData: record, reusablePlugs: record, sockets: record, stats: record, talentGrid: record>, removedInventoryItems: list<record>>, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/Destiny2/Actions/Items/InsertSocketPlugFree/")
+  let full_url = (build-url $base "/Destiny2/Actions/Items/InsertSocketPlugFree/" $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Extract an item from the Postmaster, with whatever implications that may entail. You must have a valid Destiny account. You must also pass BOTH a reference AND an instance ID if it's an instanced item.
@@ -528,10 +673,21 @@ export def "destiny2-actions-items-pull-from-post-master pull" [
 ]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: int, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/Destiny2/Actions/Items/PullFromPostmaster/")
+  let full_url = (build-url $base "/Destiny2/Actions/Items/PullFromPostmaster/" $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Set the Lock State for an instanced item. You must have a valid Destiny Account.
@@ -551,10 +707,21 @@ export def "destiny2-actions-items-set-lock-state update" [
 ]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: int, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/Destiny2/Actions/Items/SetLockState/")
+  let full_url = (build-url $base "/Destiny2/Actions/Items/SetLockState/" $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Set the Tracking State for an instanced item, if that item is a Quest or Bounty. You must have a valid Destiny Account. Yeah, it's an item.
@@ -574,10 +741,21 @@ export def "destiny2-actions-items-set-tracked-state update-quest" [
 ]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: int, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/Destiny2/Actions/Items/SetTrackedState/")
+  let full_url = (build-url $base "/Destiny2/Actions/Items/SetTrackedState/" $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Transfer an item to/from your vault. You must have a valid Destiny account. You must also pass BOTH a reference AND an instance ID if it's an instanced item. itshappening.gif
@@ -597,10 +775,21 @@ export def "destiny2-actions-items-transfer-item create" [
 ]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: int, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/Destiny2/Actions/Items/TransferItem/")
+  let full_url = (build-url $base "/Destiny2/Actions/Items/TransferItem/" $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Clear the identifiers and items of a loadout.
@@ -620,10 +809,21 @@ export def "destiny2-actions-loadouts-clear-loadout create" [
 ]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: int, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/Destiny2/Actions/Loadouts/ClearLoadout/")
+  let full_url = (build-url $base "/Destiny2/Actions/Loadouts/ClearLoadout/" $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Equip a loadout. You must have a valid Destiny Account, and either be in a social space, in orbit, or offline.
@@ -643,10 +843,21 @@ export def "destiny2-actions-loadouts-equip-loadout create" [
 ]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: int, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/Destiny2/Actions/Loadouts/EquipLoadout/")
+  let full_url = (build-url $base "/Destiny2/Actions/Loadouts/EquipLoadout/" $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Snapshot a loadout with the currently equipped items.
@@ -666,10 +877,21 @@ export def "destiny2-actions-loadouts-snapshot-loadout create" [
 ]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: int, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/Destiny2/Actions/Loadouts/SnapshotLoadout/")
+  let full_url = (build-url $base "/Destiny2/Actions/Loadouts/SnapshotLoadout/" $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Update the color, icon, and name of a loadout.
@@ -689,10 +911,21 @@ export def "destiny2-actions-loadouts-update-loadout-identifiers update" [
 ]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: int, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/Destiny2/Actions/Loadouts/UpdateLoadoutIdentifiers/")
+  let full_url = (build-url $base "/Destiny2/Actions/Loadouts/UpdateLoadoutIdentifiers/" $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Gets a page list of Destiny items.
@@ -718,10 +951,21 @@ export def "destiny2-armory-search list-destiny-entities" [
   if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
   if ($search_term | is-empty) { error make --unspanned { msg: "path parameter 'searchTerm' must be non-empty" } }
   let qp = [(serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({type: (encode-path-segment $type), search_term: (encode-path-segment $search_term)} | format pattern "/Destiny2/Armory/Search/{type}/{search_term}/") $qp)
+  let full_url = (build-url $base ({type: (encode-path-segment $type), search_term: (encode-path-segment $search_term)} | format pattern "/Destiny2/Armory/Search/{type}/{search_term}/") $qp $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"page": $page} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Provide the result of the user interaction. Called by the Bungie Destiny App to approve or reject a request.
@@ -741,10 +985,21 @@ export def "destiny2-awa-awa-provide-authorization-result create" [
 ]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: int, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/Destiny2/Awa/AwaProvideAuthorizationResult/")
+  let full_url = (build-url $base "/Destiny2/Awa/AwaProvideAuthorizationResult/" $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the action token if user approves the request.
@@ -766,10 +1021,21 @@ export def "destiny2-awa-get-action-token get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($correlation_id | is-empty) { error make --unspanned { msg: "path parameter 'correlationId' must be non-empty" } }
-  let full_url = (build-url $base ({correlation_id: (encode-path-segment $correlation_id)} | format pattern "/Destiny2/Awa/GetActionToken/{correlation_id}/"))
+  let full_url = (build-url $base ({correlation_id: (encode-path-segment $correlation_id)} | format pattern "/Destiny2/Awa/GetActionToken/{correlation_id}/") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Initialize a request to perform an advanced write action.
@@ -789,10 +1055,21 @@ export def "destiny2-awa-initialize request" [
 ]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: record<correlationId: string, sentToSelf: bool>, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/Destiny2/Awa/Initialize/")
+  let full_url = (build-url $base "/Destiny2/Awa/Initialize/" $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the dictionary of values for the Clan Banner
@@ -812,10 +1089,21 @@ export def "destiny2-clan-clan-banner-dictionary get-source" [
 ]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: record, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/Destiny2/Clan/ClanBannerDictionary/")
+  let full_url = (build-url $base "/Destiny2/Clan/ClanBannerDictionary/" $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns information on the weekly clan rewards and if the clan has earned them or not. Note that this will always report rewards as not redeemed.
@@ -837,10 +1125,21 @@ export def "destiny2-clan-weekly-reward-state get" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
-  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/Destiny2/Clan/{group_id}/WeeklyRewardState/"))
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/Destiny2/Clan/{group_id}/WeeklyRewardState/") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the current version of the manifest as a json object.
@@ -860,10 +1159,21 @@ export def "destiny2-manifest get-destiny" [
 ]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: record<iconImagePyramidInfo: list<record>, jsonWorldComponentContentPaths: record, jsonWorldContentPaths: record, mobileAssetContentPath: string, mobileClanBannerDatabasePath: string, mobileGearAssetDataBases: list<record>, mobileGearCDN: record, mobileWorldContentPaths: record, version: string>, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/Destiny2/Manifest/")
+  let full_url = (build-url $base "/Destiny2/Manifest/" $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the static definition of an entity of the given Type and hash identifier. Examine the API Documentation for the Type Names of entities that have their own definitions. Note that the return type will always *inherit from* DestinyDefinition, but the specific type returned will be the requested entity type if it can be found. Please don't use this as a chatty alternative to the Manifest database if you require large sets of data, but for simple and one-off accesses this should be handy.
@@ -887,10 +1197,21 @@ export def "destiny2-manifest get-destiny-entity-definition" [
   let base = ($base_url | default $BASE_URL)
   if ($entity_type | is-empty) { error make --unspanned { msg: "path parameter 'entityType' must be non-empty" } }
   if ($hash_identifier | is-empty) { error make --unspanned { msg: "path parameter 'hashIdentifier' must be non-empty" } }
-  let full_url = (build-url $base ({entity_type: (encode-path-segment $entity_type), hash_identifier: (encode-path-segment $hash_identifier)} | format pattern "/Destiny2/Manifest/{entity_type}/{hash_identifier}/"))
+  let full_url = (build-url $base ({entity_type: (encode-path-segment $entity_type), hash_identifier: (encode-path-segment $hash_identifier)} | format pattern "/Destiny2/Manifest/{entity_type}/{hash_identifier}/") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets public information about currently available Milestones.
@@ -910,10 +1231,21 @@ export def "destiny2-milestones get-public" [
 ]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: record, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/Destiny2/Milestones/")
+  let full_url = (build-url $base "/Destiny2/Milestones/" $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets custom localized content for the milestone of the given hash, if it exists.
@@ -935,10 +1267,21 @@ export def "destiny2-milestones-content get-public" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($milestone_hash | is-empty) { error make --unspanned { msg: "path parameter 'milestoneHash' must be non-empty" } }
-  let full_url = (build-url $base ({milestone_hash: (encode-path-segment $milestone_hash)} | format pattern "/Destiny2/Milestones/{milestone_hash}/Content/"))
+  let full_url = (build-url $base ({milestone_hash: (encode-path-segment $milestone_hash)} | format pattern "/Destiny2/Milestones/{milestone_hash}/Content/") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns a list of Destiny memberships given a global Bungie Display Name. This method will hide overridden memberships due to cross save.
@@ -960,10 +1303,21 @@ export def "destiny2-search-destiny-player-by-bungie-name list" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($membership_type | is-empty) { error make --unspanned { msg: "path parameter 'membershipType' must be non-empty" } }
-  let full_url = (build-url $base ({membership_type: (encode-path-segment $membership_type)} | format pattern "/Destiny2/SearchDestinyPlayerByBungieName/{membership_type}/"))
+  let full_url = (build-url $base ({membership_type: (encode-path-segment $membership_type)} | format pattern "/Destiny2/SearchDestinyPlayerByBungieName/{membership_type}/") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Gets aggregated stats for a clan using the same categories as the clan leaderboards. PREVIEW: This endpoint is still in beta, and may experience rough edges. The schema is in final form, but there may be bugs that prevent desirable operation.
@@ -987,10 +1341,21 @@ export def "destiny2-stats-aggregate-clan-stats get" [
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
   let qp = [(serialize-qp "modes" $modes "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/Destiny2/Stats/AggregateClanStats/{group_id}/") $qp)
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/Destiny2/Stats/AggregateClanStats/{group_id}/") $qp $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"modes": $modes} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"modes": $modes} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets historical stats definitions.
@@ -1010,10 +1375,21 @@ export def "destiny2-stats-definition get-historical" [
 ]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: record, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/Destiny2/Stats/Definition/")
+  let full_url = (build-url $base "/Destiny2/Stats/Definition/" $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets leaderboards with the signed in user's friends and the supplied destinyMembershipId as the focus. PREVIEW: This endpoint is still in beta, and may experience rough edges. The schema is in final form, but there may be bugs that prevent desirable operation.
@@ -1039,10 +1415,21 @@ export def "destiny2-stats-leaderboards-clans get" [
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
   let qp = [(serialize-qp "maxtop" $maxtop "scalar") (serialize-qp "modes" $modes "scalar") (serialize-qp "statid" $statid "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/Destiny2/Stats/Leaderboards/Clans/{group_id}/") $qp)
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/Destiny2/Stats/Leaderboards/Clans/{group_id}/") $qp $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"maxtop": $maxtop, "modes": $modes, "statid": $statid} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"maxtop": $maxtop, "modes": $modes, "statid": $statid} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets leaderboards with the signed in user's friends and the supplied destinyMembershipId as the focus. PREVIEW: This endpoint is still in beta, and may experience rough edges. The schema is in final form, but there may be bugs that prevent desirable operation.
@@ -1072,10 +1459,21 @@ export def "destiny2-stats-leaderboards get-for-character" [
   if ($destiny_membership_id | is-empty) { error make --unspanned { msg: "path parameter 'destinyMembershipId' must be non-empty" } }
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'characterId' must be non-empty" } }
   let qp = [(serialize-qp "maxtop" $maxtop "scalar") (serialize-qp "modes" $modes "scalar") (serialize-qp "statid" $statid "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({membership_type: (encode-path-segment $membership_type), destiny_membership_id: (encode-path-segment $destiny_membership_id), character_id: (encode-path-segment $character_id)} | format pattern "/Destiny2/Stats/Leaderboards/{membership_type}/{destiny_membership_id}/{character_id}/") $qp)
+  let full_url = (build-url $base ({membership_type: (encode-path-segment $membership_type), destiny_membership_id: (encode-path-segment $destiny_membership_id), character_id: (encode-path-segment $character_id)} | format pattern "/Destiny2/Stats/Leaderboards/{membership_type}/{destiny_membership_id}/{character_id}/") $qp $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"maxtop": $maxtop, "modes": $modes, "statid": $statid} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"maxtop": $maxtop, "modes": $modes, "statid": $statid} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the available post game carnage report for the activity ID.
@@ -1097,10 +1495,21 @@ export def "destiny2-stats-post-game-carnage-report get" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($activity_id | is-empty) { error make --unspanned { msg: "path parameter 'activityId' must be non-empty" } }
-  let full_url = (build-url $base ({activity_id: (encode-path-segment $activity_id)} | format pattern "/Destiny2/Stats/PostGameCarnageReport/{activity_id}/"))
+  let full_url = (build-url $base ({activity_id: (encode-path-segment $activity_id)} | format pattern "/Destiny2/Stats/PostGameCarnageReport/{activity_id}/") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Report a player that you met in an activity that was engaging in ToS-violating activities. Both you and the offending player must have played in the activityId passed in. Please use this judiciously and only when you have strong suspicions of violation, pretty please.
@@ -1122,10 +1531,21 @@ export def "destiny2-stats-post-game-carnage-report-report create-offensive-play
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($activity_id | is-empty) { error make --unspanned { msg: "path parameter 'activityId' must be non-empty" } }
-  let full_url = (build-url $base ({activity_id: (encode-path-segment $activity_id)} | format pattern "/Destiny2/Stats/PostGameCarnageReport/{activity_id}/Report/"))
+  let full_url = (build-url $base ({activity_id: (encode-path-segment $activity_id)} | format pattern "/Destiny2/Stats/PostGameCarnageReport/{activity_id}/Report/") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Get items available from vendors where the vendors have items for sale that are common for everyone. If any portion of the Vendor's available inventory is character or account specific, we will be unable to return their data from this endpoint due to the way that available inventory is computed. As I am often guilty of saying: 'It's a long story...'
@@ -1147,10 +1567,21 @@ export def "destiny2-vendors get-public" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "components" $components "csv")] | flatten | str join "&"
-  let full_url = (build-url $base "/Destiny2/Vendors/" $qp)
+  let full_url = (build-url $base "/Destiny2/Vendors/" $qp $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"components": $components} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"components": $components} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets historical stats for indicated character.
@@ -1182,10 +1613,21 @@ export def "destiny2-account-character-stats get-historical" [
   if ($destiny_membership_id | is-empty) { error make --unspanned { msg: "path parameter 'destinyMembershipId' must be non-empty" } }
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'characterId' must be non-empty" } }
   let qp = [(serialize-qp "dayend" $dayend "scalar") (serialize-qp "daystart" $daystart "scalar") (serialize-qp "groups" $groups "csv") (serialize-qp "modes" $modes "csv") (serialize-qp "periodType" $period_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({membership_type: (encode-path-segment $membership_type), destiny_membership_id: (encode-path-segment $destiny_membership_id), character_id: (encode-path-segment $character_id)} | format pattern "/Destiny2/{membership_type}/Account/{destiny_membership_id}/Character/{character_id}/Stats/") $qp)
+  let full_url = (build-url $base ({membership_type: (encode-path-segment $membership_type), destiny_membership_id: (encode-path-segment $destiny_membership_id), character_id: (encode-path-segment $character_id)} | format pattern "/Destiny2/{membership_type}/Account/{destiny_membership_id}/Character/{character_id}/Stats/") $qp $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"dayend": $dayend, "daystart": $daystart, "groups": $groups, "modes": $modes, "periodType": $period_type} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"dayend": $dayend, "daystart": $daystart, "groups": $groups, "modes": $modes, "periodType": $period_type} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets activity history stats for indicated character.
@@ -1215,10 +1657,21 @@ export def "destiny2-account-character-stats-activities get-activity-history" [
   if ($destiny_membership_id | is-empty) { error make --unspanned { msg: "path parameter 'destinyMembershipId' must be non-empty" } }
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'characterId' must be non-empty" } }
   let qp = [(serialize-qp "count" $count "scalar") (serialize-qp "mode" $mode "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({membership_type: (encode-path-segment $membership_type), destiny_membership_id: (encode-path-segment $destiny_membership_id), character_id: (encode-path-segment $character_id)} | format pattern "/Destiny2/{membership_type}/Account/{destiny_membership_id}/Character/{character_id}/Stats/Activities/") $qp)
+  let full_url = (build-url $base ({membership_type: (encode-path-segment $membership_type), destiny_membership_id: (encode-path-segment $destiny_membership_id), character_id: (encode-path-segment $character_id)} | format pattern "/Destiny2/{membership_type}/Account/{destiny_membership_id}/Character/{character_id}/Stats/Activities/") $qp $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"count": $count, "mode": $mode, "page": $page} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"count": $count, "mode": $mode, "page": $page} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets all activities the character has participated in together with aggregate statistics for those activities.
@@ -1244,10 +1697,21 @@ export def "destiny2-account-character-stats-aggregate-activity-stats get-destin
   if ($membership_type | is-empty) { error make --unspanned { msg: "path parameter 'membershipType' must be non-empty" } }
   if ($destiny_membership_id | is-empty) { error make --unspanned { msg: "path parameter 'destinyMembershipId' must be non-empty" } }
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'characterId' must be non-empty" } }
-  let full_url = (build-url $base ({membership_type: (encode-path-segment $membership_type), destiny_membership_id: (encode-path-segment $destiny_membership_id), character_id: (encode-path-segment $character_id)} | format pattern "/Destiny2/{membership_type}/Account/{destiny_membership_id}/Character/{character_id}/Stats/AggregateActivityStats/"))
+  let full_url = (build-url $base ({membership_type: (encode-path-segment $membership_type), destiny_membership_id: (encode-path-segment $destiny_membership_id), character_id: (encode-path-segment $character_id)} | format pattern "/Destiny2/{membership_type}/Account/{destiny_membership_id}/Character/{character_id}/Stats/AggregateActivityStats/") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets details about unique weapon usage, including all exotic weapons.
@@ -1273,10 +1737,21 @@ export def "destiny2-account-character-stats-unique-weapons get-history" [
   if ($membership_type | is-empty) { error make --unspanned { msg: "path parameter 'membershipType' must be non-empty" } }
   if ($destiny_membership_id | is-empty) { error make --unspanned { msg: "path parameter 'destinyMembershipId' must be non-empty" } }
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'characterId' must be non-empty" } }
-  let full_url = (build-url $base ({membership_type: (encode-path-segment $membership_type), destiny_membership_id: (encode-path-segment $destiny_membership_id), character_id: (encode-path-segment $character_id)} | format pattern "/Destiny2/{membership_type}/Account/{destiny_membership_id}/Character/{character_id}/Stats/UniqueWeapons/"))
+  let full_url = (build-url $base ({membership_type: (encode-path-segment $membership_type), destiny_membership_id: (encode-path-segment $destiny_membership_id), character_id: (encode-path-segment $character_id)} | format pattern "/Destiny2/{membership_type}/Account/{destiny_membership_id}/Character/{character_id}/Stats/UniqueWeapons/") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets aggregate historical stats organized around each character for a given account.
@@ -1302,10 +1777,21 @@ export def "destiny2-account-stats get-historical" [
   if ($membership_type | is-empty) { error make --unspanned { msg: "path parameter 'membershipType' must be non-empty" } }
   if ($destiny_membership_id | is-empty) { error make --unspanned { msg: "path parameter 'destinyMembershipId' must be non-empty" } }
   let qp = [(serialize-qp "groups" $groups "csv")] | flatten | str join "&"
-  let full_url = (build-url $base ({membership_type: (encode-path-segment $membership_type), destiny_membership_id: (encode-path-segment $destiny_membership_id)} | format pattern "/Destiny2/{membership_type}/Account/{destiny_membership_id}/Stats/") $qp)
+  let full_url = (build-url $base ({membership_type: (encode-path-segment $membership_type), destiny_membership_id: (encode-path-segment $destiny_membership_id)} | format pattern "/Destiny2/{membership_type}/Account/{destiny_membership_id}/Stats/") $qp $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"groups": $groups} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"groups": $groups} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets leaderboards with the signed in user's friends and the supplied destinyMembershipId as the focus. PREVIEW: This endpoint has not yet been implemented. It is being returned for a preview of future functionality, and for public comment/suggestion/preparation.
@@ -1333,10 +1819,21 @@ export def "destiny2-account-stats-leaderboards get" [
   if ($membership_type | is-empty) { error make --unspanned { msg: "path parameter 'membershipType' must be non-empty" } }
   if ($destiny_membership_id | is-empty) { error make --unspanned { msg: "path parameter 'destinyMembershipId' must be non-empty" } }
   let qp = [(serialize-qp "maxtop" $maxtop "scalar") (serialize-qp "modes" $modes "scalar") (serialize-qp "statid" $statid "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({membership_type: (encode-path-segment $membership_type), destiny_membership_id: (encode-path-segment $destiny_membership_id)} | format pattern "/Destiny2/{membership_type}/Account/{destiny_membership_id}/Stats/Leaderboards/") $qp)
+  let full_url = (build-url $base ({membership_type: (encode-path-segment $membership_type), destiny_membership_id: (encode-path-segment $destiny_membership_id)} | format pattern "/Destiny2/{membership_type}/Account/{destiny_membership_id}/Stats/Leaderboards/") $qp $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"maxtop": $maxtop, "modes": $modes, "statid": $statid} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"maxtop": $maxtop, "modes": $modes, "statid": $statid} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns Destiny Profile information for the supplied membership.
@@ -1362,10 +1859,21 @@ export def "destiny2-profile get" [
   if ($membership_type | is-empty) { error make --unspanned { msg: "path parameter 'membershipType' must be non-empty" } }
   if ($destiny_membership_id | is-empty) { error make --unspanned { msg: "path parameter 'destinyMembershipId' must be non-empty" } }
   let qp = [(serialize-qp "components" $components "csv")] | flatten | str join "&"
-  let full_url = (build-url $base ({membership_type: (encode-path-segment $membership_type), destiny_membership_id: (encode-path-segment $destiny_membership_id)} | format pattern "/Destiny2/{membership_type}/Profile/{destiny_membership_id}/") $qp)
+  let full_url = (build-url $base ({membership_type: (encode-path-segment $membership_type), destiny_membership_id: (encode-path-segment $destiny_membership_id)} | format pattern "/Destiny2/{membership_type}/Profile/{destiny_membership_id}/") $qp $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"components": $components} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"components": $components} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns character information for the supplied character.
@@ -1393,10 +1901,21 @@ export def "destiny2-profile-character get" [
   if ($destiny_membership_id | is-empty) { error make --unspanned { msg: "path parameter 'destinyMembershipId' must be non-empty" } }
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'characterId' must be non-empty" } }
   let qp = [(serialize-qp "components" $components "csv")] | flatten | str join "&"
-  let full_url = (build-url $base ({membership_type: (encode-path-segment $membership_type), destiny_membership_id: (encode-path-segment $destiny_membership_id), character_id: (encode-path-segment $character_id)} | format pattern "/Destiny2/{membership_type}/Profile/{destiny_membership_id}/Character/{character_id}/") $qp)
+  let full_url = (build-url $base ({membership_type: (encode-path-segment $membership_type), destiny_membership_id: (encode-path-segment $destiny_membership_id), character_id: (encode-path-segment $character_id)} | format pattern "/Destiny2/{membership_type}/Profile/{destiny_membership_id}/Character/{character_id}/") $qp $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"components": $components} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"components": $components} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Given a Presentation Node that has Collectibles as direct descendants, this will return item details about those descendants in the context of the requesting character.
@@ -1426,10 +1945,21 @@ export def "destiny2-profile-character-collectibles get-node-details" [
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'characterId' must be non-empty" } }
   if ($collectible_presentation_node_hash | is-empty) { error make --unspanned { msg: "path parameter 'collectiblePresentationNodeHash' must be non-empty" } }
   let qp = [(serialize-qp "components" $components "csv")] | flatten | str join "&"
-  let full_url = (build-url $base ({membership_type: (encode-path-segment $membership_type), destiny_membership_id: (encode-path-segment $destiny_membership_id), character_id: (encode-path-segment $character_id), collectible_presentation_node_hash: (encode-path-segment $collectible_presentation_node_hash)} | format pattern "/Destiny2/{membership_type}/Profile/{destiny_membership_id}/Character/{character_id}/Collectibles/{collectible_presentation_node_hash}/") $qp)
+  let full_url = (build-url $base ({membership_type: (encode-path-segment $membership_type), destiny_membership_id: (encode-path-segment $destiny_membership_id), character_id: (encode-path-segment $character_id), collectible_presentation_node_hash: (encode-path-segment $collectible_presentation_node_hash)} | format pattern "/Destiny2/{membership_type}/Profile/{destiny_membership_id}/Character/{character_id}/Collectibles/{collectible_presentation_node_hash}/") $qp $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"components": $components} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"components": $components} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get currently available vendors from the list of vendors that can possibly have rotating inventory. Note that this does not include things like preview vendors and vendors-as-kiosks, neither of whom have rotating/dynamic inventories. Use their definitions as-is for those.
@@ -1458,10 +1988,21 @@ export def "destiny2-profile-character-vendors list" [
   if ($destiny_membership_id | is-empty) { error make --unspanned { msg: "path parameter 'destinyMembershipId' must be non-empty" } }
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'characterId' must be non-empty" } }
   let qp = [(serialize-qp "components" $components "csv") (serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({membership_type: (encode-path-segment $membership_type), destiny_membership_id: (encode-path-segment $destiny_membership_id), character_id: (encode-path-segment $character_id)} | format pattern "/Destiny2/{membership_type}/Profile/{destiny_membership_id}/Character/{character_id}/Vendors/") $qp)
+  let full_url = (build-url $base ({membership_type: (encode-path-segment $membership_type), destiny_membership_id: (encode-path-segment $destiny_membership_id), character_id: (encode-path-segment $character_id)} | format pattern "/Destiny2/{membership_type}/Profile/{destiny_membership_id}/Character/{character_id}/Vendors/") $qp $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"components": $components, "filter": $filter} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"components": $components, "filter": $filter} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get the details of a specific Vendor.
@@ -1491,10 +2032,21 @@ export def "destiny2-profile-character-vendors get" [
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'characterId' must be non-empty" } }
   if ($vendor_hash | is-empty) { error make --unspanned { msg: "path parameter 'vendorHash' must be non-empty" } }
   let qp = [(serialize-qp "components" $components "csv")] | flatten | str join "&"
-  let full_url = (build-url $base ({membership_type: (encode-path-segment $membership_type), destiny_membership_id: (encode-path-segment $destiny_membership_id), character_id: (encode-path-segment $character_id), vendor_hash: (encode-path-segment $vendor_hash)} | format pattern "/Destiny2/{membership_type}/Profile/{destiny_membership_id}/Character/{character_id}/Vendors/{vendor_hash}/") $qp)
+  let full_url = (build-url $base ({membership_type: (encode-path-segment $membership_type), destiny_membership_id: (encode-path-segment $destiny_membership_id), character_id: (encode-path-segment $character_id), vendor_hash: (encode-path-segment $vendor_hash)} | format pattern "/Destiny2/{membership_type}/Profile/{destiny_membership_id}/Character/{character_id}/Vendors/{vendor_hash}/") $qp $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"components": $components} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"components": $components} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve the details of an instanced Destiny Item. An instanced Destiny item is one with an ItemInstanceId. Non-instanced items, such as materials, have no useful instance-specific details and thus are not queryable here.
@@ -1522,10 +2074,21 @@ export def "destiny2-profile-item get" [
   if ($destiny_membership_id | is-empty) { error make --unspanned { msg: "path parameter 'destinyMembershipId' must be non-empty" } }
   if ($item_instance_id | is-empty) { error make --unspanned { msg: "path parameter 'itemInstanceId' must be non-empty" } }
   let qp = [(serialize-qp "components" $components "csv")] | flatten | str join "&"
-  let full_url = (build-url $base ({membership_type: (encode-path-segment $membership_type), destiny_membership_id: (encode-path-segment $destiny_membership_id), item_instance_id: (encode-path-segment $item_instance_id)} | format pattern "/Destiny2/{membership_type}/Profile/{destiny_membership_id}/Item/{item_instance_id}/") $qp)
+  let full_url = (build-url $base ({membership_type: (encode-path-segment $membership_type), destiny_membership_id: (encode-path-segment $destiny_membership_id), item_instance_id: (encode-path-segment $item_instance_id)} | format pattern "/Destiny2/{membership_type}/Profile/{destiny_membership_id}/Item/{item_instance_id}/") $qp $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"components": $components} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"components": $components} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns a summary information about all profiles linked to the requesting membership type/membership ID that have valid Destiny information. The passed-in Membership Type/Membership ID may be a Bungie.Net membership or a Destiny membership. It only returns the minimal amount of data to begin making more substantive requests, but will hopefully serve as a useful alternative to UserServices for people who just care about Destiny data. Note that it will only return linked accounts whose linkages you are allowed to view.
@@ -1551,10 +2114,21 @@ export def "destiny2-profile-linked-profiles get" [
   if ($membership_type | is-empty) { error make --unspanned { msg: "path parameter 'membershipType' must be non-empty" } }
   if ($membership_id | is-empty) { error make --unspanned { msg: "path parameter 'membershipId' must be non-empty" } }
   let qp = [(serialize-qp "getAllMemberships" $get_all_memberships "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({membership_type: (encode-path-segment $membership_type), membership_id: (encode-path-segment $membership_id)} | format pattern "/Destiny2/{membership_type}/Profile/{membership_id}/LinkedProfiles/") $qp)
+  let full_url = (build-url $base ({membership_type: (encode-path-segment $membership_type), membership_id: (encode-path-segment $membership_id)} | format pattern "/Destiny2/{membership_type}/Profile/{membership_id}/LinkedProfiles/") $qp $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"getAllMemberships": $get_all_memberships} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"getAllMemberships": $get_all_memberships} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets a count of all active non-public fireteams for the specified clan. Maximum value returned is 25.
@@ -1576,10 +2150,21 @@ export def "fireteam-clan-active-count get-private" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
-  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/Fireteam/Clan/{group_id}/ActiveCount/"))
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/Fireteam/Clan/{group_id}/ActiveCount/") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets a listing of all of this clan's fireteams that are have available slots. Caller is not checked for join criteria so caching is maximized.
@@ -1616,10 +2201,21 @@ export def "fireteam-clan-available get" [
   if ($public_only | is-empty) { error make --unspanned { msg: "path parameter 'publicOnly' must be non-empty" } }
   if ($page | is-empty) { error make --unspanned { msg: "path parameter 'page' must be non-empty" } }
   let qp = [(serialize-qp "excludeImmediate" $exclude_immediate "scalar") (serialize-qp "langFilter" $lang_filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id), platform: (encode-path-segment $platform), activity_type: (encode-path-segment $activity_type), date_range: (encode-path-segment $date_range), slot_filter: (encode-path-segment $slot_filter), public_only: (encode-path-segment $public_only), page: (encode-path-segment $page)} | format pattern "/Fireteam/Clan/{group_id}/Available/{platform}/{activity_type}/{date_range}/{slot_filter}/{public_only}/{page}/") $qp)
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id), platform: (encode-path-segment $platform), activity_type: (encode-path-segment $activity_type), date_range: (encode-path-segment $date_range), slot_filter: (encode-path-segment $slot_filter), public_only: (encode-path-segment $public_only), page: (encode-path-segment $page)} | format pattern "/Fireteam/Clan/{group_id}/Available/{platform}/{activity_type}/{date_range}/{slot_filter}/{public_only}/{page}/") $qp $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"excludeImmediate": $exclude_immediate, "langFilter": $lang_filter} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"excludeImmediate": $exclude_immediate, "langFilter": $lang_filter} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets a listing of all fireteams that caller is an applicant, a member, or an alternate of.
@@ -1650,10 +2246,21 @@ export def "fireteam-clan-my get" [
   if ($include_closed | is-empty) { error make --unspanned { msg: "path parameter 'includeClosed' must be non-empty" } }
   if ($page | is-empty) { error make --unspanned { msg: "path parameter 'page' must be non-empty" } }
   let qp = [(serialize-qp "groupFilter" $group_filter "scalar") (serialize-qp "langFilter" $lang_filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id), platform: (encode-path-segment $platform), include_closed: (encode-path-segment $include_closed), page: (encode-path-segment $page)} | format pattern "/Fireteam/Clan/{group_id}/My/{platform}/{include_closed}/{page}/") $qp)
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id), platform: (encode-path-segment $platform), include_closed: (encode-path-segment $include_closed), page: (encode-path-segment $page)} | format pattern "/Fireteam/Clan/{group_id}/My/{platform}/{include_closed}/{page}/") $qp $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"groupFilter": $group_filter, "langFilter": $lang_filter} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"groupFilter": $group_filter, "langFilter": $lang_filter} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets a specific fireteam.
@@ -1677,10 +2284,21 @@ export def "fireteam-clan-summary get" [
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
   if ($fireteam_id | is-empty) { error make --unspanned { msg: "path parameter 'fireteamId' must be non-empty" } }
-  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id), fireteam_id: (encode-path-segment $fireteam_id)} | format pattern "/Fireteam/Clan/{group_id}/Summary/{fireteam_id}/"))
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id), fireteam_id: (encode-path-segment $fireteam_id)} | format pattern "/Fireteam/Clan/{group_id}/Summary/{fireteam_id}/") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets a listing of all public fireteams starting now with open slots. Caller is not checked for join criteria so caching is maximized.
@@ -1713,10 +2331,21 @@ export def "fireteam-search-available list-public-clan" [
   if ($slot_filter | is-empty) { error make --unspanned { msg: "path parameter 'slotFilter' must be non-empty" } }
   if ($page | is-empty) { error make --unspanned { msg: "path parameter 'page' must be non-empty" } }
   let qp = [(serialize-qp "excludeImmediate" $exclude_immediate "scalar") (serialize-qp "langFilter" $lang_filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({platform: (encode-path-segment $platform), activity_type: (encode-path-segment $activity_type), date_range: (encode-path-segment $date_range), slot_filter: (encode-path-segment $slot_filter), page: (encode-path-segment $page)} | format pattern "/Fireteam/Search/Available/{platform}/{activity_type}/{date_range}/{slot_filter}/{page}/") $qp)
+  let full_url = (build-url $base ({platform: (encode-path-segment $platform), activity_type: (encode-path-segment $activity_type), date_range: (encode-path-segment $date_range), slot_filter: (encode-path-segment $slot_filter), page: (encode-path-segment $page)} | format pattern "/Fireteam/Search/Available/{platform}/{activity_type}/{date_range}/{slot_filter}/{page}/") $qp $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"excludeImmediate": $exclude_immediate, "langFilter": $lang_filter} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"excludeImmediate": $exclude_immediate, "langFilter": $lang_filter} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets a listing of all topics marked as part of the core group.
@@ -1746,10 +2375,21 @@ export def "forum-get-core-topics-paged get" [
   if ($quick_date | is-empty) { error make --unspanned { msg: "path parameter 'quickDate' must be non-empty" } }
   if ($category_filter | is-empty) { error make --unspanned { msg: "path parameter 'categoryFilter' must be non-empty" } }
   let qp = [(serialize-qp "locales" $locales "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({page: (encode-path-segment $page), sort: (encode-path-segment $sort), quick_date: (encode-path-segment $quick_date), category_filter: (encode-path-segment $category_filter)} | format pattern "/Forum/GetCoreTopicsPaged/{page}/{sort}/{quick_date}/{category_filter}/") $qp)
+  let full_url = (build-url $base ({page: (encode-path-segment $page), sort: (encode-path-segment $sort), quick_date: (encode-path-segment $quick_date), category_filter: (encode-path-segment $category_filter)} | format pattern "/Forum/GetCoreTopicsPaged/{page}/{sort}/{quick_date}/{category_filter}/") $qp $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"locales": $locales} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"locales": $locales} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets tag suggestions based on partial text entry, matching them with other tags previously used in the forums.
@@ -1771,10 +2411,21 @@ export def "forum-get-forum-tag-suggestions get" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "partialtag" $partialtag "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/Forum/GetForumTagSuggestions/" $qp)
+  let full_url = (build-url $base "/Forum/GetForumTagSuggestions/" $qp $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"partialtag": $partialtag} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"partialtag": $partialtag} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the post specified and its immediate parent.
@@ -1798,10 +2449,21 @@ export def "forum-get-post-and-parent get" [
   let base = ($base_url | default $BASE_URL)
   if ($child_post_id | is-empty) { error make --unspanned { msg: "path parameter 'childPostId' must be non-empty" } }
   let qp = [(serialize-qp "showbanned" $showbanned "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({child_post_id: (encode-path-segment $child_post_id)} | format pattern "/Forum/GetPostAndParent/{child_post_id}/") $qp)
+  let full_url = (build-url $base ({child_post_id: (encode-path-segment $child_post_id)} | format pattern "/Forum/GetPostAndParent/{child_post_id}/") $qp $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"showbanned": $showbanned} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"showbanned": $showbanned} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the post specified and its immediate parent of posts that are awaiting approval.
@@ -1825,10 +2487,21 @@ export def "forum-get-post-and-parent-awaiting-approval get" [
   let base = ($base_url | default $BASE_URL)
   if ($child_post_id | is-empty) { error make --unspanned { msg: "path parameter 'childPostId' must be non-empty" } }
   let qp = [(serialize-qp "showbanned" $showbanned "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({child_post_id: (encode-path-segment $child_post_id)} | format pattern "/Forum/GetPostAndParentAwaitingApproval/{child_post_id}/") $qp)
+  let full_url = (build-url $base ({child_post_id: (encode-path-segment $child_post_id)} | format pattern "/Forum/GetPostAndParentAwaitingApproval/{child_post_id}/") $qp $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"showbanned": $showbanned} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"showbanned": $showbanned} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns a thread of posts at the given parent, optionally returning replies to those posts as well as the original parent.
@@ -1864,10 +2537,21 @@ export def "forum-get-posts-threaded-paged get" [
   if ($root_thread_mode | is-empty) { error make --unspanned { msg: "path parameter 'rootThreadMode' must be non-empty" } }
   if ($sort_mode | is-empty) { error make --unspanned { msg: "path parameter 'sortMode' must be non-empty" } }
   let qp = [(serialize-qp "showbanned" $showbanned "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent_post_id: (encode-path-segment $parent_post_id), page: (encode-path-segment $page), page_size: (encode-path-segment $page_size), reply_size: (encode-path-segment $reply_size), get_parent_post: (encode-path-segment $get_parent_post), root_thread_mode: (encode-path-segment $root_thread_mode), sort_mode: (encode-path-segment $sort_mode)} | format pattern "/Forum/GetPostsThreadedPaged/{parent_post_id}/{page}/{page_size}/{reply_size}/{get_parent_post}/{root_thread_mode}/{sort_mode}/") $qp)
+  let full_url = (build-url $base ({parent_post_id: (encode-path-segment $parent_post_id), page: (encode-path-segment $page), page_size: (encode-path-segment $page_size), reply_size: (encode-path-segment $reply_size), get_parent_post: (encode-path-segment $get_parent_post), root_thread_mode: (encode-path-segment $root_thread_mode), sort_mode: (encode-path-segment $sort_mode)} | format pattern "/Forum/GetPostsThreadedPaged/{parent_post_id}/{page}/{page_size}/{reply_size}/{get_parent_post}/{root_thread_mode}/{sort_mode}/") $qp $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"showbanned": $showbanned} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"showbanned": $showbanned} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns a thread of posts starting at the topicId of the input childPostId, optionally returning replies to those posts as well as the original parent.
@@ -1901,10 +2585,21 @@ export def "forum-get-posts-threaded-paged-from-child get" [
   if ($root_thread_mode | is-empty) { error make --unspanned { msg: "path parameter 'rootThreadMode' must be non-empty" } }
   if ($sort_mode | is-empty) { error make --unspanned { msg: "path parameter 'sortMode' must be non-empty" } }
   let qp = [(serialize-qp "showbanned" $showbanned "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({child_post_id: (encode-path-segment $child_post_id), page: (encode-path-segment $page), page_size: (encode-path-segment $page_size), reply_size: (encode-path-segment $reply_size), root_thread_mode: (encode-path-segment $root_thread_mode), sort_mode: (encode-path-segment $sort_mode)} | format pattern "/Forum/GetPostsThreadedPagedFromChild/{child_post_id}/{page}/{page_size}/{reply_size}/{root_thread_mode}/{sort_mode}/") $qp)
+  let full_url = (build-url $base ({child_post_id: (encode-path-segment $child_post_id), page: (encode-path-segment $page), page_size: (encode-path-segment $page_size), reply_size: (encode-path-segment $reply_size), root_thread_mode: (encode-path-segment $root_thread_mode), sort_mode: (encode-path-segment $sort_mode)} | format pattern "/Forum/GetPostsThreadedPagedFromChild/{child_post_id}/{page}/{page_size}/{reply_size}/{root_thread_mode}/{sort_mode}/") $qp $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"showbanned": $showbanned} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"showbanned": $showbanned} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the post Id for the given content item's comments, if it exists.
@@ -1926,10 +2621,21 @@ export def "forum-get-topic-for-content get" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($content_id | is-empty) { error make --unspanned { msg: "path parameter 'contentId' must be non-empty" } }
-  let full_url = (build-url $base ({content_id: (encode-path-segment $content_id)} | format pattern "/Forum/GetTopicForContent/{content_id}/"))
+  let full_url = (build-url $base ({content_id: (encode-path-segment $content_id)} | format pattern "/Forum/GetTopicForContent/{content_id}/") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get topics from any forum.
@@ -1964,10 +2670,21 @@ export def "forum-get-topics-paged get" [
   if ($quick_date | is-empty) { error make --unspanned { msg: "path parameter 'quickDate' must be non-empty" } }
   if ($category_filter | is-empty) { error make --unspanned { msg: "path parameter 'categoryFilter' must be non-empty" } }
   let qp = [(serialize-qp "locales" $locales "scalar") (serialize-qp "tagstring" $tagstring "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({page: (encode-path-segment $page), page_size: (encode-path-segment $page_size), group: (encode-path-segment $group), sort: (encode-path-segment $sort), quick_date: (encode-path-segment $quick_date), category_filter: (encode-path-segment $category_filter)} | format pattern "/Forum/GetTopicsPaged/{page}/{page_size}/{group}/{sort}/{quick_date}/{category_filter}/") $qp)
+  let full_url = (build-url $base ({page: (encode-path-segment $page), page_size: (encode-path-segment $page_size), group: (encode-path-segment $group), sort: (encode-path-segment $sort), quick_date: (encode-path-segment $quick_date), category_filter: (encode-path-segment $category_filter)} | format pattern "/Forum/GetTopicsPaged/{page}/{page_size}/{group}/{sort}/{quick_date}/{category_filter}/") $qp $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"locales": $locales, "tagstring": $tagstring} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"locales": $locales, "tagstring": $tagstring} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the specified forum poll.
@@ -1989,10 +2706,21 @@ export def "forum-poll get" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($topic_id | is-empty) { error make --unspanned { msg: "path parameter 'topicId' must be non-empty" } }
-  let full_url = (build-url $base ({topic_id: (encode-path-segment $topic_id)} | format pattern "/Forum/Poll/{topic_id}/"))
+  let full_url = (build-url $base ({topic_id: (encode-path-segment $topic_id)} | format pattern "/Forum/Poll/{topic_id}/") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Allows the caller to get a list of to 25 recruitment thread summary information objects.
@@ -2012,10 +2740,21 @@ export def "forum-recruit-summaries get-recruitment-thread" [
 ]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: table<Fireteam: list, approved: bool, conversationId: int, intensity: int, kickedPlayerIds: list, microphoneRequired: bool, playerSlotsRemaining: int, playerSlotsTotal: int, tone: int, topicId: int>, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/Forum/Recruit/Summaries/")
+  let full_url = (build-url $base "/Forum/Recruit/Summaries/" $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # List of available localization cultures
@@ -2035,10 +2774,21 @@ export def "get-available-locales get" [
 ]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: record, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/GetAvailableLocales/")
+  let full_url = (build-url $base "/GetAvailableLocales/" $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets any active global alert for display in the forum banners, help pages, etc. Usually used for DOC alerts.
@@ -2060,10 +2810,21 @@ export def "global-alerts get" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "includestreaming" $includestreaming "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/GlobalAlerts/" $qp)
+  let full_url = (build-url $base "/GlobalAlerts/" $qp $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"includestreaming": $includestreaming} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"includestreaming": $includestreaming} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns a list of all available group avatars for the signed-in user.
@@ -2083,10 +2844,21 @@ export def "group-v2-get-available-avatars get" [
 ]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: record, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/GroupV2/GetAvailableAvatars/")
+  let full_url = (build-url $base "/GroupV2/GetAvailableAvatars/" $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns a list of all available group themes.
@@ -2106,10 +2878,21 @@ export def "group-v2-get-available-themes get" [
 ]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: table<description: string, folder: string, name: string>, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/GroupV2/GetAvailableThemes/")
+  let full_url = (build-url $base "/GroupV2/GetAvailableThemes/" $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the state of the user's clan invite preferences for a particular membership type - true if they wish to be invited to clans, false otherwise.
@@ -2131,10 +2914,21 @@ export def "group-v2-get-user-clan-invite-setting get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($m_type | is-empty) { error make --unspanned { msg: "path parameter 'mType' must be non-empty" } }
-  let full_url = (build-url $base ({m_type: (encode-path-segment $m_type)} | format pattern "/GroupV2/GetUserClanInviteSetting/{m_type}/"))
+  let full_url = (build-url $base ({m_type: (encode-path-segment $m_type)} | format pattern "/GroupV2/GetUserClanInviteSetting/{m_type}/") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get information about a specific group with the given name and type.
@@ -2158,10 +2952,21 @@ export def "group-v2-name get" [
   let base = ($base_url | default $BASE_URL)
   if ($group_name | is-empty) { error make --unspanned { msg: "path parameter 'groupName' must be non-empty" } }
   if ($group_type | is-empty) { error make --unspanned { msg: "path parameter 'groupType' must be non-empty" } }
-  let full_url = (build-url $base ({group_name: (encode-path-segment $group_name), group_type: (encode-path-segment $group_type)} | format pattern "/GroupV2/Name/{group_name}/{group_type}/"))
+  let full_url = (build-url $base ({group_name: (encode-path-segment $group_name), group_type: (encode-path-segment $group_type)} | format pattern "/GroupV2/Name/{group_name}/{group_type}/") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get information about a specific group with the given name and type. The POST version.
@@ -2181,10 +2986,21 @@ export def "group-v2-name-v2 get" [
 ]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: record<allianceStatus: int, alliedIds: list<int>, currentUserMemberMap: record, currentUserMembershipsInactiveForDestiny: bool, currentUserPotentialMemberMap: record, detail: record<about: string, allowChat: bool, avatarImageIndex: int, avatarPath: string, banExpireDate: string, bannerPath: string, chatSecurity: int, clanInfo: record, conversationId: int, creationDate: string, defaultPublicity: int, enableInvitationMessagingForAdmins: bool, features: record, groupId: int, groupType: int, homepage: int, isDefaultPostPublic: bool, isPublic: bool, isPublicTopicAdminOnly: bool, locale: string, memberCount: int, membershipIdCreated: int, membershipOption: int, modificationDate: string, motto: string, name: string, tags: list, theme: string>, founder: record<bungieNetUserInfo: record, destinyUserInfo: record, groupId: int, isOnline: bool, joinDate: string, lastOnlineStatusChange: int, memberType: int>, groupJoinInviteCount: int, parentGroup: record<about: string, allowChat: bool, avatarImageIndex: int, avatarPath: string, banExpireDate: string, bannerPath: string, chatSecurity: int, clanInfo: record, conversationId: int, creationDate: string, defaultPublicity: int, enableInvitationMessagingForAdmins: bool, features: record, groupId: int, groupType: int, homepage: int, isDefaultPostPublic: bool, isPublic: bool, isPublicTopicAdminOnly: bool, locale: string, memberCount: int, membershipIdCreated: int, membershipOption: int, modificationDate: string, motto: string, name: string, tags: list, theme: string>>, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/GroupV2/NameV2/")
+  let full_url = (build-url $base "/GroupV2/NameV2/" $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Gets groups recommended for you based on the groups to whom those you follow belong.
@@ -2208,10 +3024,21 @@ export def "group-v2-recommended get" [
   let base = ($base_url | default $BASE_URL)
   if ($group_type | is-empty) { error make --unspanned { msg: "path parameter 'groupType' must be non-empty" } }
   if ($create_date_range | is-empty) { error make --unspanned { msg: "path parameter 'createDateRange' must be non-empty" } }
-  let full_url = (build-url $base ({group_type: (encode-path-segment $group_type), create_date_range: (encode-path-segment $create_date_range)} | format pattern "/GroupV2/Recommended/{group_type}/{create_date_range}/"))
+  let full_url = (build-url $base ({group_type: (encode-path-segment $group_type), create_date_range: (encode-path-segment $create_date_range)} | format pattern "/GroupV2/Recommended/{group_type}/{create_date_range}/") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Allows a founder to manually recover a group they can see in game but not on bungie.net
@@ -2237,10 +3064,21 @@ export def "group-v2-recover get-for-founder" [
   if ($membership_type | is-empty) { error make --unspanned { msg: "path parameter 'membershipType' must be non-empty" } }
   if ($membership_id | is-empty) { error make --unspanned { msg: "path parameter 'membershipId' must be non-empty" } }
   if ($group_type | is-empty) { error make --unspanned { msg: "path parameter 'groupType' must be non-empty" } }
-  let full_url = (build-url $base ({membership_type: (encode-path-segment $membership_type), membership_id: (encode-path-segment $membership_id), group_type: (encode-path-segment $group_type)} | format pattern "/GroupV2/Recover/{membership_type}/{membership_id}/{group_type}/"))
+  let full_url = (build-url $base ({membership_type: (encode-path-segment $membership_type), membership_id: (encode-path-segment $membership_id), group_type: (encode-path-segment $group_type)} | format pattern "/GroupV2/Recover/{membership_type}/{membership_id}/{group_type}/") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Search for Groups.
@@ -2260,10 +3098,21 @@ export def "group-v2-search list" [
 ]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: record<hasMore: bool, query: record<currentPage: int, itemsPerPage: int, requestContinuationToken: string>, replacementContinuationToken: string, results: list<record>, totalResults: int, useTotalResults: bool>, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/GroupV2/Search/")
+  let full_url = (build-url $base "/GroupV2/Search/" $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Get information about the groups that a given member has applied to or been invited to.
@@ -2291,10 +3140,21 @@ export def "group-v2-user-potential get-for-member" [
   if ($membership_id | is-empty) { error make --unspanned { msg: "path parameter 'membershipId' must be non-empty" } }
   if ($filter | is-empty) { error make --unspanned { msg: "path parameter 'filter' must be non-empty" } }
   if ($group_type | is-empty) { error make --unspanned { msg: "path parameter 'groupType' must be non-empty" } }
-  let full_url = (build-url $base ({membership_type: (encode-path-segment $membership_type), membership_id: (encode-path-segment $membership_id), filter: (encode-path-segment $filter), group_type: (encode-path-segment $group_type)} | format pattern "/GroupV2/User/Potential/{membership_type}/{membership_id}/{filter}/{group_type}/"))
+  let full_url = (build-url $base ({membership_type: (encode-path-segment $membership_type), membership_id: (encode-path-segment $membership_id), filter: (encode-path-segment $filter), group_type: (encode-path-segment $group_type)} | format pattern "/GroupV2/User/Potential/{membership_type}/{membership_id}/{filter}/{group_type}/") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get information about the groups that a given member has joined.
@@ -2322,10 +3182,21 @@ export def "group-v2-user get-for-member" [
   if ($membership_id | is-empty) { error make --unspanned { msg: "path parameter 'membershipId' must be non-empty" } }
   if ($filter | is-empty) { error make --unspanned { msg: "path parameter 'filter' must be non-empty" } }
   if ($group_type | is-empty) { error make --unspanned { msg: "path parameter 'groupType' must be non-empty" } }
-  let full_url = (build-url $base ({membership_type: (encode-path-segment $membership_type), membership_id: (encode-path-segment $membership_id), filter: (encode-path-segment $filter), group_type: (encode-path-segment $group_type)} | format pattern "/GroupV2/User/{membership_type}/{membership_id}/{filter}/{group_type}/"))
+  let full_url = (build-url $base ({membership_type: (encode-path-segment $membership_type), membership_id: (encode-path-segment $membership_id), filter: (encode-path-segment $filter), group_type: (encode-path-segment $group_type)} | format pattern "/GroupV2/User/{membership_type}/{membership_id}/{filter}/{group_type}/") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get information about a specific group of the given ID.
@@ -2347,10 +3218,21 @@ export def "group-v2 get" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
-  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/GroupV2/{group_id}/"))
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/GroupV2/{group_id}/") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # An administrative method to allow the founder of a group or clan to give up their position to another admin permanently.
@@ -2376,10 +3258,21 @@ export def "group-v2-admin-abdicate-foundership create" [
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
   if ($membership_type | is-empty) { error make --unspanned { msg: "path parameter 'membershipType' must be non-empty" } }
   if ($founder_id_new | is-empty) { error make --unspanned { msg: "path parameter 'founderIdNew' must be non-empty" } }
-  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id), membership_type: (encode-path-segment $membership_type), founder_id_new: (encode-path-segment $founder_id_new)} | format pattern "/GroupV2/{group_id}/Admin/AbdicateFoundership/{membership_type}/{founder_id_new}/"))
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id), membership_type: (encode-path-segment $membership_type), founder_id_new: (encode-path-segment $founder_id_new)} | format pattern "/GroupV2/{group_id}/Admin/AbdicateFoundership/{membership_type}/{founder_id_new}/") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Get the list of members in a given group who are of admin level or higher.
@@ -2403,10 +3296,21 @@ export def "group-v2-admins-and-founder get" [
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
   let qp = [(serialize-qp "currentpage" $currentpage "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/GroupV2/{group_id}/AdminsAndFounder/") $qp)
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/GroupV2/{group_id}/AdminsAndFounder/") $qp $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"currentpage": $currentpage} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"currentpage": $currentpage} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get the list of banned members in a given group. Only accessible to group Admins and above. Not applicable to all groups. Check group features.
@@ -2430,10 +3334,21 @@ export def "group-v2-banned get-members" [
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
   let qp = [(serialize-qp "currentpage" $currentpage "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/GroupV2/{group_id}/Banned/") $qp)
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/GroupV2/{group_id}/Banned/") $qp $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"currentpage": $currentpage} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"currentpage": $currentpage} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Edit an existing group. You must have suitable permissions in the group to perform this operation. This latest revision will only edit the fields you pass in - pass null for properties you want to leave unaltered.
@@ -2455,10 +3370,21 @@ export def "group-v2-edit create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
-  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/GroupV2/{group_id}/Edit/"))
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/GroupV2/{group_id}/Edit/") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Edit an existing group's clan banner. You must have suitable permissions in the group to perform this operation. All fields are required.
@@ -2480,10 +3406,21 @@ export def "group-v2-edit-clan-banner create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
-  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/GroupV2/{group_id}/EditClanBanner/"))
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/GroupV2/{group_id}/EditClanBanner/") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Edit group options only available to a founder. You must have suitable permissions in the group to perform this operation.
@@ -2505,10 +3442,21 @@ export def "group-v2-edit-founder-options create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
-  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/GroupV2/{group_id}/EditFounderOptions/"))
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/GroupV2/{group_id}/EditFounderOptions/") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Get the list of members in a given group.
@@ -2534,10 +3482,21 @@ export def "group-v2-members get" [
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
   let qp = [(serialize-qp "currentpage" $currentpage "scalar") (serialize-qp "memberType" $member_type "scalar") (serialize-qp "nameSearch" $name_search "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/GroupV2/{group_id}/Members/") $qp)
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/GroupV2/{group_id}/Members/") $qp $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"currentpage": $currentpage, "memberType": $member_type, "nameSearch": $name_search} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"currentpage": $currentpage, "memberType": $member_type, "nameSearch": $name_search} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Approve the given membershipId to join the group/clan as long as they have applied.
@@ -2563,10 +3522,21 @@ export def "group-v2-members-approve approve-pending" [
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
   if ($membership_type | is-empty) { error make --unspanned { msg: "path parameter 'membershipType' must be non-empty" } }
   if ($membership_id | is-empty) { error make --unspanned { msg: "path parameter 'membershipId' must be non-empty" } }
-  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id), membership_type: (encode-path-segment $membership_type), membership_id: (encode-path-segment $membership_id)} | format pattern "/GroupV2/{group_id}/Members/Approve/{membership_type}/{membership_id}/"))
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id), membership_type: (encode-path-segment $membership_type), membership_id: (encode-path-segment $membership_id)} | format pattern "/GroupV2/{group_id}/Members/Approve/{membership_type}/{membership_id}/") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Approve all of the pending users for the given group.
@@ -2588,10 +3558,21 @@ export def "group-v2-members-approve-all approve-pending" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
-  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/GroupV2/{group_id}/Members/ApproveAll/"))
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/GroupV2/{group_id}/Members/ApproveAll/") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Approve all of the pending users for the given group.
@@ -2613,10 +3594,21 @@ export def "group-v2-members-approve-list approve-pending" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
-  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/GroupV2/{group_id}/Members/ApproveList/"))
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/GroupV2/{group_id}/Members/ApproveList/") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Deny all of the pending users for the given group.
@@ -2638,10 +3630,21 @@ export def "group-v2-members-deny-all list-pending" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
-  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/GroupV2/{group_id}/Members/DenyAll/"))
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/GroupV2/{group_id}/Members/DenyAll/") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Deny all of the pending users for the given group that match the passed-in .
@@ -2663,10 +3666,21 @@ export def "group-v2-members-deny-list list-pending" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
-  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/GroupV2/{group_id}/Members/DenyList/"))
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/GroupV2/{group_id}/Members/DenyList/") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Invite a user to join this group.
@@ -2692,10 +3706,21 @@ export def "group-v2-members-individual-invite create" [
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
   if ($membership_type | is-empty) { error make --unspanned { msg: "path parameter 'membershipType' must be non-empty" } }
   if ($membership_id | is-empty) { error make --unspanned { msg: "path parameter 'membershipId' must be non-empty" } }
-  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id), membership_type: (encode-path-segment $membership_type), membership_id: (encode-path-segment $membership_id)} | format pattern "/GroupV2/{group_id}/Members/IndividualInvite/{membership_type}/{membership_id}/"))
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id), membership_type: (encode-path-segment $membership_type), membership_id: (encode-path-segment $membership_id)} | format pattern "/GroupV2/{group_id}/Members/IndividualInvite/{membership_type}/{membership_id}/") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Cancels a pending invitation to join a group.
@@ -2721,10 +3746,21 @@ export def "group-v2-members-individual-invite-cancel cancel" [
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
   if ($membership_type | is-empty) { error make --unspanned { msg: "path parameter 'membershipType' must be non-empty" } }
   if ($membership_id | is-empty) { error make --unspanned { msg: "path parameter 'membershipId' must be non-empty" } }
-  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id), membership_type: (encode-path-segment $membership_type), membership_id: (encode-path-segment $membership_id)} | format pattern "/GroupV2/{group_id}/Members/IndividualInviteCancel/{membership_type}/{membership_id}/"))
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id), membership_type: (encode-path-segment $membership_type), membership_id: (encode-path-segment $membership_id)} | format pattern "/GroupV2/{group_id}/Members/IndividualInviteCancel/{membership_type}/{membership_id}/") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Get the list of users who have been invited into the group.
@@ -2748,10 +3784,21 @@ export def "group-v2-members-invited-individuals get" [
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
   let qp = [(serialize-qp "currentpage" $currentpage "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/GroupV2/{group_id}/Members/InvitedIndividuals/") $qp)
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/GroupV2/{group_id}/Members/InvitedIndividuals/") $qp $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"currentpage": $currentpage} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"currentpage": $currentpage} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get the list of users who are awaiting a decision on their application to join a given group. Modified to include application info.
@@ -2775,10 +3822,21 @@ export def "group-v2-members-pending get-memberships" [
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
   let qp = [(serialize-qp "currentpage" $currentpage "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/GroupV2/{group_id}/Members/Pending/") $qp)
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/GroupV2/{group_id}/Members/Pending/") $qp $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"currentpage": $currentpage} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"currentpage": $currentpage} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Bans the requested member from the requested group for the specified period of time.
@@ -2804,10 +3862,21 @@ export def "group-v2-members-ban create" [
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
   if ($membership_type | is-empty) { error make --unspanned { msg: "path parameter 'membershipType' must be non-empty" } }
   if ($membership_id | is-empty) { error make --unspanned { msg: "path parameter 'membershipId' must be non-empty" } }
-  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id), membership_type: (encode-path-segment $membership_type), membership_id: (encode-path-segment $membership_id)} | format pattern "/GroupV2/{group_id}/Members/{membership_type}/{membership_id}/Ban/"))
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id), membership_type: (encode-path-segment $membership_type), membership_id: (encode-path-segment $membership_id)} | format pattern "/GroupV2/{group_id}/Members/{membership_type}/{membership_id}/Ban/") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Kick a member from the given group, forcing them to reapply if they wish to re-join the group. You must have suitable permissions in the group to perform this operation.
@@ -2833,10 +3902,21 @@ export def "group-v2-members-kick create" [
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
   if ($membership_type | is-empty) { error make --unspanned { msg: "path parameter 'membershipType' must be non-empty" } }
   if ($membership_id | is-empty) { error make --unspanned { msg: "path parameter 'membershipId' must be non-empty" } }
-  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id), membership_type: (encode-path-segment $membership_type), membership_id: (encode-path-segment $membership_id)} | format pattern "/GroupV2/{group_id}/Members/{membership_type}/{membership_id}/Kick/"))
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id), membership_type: (encode-path-segment $membership_type), membership_id: (encode-path-segment $membership_id)} | format pattern "/GroupV2/{group_id}/Members/{membership_type}/{membership_id}/Kick/") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Edit the membership type of a given member. You must have suitable permissions in the group to perform this operation.
@@ -2864,10 +3944,21 @@ export def "group-v2-members-set-membership-type create-edit" [
   if ($membership_type | is-empty) { error make --unspanned { msg: "path parameter 'membershipType' must be non-empty" } }
   if ($membership_id | is-empty) { error make --unspanned { msg: "path parameter 'membershipId' must be non-empty" } }
   if ($member_type | is-empty) { error make --unspanned { msg: "path parameter 'memberType' must be non-empty" } }
-  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id), membership_type: (encode-path-segment $membership_type), membership_id: (encode-path-segment $membership_id), member_type: (encode-path-segment $member_type)} | format pattern "/GroupV2/{group_id}/Members/{membership_type}/{membership_id}/SetMembershipType/{member_type}/"))
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id), membership_type: (encode-path-segment $membership_type), membership_id: (encode-path-segment $membership_id), member_type: (encode-path-segment $member_type)} | format pattern "/GroupV2/{group_id}/Members/{membership_type}/{membership_id}/SetMembershipType/{member_type}/") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Unbans the requested member, allowing them to re-apply for membership.
@@ -2893,10 +3984,21 @@ export def "group-v2-members-unban create" [
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
   if ($membership_type | is-empty) { error make --unspanned { msg: "path parameter 'membershipType' must be non-empty" } }
   if ($membership_id | is-empty) { error make --unspanned { msg: "path parameter 'membershipId' must be non-empty" } }
-  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id), membership_type: (encode-path-segment $membership_type), membership_id: (encode-path-segment $membership_id)} | format pattern "/GroupV2/{group_id}/Members/{membership_type}/{membership_id}/Unban/"))
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id), membership_type: (encode-path-segment $membership_type), membership_id: (encode-path-segment $membership_id)} | format pattern "/GroupV2/{group_id}/Members/{membership_type}/{membership_id}/Unban/") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Gets a list of available optional conversation channels and their settings.
@@ -2918,10 +4020,21 @@ export def "group-v2-optional-conversations get" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
-  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/GroupV2/{group_id}/OptionalConversations/"))
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/GroupV2/{group_id}/OptionalConversations/") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Add a new optional conversation/chat channel. Requires admin permissions to the group.
@@ -2943,10 +4056,21 @@ export def "group-v2-optional-conversations-add create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
-  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/GroupV2/{group_id}/OptionalConversations/Add/"))
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/GroupV2/{group_id}/OptionalConversations/Add/") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Edit the settings of an optional conversation/chat channel. Requires admin permissions to the group.
@@ -2970,10 +4094,21 @@ export def "group-v2-optional-conversations-edit create" [
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
   if ($conversation_id | is-empty) { error make --unspanned { msg: "path parameter 'conversationId' must be non-empty" } }
-  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id), conversation_id: (encode-path-segment $conversation_id)} | format pattern "/GroupV2/{group_id}/OptionalConversations/Edit/{conversation_id}/"))
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id), conversation_id: (encode-path-segment $conversation_id)} | format pattern "/GroupV2/{group_id}/OptionalConversations/Edit/{conversation_id}/") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Get the common settings used by the Bungie.Net environment.
@@ -2993,10 +4128,21 @@ export def "settings get-common" [
 ]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: record<clanBannerDecalColors: list<record>, clanBannerDecals: list<record>, clanBannerGonfalonColors: list<record>, clanBannerGonfalonDetailColors: list<record>, clanBannerGonfalonDetails: list<record>, clanBannerGonfalons: list<record>, clanBannerStandards: list<record>, defaultGroupTheme: record<childSettings: list, displayName: string, identifier: string, imagePath: string, isDefault: bool, summary: string>, destiny2CoreSettings: record<activeSealsRootNodeHash: int, activeTriumphsRootNodeHash: int, ammoTypeHeavyIcon: string, ammoTypePrimaryIcon: string, ammoTypeSpecialIcon: string, badgesRootNode: int, collectionRootNode: int, craftingRootNodeHash: int, currentRankProgressionHashes: list, currentSeasonHash: int, currentSeasonalArtifactHash: int, exoticCatalystsRootNodeHash: int, futureSeasonHashes: list, guardianRankConstantsHash: int, guardianRanksRootNodeHash: int, insertPlugFreeBlockedSocketTypeHashes: list, insertPlugFreeProtectedPlugItemHashes: list, legacySealsRootNodeHash: int, legacyTriumphsRootNodeHash: int, loadoutConstantsHash: int, loreRootNodeHash: int, medalsRootNode: int, medalsRootNodeHash: int, metricsRootNode: int, pastSeasonHashes: list, recordsRootNode: int, seasonalChallengesPresentationNodeHash: int, undiscoveredCollectibleImage: string>, destinyMembershipTypes: list<record>, emailSettings: record<optInDefinitions: record, subscriptionDefinitions: record, views: record>, environment: string, fireteamActivities: list<record>, forumCategories: list<record>, groupAvatars: list<record>, ignoreReasons: list<record>, recruitmentActivities: list<record>, recruitmentMiscTags: list<record>, recruitmentPlatformTags: list<record>, systemContentLocales: list<record>, systems: record, userContentLocales: list<record>>, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/Settings/")
+  let full_url = (build-url $base "/Settings/" $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns your Bungie Friend list
@@ -3016,10 +4162,21 @@ export def "social-friends get-list" [
 ]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: record<friends: list<record>>, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/Social/Friends/")
+  let full_url = (build-url $base "/Social/Friends/" $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Requests a friend relationship with the target user. Any of the target user's linked membership ids are valid inputs.
@@ -3041,10 +4198,21 @@ export def "social-friends-add request-issue" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($membership_id | is-empty) { error make --unspanned { msg: "path parameter 'membershipId' must be non-empty" } }
-  let full_url = (build-url $base ({membership_id: (encode-path-segment $membership_id)} | format pattern "/Social/Friends/Add/{membership_id}/"))
+  let full_url = (build-url $base ({membership_id: (encode-path-segment $membership_id)} | format pattern "/Social/Friends/Add/{membership_id}/") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Remove a friend relationship with the target user. The user must be on your friend list, though no error will occur if they are not.
@@ -3066,10 +4234,21 @@ export def "social-friends-remove delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($membership_id | is-empty) { error make --unspanned { msg: "path parameter 'membershipId' must be non-empty" } }
-  let full_url = (build-url $base ({membership_id: (encode-path-segment $membership_id)} | format pattern "/Social/Friends/Remove/{membership_id}/"))
+  let full_url = (build-url $base ({membership_id: (encode-path-segment $membership_id)} | format pattern "/Social/Friends/Remove/{membership_id}/") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Returns your friend request queue.
@@ -3089,10 +4268,21 @@ export def "social-friends-requests get-list" [
 ]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: record<incomingRequests: list<record>, outgoingRequests: list<record>>, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/Social/Friends/Requests/")
+  let full_url = (build-url $base "/Social/Friends/Requests/" $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Accepts a friend relationship with the target user. The user must be on your incoming friend request list, though no error will occur if they are not.
@@ -3114,10 +4304,21 @@ export def "social-friends-requests-accept request" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($membership_id | is-empty) { error make --unspanned { msg: "path parameter 'membershipId' must be non-empty" } }
-  let full_url = (build-url $base ({membership_id: (encode-path-segment $membership_id)} | format pattern "/Social/Friends/Requests/Accept/{membership_id}/"))
+  let full_url = (build-url $base ({membership_id: (encode-path-segment $membership_id)} | format pattern "/Social/Friends/Requests/Accept/{membership_id}/") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Declines a friend relationship with the target user. The user must be on your incoming friend request list, though no error will occur if they are not.
@@ -3139,10 +4340,21 @@ export def "social-friends-requests-decline request" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($membership_id | is-empty) { error make --unspanned { msg: "path parameter 'membershipId' must be non-empty" } }
-  let full_url = (build-url $base ({membership_id: (encode-path-segment $membership_id)} | format pattern "/Social/Friends/Requests/Decline/{membership_id}/"))
+  let full_url = (build-url $base ({membership_id: (encode-path-segment $membership_id)} | format pattern "/Social/Friends/Requests/Decline/{membership_id}/") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Remove a friend relationship with the target user. The user must be on your outgoing request friend list, though no error will occur if they are not.
@@ -3164,10 +4376,21 @@ export def "social-friends-requests-remove delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($membership_id | is-empty) { error make --unspanned { msg: "path parameter 'membershipId' must be non-empty" } }
-  let full_url = (build-url $base ({membership_id: (encode-path-segment $membership_id)} | format pattern "/Social/Friends/Requests/Remove/{membership_id}/"))
+  let full_url = (build-url $base ({membership_id: (encode-path-segment $membership_id)} | format pattern "/Social/Friends/Requests/Remove/{membership_id}/") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the platform friend of the requested type, with additional information if they have Bungie accounts. Must have a recent login session with said platform.
@@ -3191,10 +4414,21 @@ export def "social-platform-friends get-list" [
   let base = ($base_url | default $BASE_URL)
   if ($friend_platform | is-empty) { error make --unspanned { msg: "path parameter 'friendPlatform' must be non-empty" } }
   if ($page | is-empty) { error make --unspanned { msg: "path parameter 'page' must be non-empty" } }
-  let full_url = (build-url $base ({friend_platform: (encode-path-segment $friend_platform), page: (encode-path-segment $page)} | format pattern "/Social/PlatformFriends/{friend_platform}/{page}/"))
+  let full_url = (build-url $base ({friend_platform: (encode-path-segment $friend_platform), page: (encode-path-segment $page)} | format pattern "/Social/PlatformFriends/{friend_platform}/{page}/") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Apply a partner offer to the targeted user. This endpoint does not claim a new offer, but any already claimed offers will be applied to the game if not already.
@@ -3218,10 +4452,21 @@ export def "tokens-partner-apply-missing-offers create-without-claim" [
   let base = ($base_url | default $BASE_URL)
   if ($partner_application_id | is-empty) { error make --unspanned { msg: "path parameter 'partnerApplicationId' must be non-empty" } }
   if ($target_bnet_membership_id | is-empty) { error make --unspanned { msg: "path parameter 'targetBnetMembershipId' must be non-empty" } }
-  let full_url = (build-url $base ({partner_application_id: (encode-path-segment $partner_application_id), target_bnet_membership_id: (encode-path-segment $target_bnet_membership_id)} | format pattern "/Tokens/Partner/ApplyMissingOffers/{partner_application_id}/{target_bnet_membership_id}/"))
+  let full_url = (build-url $base ({partner_application_id: (encode-path-segment $partner_application_id), target_bnet_membership_id: (encode-path-segment $target_bnet_membership_id)} | format pattern "/Tokens/Partner/ApplyMissingOffers/{partner_application_id}/{target_bnet_membership_id}/") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Claim a partner offer as the authenticated user.
@@ -3241,10 +4486,21 @@ export def "tokens-partner-claim-offer create" [
 ]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: bool, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/Tokens/Partner/ClaimOffer/")
+  let full_url = (build-url $base "/Tokens/Partner/ClaimOffer/" $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Twitch Drops self-repair function - scans twitch for drops not marked as fulfilled and resyncs them.
@@ -3264,10 +4520,21 @@ export def "tokens-partner-force-drops-repair create" [
 ]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: bool, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/Tokens/Partner/ForceDropsRepair/")
+  let full_url = (build-url $base "/Tokens/Partner/ForceDropsRepair/" $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the partner sku and offer history of the targeted user. Elevated permissions are required to see users that are not yourself.
@@ -3291,10 +4558,21 @@ export def "tokens-partner-history get-offer-sku" [
   let base = ($base_url | default $BASE_URL)
   if ($partner_application_id | is-empty) { error make --unspanned { msg: "path parameter 'partnerApplicationId' must be non-empty" } }
   if ($target_bnet_membership_id | is-empty) { error make --unspanned { msg: "path parameter 'targetBnetMembershipId' must be non-empty" } }
-  let full_url = (build-url $base ({partner_application_id: (encode-path-segment $partner_application_id), target_bnet_membership_id: (encode-path-segment $target_bnet_membership_id)} | format pattern "/Tokens/Partner/History/{partner_application_id}/{target_bnet_membership_id}/"))
+  let full_url = (build-url $base ({partner_application_id: (encode-path-segment $partner_application_id), target_bnet_membership_id: (encode-path-segment $target_bnet_membership_id)} | format pattern "/Tokens/Partner/History/{partner_application_id}/{target_bnet_membership_id}/") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the partner rewards history of the targeted user, both partner offers and Twitch drops.
@@ -3318,10 +4596,21 @@ export def "tokens-partner-history-application get-reward" [
   let base = ($base_url | default $BASE_URL)
   if ($target_bnet_membership_id | is-empty) { error make --unspanned { msg: "path parameter 'targetBnetMembershipId' must be non-empty" } }
   if ($partner_application_id | is-empty) { error make --unspanned { msg: "path parameter 'partnerApplicationId' must be non-empty" } }
-  let full_url = (build-url $base ({target_bnet_membership_id: (encode-path-segment $target_bnet_membership_id), partner_application_id: (encode-path-segment $partner_application_id)} | format pattern "/Tokens/Partner/History/{target_bnet_membership_id}/Application/{partner_application_id}/"))
+  let full_url = (build-url $base ({target_bnet_membership_id: (encode-path-segment $target_bnet_membership_id), partner_application_id: (encode-path-segment $partner_application_id)} | format pattern "/Tokens/Partner/History/{target_bnet_membership_id}/Application/{partner_application_id}/") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns a list of the current bungie rewards
@@ -3341,10 +4630,21 @@ export def "tokens-rewards-bungie-rewards get-list" [
 ]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: record, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/Tokens/Rewards/BungieRewards/")
+  let full_url = (build-url $base "/Tokens/Rewards/BungieRewards/" $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the bungie rewards for the targeted user when a platform membership Id and Type are used.
@@ -3368,10 +4668,21 @@ export def "tokens-rewards-get-rewards-for-platform-user get-bungie" [
   let base = ($base_url | default $BASE_URL)
   if ($membership_id | is-empty) { error make --unspanned { msg: "path parameter 'membershipId' must be non-empty" } }
   if ($membership_type | is-empty) { error make --unspanned { msg: "path parameter 'membershipType' must be non-empty" } }
-  let full_url = (build-url $base ({membership_id: (encode-path-segment $membership_id), membership_type: (encode-path-segment $membership_type)} | format pattern "/Tokens/Rewards/GetRewardsForPlatformUser/{membership_id}/{membership_type}/"))
+  let full_url = (build-url $base ({membership_id: (encode-path-segment $membership_id), membership_type: (encode-path-segment $membership_type)} | format pattern "/Tokens/Rewards/GetRewardsForPlatformUser/{membership_id}/{membership_type}/") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the bungie rewards for the targeted user.
@@ -3393,10 +4704,21 @@ export def "tokens-rewards-get-rewards-for-user get-bungie" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($membership_id | is-empty) { error make --unspanned { msg: "path parameter 'membershipId' must be non-empty" } }
-  let full_url = (build-url $base ({membership_id: (encode-path-segment $membership_id)} | format pattern "/Tokens/Rewards/GetRewardsForUser/{membership_id}/"))
+  let full_url = (build-url $base ({membership_id: (encode-path-segment $membership_id)} | format pattern "/Tokens/Rewards/GetRewardsForUser/{membership_id}/") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns trending items for Bungie.net, collapsed into the first page of items per category. For pagination within a category, call GetTrendingCategory.
@@ -3416,10 +4738,21 @@ export def "trending-categories get" [
 ]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: record<categories: list<record>>, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/Trending/Categories/")
+  let full_url = (build-url $base "/Trending/Categories/" $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns paginated lists of trending items for a category.
@@ -3443,10 +4776,21 @@ export def "trending-categories get-category" [
   let base = ($base_url | default $BASE_URL)
   if ($category_id | is-empty) { error make --unspanned { msg: "path parameter 'categoryId' must be non-empty" } }
   if ($page_number | is-empty) { error make --unspanned { msg: "path parameter 'pageNumber' must be non-empty" } }
-  let full_url = (build-url $base ({category_id: (encode-path-segment $category_id), page_number: (encode-path-segment $page_number)} | format pattern "/Trending/Categories/{category_id}/{page_number}/"))
+  let full_url = (build-url $base ({category_id: (encode-path-segment $category_id), page_number: (encode-path-segment $page_number)} | format pattern "/Trending/Categories/{category_id}/{page_number}/") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the detailed results for a specific trending entry. Note that trending entries are uniquely identified by a combination of *both* the TrendingEntryType *and* the identifier: the identifier alone is not guaranteed to be globally unique.
@@ -3470,10 +4814,21 @@ export def "trending-details get-entry" [
   let base = ($base_url | default $BASE_URL)
   if ($trending_entry_type | is-empty) { error make --unspanned { msg: "path parameter 'trendingEntryType' must be non-empty" } }
   if ($identifier | is-empty) { error make --unspanned { msg: "path parameter 'identifier' must be non-empty" } }
-  let full_url = (build-url $base ({trending_entry_type: (encode-path-segment $trending_entry_type), identifier: (encode-path-segment $identifier)} | format pattern "/Trending/Details/{trending_entry_type}/{identifier}/"))
+  let full_url = (build-url $base ({trending_entry_type: (encode-path-segment $trending_entry_type), identifier: (encode-path-segment $identifier)} | format pattern "/Trending/Details/{trending_entry_type}/{identifier}/") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns a list of all available user themes.
@@ -3493,10 +4848,21 @@ export def "user-get-available-themes get" [
 ]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: table<userThemeDescription: string, userThemeId: int, userThemeName: string>, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/User/GetAvailableThemes/")
+  let full_url = (build-url $base "/User/GetAvailableThemes/" $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Loads a bungienet user by membership id.
@@ -3518,10 +4884,21 @@ export def "user-get-bungie-net-user-by-id get" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/User/GetBungieNetUserById/{id}/"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/User/GetBungieNetUserById/{id}/") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns a list of credential types attached to the requested account
@@ -3543,10 +4920,21 @@ export def "user-get-credential-types-for-target-account get" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($membership_id | is-empty) { error make --unspanned { msg: "path parameter 'membershipId' must be non-empty" } }
-  let full_url = (build-url $base ({membership_id: (encode-path-segment $membership_id)} | format pattern "/User/GetCredentialTypesForTargetAccount/{membership_id}/"))
+  let full_url = (build-url $base ({membership_id: (encode-path-segment $membership_id)} | format pattern "/User/GetCredentialTypesForTargetAccount/{membership_id}/") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets any hard linked membership given a credential. Only works for credentials that are public (just SteamID64 right now). Cross Save aware.
@@ -3570,10 +4958,21 @@ export def "user-get-membership-from-hard-linked-credential get" [
   let base = ($base_url | default $BASE_URL)
   if ($cr_type | is-empty) { error make --unspanned { msg: "path parameter 'crType' must be non-empty" } }
   if ($credential | is-empty) { error make --unspanned { msg: "path parameter 'credential' must be non-empty" } }
-  let full_url = (build-url $base ({cr_type: (encode-path-segment $cr_type), credential: (encode-path-segment $credential)} | format pattern "/User/GetMembershipFromHardLinkedCredential/{cr_type}/{credential}/"))
+  let full_url = (build-url $base ({cr_type: (encode-path-segment $cr_type), credential: (encode-path-segment $credential)} | format pattern "/User/GetMembershipFromHardLinkedCredential/{cr_type}/{credential}/") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns a list of accounts associated with the supplied membership ID and membership type. This will include all linked accounts (even when hidden) if supplied credentials permit it.
@@ -3597,10 +4996,21 @@ export def "user-get-memberships-by-id get-data" [
   let base = ($base_url | default $BASE_URL)
   if ($membership_id | is-empty) { error make --unspanned { msg: "path parameter 'membershipId' must be non-empty" } }
   if ($membership_type | is-empty) { error make --unspanned { msg: "path parameter 'membershipType' must be non-empty" } }
-  let full_url = (build-url $base ({membership_id: (encode-path-segment $membership_id), membership_type: (encode-path-segment $membership_type)} | format pattern "/User/GetMembershipsById/{membership_id}/{membership_type}/"))
+  let full_url = (build-url $base ({membership_id: (encode-path-segment $membership_id), membership_type: (encode-path-segment $membership_type)} | format pattern "/User/GetMembershipsById/{membership_id}/{membership_type}/") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns a list of accounts associated with signed in user. This is useful for OAuth implementations that do not give you access to the token response.
@@ -3620,10 +5030,21 @@ export def "user-get-memberships-for-current-user get-data" [
 ]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: record<bungieNetUser: record<about: string, blizzardDisplayName: string, cachedBungieGlobalDisplayName: string, cachedBungieGlobalDisplayNameCode: int, context: record, displayName: string, egsDisplayName: string, fbDisplayName: string, firstAccess: string, isDeleted: bool, lastBanReportId: int, lastUpdate: string, legacyPortalUID: int, locale: string, localeInheritDefault: bool, membershipId: int, normalizedName: string, profileBanExpire: string, profilePicture: int, profilePicturePath: string, profilePictureWidePath: string, profileTheme: int, profileThemeName: string, psnDisplayName: string, showActivity: bool, showGroupMessaging: bool, stadiaDisplayName: string, statusDate: string, statusText: string, steamDisplayName: string, successMessageFlags: int, twitchDisplayName: string, uniqueName: string, userTitle: int, userTitleDisplay: string, xboxDisplayName: string>, destinyMemberships: list<record>, primaryMembershipId: int>, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/User/GetMembershipsForCurrentUser/")
+  let full_url = (build-url $base "/User/GetMembershipsForCurrentUser/" $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets a list of all display names linked to this membership id but sanitized (profanity filtered). Obeys all visibility rules of calling user and is heavily cached.
@@ -3645,10 +5066,21 @@ export def "user-get-sanitized-platform-display-names get" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($membership_id | is-empty) { error make --unspanned { msg: "path parameter 'membershipId' must be non-empty" } }
-  let full_url = (build-url $base ({membership_id: (encode-path-segment $membership_id)} | format pattern "/User/GetSanitizedPlatformDisplayNames/{membership_id}/"))
+  let full_url = (build-url $base ({membership_id: (encode-path-segment $membership_id)} | format pattern "/User/GetSanitizedPlatformDisplayNames/{membership_id}/") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Given the prefix of a global display name, returns all users who share that name.
@@ -3670,10 +5102,21 @@ export def "user-search-global-name create-by" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($page | is-empty) { error make --unspanned { msg: "path parameter 'page' must be non-empty" } }
-  let full_url = (build-url $base ({page: (encode-path-segment $page)} | format pattern "/User/Search/GlobalName/{page}/"))
+  let full_url = (build-url $base ({page: (encode-path-segment $page)} | format pattern "/User/Search/GlobalName/{page}/") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # [OBSOLETE] Do not use this to search users, use SearchByGlobalNamePost instead.
@@ -3697,10 +5140,21 @@ export def "user-search-prefix list-by-global-name" [
   let base = ($base_url | default $BASE_URL)
   if ($display_name_prefix | is-empty) { error make --unspanned { msg: "path parameter 'displayNamePrefix' must be non-empty" } }
   if ($page | is-empty) { error make --unspanned { msg: "path parameter 'page' must be non-empty" } }
-  let full_url = (build-url $base ({display_name_prefix: (encode-path-segment $display_name_prefix), page: (encode-path-segment $page)} | format pattern "/User/Search/Prefix/{display_name_prefix}/{page}/"))
+  let full_url = (build-url $base ({display_name_prefix: (encode-path-segment $display_name_prefix), page: (encode-path-segment $page)} | format pattern "/User/Search/Prefix/{display_name_prefix}/{page}/") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get the user-specific system overrides that should be respected alongside common systems.
@@ -3720,8 +5174,19 @@ export def "user-system-overrides get" [
 ]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: record, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/UserSystemOverrides/")
+  let full_url = (build-url $base "/UserSystemOverrides/" $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }

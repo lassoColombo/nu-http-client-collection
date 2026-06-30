@@ -8,7 +8,7 @@ const BASE_URL = "http://service.chime.aws.amazon.com"
 # `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
 # where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o AMAZON_CHIME_TOKEN | default "" }
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o AMAZON_CHIME_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
@@ -41,14 +41,11 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
-# Trick: `url encode --all` over-encodes, then we decode the four unreserved
-# punctuation chars back. Pre-existing %XX sequences in the input survive
-# because `url encode --all` first turns their % into %25.
 def encode-path-segment [v: any]: nothing -> string {
   $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
-# Serialize an array-typed path parameter (issue 49.A). OpenAPI 3 `style: simple`
+# Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
 # (the default for path params) and Swagger 2 `collectionFormat: csv` both join
 # the elements with a literal comma WITHIN the single path segment, each element
 # RFC-3986-encoded individually (so a comma inside an element stays %2C). Without
@@ -59,51 +56,57 @@ def encode-path-array [v: any]: nothing -> string {
   if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
 }
 
-# Build URL from base, path, and optional query string
-def build-url [base: string, path: string, query?: string]: nothing -> string {
+# Build the request URL from base, path, and any number of pre-encoded query
+# fragments (param serializer output and/or the auth query). Each fragment is an
+# `&`-joinable `key=value` string already percent-encoded by its producer; empty
+# fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
+# delimiters are hand-spliced — and any query already on the base URL is merged in.
+def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
   let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
-  let result = ($parsed | upsert path $full_path)
-  if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
+  let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
+  $parsed | upsert path $full_path | upsert query $query | url join
 }
 
-# Build the dry-run record returned by --dry-run. Shape:
-#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
-#    auth: {scheme, location}}
-# `meta` carries logical-form data (the query record by spec name, the pre-serialization
-# body) that do-request itself cannot reconstruct from its wire-format args.
-def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
-  let m = ($meta | default {})
-  {
-    dry_run: true
-    method: $method
-    url: $url
-    query: ($m | get -o query | default {})
-    headers: $auth.headers
-    body: ($m | get -o body)
-    content_type: $content_type
-    timeout: $timeout
-    auth: {scheme: $auth.scheme, location: $auth.location}
-  }
+# Success policy: did this response succeed? Single source of truth, consulted by
+# handle-response and the HEAD header-unwrap. Empty ok_codes means the spec listed
+# none, so fall back to < 400. Otherwise: any 2xx, plus documented success codes.
+def status-ok [status: int, ok_codes: list<int>]: nothing -> bool {
+  if ($ok_codes | is-empty) { $status < 400 } else { ($status >= 200 and $status < 300) or ($status in $ok_codes) }
 }
 
-# Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
-  let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
-  let timeout = ($max_time | default 30min)
-  let ct = ($content_type | default "application/json")
-  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
-  let resp = match $method {
-    "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
-  }
-  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
-  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
+# Unwrap a `--full` HTTP response into the user-facing value. Response arrives
+# via pipeline; ok_codes gates the error throw (see status-ok).
+def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: record -> any {
+  let resp = $in
+  if $allow_errors { return $resp }
+  if not (status-ok $resp.status $ok_codes) { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } }
+  if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
+  if $resp.status == 204 { return null }
+  $resp.body
+}
+
+# GET — bodyless, honours --raw
+def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+}
+
+# POST — body + content-type
+def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# PUT — body + content-type
+def send-put [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http put --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http put --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# DELETE — body via --data
+def send-delete [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http delete --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url } else { http delete --headers $req.headers --content-type $req.content_type --data $body --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url }
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 def base-url-completer [] { ["http://service.chime.aws.amazon.com" "https://service.chime.aws.amazon.com" "http://chime.cn-north-1.amazonaws.com.cn" "http://chime.cn-northwest-1.amazonaws.com.cn" "https://chime.cn-north-1.amazonaws.com.cn" "https://chime.cn-northwest-1.amazonaws.com.cn"] }
@@ -217,14 +220,25 @@ export def "accounts-users create-associate-phone-number" [
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
   let qp = [(serialize-qp "operation" $operation "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), user_id: (encode-path-segment $user_id)} | format pattern "/accounts/{account_id}/users/{user_id}") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), user_id: (encode-path-segment $user_id)} | format pattern "/accounts/{account_id}/users/{user_id}") $qp $auth.query)
   let req_body = {"E164PhoneNumber": $e164_phone_number} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"operation": $operation} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"operation": $operation} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Associates phone numbers with the specified Amazon Chime Voice Connector.
@@ -258,14 +272,25 @@ export def "voice-connectors create-associate-phone-numbers" [
   let base = ($base_url | default $BASE_URL)
   if ($voice_connector_id | is-empty) { error make --unspanned { msg: "path parameter 'voiceConnectorId' must be non-empty" } }
   let qp = [(serialize-qp "operation" $operation "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({voice_connector_id: (encode-path-segment $voice_connector_id)} | format pattern "/voice-connectors/{voice_connector_id}") $qp)
+  let full_url = (build-url $base ({voice_connector_id: (encode-path-segment $voice_connector_id)} | format pattern "/voice-connectors/{voice_connector_id}") $qp $auth.query)
   let req_body = {"E164PhoneNumbers": $e164_phone_numbers, "ForceAssociate": $force_associate} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"operation": $operation} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"operation": $operation} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Associates phone numbers with the specified Amazon Chime Voice Connector group.
@@ -299,14 +324,25 @@ export def "voice-connector-groups create-associate-phone-numbers" [
   let base = ($base_url | default $BASE_URL)
   if ($voice_connector_group_id | is-empty) { error make --unspanned { msg: "path parameter 'voiceConnectorGroupId' must be non-empty" } }
   let qp = [(serialize-qp "operation" $operation "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({voice_connector_group_id: (encode-path-segment $voice_connector_group_id)} | format pattern "/voice-connector-groups/{voice_connector_group_id}") $qp)
+  let full_url = (build-url $base ({voice_connector_group_id: (encode-path-segment $voice_connector_group_id)} | format pattern "/voice-connector-groups/{voice_connector_group_id}") $qp $auth.query)
   let req_body = {"E164PhoneNumbers": $e164_phone_numbers, "ForceAssociate": $force_associate} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"operation": $operation} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"operation": $operation} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Associates the specified sign-in delegate groups with the specified Amazon Chime account.
@@ -340,14 +376,25 @@ export def "accounts create-associate-signin-delegate-groups" [
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let qp = [(serialize-qp "operation" $operation "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}") $qp $auth.query)
   let req_body = {"SigninDelegateGroups": $signin_delegate_groups} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"operation": $operation} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"operation": $operation} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Creates up to 100 new attendees for an active Amazon Chime SDK meeting. For more information about the Amazon Chime SDK, see Using the Amazon Chime SDK (https://docs.aws.amazon.com/chime-sdk/latest/dg/meetings-sdk.html) in the Amazon Chime SDK Developer Guide.
@@ -381,14 +428,25 @@ export def "meetings-attendees create-batch" [
   let base = ($base_url | default $BASE_URL)
   if ($meeting_id | is-empty) { error make --unspanned { msg: "path parameter 'meetingId' must be non-empty" } }
   let qp = [(serialize-qp "operation" $operation "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({meeting_id: (encode-path-segment $meeting_id)} | format pattern "/meetings/{meeting_id}/attendees") $qp)
+  let full_url = (build-url $base ({meeting_id: (encode-path-segment $meeting_id)} | format pattern "/meetings/{meeting_id}/attendees") $qp $auth.query)
   let req_body = {"Attendees": $attendees} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"operation": $operation} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"operation": $operation} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Adds a specified number of users to a channel.
@@ -423,14 +481,25 @@ export def "channels-memberships create-batch" [
   let base = ($base_url | default $BASE_URL)
   if ($channel_arn | is-empty) { error make --unspanned { msg: "path parameter 'channelArn' must be non-empty" } }
   let qp = [(serialize-qp "operation" $operation "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({channel_arn: (encode-path-segment $channel_arn)} | format pattern "/channels/{channel_arn}/memberships") $qp)
+  let full_url = (build-url $base ({channel_arn: (encode-path-segment $channel_arn)} | format pattern "/channels/{channel_arn}/memberships") $qp $auth.query)
   let req_body = {"Type": $type, "MemberArns": $member_arns} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "x-amz-chime-bearer": $x_amz_chime_bearer} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"operation": $operation} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"operation": $operation} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Adds up to 50 members to a chat room in an Amazon Chime Enterprise account. Members can be users or bots. The member role designates whether the member is a chat room administrator or a general chat room member.
@@ -466,14 +535,25 @@ export def "accounts-rooms-memberships create-batch" [
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   if ($room_id | is-empty) { error make --unspanned { msg: "path parameter 'roomId' must be non-empty" } }
   let qp = [(serialize-qp "operation" $operation "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), room_id: (encode-path-segment $room_id)} | format pattern "/accounts/{account_id}/rooms/{room_id}/memberships") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), room_id: (encode-path-segment $room_id)} | format pattern "/accounts/{account_id}/rooms/{room_id}/memberships") $qp $auth.query)
   let req_body = {"MembershipItemList": $membership_item_list} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"operation": $operation} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"operation": $operation} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Moves phone numbers into the Deletion queue. Phone numbers must be disassociated from any users or Amazon Chime Voice Connectors before they can be deleted. Phone numbers remain in the Deletion queue for 7 days before they are deleted permanently.
@@ -504,14 +584,25 @@ export def "phone-numbers delete-batch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "operation" $operation "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/phone-numbers" $qp)
+  let full_url = (build-url $base "/phone-numbers" $qp $auth.query)
   let req_body = {"PhoneNumberIds": $phone_number_ids} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"operation": $operation} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"operation": $operation} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Suspends up to 50 users from a Team or EnterpriseLWA Amazon Chime account. For more information about different account types, see Managing Your Amazon Chime Accounts (https://docs.aws.amazon.com/chime/latest/ag/manage-chime-account.html) in the Amazon Chime Administration Guide. Users suspended from a Team account are disassociated from the account,but they can continue to use Amazon Chime as free users. To remove the suspension from suspended Team account users, invite them to the Team account again. You can use the InviteUsers action to do so. Users suspended from an EnterpriseLWA account are immediately signed out of Amazon Chime and can no longer sign in. To remove the suspension from suspended EnterpriseLWA account users, use the BatchUnsuspendUser action. To sign out users without suspending them, use the LogoutUser action.
@@ -544,14 +635,25 @@ export def "accounts-users create-batch-suspend" [
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let qp = [(serialize-qp "operation" $operation "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}/users") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}/users") $qp $auth.query)
   let req_body = {"UserIdList": $user_id_list} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"operation": $operation} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"operation": $operation} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Removes the suspension from up to 50 previously suspended users for the specified Amazon Chime EnterpriseLWA account. Only users on EnterpriseLWA accounts can be unsuspended using this action. For more information about different account types, see Managing Your Amazon Chime Accounts (https://docs.aws.amazon.com/chime/latest/ag/manage-chime-account.html) in the account types, in the Amazon Chime Administration Guide. Previously suspended users who are unsuspended using this action are returned to Registered status. Users who are not previously suspended are ignored.
@@ -584,14 +686,25 @@ export def "accounts-users create-batch-unsuspend" [
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let qp = [(serialize-qp "operation" $operation "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}/users") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}/users") $qp $auth.query)
   let req_body = {"UserIdList": $user_id_list} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"operation": $operation} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"operation": $operation} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Updates phone number product types or calling names. You can update one attribute at a time for each UpdatePhoneNumberRequestItem. For example, you can update the product type or the calling name. For toll-free numbers, you cannot use the Amazon Chime Business Calling product type. For numbers outside the U.S., you must use the Amazon Chime SIP Media Application Dial-In product type. Updates to outbound calling names can take up to 72 hours to complete. Pending updates to outbound calling names must be complete before you can request another update.
@@ -623,14 +736,25 @@ export def "phone-numbers update-batch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "operation" $operation "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/phone-numbers" $qp)
+  let full_url = (build-url $base "/phone-numbers" $qp $auth.query)
   let req_body = {"UpdatePhoneNumberRequestItems": $update_phone_number_request_items} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"operation": $operation} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"operation": $operation} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Updates user details within the UpdateUserRequestItem object for up to 20 users for the specified Amazon Chime account. Currently, only LicenseType updates are supported for this action.
@@ -662,14 +786,25 @@ export def "accounts-users update-batch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}/users"))
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}/users") $auth.query)
   let req_body = {"UpdateUserRequestItems": $update_user_request_items} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Lists the users that belong to the specified Amazon Chime account. You can specify an email address to list only the user that the email address belongs to.
@@ -705,12 +840,23 @@ export def "accounts-users list" [
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let qp = [(serialize-qp "user-email" $user_email "scalar") (serialize-qp "user-type" $user_type "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "next-token" $next_token "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}/users") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}/users") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"user-email": $user_email, "user-type": $user_type, "max-results": $max_results, "next-token": $next_token, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"user-email": $user_email, "user-type": $user_type, "max-results": $max_results, "next-token": $next_token, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Creates an Amazon Chime account under the administrator's AWS account. Only Team account types are currently supported for this action. For more information about different account types, see Managing Your Amazon Chime Accounts (https://docs.aws.amazon.com/chime/latest/ag/manage-chime-account.html) in the Amazon Chime Administration Guide.
@@ -739,14 +885,25 @@ export def "accounts create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/accounts")
+  let full_url = (build-url $base "/accounts" $auth.query)
   let req_body = {"Name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Lists the Amazon Chime accounts under the administrator's AWS account. You can filter accounts by account name prefix. To find out which Amazon Chime account a user belongs to, you can filter by the user's email address, which returns one account result.
@@ -780,12 +937,23 @@ export def "accounts list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "user-email" $user_email "scalar") (serialize-qp "next-token" $next_token "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/accounts" $qp)
+  let full_url = (build-url $base "/accounts" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"name": $name, "user-email": $user_email, "next-token": $next_token, "max-results": $max_results, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"name": $name, "user-email": $user_email, "next-token": $next_token, "max-results": $max_results, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Creates an Amazon Chime SDK messaging AppInstance under an AWS account. Only SDK messaging customers use this API. CreateAppInstance supports idempotency behavior as described in the AWS API Standard.
@@ -818,14 +986,25 @@ export def "app-instances create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/app-instances")
+  let full_url = (build-url $base "/app-instances" $auth.query)
   let req_body = {"Name": $name, "Metadata": $metadata, "ClientRequestToken": $client_request_token, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Lists all Amazon Chime AppInstances created under a single AWS account.
@@ -857,12 +1036,23 @@ export def "app-instances list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "max-results" $max_results "scalar") (serialize-qp "next-token" $next_token "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/app-instances" $qp)
+  let full_url = (build-url $base "/app-instances" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"max-results": $max_results, "next-token": $next_token, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"max-results": $max_results, "next-token": $next_token, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Promotes an AppInstanceUser to an AppInstanceAdmin. The promoted user can perform the following actions. ChannelModerator actions across all channels in the AppInstance. DeleteChannelMessage actions. Only an AppInstanceUser can be promoted to an AppInstanceAdmin role.
@@ -893,14 +1083,25 @@ export def "app-instances-admins create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($app_instance_arn | is-empty) { error make --unspanned { msg: "path parameter 'appInstanceArn' must be non-empty" } }
-  let full_url = (build-url $base ({app_instance_arn: (encode-path-segment $app_instance_arn)} | format pattern "/app-instances/{app_instance_arn}/admins"))
+  let full_url = (build-url $base ({app_instance_arn: (encode-path-segment $app_instance_arn)} | format pattern "/app-instances/{app_instance_arn}/admins") $auth.query)
   let req_body = {"AppInstanceAdminArn": $app_instance_admin_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Returns a list of the administrators in the AppInstance.
@@ -934,12 +1135,23 @@ export def "app-instances-admins list" [
   let base = ($base_url | default $BASE_URL)
   if ($app_instance_arn | is-empty) { error make --unspanned { msg: "path parameter 'appInstanceArn' must be non-empty" } }
   let qp = [(serialize-qp "max-results" $max_results "scalar") (serialize-qp "next-token" $next_token "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_instance_arn: (encode-path-segment $app_instance_arn)} | format pattern "/app-instances/{app_instance_arn}/admins") $qp)
+  let full_url = (build-url $base ({app_instance_arn: (encode-path-segment $app_instance_arn)} | format pattern "/app-instances/{app_instance_arn}/admins") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"max-results": $max_results, "next-token": $next_token, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"max-results": $max_results, "next-token": $next_token, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Creates a user under an Amazon Chime AppInstance. The request consists of a unique appInstanceUserId and Name for that user.
@@ -974,14 +1186,25 @@ export def "app-instance-users create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/app-instance-users")
+  let full_url = (build-url $base "/app-instance-users" $auth.query)
   let req_body = {"AppInstanceArn": $app_instance_arn, "AppInstanceUserId": $app_instance_user_id, "Name": $name, "Metadata": $metadata, "ClientRequestToken": $client_request_token, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Creates a new attendee for an active Amazon Chime SDK meeting. For more information about the Amazon Chime SDK, see Using the Amazon Chime SDK (https://docs.aws.amazon.com/chime-sdk/latest/dg/meetings-sdk.html) in the Amazon Chime SDK Developer Guide.
@@ -1014,14 +1237,25 @@ export def "meetings-attendees create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($meeting_id | is-empty) { error make --unspanned { msg: "path parameter 'meetingId' must be non-empty" } }
-  let full_url = (build-url $base ({meeting_id: (encode-path-segment $meeting_id)} | format pattern "/meetings/{meeting_id}/attendees"))
+  let full_url = (build-url $base ({meeting_id: (encode-path-segment $meeting_id)} | format pattern "/meetings/{meeting_id}/attendees") $auth.query)
   let req_body = {"ExternalUserId": $external_user_id, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Lists the attendees for the specified Amazon Chime SDK meeting. For more information about the Amazon Chime SDK, see Using the Amazon Chime SDK (https://docs.aws.amazon.com/chime-sdk/latest/dg/meetings-sdk.html) in the Amazon Chime SDK Developer Guide.
@@ -1055,12 +1289,23 @@ export def "meetings-attendees list" [
   let base = ($base_url | default $BASE_URL)
   if ($meeting_id | is-empty) { error make --unspanned { msg: "path parameter 'meetingId' must be non-empty" } }
   let qp = [(serialize-qp "next-token" $next_token "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({meeting_id: (encode-path-segment $meeting_id)} | format pattern "/meetings/{meeting_id}/attendees") $qp)
+  let full_url = (build-url $base ({meeting_id: (encode-path-segment $meeting_id)} | format pattern "/meetings/{meeting_id}/attendees") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"next-token": $next_token, "max-results": $max_results, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"next-token": $next_token, "max-results": $max_results, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Creates a bot for an Amazon Chime Enterprise account.
@@ -1092,14 +1337,25 @@ export def "accounts-bots create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}/bots"))
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}/bots") $auth.query)
   let req_body = {"DisplayName": $display_name, "Domain": $domain} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Lists the bots associated with the administrator's Amazon Chime Enterprise account ID.
@@ -1133,12 +1389,23 @@ export def "accounts-bots list" [
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let qp = [(serialize-qp "max-results" $max_results "scalar") (serialize-qp "next-token" $next_token "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}/bots") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}/bots") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"max-results": $max_results, "next-token": $next_token, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"max-results": $max_results, "next-token": $next_token, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Creates a channel to which you can add users and send messages. Restriction: You can't change a channel's privacy. The x-amz-chime-bearer request header is mandatory. Use the AppInstanceUserArn of the user that makes the API call as the value in the header.
@@ -1175,14 +1442,25 @@ export def "channels create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/channels")
+  let full_url = (build-url $base "/channels" $auth.query)
   let req_body = {"AppInstanceArn": $app_instance_arn, "Name": $name, "Mode": $mode, "Privacy": $privacy, "Metadata": $metadata, "ClientRequestToken": $client_request_token, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "x-amz-chime-bearer": $x_amz_chime_bearer} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Permanently bans a member from a channel. Moderators can't add banned members to a channel. To undo a ban, you first have to DeleteChannelBan, and then CreateChannelMembership. Bans are cleaned up when you delete users or channels. If you ban a user who is already part of a channel, that user is automatically kicked from the channel. The x-amz-chime-bearer request header is mandatory. Use the AppInstanceUserArn of the user that makes the API call as the value in the header.
@@ -1214,14 +1492,25 @@ export def "channels-bans create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($channel_arn | is-empty) { error make --unspanned { msg: "path parameter 'channelArn' must be non-empty" } }
-  let full_url = (build-url $base ({channel_arn: (encode-path-segment $channel_arn)} | format pattern "/channels/{channel_arn}/bans"))
+  let full_url = (build-url $base ({channel_arn: (encode-path-segment $channel_arn)} | format pattern "/channels/{channel_arn}/bans") $auth.query)
   let req_body = {"MemberArn": $member_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "x-amz-chime-bearer": $x_amz_chime_bearer} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Lists all the users banned from a particular channel. The x-amz-chime-bearer request header is mandatory. Use the AppInstanceUserArn of the user that makes the API call as the value in the header.
@@ -1256,12 +1545,23 @@ export def "channels-bans list" [
   let base = ($base_url | default $BASE_URL)
   if ($channel_arn | is-empty) { error make --unspanned { msg: "path parameter 'channelArn' must be non-empty" } }
   let qp = [(serialize-qp "max-results" $max_results "scalar") (serialize-qp "next-token" $next_token "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({channel_arn: (encode-path-segment $channel_arn)} | format pattern "/channels/{channel_arn}/bans") $qp)
+  let full_url = (build-url $base ({channel_arn: (encode-path-segment $channel_arn)} | format pattern "/channels/{channel_arn}/bans") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "x-amz-chime-bearer": $x_amz_chime_bearer} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"max-results": $max_results, "next-token": $next_token, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"max-results": $max_results, "next-token": $next_token, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Adds a user to a channel. The InvitedBy response field is derived from the request header. A channel member can: List messages Send messages Receive messages Edit their own messages Leave the channel Privacy settings impact this action as follows: Public Channels: You do not need to be a member to list messages, but you must be a member to send messages. Private Channels: You must be a member to list or send messages. The x-amz-chime-bearer request header is mandatory. Use the AppInstanceUserArn of the user that makes the API call as the value in the header.
@@ -1294,14 +1594,25 @@ export def "channels-memberships create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($channel_arn | is-empty) { error make --unspanned { msg: "path parameter 'channelArn' must be non-empty" } }
-  let full_url = (build-url $base ({channel_arn: (encode-path-segment $channel_arn)} | format pattern "/channels/{channel_arn}/memberships"))
+  let full_url = (build-url $base ({channel_arn: (encode-path-segment $channel_arn)} | format pattern "/channels/{channel_arn}/memberships") $auth.query)
   let req_body = {"MemberArn": $member_arn, "Type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "x-amz-chime-bearer": $x_amz_chime_bearer} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Lists all channel memberships in a channel. The x-amz-chime-bearer request header is mandatory. Use the AppInstanceUserArn of the user that makes the API call as the value in the header.
@@ -1337,12 +1648,23 @@ export def "channels-memberships list" [
   let base = ($base_url | default $BASE_URL)
   if ($channel_arn | is-empty) { error make --unspanned { msg: "path parameter 'channelArn' must be non-empty" } }
   let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "next-token" $next_token "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({channel_arn: (encode-path-segment $channel_arn)} | format pattern "/channels/{channel_arn}/memberships") $qp)
+  let full_url = (build-url $base ({channel_arn: (encode-path-segment $channel_arn)} | format pattern "/channels/{channel_arn}/memberships") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "x-amz-chime-bearer": $x_amz_chime_bearer} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"type": $type, "max-results": $max_results, "next-token": $next_token, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"type": $type, "max-results": $max_results, "next-token": $next_token, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Creates a new ChannelModerator. A channel moderator can: Add and remove other members of the channel. Add and remove other moderators of the channel. Add and remove user bans for the channel. Redact messages in the channel. List messages in the channel. The x-amz-chime-bearer request header is mandatory. Use the AppInstanceUserArn of the user that makes the API call as the value in the header.
@@ -1374,14 +1696,25 @@ export def "channels-moderators create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($channel_arn | is-empty) { error make --unspanned { msg: "path parameter 'channelArn' must be non-empty" } }
-  let full_url = (build-url $base ({channel_arn: (encode-path-segment $channel_arn)} | format pattern "/channels/{channel_arn}/moderators"))
+  let full_url = (build-url $base ({channel_arn: (encode-path-segment $channel_arn)} | format pattern "/channels/{channel_arn}/moderators") $auth.query)
   let req_body = {"ChannelModeratorArn": $channel_moderator_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "x-amz-chime-bearer": $x_amz_chime_bearer} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Lists all the moderators for a channel. The x-amz-chime-bearer request header is mandatory. Use the AppInstanceUserArn of the user that makes the API call as the value in the header.
@@ -1416,12 +1749,23 @@ export def "channels-moderators list" [
   let base = ($base_url | default $BASE_URL)
   if ($channel_arn | is-empty) { error make --unspanned { msg: "path parameter 'channelArn' must be non-empty" } }
   let qp = [(serialize-qp "max-results" $max_results "scalar") (serialize-qp "next-token" $next_token "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({channel_arn: (encode-path-segment $channel_arn)} | format pattern "/channels/{channel_arn}/moderators") $qp)
+  let full_url = (build-url $base ({channel_arn: (encode-path-segment $channel_arn)} | format pattern "/channels/{channel_arn}/moderators") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "x-amz-chime-bearer": $x_amz_chime_bearer} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"max-results": $max_results, "next-token": $next_token, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"max-results": $max_results, "next-token": $next_token, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Creates a media capture pipeline.
@@ -1456,14 +1800,25 @@ export def "media-capture-pipelines create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/media-capture-pipelines")
+  let full_url = (build-url $base "/media-capture-pipelines" $auth.query)
   let req_body = {"SourceType": $source_type, "SourceArn": $source_arn, "SinkType": $sink_type, "SinkArn": $sink_arn, "ClientRequestToken": $client_request_token, "ChimeSdkMeetingConfiguration": $chime_sdk_meeting_configuration} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Returns a list of media capture pipelines.
@@ -1495,12 +1850,23 @@ export def "media-capture-pipelines list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "next-token" $next_token "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/media-capture-pipelines" $qp)
+  let full_url = (build-url $base "/media-capture-pipelines" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"next-token": $next_token, "max-results": $max_results, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"next-token": $next_token, "max-results": $max_results, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Creates a new Amazon Chime SDK meeting in the specified media Region with no initial attendees. For more information about specifying media Regions, see Amazon Chime SDK Media Regions (https://docs.aws.amazon.com/chime-sdk/latest/dg/chime-sdk-meetings-regions.html) in the Amazon Chime SDK Developer Guide . For more information about the Amazon Chime SDK, see Using the Amazon Chime SDK (https://docs.aws.amazon.com/chime-sdk/latest/dg/meetings-sdk.html) in the Amazon Chime SDK Developer Guide .
@@ -1536,14 +1902,25 @@ export def "meetings create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/meetings")
+  let full_url = (build-url $base "/meetings" $auth.query)
   let req_body = {"ClientRequestToken": $client_request_token, "ExternalMeetingId": $external_meeting_id, "MeetingHostId": $meeting_host_id, "MediaRegion": $media_region, "Tags": $tags, "NotificationsConfiguration": $notifications_configuration} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Lists up to 100 active Amazon Chime SDK meetings. For more information about the Amazon Chime SDK, see Using the Amazon Chime SDK (https://docs.aws.amazon.com/chime-sdk/latest/dg/meetings-sdk.html) in the Amazon Chime SDK Developer Guide.
@@ -1575,12 +1952,23 @@ export def "meetings list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "next-token" $next_token "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/meetings" $qp)
+  let full_url = (build-url $base "/meetings" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"next-token": $next_token, "max-results": $max_results, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"next-token": $next_token, "max-results": $max_results, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Uses the join token and call metadata in a meeting request (From number, To number, and so forth) to initiate an outbound call to a public switched telephone network (PSTN) and join them into a Chime meeting. Also ensures that the From number belongs to the customer. To play welcome audio or implement an interactive voice response (IVR), use the CreateSipMediaApplicationCall action with the corresponding SIP media application ID.
@@ -1613,14 +2001,25 @@ export def "meetings-dial-outs create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($meeting_id | is-empty) { error make --unspanned { msg: "path parameter 'meetingId' must be non-empty" } }
-  let full_url = (build-url $base ({meeting_id: (encode-path-segment $meeting_id)} | format pattern "/meetings/{meeting_id}/dial-outs"))
+  let full_url = (build-url $base ({meeting_id: (encode-path-segment $meeting_id)} | format pattern "/meetings/{meeting_id}/dial-outs") $auth.query)
   let req_body = {"FromPhoneNumber": $from_phone_number, "ToPhoneNumber": $to_phone_number, "JoinToken": $join_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Creates a new Amazon Chime SDK meeting in the specified media Region, with attendees. For more information about specifying media Regions, see Amazon Chime SDK Media Regions (https://docs.aws.amazon.com/chime-sdk/latest/dg/chime-sdk-meetings-regions.html) in the Amazon Chime SDK Developer Guide . For more information about the Amazon Chime SDK, see Using the Amazon Chime SDK (https://docs.aws.amazon.com/chime-sdk/latest/dg/meetings-sdk.html) in the Amazon Chime SDK Developer Guide .
@@ -1660,14 +2059,25 @@ export def "meetings create-with-attendees" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "operation" $operation "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/meetings" $qp)
+  let full_url = (build-url $base "/meetings" $qp $auth.query)
   let req_body = {"ClientRequestToken": $client_request_token, "ExternalMeetingId": $external_meeting_id, "MeetingHostId": $meeting_host_id, "MediaRegion": $media_region, "Tags": $tags, "NotificationsConfiguration": $notifications_configuration, "Attendees": $attendees} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"operation": $operation} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"operation": $operation} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Creates an order for phone numbers to be provisioned. For toll-free numbers, you cannot use the Amazon Chime Business Calling product type. For numbers outside the U.S., you must use the Amazon Chime SIP Media Application Dial-In product type.
@@ -1697,14 +2107,25 @@ export def "phone-number-orders create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/phone-number-orders")
+  let full_url = (build-url $base "/phone-number-orders" $auth.query)
   let req_body = {"ProductType": $product_type, "E164PhoneNumbers": $e164_phone_numbers} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Lists the phone number orders for the administrator's Amazon Chime account.
@@ -1736,12 +2157,23 @@ export def "phone-number-orders list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "next-token" $next_token "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/phone-number-orders" $qp)
+  let full_url = (build-url $base "/phone-number-orders" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"next-token": $next_token, "max-results": $max_results, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"next-token": $next_token, "max-results": $max_results, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Creates a proxy session on the specified Amazon Chime Voice Connector for the specified participant phone numbers.
@@ -1779,14 +2211,25 @@ export def "voice-connectors-proxy-sessions create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($voice_connector_id | is-empty) { error make --unspanned { msg: "path parameter 'voiceConnectorId' must be non-empty" } }
-  let full_url = (build-url $base ({voice_connector_id: (encode-path-segment $voice_connector_id)} | format pattern "/voice-connectors/{voice_connector_id}/proxy-sessions"))
+  let full_url = (build-url $base ({voice_connector_id: (encode-path-segment $voice_connector_id)} | format pattern "/voice-connectors/{voice_connector_id}/proxy-sessions") $auth.query)
   let req_body = {"ParticipantPhoneNumbers": $participant_phone_numbers, "Name": $name, "ExpiryMinutes": $expiry_minutes, "Capabilities": $capabilities, "NumberSelectionBehavior": $number_selection_behavior, "GeoMatchLevel": $geo_match_level, "GeoMatchParams": $geo_match_params} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Lists the proxy sessions for the specified Amazon Chime Voice Connector.
@@ -1821,12 +2264,23 @@ export def "voice-connectors-proxy-sessions list" [
   let base = ($base_url | default $BASE_URL)
   if ($voice_connector_id | is-empty) { error make --unspanned { msg: "path parameter 'voiceConnectorId' must be non-empty" } }
   let qp = [(serialize-qp "status" $status "scalar") (serialize-qp "next-token" $next_token "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({voice_connector_id: (encode-path-segment $voice_connector_id)} | format pattern "/voice-connectors/{voice_connector_id}/proxy-sessions") $qp)
+  let full_url = (build-url $base ({voice_connector_id: (encode-path-segment $voice_connector_id)} | format pattern "/voice-connectors/{voice_connector_id}/proxy-sessions") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"status": $status, "next-token": $next_token, "max-results": $max_results, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"status": $status, "next-token": $next_token, "max-results": $max_results, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Creates a chat room for the specified Amazon Chime Enterprise account.
@@ -1858,14 +2312,25 @@ export def "accounts-rooms create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}/rooms"))
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}/rooms") $auth.query)
   let req_body = {"Name": $name, "ClientRequestToken": $client_request_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Lists the room details for the specified Amazon Chime Enterprise account. Optionally, filter the results by a member ID (user ID or bot ID) to see a list of rooms that the member belongs to.
@@ -1900,12 +2365,23 @@ export def "accounts-rooms list" [
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let qp = [(serialize-qp "member-id" $member_id "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "next-token" $next_token "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}/rooms") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}/rooms") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"member-id": $member_id, "max-results": $max_results, "next-token": $next_token, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"member-id": $member_id, "max-results": $max_results, "next-token": $next_token, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Adds a member to a chat room in an Amazon Chime Enterprise account. A member can be either a user or a bot. The member role designates whether the member is a chat room administrator or a general chat room member.
@@ -1939,14 +2415,25 @@ export def "accounts-rooms-memberships create" [
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   if ($room_id | is-empty) { error make --unspanned { msg: "path parameter 'roomId' must be non-empty" } }
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), room_id: (encode-path-segment $room_id)} | format pattern "/accounts/{account_id}/rooms/{room_id}/memberships"))
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), room_id: (encode-path-segment $room_id)} | format pattern "/accounts/{account_id}/rooms/{room_id}/memberships") $auth.query)
   let req_body = {"MemberId": $member_id, "Role": $role} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Lists the membership details for the specified room in an Amazon Chime Enterprise account, such as the members' IDs, email addresses, and names.
@@ -1982,12 +2469,23 @@ export def "accounts-rooms-memberships list" [
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   if ($room_id | is-empty) { error make --unspanned { msg: "path parameter 'roomId' must be non-empty" } }
   let qp = [(serialize-qp "max-results" $max_results "scalar") (serialize-qp "next-token" $next_token "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), room_id: (encode-path-segment $room_id)} | format pattern "/accounts/{account_id}/rooms/{room_id}/memberships") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), room_id: (encode-path-segment $room_id)} | format pattern "/accounts/{account_id}/rooms/{room_id}/memberships") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"max-results": $max_results, "next-token": $next_token, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"max-results": $max_results, "next-token": $next_token, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Creates a SIP media application.
@@ -2019,14 +2517,25 @@ export def "sip-media-applications create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/sip-media-applications")
+  let full_url = (build-url $base "/sip-media-applications" $auth.query)
   let req_body = {"AwsRegion": $aws_region, "Name": $name, "Endpoints": $endpoints} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Lists the SIP media applications under the administrator's AWS account.
@@ -2058,12 +2567,23 @@ export def "sip-media-applications list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "max-results" $max_results "scalar") (serialize-qp "next-token" $next_token "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/sip-media-applications" $qp)
+  let full_url = (build-url $base "/sip-media-applications" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"max-results": $max_results, "next-token": $next_token, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"max-results": $max_results, "next-token": $next_token, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Creates an outbound call to a phone number from the phone number specified in the request, and it invokes the endpoint of the specified sipMediaApplicationId.
@@ -2096,14 +2616,25 @@ export def "sip-media-applications-calls create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($sip_media_application_id | is-empty) { error make --unspanned { msg: "path parameter 'sipMediaApplicationId' must be non-empty" } }
-  let full_url = (build-url $base ({sip_media_application_id: (encode-path-segment $sip_media_application_id)} | format pattern "/sip-media-applications/{sip_media_application_id}/calls"))
+  let full_url = (build-url $base ({sip_media_application_id: (encode-path-segment $sip_media_application_id)} | format pattern "/sip-media-applications/{sip_media_application_id}/calls") $auth.query)
   let req_body = {"FromPhoneNumber": $from_phone_number, "ToPhoneNumber": $to_phone_number, "SipHeaders": $sip_headers} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Creates a SIP rule which can be used to run a SIP media application as a target for a specific trigger type.
@@ -2137,14 +2668,25 @@ export def "sip-rules create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/sip-rules")
+  let full_url = (build-url $base "/sip-rules" $auth.query)
   let req_body = {"Name": $name, "TriggerType": $trigger_type, "TriggerValue": $trigger_value, "Disabled": $disabled, "TargetApplications": $target_applications} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Lists the SIP rules under the administrator's AWS account.
@@ -2177,12 +2719,23 @@ export def "sip-rules list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "sip-media-application" $sip_media_application "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "next-token" $next_token "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/sip-rules" $qp)
+  let full_url = (build-url $base "/sip-rules" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"sip-media-application": $sip_media_application, "max-results": $max_results, "next-token": $next_token, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"sip-media-application": $sip_media_application, "max-results": $max_results, "next-token": $next_token, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Creates a user under the specified Amazon Chime account.
@@ -2217,14 +2770,25 @@ export def "accounts-users create" [
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let qp = [(serialize-qp "operation" $operation "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}/users") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}/users") $qp $auth.query)
   let req_body = {"Username": $username, "Email": $email, "UserType": $user_type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"operation": $operation} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"operation": $operation} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Creates an Amazon Chime Voice Connector under the administrator's AWS account. You can choose to create an Amazon Chime Voice Connector in a specific AWS Region. Enabling CreateVoiceConnectorRequest$RequireEncryption configures your Amazon Chime Voice Connector to use TLS transport for SIP signaling and Secure RTP (SRTP) for media. Inbound calls use TLS transport, and unencrypted outbound calls are blocked.
@@ -2255,14 +2819,25 @@ export def "voice-connectors create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/voice-connectors")
+  let full_url = (build-url $base "/voice-connectors" $auth.query)
   let req_body = {"Name": $name, "AwsRegion": $aws_region, "RequireEncryption": $require_encryption} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Lists the Amazon Chime Voice Connectors for the administrator's AWS account.
@@ -2294,12 +2869,23 @@ export def "voice-connectors list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "next-token" $next_token "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/voice-connectors" $qp)
+  let full_url = (build-url $base "/voice-connectors" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"next-token": $next_token, "max-results": $max_results, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"next-token": $next_token, "max-results": $max_results, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Creates an Amazon Chime Voice Connector group under the administrator's AWS account. You can associate Amazon Chime Voice Connectors with the Amazon Chime Voice Connector group by including VoiceConnectorItems in the request. You can include Amazon Chime Voice Connectors from different AWS Regions in your group. This creates a fault tolerant mechanism for fallback in case of availability events.
@@ -2330,14 +2916,25 @@ export def "voice-connector-groups create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/voice-connector-groups")
+  let full_url = (build-url $base "/voice-connector-groups" $auth.query)
   let req_body = {"Name": $name, "VoiceConnectorItems": $voice_connector_items} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Lists the Amazon Chime Voice Connector groups for the administrator's AWS account.
@@ -2369,12 +2966,23 @@ export def "voice-connector-groups list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "next-token" $next_token "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/voice-connector-groups" $qp)
+  let full_url = (build-url $base "/voice-connector-groups" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"next-token": $next_token, "max-results": $max_results, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"next-token": $next_token, "max-results": $max_results, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes the specified Amazon Chime account. You must suspend all users before deleting Team account. You can use the BatchSuspendUser action to dodo. For EnterpriseLWA and EnterpriseAD accounts, you must release the claimed domains for your Amazon Chime account before deletion. As soon as you release the domain, all users under that account are suspended. Deleted accounts appear in your Disabled accounts list for 90 days. To restore deleted account from your Disabled accounts list, you must contact AWS Support. After 90 days, deleted accounts are permanently removed from your Disabled accounts list.
@@ -2403,12 +3011,23 @@ export def "accounts delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}"))
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Retrieves details for the specified Amazon Chime account, such as account type and supported licenses.
@@ -2437,12 +3056,23 @@ export def "accounts get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}"))
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates account details for the specified Amazon Chime account. Currently, only account name and default license updates are supported for this action.
@@ -2474,14 +3104,25 @@ export def "accounts update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}"))
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}") $auth.query)
   let req_body = {"Name": $name, "DefaultLicense": $default_license} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes an AppInstance and all associated data asynchronously.
@@ -2510,12 +3151,23 @@ export def "app-instances delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($app_instance_arn | is-empty) { error make --unspanned { msg: "path parameter 'appInstanceArn' must be non-empty" } }
-  let full_url = (build-url $base ({app_instance_arn: (encode-path-segment $app_instance_arn)} | format pattern "/app-instances/{app_instance_arn}"))
+  let full_url = (build-url $base ({app_instance_arn: (encode-path-segment $app_instance_arn)} | format pattern "/app-instances/{app_instance_arn}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Returns the full details of an AppInstance.
@@ -2544,12 +3196,23 @@ export def "app-instances get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($app_instance_arn | is-empty) { error make --unspanned { msg: "path parameter 'appInstanceArn' must be non-empty" } }
-  let full_url = (build-url $base ({app_instance_arn: (encode-path-segment $app_instance_arn)} | format pattern "/app-instances/{app_instance_arn}"))
+  let full_url = (build-url $base ({app_instance_arn: (encode-path-segment $app_instance_arn)} | format pattern "/app-instances/{app_instance_arn}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates AppInstance metadata.
@@ -2581,14 +3244,25 @@ export def "app-instances update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($app_instance_arn | is-empty) { error make --unspanned { msg: "path parameter 'appInstanceArn' must be non-empty" } }
-  let full_url = (build-url $base ({app_instance_arn: (encode-path-segment $app_instance_arn)} | format pattern "/app-instances/{app_instance_arn}"))
+  let full_url = (build-url $base ({app_instance_arn: (encode-path-segment $app_instance_arn)} | format pattern "/app-instances/{app_instance_arn}") $auth.query)
   let req_body = {"Name": $name, "Metadata": $metadata} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Demotes an AppInstanceAdmin to an AppInstanceUser. This action does not delete the user.
@@ -2619,12 +3293,23 @@ export def "app-instances-admins delete" [
   let base = ($base_url | default $BASE_URL)
   if ($app_instance_arn | is-empty) { error make --unspanned { msg: "path parameter 'appInstanceArn' must be non-empty" } }
   if ($app_instance_admin_arn | is-empty) { error make --unspanned { msg: "path parameter 'appInstanceAdminArn' must be non-empty" } }
-  let full_url = (build-url $base ({app_instance_arn: (encode-path-segment $app_instance_arn), app_instance_admin_arn: (encode-path-segment $app_instance_admin_arn)} | format pattern "/app-instances/{app_instance_arn}/admins/{app_instance_admin_arn}"))
+  let full_url = (build-url $base ({app_instance_arn: (encode-path-segment $app_instance_arn), app_instance_admin_arn: (encode-path-segment $app_instance_admin_arn)} | format pattern "/app-instances/{app_instance_arn}/admins/{app_instance_admin_arn}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Returns the full details of an AppInstanceAdmin.
@@ -2655,12 +3340,23 @@ export def "app-instances-admins get" [
   let base = ($base_url | default $BASE_URL)
   if ($app_instance_arn | is-empty) { error make --unspanned { msg: "path parameter 'appInstanceArn' must be non-empty" } }
   if ($app_instance_admin_arn | is-empty) { error make --unspanned { msg: "path parameter 'appInstanceAdminArn' must be non-empty" } }
-  let full_url = (build-url $base ({app_instance_arn: (encode-path-segment $app_instance_arn), app_instance_admin_arn: (encode-path-segment $app_instance_admin_arn)} | format pattern "/app-instances/{app_instance_arn}/admins/{app_instance_admin_arn}"))
+  let full_url = (build-url $base ({app_instance_arn: (encode-path-segment $app_instance_arn), app_instance_admin_arn: (encode-path-segment $app_instance_admin_arn)} | format pattern "/app-instances/{app_instance_arn}/admins/{app_instance_admin_arn}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes the streaming configurations of an AppInstance.
@@ -2689,12 +3385,23 @@ export def "app-instances-streaming-configurations delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($app_instance_arn | is-empty) { error make --unspanned { msg: "path parameter 'appInstanceArn' must be non-empty" } }
-  let full_url = (build-url $base ({app_instance_arn: (encode-path-segment $app_instance_arn)} | format pattern "/app-instances/{app_instance_arn}/streaming-configurations"))
+  let full_url = (build-url $base ({app_instance_arn: (encode-path-segment $app_instance_arn)} | format pattern "/app-instances/{app_instance_arn}/streaming-configurations") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Gets the streaming settings for an AppInstance.
@@ -2723,12 +3430,23 @@ export def "app-instances-streaming-configurations get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($app_instance_arn | is-empty) { error make --unspanned { msg: "path parameter 'appInstanceArn' must be non-empty" } }
-  let full_url = (build-url $base ({app_instance_arn: (encode-path-segment $app_instance_arn)} | format pattern "/app-instances/{app_instance_arn}/streaming-configurations"))
+  let full_url = (build-url $base ({app_instance_arn: (encode-path-segment $app_instance_arn)} | format pattern "/app-instances/{app_instance_arn}/streaming-configurations") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # The data streaming configurations of an AppInstance.
@@ -2760,14 +3478,25 @@ export def "app-instances-streaming-configurations update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($app_instance_arn | is-empty) { error make --unspanned { msg: "path parameter 'appInstanceArn' must be non-empty" } }
-  let full_url = (build-url $base ({app_instance_arn: (encode-path-segment $app_instance_arn)} | format pattern "/app-instances/{app_instance_arn}/streaming-configurations"))
+  let full_url = (build-url $base ({app_instance_arn: (encode-path-segment $app_instance_arn)} | format pattern "/app-instances/{app_instance_arn}/streaming-configurations") $auth.query)
   let req_body = {"AppInstanceStreamingConfigurations": $app_instance_streaming_configurations} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes an AppInstanceUser.
@@ -2796,12 +3525,23 @@ export def "app-instance-users delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($app_instance_user_arn | is-empty) { error make --unspanned { msg: "path parameter 'appInstanceUserArn' must be non-empty" } }
-  let full_url = (build-url $base ({app_instance_user_arn: (encode-path-segment $app_instance_user_arn)} | format pattern "/app-instance-users/{app_instance_user_arn}"))
+  let full_url = (build-url $base ({app_instance_user_arn: (encode-path-segment $app_instance_user_arn)} | format pattern "/app-instance-users/{app_instance_user_arn}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Returns the full details of an AppInstanceUser.
@@ -2830,12 +3570,23 @@ export def "app-instance-users get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($app_instance_user_arn | is-empty) { error make --unspanned { msg: "path parameter 'appInstanceUserArn' must be non-empty" } }
-  let full_url = (build-url $base ({app_instance_user_arn: (encode-path-segment $app_instance_user_arn)} | format pattern "/app-instance-users/{app_instance_user_arn}"))
+  let full_url = (build-url $base ({app_instance_user_arn: (encode-path-segment $app_instance_user_arn)} | format pattern "/app-instance-users/{app_instance_user_arn}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates the details of an AppInstanceUser. You can update names and metadata.
@@ -2867,14 +3618,25 @@ export def "app-instance-users update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($app_instance_user_arn | is-empty) { error make --unspanned { msg: "path parameter 'appInstanceUserArn' must be non-empty" } }
-  let full_url = (build-url $base ({app_instance_user_arn: (encode-path-segment $app_instance_user_arn)} | format pattern "/app-instance-users/{app_instance_user_arn}"))
+  let full_url = (build-url $base ({app_instance_user_arn: (encode-path-segment $app_instance_user_arn)} | format pattern "/app-instance-users/{app_instance_user_arn}") $auth.query)
   let req_body = {"Name": $name, "Metadata": $metadata} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes an attendee from the specified Amazon Chime SDK meeting and deletes their JoinToken. Attendees are automatically deleted when a Amazon Chime SDK meeting is deleted. For more information about the Amazon Chime SDK, see Using the Amazon Chime SDK (https://docs.aws.amazon.com/chime-sdk/latest/dg/meetings-sdk.html) in the Amazon Chime SDK Developer Guide.
@@ -2905,12 +3667,23 @@ export def "meetings-attendees delete" [
   let base = ($base_url | default $BASE_URL)
   if ($meeting_id | is-empty) { error make --unspanned { msg: "path parameter 'meetingId' must be non-empty" } }
   if ($attendee_id | is-empty) { error make --unspanned { msg: "path parameter 'attendeeId' must be non-empty" } }
-  let full_url = (build-url $base ({meeting_id: (encode-path-segment $meeting_id), attendee_id: (encode-path-segment $attendee_id)} | format pattern "/meetings/{meeting_id}/attendees/{attendee_id}"))
+  let full_url = (build-url $base ({meeting_id: (encode-path-segment $meeting_id), attendee_id: (encode-path-segment $attendee_id)} | format pattern "/meetings/{meeting_id}/attendees/{attendee_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Gets the Amazon Chime SDK attendee details for a specified meeting ID and attendee ID. For more information about the Amazon Chime SDK, see Using the Amazon Chime SDK (https://docs.aws.amazon.com/chime-sdk/latest/dg/meetings-sdk.html) in the Amazon Chime SDK Developer Guide .
@@ -2941,12 +3714,23 @@ export def "meetings-attendees get" [
   let base = ($base_url | default $BASE_URL)
   if ($meeting_id | is-empty) { error make --unspanned { msg: "path parameter 'meetingId' must be non-empty" } }
   if ($attendee_id | is-empty) { error make --unspanned { msg: "path parameter 'attendeeId' must be non-empty" } }
-  let full_url = (build-url $base ({meeting_id: (encode-path-segment $meeting_id), attendee_id: (encode-path-segment $attendee_id)} | format pattern "/meetings/{meeting_id}/attendees/{attendee_id}"))
+  let full_url = (build-url $base ({meeting_id: (encode-path-segment $meeting_id), attendee_id: (encode-path-segment $attendee_id)} | format pattern "/meetings/{meeting_id}/attendees/{attendee_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Immediately makes a channel and its memberships inaccessible and marks them for deletion. This is an irreversible process. The x-amz-chime-bearer request header is mandatory. Use the AppInstanceUserArn of the user that makes the API call as the value in the header.
@@ -2976,12 +3760,23 @@ export def "channels delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($channel_arn | is-empty) { error make --unspanned { msg: "path parameter 'channelArn' must be non-empty" } }
-  let full_url = (build-url $base ({channel_arn: (encode-path-segment $channel_arn)} | format pattern "/channels/{channel_arn}"))
+  let full_url = (build-url $base ({channel_arn: (encode-path-segment $channel_arn)} | format pattern "/channels/{channel_arn}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "x-amz-chime-bearer": $x_amz_chime_bearer} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Returns the full details of a channel in an Amazon Chime AppInstance. The x-amz-chime-bearer request header is mandatory. Use the AppInstanceUserArn of the user that makes the API call as the value in the header.
@@ -3011,12 +3806,23 @@ export def "channels get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($channel_arn | is-empty) { error make --unspanned { msg: "path parameter 'channelArn' must be non-empty" } }
-  let full_url = (build-url $base ({channel_arn: (encode-path-segment $channel_arn)} | format pattern "/channels/{channel_arn}"))
+  let full_url = (build-url $base ({channel_arn: (encode-path-segment $channel_arn)} | format pattern "/channels/{channel_arn}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "x-amz-chime-bearer": $x_amz_chime_bearer} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update a channel's attributes. Restriction: You can't change a channel's privacy. The x-amz-chime-bearer request header is mandatory. Use the AppInstanceUserArn of the user that makes the API call as the value in the header.
@@ -3050,14 +3856,25 @@ export def "channels update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($channel_arn | is-empty) { error make --unspanned { msg: "path parameter 'channelArn' must be non-empty" } }
-  let full_url = (build-url $base ({channel_arn: (encode-path-segment $channel_arn)} | format pattern "/channels/{channel_arn}"))
+  let full_url = (build-url $base ({channel_arn: (encode-path-segment $channel_arn)} | format pattern "/channels/{channel_arn}") $auth.query)
   let req_body = {"Name": $name, "Mode": $mode, "Metadata": $metadata} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "x-amz-chime-bearer": $x_amz_chime_bearer} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Removes a user from a channel's ban list. The x-amz-chime-bearer request header is mandatory. Use the AppInstanceUserArn of the user that makes the API call as the value in the header.
@@ -3089,12 +3906,23 @@ export def "channels-bans delete" [
   let base = ($base_url | default $BASE_URL)
   if ($channel_arn | is-empty) { error make --unspanned { msg: "path parameter 'channelArn' must be non-empty" } }
   if ($member_arn | is-empty) { error make --unspanned { msg: "path parameter 'memberArn' must be non-empty" } }
-  let full_url = (build-url $base ({channel_arn: (encode-path-segment $channel_arn), member_arn: (encode-path-segment $member_arn)} | format pattern "/channels/{channel_arn}/bans/{member_arn}"))
+  let full_url = (build-url $base ({channel_arn: (encode-path-segment $channel_arn), member_arn: (encode-path-segment $member_arn)} | format pattern "/channels/{channel_arn}/bans/{member_arn}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "x-amz-chime-bearer": $x_amz_chime_bearer} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Returns the full details of a channel ban. The x-amz-chime-bearer request header is mandatory. Use the AppInstanceUserArn of the user that makes the API call as the value in the header.
@@ -3126,12 +3954,23 @@ export def "channels-bans get" [
   let base = ($base_url | default $BASE_URL)
   if ($channel_arn | is-empty) { error make --unspanned { msg: "path parameter 'channelArn' must be non-empty" } }
   if ($member_arn | is-empty) { error make --unspanned { msg: "path parameter 'memberArn' must be non-empty" } }
-  let full_url = (build-url $base ({channel_arn: (encode-path-segment $channel_arn), member_arn: (encode-path-segment $member_arn)} | format pattern "/channels/{channel_arn}/bans/{member_arn}"))
+  let full_url = (build-url $base ({channel_arn: (encode-path-segment $channel_arn), member_arn: (encode-path-segment $member_arn)} | format pattern "/channels/{channel_arn}/bans/{member_arn}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "x-amz-chime-bearer": $x_amz_chime_bearer} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Removes a member from a channel. The x-amz-chime-bearer request header is mandatory. Use the AppInstanceUserArn of the user that makes the API call as the value in the header.
@@ -3163,12 +4002,23 @@ export def "channels-memberships delete" [
   let base = ($base_url | default $BASE_URL)
   if ($channel_arn | is-empty) { error make --unspanned { msg: "path parameter 'channelArn' must be non-empty" } }
   if ($member_arn | is-empty) { error make --unspanned { msg: "path parameter 'memberArn' must be non-empty" } }
-  let full_url = (build-url $base ({channel_arn: (encode-path-segment $channel_arn), member_arn: (encode-path-segment $member_arn)} | format pattern "/channels/{channel_arn}/memberships/{member_arn}"))
+  let full_url = (build-url $base ({channel_arn: (encode-path-segment $channel_arn), member_arn: (encode-path-segment $member_arn)} | format pattern "/channels/{channel_arn}/memberships/{member_arn}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "x-amz-chime-bearer": $x_amz_chime_bearer} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Returns the full details of a user's channel membership. The x-amz-chime-bearer request header is mandatory. Use the AppInstanceUserArn of the user that makes the API call as the value in the header.
@@ -3200,12 +4050,23 @@ export def "channels-memberships get" [
   let base = ($base_url | default $BASE_URL)
   if ($channel_arn | is-empty) { error make --unspanned { msg: "path parameter 'channelArn' must be non-empty" } }
   if ($member_arn | is-empty) { error make --unspanned { msg: "path parameter 'memberArn' must be non-empty" } }
-  let full_url = (build-url $base ({channel_arn: (encode-path-segment $channel_arn), member_arn: (encode-path-segment $member_arn)} | format pattern "/channels/{channel_arn}/memberships/{member_arn}"))
+  let full_url = (build-url $base ({channel_arn: (encode-path-segment $channel_arn), member_arn: (encode-path-segment $member_arn)} | format pattern "/channels/{channel_arn}/memberships/{member_arn}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "x-amz-chime-bearer": $x_amz_chime_bearer} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes a channel message. Only admins can perform this action. Deletion makes messages inaccessible immediately. A background process deletes any revisions created by UpdateChannelMessage. The x-amz-chime-bearer request header is mandatory. Use the AppInstanceUserArn of the user that makes the API call as the value in the header.
@@ -3237,12 +4098,23 @@ export def "channels-messages delete" [
   let base = ($base_url | default $BASE_URL)
   if ($channel_arn | is-empty) { error make --unspanned { msg: "path parameter 'channelArn' must be non-empty" } }
   if ($message_id | is-empty) { error make --unspanned { msg: "path parameter 'messageId' must be non-empty" } }
-  let full_url = (build-url $base ({channel_arn: (encode-path-segment $channel_arn), message_id: (encode-path-segment $message_id)} | format pattern "/channels/{channel_arn}/messages/{message_id}"))
+  let full_url = (build-url $base ({channel_arn: (encode-path-segment $channel_arn), message_id: (encode-path-segment $message_id)} | format pattern "/channels/{channel_arn}/messages/{message_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "x-amz-chime-bearer": $x_amz_chime_bearer} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Gets the full details of a channel message. The x-amz-chime-bearer request header is mandatory. Use the AppInstanceUserArn of the user that makes the API call as the value in the header.
@@ -3274,12 +4146,23 @@ export def "channels-messages get" [
   let base = ($base_url | default $BASE_URL)
   if ($channel_arn | is-empty) { error make --unspanned { msg: "path parameter 'channelArn' must be non-empty" } }
   if ($message_id | is-empty) { error make --unspanned { msg: "path parameter 'messageId' must be non-empty" } }
-  let full_url = (build-url $base ({channel_arn: (encode-path-segment $channel_arn), message_id: (encode-path-segment $message_id)} | format pattern "/channels/{channel_arn}/messages/{message_id}"))
+  let full_url = (build-url $base ({channel_arn: (encode-path-segment $channel_arn), message_id: (encode-path-segment $message_id)} | format pattern "/channels/{channel_arn}/messages/{message_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "x-amz-chime-bearer": $x_amz_chime_bearer} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates the content of a message. The x-amz-chime-bearer request header is mandatory. Use the AppInstanceUserArn of the user that makes the API call as the value in the header.
@@ -3314,14 +4197,25 @@ export def "channels-messages update" [
   let base = ($base_url | default $BASE_URL)
   if ($channel_arn | is-empty) { error make --unspanned { msg: "path parameter 'channelArn' must be non-empty" } }
   if ($message_id | is-empty) { error make --unspanned { msg: "path parameter 'messageId' must be non-empty" } }
-  let full_url = (build-url $base ({channel_arn: (encode-path-segment $channel_arn), message_id: (encode-path-segment $message_id)} | format pattern "/channels/{channel_arn}/messages/{message_id}"))
+  let full_url = (build-url $base ({channel_arn: (encode-path-segment $channel_arn), message_id: (encode-path-segment $message_id)} | format pattern "/channels/{channel_arn}/messages/{message_id}") $auth.query)
   let req_body = {"Content": $content, "Metadata": $metadata} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "x-amz-chime-bearer": $x_amz_chime_bearer} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes a channel moderator. The x-amz-chime-bearer request header is mandatory. Use the AppInstanceUserArn of the user that makes the API call as the value in the header.
@@ -3353,12 +4247,23 @@ export def "channels-moderators delete" [
   let base = ($base_url | default $BASE_URL)
   if ($channel_arn | is-empty) { error make --unspanned { msg: "path parameter 'channelArn' must be non-empty" } }
   if ($channel_moderator_arn | is-empty) { error make --unspanned { msg: "path parameter 'channelModeratorArn' must be non-empty" } }
-  let full_url = (build-url $base ({channel_arn: (encode-path-segment $channel_arn), channel_moderator_arn: (encode-path-segment $channel_moderator_arn)} | format pattern "/channels/{channel_arn}/moderators/{channel_moderator_arn}"))
+  let full_url = (build-url $base ({channel_arn: (encode-path-segment $channel_arn), channel_moderator_arn: (encode-path-segment $channel_moderator_arn)} | format pattern "/channels/{channel_arn}/moderators/{channel_moderator_arn}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "x-amz-chime-bearer": $x_amz_chime_bearer} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Returns the full details of a single ChannelModerator. The x-amz-chime-bearer request header is mandatory. Use the AppInstanceUserArn of the user that makes the API call as the value in the header.
@@ -3390,12 +4295,23 @@ export def "channels-moderators get" [
   let base = ($base_url | default $BASE_URL)
   if ($channel_arn | is-empty) { error make --unspanned { msg: "path parameter 'channelArn' must be non-empty" } }
   if ($channel_moderator_arn | is-empty) { error make --unspanned { msg: "path parameter 'channelModeratorArn' must be non-empty" } }
-  let full_url = (build-url $base ({channel_arn: (encode-path-segment $channel_arn), channel_moderator_arn: (encode-path-segment $channel_moderator_arn)} | format pattern "/channels/{channel_arn}/moderators/{channel_moderator_arn}"))
+  let full_url = (build-url $base ({channel_arn: (encode-path-segment $channel_arn), channel_moderator_arn: (encode-path-segment $channel_moderator_arn)} | format pattern "/channels/{channel_arn}/moderators/{channel_moderator_arn}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "x-amz-chime-bearer": $x_amz_chime_bearer} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes the events configuration that allows a bot to receive outgoing events.
@@ -3426,12 +4342,23 @@ export def "accounts-bots-events-configuration delete" [
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   if ($bot_id | is-empty) { error make --unspanned { msg: "path parameter 'botId' must be non-empty" } }
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), bot_id: (encode-path-segment $bot_id)} | format pattern "/accounts/{account_id}/bots/{bot_id}/events-configuration"))
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), bot_id: (encode-path-segment $bot_id)} | format pattern "/accounts/{account_id}/bots/{bot_id}/events-configuration") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Gets details for an events configuration that allows a bot to receive outgoing events, such as an HTTPS endpoint or Lambda function ARN.
@@ -3462,12 +4389,23 @@ export def "accounts-bots-events-configuration get" [
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   if ($bot_id | is-empty) { error make --unspanned { msg: "path parameter 'botId' must be non-empty" } }
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), bot_id: (encode-path-segment $bot_id)} | format pattern "/accounts/{account_id}/bots/{bot_id}/events-configuration"))
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), bot_id: (encode-path-segment $bot_id)} | format pattern "/accounts/{account_id}/bots/{bot_id}/events-configuration") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Creates an events configuration that allows a bot to receive outgoing events sent by Amazon Chime. Choose either an HTTPS endpoint or a Lambda function ARN. For more information, see Bot.
@@ -3501,14 +4439,25 @@ export def "accounts-bots-events-configuration update" [
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   if ($bot_id | is-empty) { error make --unspanned { msg: "path parameter 'botId' must be non-empty" } }
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), bot_id: (encode-path-segment $bot_id)} | format pattern "/accounts/{account_id}/bots/{bot_id}/events-configuration"))
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), bot_id: (encode-path-segment $bot_id)} | format pattern "/accounts/{account_id}/bots/{bot_id}/events-configuration") $auth.query)
   let req_body = {"OutboundEventsHTTPSEndpoint": $outbound_events_https_endpoint, "LambdaFunctionArn": $lambda_function_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Deletes the media capture pipeline.
@@ -3537,12 +4486,23 @@ export def "media-capture-pipelines delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($media_pipeline_id | is-empty) { error make --unspanned { msg: "path parameter 'mediaPipelineId' must be non-empty" } }
-  let full_url = (build-url $base ({media_pipeline_id: (encode-path-segment $media_pipeline_id)} | format pattern "/media-capture-pipelines/{media_pipeline_id}"))
+  let full_url = (build-url $base ({media_pipeline_id: (encode-path-segment $media_pipeline_id)} | format pattern "/media-capture-pipelines/{media_pipeline_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Gets an existing media capture pipeline.
@@ -3571,12 +4531,23 @@ export def "media-capture-pipelines get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($media_pipeline_id | is-empty) { error make --unspanned { msg: "path parameter 'mediaPipelineId' must be non-empty" } }
-  let full_url = (build-url $base ({media_pipeline_id: (encode-path-segment $media_pipeline_id)} | format pattern "/media-capture-pipelines/{media_pipeline_id}"))
+  let full_url = (build-url $base ({media_pipeline_id: (encode-path-segment $media_pipeline_id)} | format pattern "/media-capture-pipelines/{media_pipeline_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes the specified Amazon Chime SDK meeting. The operation deletes all attendees, disconnects all clients, and prevents new clients from joining the meeting. For more information about the Amazon Chime SDK, see Using the Amazon Chime SDK (https://docs.aws.amazon.com/chime-sdk/latest/dg/meetings-sdk.html) in the Amazon Chime SDK Developer Guide.
@@ -3605,12 +4576,23 @@ export def "meetings delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($meeting_id | is-empty) { error make --unspanned { msg: "path parameter 'meetingId' must be non-empty" } }
-  let full_url = (build-url $base ({meeting_id: (encode-path-segment $meeting_id)} | format pattern "/meetings/{meeting_id}"))
+  let full_url = (build-url $base ({meeting_id: (encode-path-segment $meeting_id)} | format pattern "/meetings/{meeting_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Gets the Amazon Chime SDK meeting details for the specified meeting ID. For more information about the Amazon Chime SDK, see Using the Amazon Chime SDK (https://docs.aws.amazon.com/chime-sdk/latest/dg/meetings-sdk.html) in the Amazon Chime SDK Developer Guide .
@@ -3639,12 +4621,23 @@ export def "meetings get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($meeting_id | is-empty) { error make --unspanned { msg: "path parameter 'meetingId' must be non-empty" } }
-  let full_url = (build-url $base ({meeting_id: (encode-path-segment $meeting_id)} | format pattern "/meetings/{meeting_id}"))
+  let full_url = (build-url $base ({meeting_id: (encode-path-segment $meeting_id)} | format pattern "/meetings/{meeting_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Moves the specified phone number into the Deletion queue. A phone number must be disassociated from any users or Amazon Chime Voice Connectors before it can be deleted. Deleted phone numbers remain in the Deletion queue for 7 days before they are deleted permanently.
@@ -3673,12 +4666,23 @@ export def "phone-numbers delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($phone_number_id | is-empty) { error make --unspanned { msg: "path parameter 'phoneNumberId' must be non-empty" } }
-  let full_url = (build-url $base ({phone_number_id: (encode-path-segment $phone_number_id)} | format pattern "/phone-numbers/{phone_number_id}"))
+  let full_url = (build-url $base ({phone_number_id: (encode-path-segment $phone_number_id)} | format pattern "/phone-numbers/{phone_number_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Retrieves details for the specified phone number ID, such as associations, capabilities, and product type.
@@ -3707,12 +4711,23 @@ export def "phone-numbers get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($phone_number_id | is-empty) { error make --unspanned { msg: "path parameter 'phoneNumberId' must be non-empty" } }
-  let full_url = (build-url $base ({phone_number_id: (encode-path-segment $phone_number_id)} | format pattern "/phone-numbers/{phone_number_id}"))
+  let full_url = (build-url $base ({phone_number_id: (encode-path-segment $phone_number_id)} | format pattern "/phone-numbers/{phone_number_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates phone number details, such as product type or calling name, for the specified phone number ID. You can update one phone number detail at a time. For example, you can update either the product type or the calling name in one action. For toll-free numbers, you cannot use the Amazon Chime Business Calling product type. For numbers outside the U.S., you must use the Amazon Chime SIP Media Application Dial-In product type. Updates to outbound calling names can take 72 hours to complete. Pending updates to outbound calling names must be complete before you can request another update.
@@ -3744,14 +4759,25 @@ export def "phone-numbers update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($phone_number_id | is-empty) { error make --unspanned { msg: "path parameter 'phoneNumberId' must be non-empty" } }
-  let full_url = (build-url $base ({phone_number_id: (encode-path-segment $phone_number_id)} | format pattern "/phone-numbers/{phone_number_id}"))
+  let full_url = (build-url $base ({phone_number_id: (encode-path-segment $phone_number_id)} | format pattern "/phone-numbers/{phone_number_id}") $auth.query)
   let req_body = {"ProductType": $product_type, "CallingName": $calling_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes the specified proxy session from the specified Amazon Chime Voice Connector.
@@ -3782,12 +4808,23 @@ export def "voice-connectors-proxy-sessions delete" [
   let base = ($base_url | default $BASE_URL)
   if ($voice_connector_id | is-empty) { error make --unspanned { msg: "path parameter 'voiceConnectorId' must be non-empty" } }
   if ($proxy_session_id | is-empty) { error make --unspanned { msg: "path parameter 'proxySessionId' must be non-empty" } }
-  let full_url = (build-url $base ({voice_connector_id: (encode-path-segment $voice_connector_id), proxy_session_id: (encode-path-segment $proxy_session_id)} | format pattern "/voice-connectors/{voice_connector_id}/proxy-sessions/{proxy_session_id}"))
+  let full_url = (build-url $base ({voice_connector_id: (encode-path-segment $voice_connector_id), proxy_session_id: (encode-path-segment $proxy_session_id)} | format pattern "/voice-connectors/{voice_connector_id}/proxy-sessions/{proxy_session_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Gets the specified proxy session details for the specified Amazon Chime Voice Connector.
@@ -3818,12 +4855,23 @@ export def "voice-connectors-proxy-sessions get" [
   let base = ($base_url | default $BASE_URL)
   if ($voice_connector_id | is-empty) { error make --unspanned { msg: "path parameter 'voiceConnectorId' must be non-empty" } }
   if ($proxy_session_id | is-empty) { error make --unspanned { msg: "path parameter 'proxySessionId' must be non-empty" } }
-  let full_url = (build-url $base ({voice_connector_id: (encode-path-segment $voice_connector_id), proxy_session_id: (encode-path-segment $proxy_session_id)} | format pattern "/voice-connectors/{voice_connector_id}/proxy-sessions/{proxy_session_id}"))
+  let full_url = (build-url $base ({voice_connector_id: (encode-path-segment $voice_connector_id), proxy_session_id: (encode-path-segment $proxy_session_id)} | format pattern "/voice-connectors/{voice_connector_id}/proxy-sessions/{proxy_session_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates the specified proxy session details, such as voice or SMS capabilities.
@@ -3857,14 +4905,25 @@ export def "voice-connectors-proxy-sessions update" [
   let base = ($base_url | default $BASE_URL)
   if ($voice_connector_id | is-empty) { error make --unspanned { msg: "path parameter 'voiceConnectorId' must be non-empty" } }
   if ($proxy_session_id | is-empty) { error make --unspanned { msg: "path parameter 'proxySessionId' must be non-empty" } }
-  let full_url = (build-url $base ({voice_connector_id: (encode-path-segment $voice_connector_id), proxy_session_id: (encode-path-segment $proxy_session_id)} | format pattern "/voice-connectors/{voice_connector_id}/proxy-sessions/{proxy_session_id}"))
+  let full_url = (build-url $base ({voice_connector_id: (encode-path-segment $voice_connector_id), proxy_session_id: (encode-path-segment $proxy_session_id)} | format pattern "/voice-connectors/{voice_connector_id}/proxy-sessions/{proxy_session_id}") $auth.query)
   let req_body = {"Capabilities": $capabilities, "ExpiryMinutes": $expiry_minutes} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Deletes a chat room in an Amazon Chime Enterprise account.
@@ -3895,12 +4954,23 @@ export def "accounts-rooms delete" [
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   if ($room_id | is-empty) { error make --unspanned { msg: "path parameter 'roomId' must be non-empty" } }
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), room_id: (encode-path-segment $room_id)} | format pattern "/accounts/{account_id}/rooms/{room_id}"))
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), room_id: (encode-path-segment $room_id)} | format pattern "/accounts/{account_id}/rooms/{room_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Retrieves room details, such as the room name, for a room in an Amazon Chime Enterprise account.
@@ -3931,12 +5001,23 @@ export def "accounts-rooms get" [
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   if ($room_id | is-empty) { error make --unspanned { msg: "path parameter 'roomId' must be non-empty" } }
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), room_id: (encode-path-segment $room_id)} | format pattern "/accounts/{account_id}/rooms/{room_id}"))
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), room_id: (encode-path-segment $room_id)} | format pattern "/accounts/{account_id}/rooms/{room_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates room details, such as the room name, for a room in an Amazon Chime Enterprise account.
@@ -3969,14 +5050,25 @@ export def "accounts-rooms update" [
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   if ($room_id | is-empty) { error make --unspanned { msg: "path parameter 'roomId' must be non-empty" } }
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), room_id: (encode-path-segment $room_id)} | format pattern "/accounts/{account_id}/rooms/{room_id}"))
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), room_id: (encode-path-segment $room_id)} | format pattern "/accounts/{account_id}/rooms/{room_id}") $auth.query)
   let req_body = {"Name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Removes a member from a chat room in an Amazon Chime Enterprise account.
@@ -4009,12 +5101,23 @@ export def "accounts-rooms-memberships delete" [
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   if ($room_id | is-empty) { error make --unspanned { msg: "path parameter 'roomId' must be non-empty" } }
   if ($member_id | is-empty) { error make --unspanned { msg: "path parameter 'memberId' must be non-empty" } }
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), room_id: (encode-path-segment $room_id), member_id: (encode-path-segment $member_id)} | format pattern "/accounts/{account_id}/rooms/{room_id}/memberships/{member_id}"))
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), room_id: (encode-path-segment $room_id), member_id: (encode-path-segment $member_id)} | format pattern "/accounts/{account_id}/rooms/{room_id}/memberships/{member_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Updates room membership details, such as the member role, for a room in an Amazon Chime Enterprise account. The member role designates whether the member is a chat room administrator or a general chat room member. The member role can be updated only for user IDs.
@@ -4049,14 +5152,25 @@ export def "accounts-rooms-memberships update" [
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   if ($room_id | is-empty) { error make --unspanned { msg: "path parameter 'roomId' must be non-empty" } }
   if ($member_id | is-empty) { error make --unspanned { msg: "path parameter 'memberId' must be non-empty" } }
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), room_id: (encode-path-segment $room_id), member_id: (encode-path-segment $member_id)} | format pattern "/accounts/{account_id}/rooms/{room_id}/memberships/{member_id}"))
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), room_id: (encode-path-segment $room_id), member_id: (encode-path-segment $member_id)} | format pattern "/accounts/{account_id}/rooms/{room_id}/memberships/{member_id}") $auth.query)
   let req_body = {"Role": $role} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes a SIP media application.
@@ -4085,12 +5199,23 @@ export def "sip-media-applications delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($sip_media_application_id | is-empty) { error make --unspanned { msg: "path parameter 'sipMediaApplicationId' must be non-empty" } }
-  let full_url = (build-url $base ({sip_media_application_id: (encode-path-segment $sip_media_application_id)} | format pattern "/sip-media-applications/{sip_media_application_id}"))
+  let full_url = (build-url $base ({sip_media_application_id: (encode-path-segment $sip_media_application_id)} | format pattern "/sip-media-applications/{sip_media_application_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Retrieves the information for a SIP media application, including name, AWS Region, and endpoints.
@@ -4119,12 +5244,23 @@ export def "sip-media-applications get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($sip_media_application_id | is-empty) { error make --unspanned { msg: "path parameter 'sipMediaApplicationId' must be non-empty" } }
-  let full_url = (build-url $base ({sip_media_application_id: (encode-path-segment $sip_media_application_id)} | format pattern "/sip-media-applications/{sip_media_application_id}"))
+  let full_url = (build-url $base ({sip_media_application_id: (encode-path-segment $sip_media_application_id)} | format pattern "/sip-media-applications/{sip_media_application_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates the details of the specified SIP media application.
@@ -4157,14 +5293,25 @@ export def "sip-media-applications update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($sip_media_application_id | is-empty) { error make --unspanned { msg: "path parameter 'sipMediaApplicationId' must be non-empty" } }
-  let full_url = (build-url $base ({sip_media_application_id: (encode-path-segment $sip_media_application_id)} | format pattern "/sip-media-applications/{sip_media_application_id}"))
+  let full_url = (build-url $base ({sip_media_application_id: (encode-path-segment $sip_media_application_id)} | format pattern "/sip-media-applications/{sip_media_application_id}") $auth.query)
   let req_body = {"Name": $name, "Endpoints": $endpoints} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes a SIP rule. You must disable a SIP rule before you can delete it.
@@ -4193,12 +5340,23 @@ export def "sip-rules delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($sip_rule_id | is-empty) { error make --unspanned { msg: "path parameter 'sipRuleId' must be non-empty" } }
-  let full_url = (build-url $base ({sip_rule_id: (encode-path-segment $sip_rule_id)} | format pattern "/sip-rules/{sip_rule_id}"))
+  let full_url = (build-url $base ({sip_rule_id: (encode-path-segment $sip_rule_id)} | format pattern "/sip-rules/{sip_rule_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Retrieves the details of a SIP rule, such as the rule ID, name, triggers, and target endpoints.
@@ -4227,12 +5385,23 @@ export def "sip-rules get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($sip_rule_id | is-empty) { error make --unspanned { msg: "path parameter 'sipRuleId' must be non-empty" } }
-  let full_url = (build-url $base ({sip_rule_id: (encode-path-segment $sip_rule_id)} | format pattern "/sip-rules/{sip_rule_id}"))
+  let full_url = (build-url $base ({sip_rule_id: (encode-path-segment $sip_rule_id)} | format pattern "/sip-rules/{sip_rule_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates the details of the specified SIP rule.
@@ -4266,14 +5435,25 @@ export def "sip-rules update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($sip_rule_id | is-empty) { error make --unspanned { msg: "path parameter 'sipRuleId' must be non-empty" } }
-  let full_url = (build-url $base ({sip_rule_id: (encode-path-segment $sip_rule_id)} | format pattern "/sip-rules/{sip_rule_id}"))
+  let full_url = (build-url $base ({sip_rule_id: (encode-path-segment $sip_rule_id)} | format pattern "/sip-rules/{sip_rule_id}") $auth.query)
   let req_body = {"Name": $name, "Disabled": $disabled, "TargetApplications": $target_applications} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [202]
 }
 
 # Deletes the specified Amazon Chime Voice Connector. Any phone numbers associated with the Amazon Chime Voice Connector must be disassociated from it before it can be deleted.
@@ -4302,12 +5482,23 @@ export def "voice-connectors delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($voice_connector_id | is-empty) { error make --unspanned { msg: "path parameter 'voiceConnectorId' must be non-empty" } }
-  let full_url = (build-url $base ({voice_connector_id: (encode-path-segment $voice_connector_id)} | format pattern "/voice-connectors/{voice_connector_id}"))
+  let full_url = (build-url $base ({voice_connector_id: (encode-path-segment $voice_connector_id)} | format pattern "/voice-connectors/{voice_connector_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Retrieves details for the specified Amazon Chime Voice Connector, such as timestamps,name, outbound host, and encryption requirements.
@@ -4336,12 +5527,23 @@ export def "voice-connectors get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($voice_connector_id | is-empty) { error make --unspanned { msg: "path parameter 'voiceConnectorId' must be non-empty" } }
-  let full_url = (build-url $base ({voice_connector_id: (encode-path-segment $voice_connector_id)} | format pattern "/voice-connectors/{voice_connector_id}"))
+  let full_url = (build-url $base ({voice_connector_id: (encode-path-segment $voice_connector_id)} | format pattern "/voice-connectors/{voice_connector_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates details for the specified Amazon Chime Voice Connector.
@@ -4373,14 +5575,25 @@ export def "voice-connectors update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($voice_connector_id | is-empty) { error make --unspanned { msg: "path parameter 'voiceConnectorId' must be non-empty" } }
-  let full_url = (build-url $base ({voice_connector_id: (encode-path-segment $voice_connector_id)} | format pattern "/voice-connectors/{voice_connector_id}"))
+  let full_url = (build-url $base ({voice_connector_id: (encode-path-segment $voice_connector_id)} | format pattern "/voice-connectors/{voice_connector_id}") $auth.query)
   let req_body = {"Name": $name, "RequireEncryption": $require_encryption} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes the emergency calling configuration details from the specified Amazon Chime Voice Connector.
@@ -4409,12 +5622,23 @@ export def "voice-connectors-emergency-calling-configuration delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($voice_connector_id | is-empty) { error make --unspanned { msg: "path parameter 'voiceConnectorId' must be non-empty" } }
-  let full_url = (build-url $base ({voice_connector_id: (encode-path-segment $voice_connector_id)} | format pattern "/voice-connectors/{voice_connector_id}/emergency-calling-configuration"))
+  let full_url = (build-url $base ({voice_connector_id: (encode-path-segment $voice_connector_id)} | format pattern "/voice-connectors/{voice_connector_id}/emergency-calling-configuration") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Gets the emergency calling configuration details for the specified Amazon Chime Voice Connector.
@@ -4443,12 +5667,23 @@ export def "voice-connectors-emergency-calling-configuration get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($voice_connector_id | is-empty) { error make --unspanned { msg: "path parameter 'voiceConnectorId' must be non-empty" } }
-  let full_url = (build-url $base ({voice_connector_id: (encode-path-segment $voice_connector_id)} | format pattern "/voice-connectors/{voice_connector_id}/emergency-calling-configuration"))
+  let full_url = (build-url $base ({voice_connector_id: (encode-path-segment $voice_connector_id)} | format pattern "/voice-connectors/{voice_connector_id}/emergency-calling-configuration") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Puts emergency calling configuration details to the specified Amazon Chime Voice Connector, such as emergency phone numbers and calling countries. Origination and termination settings must be enabled for the Amazon Chime Voice Connector before emergency calling can be configured.
@@ -4480,14 +5715,25 @@ export def "voice-connectors-emergency-calling-configuration update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($voice_connector_id | is-empty) { error make --unspanned { msg: "path parameter 'voiceConnectorId' must be non-empty" } }
-  let full_url = (build-url $base ({voice_connector_id: (encode-path-segment $voice_connector_id)} | format pattern "/voice-connectors/{voice_connector_id}/emergency-calling-configuration"))
+  let full_url = (build-url $base ({voice_connector_id: (encode-path-segment $voice_connector_id)} | format pattern "/voice-connectors/{voice_connector_id}/emergency-calling-configuration") $auth.query)
   let req_body = {"EmergencyCallingConfiguration": $emergency_calling_configuration} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes the specified Amazon Chime Voice Connector group. Any VoiceConnectorItems and phone numbers associated with the group must be removed before it can be deleted.
@@ -4516,12 +5762,23 @@ export def "voice-connector-groups delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($voice_connector_group_id | is-empty) { error make --unspanned { msg: "path parameter 'voiceConnectorGroupId' must be non-empty" } }
-  let full_url = (build-url $base ({voice_connector_group_id: (encode-path-segment $voice_connector_group_id)} | format pattern "/voice-connector-groups/{voice_connector_group_id}"))
+  let full_url = (build-url $base ({voice_connector_group_id: (encode-path-segment $voice_connector_group_id)} | format pattern "/voice-connector-groups/{voice_connector_group_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Retrieves details for the specified Amazon Chime Voice Connector group, such as timestamps,name, and associated VoiceConnectorItems.
@@ -4550,12 +5807,23 @@ export def "voice-connector-groups get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($voice_connector_group_id | is-empty) { error make --unspanned { msg: "path parameter 'voiceConnectorGroupId' must be non-empty" } }
-  let full_url = (build-url $base ({voice_connector_group_id: (encode-path-segment $voice_connector_group_id)} | format pattern "/voice-connector-groups/{voice_connector_group_id}"))
+  let full_url = (build-url $base ({voice_connector_group_id: (encode-path-segment $voice_connector_group_id)} | format pattern "/voice-connector-groups/{voice_connector_group_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates details of the specified Amazon Chime Voice Connector group, such as the name and Amazon Chime Voice Connector priority ranking.
@@ -4588,14 +5856,25 @@ export def "voice-connector-groups update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($voice_connector_group_id | is-empty) { error make --unspanned { msg: "path parameter 'voiceConnectorGroupId' must be non-empty" } }
-  let full_url = (build-url $base ({voice_connector_group_id: (encode-path-segment $voice_connector_group_id)} | format pattern "/voice-connector-groups/{voice_connector_group_id}"))
+  let full_url = (build-url $base ({voice_connector_group_id: (encode-path-segment $voice_connector_group_id)} | format pattern "/voice-connector-groups/{voice_connector_group_id}") $auth.query)
   let req_body = {"Name": $name, "VoiceConnectorItems": $voice_connector_items} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [202]
 }
 
 # Deletes the origination settings for the specified Amazon Chime Voice Connector. If emergency calling is configured for the Amazon Chime Voice Connector, it must be deleted prior to deleting the origination settings.
@@ -4624,12 +5903,23 @@ export def "voice-connectors-origination delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($voice_connector_id | is-empty) { error make --unspanned { msg: "path parameter 'voiceConnectorId' must be non-empty" } }
-  let full_url = (build-url $base ({voice_connector_id: (encode-path-segment $voice_connector_id)} | format pattern "/voice-connectors/{voice_connector_id}/origination"))
+  let full_url = (build-url $base ({voice_connector_id: (encode-path-segment $voice_connector_id)} | format pattern "/voice-connectors/{voice_connector_id}/origination") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Retrieves origination setting details for the specified Amazon Chime Voice Connector.
@@ -4658,12 +5948,23 @@ export def "voice-connectors-origination get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($voice_connector_id | is-empty) { error make --unspanned { msg: "path parameter 'voiceConnectorId' must be non-empty" } }
-  let full_url = (build-url $base ({voice_connector_id: (encode-path-segment $voice_connector_id)} | format pattern "/voice-connectors/{voice_connector_id}/origination"))
+  let full_url = (build-url $base ({voice_connector_id: (encode-path-segment $voice_connector_id)} | format pattern "/voice-connectors/{voice_connector_id}/origination") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Adds origination settings for the specified Amazon Chime Voice Connector. If emergency calling is configured for the Amazon Chime Voice Connector, it must be deleted prior to turning off origination settings.
@@ -4695,14 +5996,25 @@ export def "voice-connectors-origination update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($voice_connector_id | is-empty) { error make --unspanned { msg: "path parameter 'voiceConnectorId' must be non-empty" } }
-  let full_url = (build-url $base ({voice_connector_id: (encode-path-segment $voice_connector_id)} | format pattern "/voice-connectors/{voice_connector_id}/origination"))
+  let full_url = (build-url $base ({voice_connector_id: (encode-path-segment $voice_connector_id)} | format pattern "/voice-connectors/{voice_connector_id}/origination") $auth.query)
   let req_body = {"Origination": $origination} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes the proxy configuration from the specified Amazon Chime Voice Connector.
@@ -4731,12 +6043,23 @@ export def "voice-connectors-programmable-numbers-proxy delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($voice_connector_id | is-empty) { error make --unspanned { msg: "path parameter 'voiceConnectorId' must be non-empty" } }
-  let full_url = (build-url $base ({voice_connector_id: (encode-path-segment $voice_connector_id)} | format pattern "/voice-connectors/{voice_connector_id}/programmable-numbers/proxy"))
+  let full_url = (build-url $base ({voice_connector_id: (encode-path-segment $voice_connector_id)} | format pattern "/voice-connectors/{voice_connector_id}/programmable-numbers/proxy") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Gets the proxy configuration details for the specified Amazon Chime Voice Connector.
@@ -4765,12 +6088,23 @@ export def "voice-connectors-programmable-numbers-proxy get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($voice_connector_id | is-empty) { error make --unspanned { msg: "path parameter 'voiceConnectorId' must be non-empty" } }
-  let full_url = (build-url $base ({voice_connector_id: (encode-path-segment $voice_connector_id)} | format pattern "/voice-connectors/{voice_connector_id}/programmable-numbers/proxy"))
+  let full_url = (build-url $base ({voice_connector_id: (encode-path-segment $voice_connector_id)} | format pattern "/voice-connectors/{voice_connector_id}/programmable-numbers/proxy") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Puts the specified proxy configuration to the specified Amazon Chime Voice Connector.
@@ -4804,14 +6138,25 @@ export def "voice-connectors-programmable-numbers-proxy update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($voice_connector_id | is-empty) { error make --unspanned { msg: "path parameter 'voiceConnectorId' must be non-empty" } }
-  let full_url = (build-url $base ({voice_connector_id: (encode-path-segment $voice_connector_id)} | format pattern "/voice-connectors/{voice_connector_id}/programmable-numbers/proxy"))
+  let full_url = (build-url $base ({voice_connector_id: (encode-path-segment $voice_connector_id)} | format pattern "/voice-connectors/{voice_connector_id}/programmable-numbers/proxy") $auth.query)
   let req_body = {"DefaultSessionExpiryMinutes": $default_session_expiry_minutes, "PhoneNumberPoolCountries": $phone_number_pool_countries, "FallBackPhoneNumber": $fall_back_phone_number, "Disabled": $disabled} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes the streaming configuration for the specified Amazon Chime Voice Connector.
@@ -4840,12 +6185,23 @@ export def "voice-connectors-streaming-configuration delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($voice_connector_id | is-empty) { error make --unspanned { msg: "path parameter 'voiceConnectorId' must be non-empty" } }
-  let full_url = (build-url $base ({voice_connector_id: (encode-path-segment $voice_connector_id)} | format pattern "/voice-connectors/{voice_connector_id}/streaming-configuration"))
+  let full_url = (build-url $base ({voice_connector_id: (encode-path-segment $voice_connector_id)} | format pattern "/voice-connectors/{voice_connector_id}/streaming-configuration") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Retrieves the streaming configuration details for the specified Amazon Chime Voice Connector. Shows whether media streaming is enabled for sending to Amazon Kinesis. It also shows the retention period, in hours, for the Amazon Kinesis data.
@@ -4874,12 +6230,23 @@ export def "voice-connectors-streaming-configuration get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($voice_connector_id | is-empty) { error make --unspanned { msg: "path parameter 'voiceConnectorId' must be non-empty" } }
-  let full_url = (build-url $base ({voice_connector_id: (encode-path-segment $voice_connector_id)} | format pattern "/voice-connectors/{voice_connector_id}/streaming-configuration"))
+  let full_url = (build-url $base ({voice_connector_id: (encode-path-segment $voice_connector_id)} | format pattern "/voice-connectors/{voice_connector_id}/streaming-configuration") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Adds a streaming configuration for the specified Amazon Chime Voice Connector. The streaming configuration specifies whether media streaming is enabled for sending to Kinesis. It also sets the retention period, in hours, for the Amazon Kinesis data.
@@ -4911,14 +6278,25 @@ export def "voice-connectors-streaming-configuration update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($voice_connector_id | is-empty) { error make --unspanned { msg: "path parameter 'voiceConnectorId' must be non-empty" } }
-  let full_url = (build-url $base ({voice_connector_id: (encode-path-segment $voice_connector_id)} | format pattern "/voice-connectors/{voice_connector_id}/streaming-configuration"))
+  let full_url = (build-url $base ({voice_connector_id: (encode-path-segment $voice_connector_id)} | format pattern "/voice-connectors/{voice_connector_id}/streaming-configuration") $auth.query)
   let req_body = {"StreamingConfiguration": $streaming_configuration} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes the termination settings for the specified Amazon Chime Voice Connector. If emergency calling is configured for the Amazon Chime Voice Connector, it must be deleted prior to deleting the termination settings.
@@ -4947,12 +6325,23 @@ export def "voice-connectors-termination delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($voice_connector_id | is-empty) { error make --unspanned { msg: "path parameter 'voiceConnectorId' must be non-empty" } }
-  let full_url = (build-url $base ({voice_connector_id: (encode-path-segment $voice_connector_id)} | format pattern "/voice-connectors/{voice_connector_id}/termination"))
+  let full_url = (build-url $base ({voice_connector_id: (encode-path-segment $voice_connector_id)} | format pattern "/voice-connectors/{voice_connector_id}/termination") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Retrieves termination setting details for the specified Amazon Chime Voice Connector.
@@ -4981,12 +6370,23 @@ export def "voice-connectors-termination get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($voice_connector_id | is-empty) { error make --unspanned { msg: "path parameter 'voiceConnectorId' must be non-empty" } }
-  let full_url = (build-url $base ({voice_connector_id: (encode-path-segment $voice_connector_id)} | format pattern "/voice-connectors/{voice_connector_id}/termination"))
+  let full_url = (build-url $base ({voice_connector_id: (encode-path-segment $voice_connector_id)} | format pattern "/voice-connectors/{voice_connector_id}/termination") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Adds termination settings for the specified Amazon Chime Voice Connector. If emergency calling is configured for the Amazon Chime Voice Connector, it must be deleted prior to turning off termination settings.
@@ -5018,14 +6418,25 @@ export def "voice-connectors-termination update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($voice_connector_id | is-empty) { error make --unspanned { msg: "path parameter 'voiceConnectorId' must be non-empty" } }
-  let full_url = (build-url $base ({voice_connector_id: (encode-path-segment $voice_connector_id)} | format pattern "/voice-connectors/{voice_connector_id}/termination"))
+  let full_url = (build-url $base ({voice_connector_id: (encode-path-segment $voice_connector_id)} | format pattern "/voice-connectors/{voice_connector_id}/termination") $auth.query)
   let req_body = {"Termination": $termination} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes the specified SIP credentials used by your equipment to authenticate during call termination.
@@ -5058,14 +6469,25 @@ export def "voice-connectors-termination-credentials delete" [
   let base = ($base_url | default $BASE_URL)
   if ($voice_connector_id | is-empty) { error make --unspanned { msg: "path parameter 'voiceConnectorId' must be non-empty" } }
   let qp = [(serialize-qp "operation" $operation "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({voice_connector_id: (encode-path-segment $voice_connector_id)} | format pattern "/voice-connectors/{voice_connector_id}/termination/credentials") $qp)
+  let full_url = (build-url $base ({voice_connector_id: (encode-path-segment $voice_connector_id)} | format pattern "/voice-connectors/{voice_connector_id}/termination/credentials") $qp $auth.query)
   let req_body = {"Usernames": $usernames} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"operation": $operation} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"operation": $operation} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Returns the details of a channel based on the membership of the specified AppInstanceUser. The x-amz-chime-bearer request header is mandatory. Use the AppInstanceUserArn of the user that makes the API call as the value in the header.
@@ -5098,12 +6520,23 @@ export def "channels get-membership-for-app-instance-user" [
   let base = ($base_url | default $BASE_URL)
   if ($channel_arn | is-empty) { error make --unspanned { msg: "path parameter 'channelArn' must be non-empty" } }
   let qp = [(serialize-qp "app-instance-user-arn" $app_instance_user_arn "scalar") (serialize-qp "scope" $scope "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({channel_arn: (encode-path-segment $channel_arn)} | format pattern "/channels/{channel_arn}") $qp)
+  let full_url = (build-url $base ({channel_arn: (encode-path-segment $channel_arn)} | format pattern "/channels/{channel_arn}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "x-amz-chime-bearer": $x_amz_chime_bearer} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"app-instance-user-arn": $app_instance_user_arn, "scope": $scope} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"app-instance-user-arn": $app_instance_user_arn, "scope": $scope} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the full details of a channel moderated by the specified AppInstanceUser. The x-amz-chime-bearer request header is mandatory. Use the AppInstanceUserArn of the user that makes the API call as the value in the header.
@@ -5136,12 +6569,23 @@ export def "channels get-moderated-by-app-instance-user" [
   let base = ($base_url | default $BASE_URL)
   if ($channel_arn | is-empty) { error make --unspanned { msg: "path parameter 'channelArn' must be non-empty" } }
   let qp = [(serialize-qp "app-instance-user-arn" $app_instance_user_arn "scalar") (serialize-qp "scope" $scope "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({channel_arn: (encode-path-segment $channel_arn)} | format pattern "/channels/{channel_arn}") $qp)
+  let full_url = (build-url $base ({channel_arn: (encode-path-segment $channel_arn)} | format pattern "/channels/{channel_arn}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "x-amz-chime-bearer": $x_amz_chime_bearer} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"app-instance-user-arn": $app_instance_user_arn, "scope": $scope} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"app-instance-user-arn": $app_instance_user_arn, "scope": $scope} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Disassociates the primary provisioned phone number from the specified Amazon Chime user.
@@ -5174,12 +6618,23 @@ export def "accounts-users create-disassociate-phone-number" [
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
   let qp = [(serialize-qp "operation" $operation "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), user_id: (encode-path-segment $user_id)} | format pattern "/accounts/{account_id}/users/{user_id}") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), user_id: (encode-path-segment $user_id)} | format pattern "/accounts/{account_id}/users/{user_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"operation": $operation} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"operation": $operation} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Disassociates the specified phone numbers from the specified Amazon Chime Voice Connector.
@@ -5212,14 +6667,25 @@ export def "voice-connectors create-disassociate-phone-numbers" [
   let base = ($base_url | default $BASE_URL)
   if ($voice_connector_id | is-empty) { error make --unspanned { msg: "path parameter 'voiceConnectorId' must be non-empty" } }
   let qp = [(serialize-qp "operation" $operation "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({voice_connector_id: (encode-path-segment $voice_connector_id)} | format pattern "/voice-connectors/{voice_connector_id}") $qp)
+  let full_url = (build-url $base ({voice_connector_id: (encode-path-segment $voice_connector_id)} | format pattern "/voice-connectors/{voice_connector_id}") $qp $auth.query)
   let req_body = {"E164PhoneNumbers": $e164_phone_numbers} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"operation": $operation} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"operation": $operation} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Disassociates the specified phone numbers from the specified Amazon Chime Voice Connector group.
@@ -5252,14 +6718,25 @@ export def "voice-connector-groups create-disassociate-phone-numbers" [
   let base = ($base_url | default $BASE_URL)
   if ($voice_connector_group_id | is-empty) { error make --unspanned { msg: "path parameter 'voiceConnectorGroupId' must be non-empty" } }
   let qp = [(serialize-qp "operation" $operation "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({voice_connector_group_id: (encode-path-segment $voice_connector_group_id)} | format pattern "/voice-connector-groups/{voice_connector_group_id}") $qp)
+  let full_url = (build-url $base ({voice_connector_group_id: (encode-path-segment $voice_connector_group_id)} | format pattern "/voice-connector-groups/{voice_connector_group_id}") $qp $auth.query)
   let req_body = {"E164PhoneNumbers": $e164_phone_numbers} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"operation": $operation} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"operation": $operation} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Disassociates the specified sign-in delegate groups from the specified Amazon Chime account.
@@ -5292,14 +6769,25 @@ export def "accounts create-disassociate-signin-delegate-groups" [
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let qp = [(serialize-qp "operation" $operation "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}") $qp $auth.query)
   let req_body = {"GroupNames": $group_names} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"operation": $operation} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"operation": $operation} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieves account settings for the specified Amazon Chime account ID, such as remote control and dialout settings. For more information about these settings, see Use the Policies Page (https://docs.aws.amazon.com/chime/latest/ag/policies.html) in the Amazon Chime Administration Guide.
@@ -5328,12 +6816,23 @@ export def "accounts-settings get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}/settings"))
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}/settings") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates the settings for the specified Amazon Chime account. You can update settings for remote control of shared screens, or for the dial-out option. For more information about these settings, see Use the Policies Page (https://docs.aws.amazon.com/chime/latest/ag/policies.html) in the Amazon Chime Administration Guide.
@@ -5365,14 +6864,25 @@ export def "accounts-settings update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}/settings"))
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}/settings") $auth.query)
   let req_body = {"AccountSettings": $account_settings} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Gets the retention settings for an AppInstance.
@@ -5401,12 +6911,23 @@ export def "app-instances-retention-settings get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($app_instance_arn | is-empty) { error make --unspanned { msg: "path parameter 'appInstanceArn' must be non-empty" } }
-  let full_url = (build-url $base ({app_instance_arn: (encode-path-segment $app_instance_arn)} | format pattern "/app-instances/{app_instance_arn}/retention-settings"))
+  let full_url = (build-url $base ({app_instance_arn: (encode-path-segment $app_instance_arn)} | format pattern "/app-instances/{app_instance_arn}/retention-settings") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Sets the amount of time in days that a given AppInstance retains data.
@@ -5438,14 +6959,25 @@ export def "app-instances-retention-settings update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($app_instance_arn | is-empty) { error make --unspanned { msg: "path parameter 'appInstanceArn' must be non-empty" } }
-  let full_url = (build-url $base ({app_instance_arn: (encode-path-segment $app_instance_arn)} | format pattern "/app-instances/{app_instance_arn}/retention-settings"))
+  let full_url = (build-url $base ({app_instance_arn: (encode-path-segment $app_instance_arn)} | format pattern "/app-instances/{app_instance_arn}/retention-settings") $auth.query)
   let req_body = {"AppInstanceRetentionSettings": $app_instance_retention_settings} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieves details for the specified bot, such as bot email address, bot type, status, and display name.
@@ -5476,12 +7008,23 @@ export def "accounts-bots get" [
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   if ($bot_id | is-empty) { error make --unspanned { msg: "path parameter 'botId' must be non-empty" } }
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), bot_id: (encode-path-segment $bot_id)} | format pattern "/accounts/{account_id}/bots/{bot_id}"))
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), bot_id: (encode-path-segment $bot_id)} | format pattern "/accounts/{account_id}/bots/{bot_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates the status of the specified bot, such as starting or stopping the bot from running in your Amazon Chime Enterprise account.
@@ -5514,14 +7057,25 @@ export def "accounts-bots update" [
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   if ($bot_id | is-empty) { error make --unspanned { msg: "path parameter 'botId' must be non-empty" } }
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), bot_id: (encode-path-segment $bot_id)} | format pattern "/accounts/{account_id}/bots/{bot_id}"))
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), bot_id: (encode-path-segment $bot_id)} | format pattern "/accounts/{account_id}/bots/{bot_id}") $auth.query)
   let req_body = {"Disabled": $disabled} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieves global settings for the administrator's AWS account, such as Amazon Chime Business Calling and Amazon Chime Voice Connector settings.
@@ -5548,12 +7102,23 @@ export def "settings get-global" [
 ]: nothing -> record<BusinessCalling: record<CdrBucket: record>, VoiceConnector: record<CdrBucket: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/settings")
+  let full_url = (build-url $base "/settings" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates global settings for the administrator's AWS account, such as Amazon Chime Business Calling and Amazon Chime Voice Connector settings.
@@ -5585,14 +7150,25 @@ export def "settings update-global" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/settings")
+  let full_url = (build-url $base "/settings" $auth.query)
   let req_body = {"BusinessCalling": $business_calling, "VoiceConnector": $voice_connector} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # The details of the endpoint for the messaging session.
@@ -5619,12 +7195,23 @@ export def "endpoints-messaging-session get" [
 ]: nothing -> record<Endpoint: record<Url: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/endpoints/messaging-session")
+  let full_url = (build-url $base "/endpoints/messaging-session" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieves details for the specified phone number order, such as the order creation timestamp, phone numbers in E.164 format, product type, and order status.
@@ -5653,12 +7240,23 @@ export def "phone-number-orders get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($phone_number_order_id | is-empty) { error make --unspanned { msg: "path parameter 'phoneNumberOrderId' must be non-empty" } }
-  let full_url = (build-url $base ({phone_number_order_id: (encode-path-segment $phone_number_order_id)} | format pattern "/phone-number-orders/{phone_number_order_id}"))
+  let full_url = (build-url $base ({phone_number_order_id: (encode-path-segment $phone_number_order_id)} | format pattern "/phone-number-orders/{phone_number_order_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieves the phone number settings for the administrator's AWS account, such as the default outbound calling name.
@@ -5685,12 +7283,23 @@ export def "settings-phone-number get" [
 ]: nothing -> record<CallingName: record, CallingNameUpdatedTimestamp: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/settings/phone-number")
+  let full_url = (build-url $base "/settings/phone-number" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates the phone number settings for the administrator's AWS account, such as the default outbound calling name. You can update the default outbound calling name once every seven days. Outbound calling names can take up to 72 hours to update.
@@ -5719,14 +7328,25 @@ export def "settings-phone-number update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/settings/phone-number")
+  let full_url = (build-url $base "/settings/phone-number" $auth.query)
   let req_body = {"CallingName": $calling_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Gets the retention settings for the specified Amazon Chime Enterprise account. For more information about retention settings, see Managing Chat Retention Policies (https://docs.aws.amazon.com/chime/latest/ag/chat-retention.html) in the Amazon Chime Administration Guide.
@@ -5755,12 +7375,23 @@ export def "accounts-retention-settings get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}/retention-settings"))
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}/retention-settings") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Puts retention settings for the specified Amazon Chime Enterprise account. We recommend using AWS CloudTrail to monitor usage of this API for your account. For more information, see Logging Amazon Chime API Calls with AWS CloudTrail (https://docs.aws.amazon.com/chime/latest/ag/cloudtrail.html) in the Amazon Chime Administration Guide. To turn off existing retention settings, remove the number of days from the corresponding RetentionDays field in the RetentionSettings object. For more information about retention settings, see Managing Chat Retention Policies (https://docs.aws.amazon.com/chime/latest/ag/chat-retention.html) in the Amazon Chime Administration Guide.
@@ -5792,14 +7423,25 @@ export def "accounts-retention-settings update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}/retention-settings"))
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}/retention-settings") $auth.query)
   let req_body = {"RetentionSettings": $retention_settings} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Returns the logging configuration for the specified SIP media application.
@@ -5828,12 +7470,23 @@ export def "sip-media-applications-logging-configuration get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($sip_media_application_id | is-empty) { error make --unspanned { msg: "path parameter 'sipMediaApplicationId' must be non-empty" } }
-  let full_url = (build-url $base ({sip_media_application_id: (encode-path-segment $sip_media_application_id)} | format pattern "/sip-media-applications/{sip_media_application_id}/logging-configuration"))
+  let full_url = (build-url $base ({sip_media_application_id: (encode-path-segment $sip_media_application_id)} | format pattern "/sip-media-applications/{sip_media_application_id}/logging-configuration") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates the logging configuration for the specified SIP media application.
@@ -5865,14 +7518,25 @@ export def "sip-media-applications-logging-configuration update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($sip_media_application_id | is-empty) { error make --unspanned { msg: "path parameter 'sipMediaApplicationId' must be non-empty" } }
-  let full_url = (build-url $base ({sip_media_application_id: (encode-path-segment $sip_media_application_id)} | format pattern "/sip-media-applications/{sip_media_application_id}/logging-configuration"))
+  let full_url = (build-url $base ({sip_media_application_id: (encode-path-segment $sip_media_application_id)} | format pattern "/sip-media-applications/{sip_media_application_id}/logging-configuration") $auth.query)
   let req_body = {"SipMediaApplicationLoggingConfiguration": $sip_media_application_logging_configuration} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieves details for the specified user ID, such as primary email address, license type,and personal meeting PIN. To retrieve user details with an email address instead of a user ID, use the ListUsers action, and then filter by email address.
@@ -5903,12 +7567,23 @@ export def "accounts-users get" [
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), user_id: (encode-path-segment $user_id)} | format pattern "/accounts/{account_id}/users/{user_id}"))
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), user_id: (encode-path-segment $user_id)} | format pattern "/accounts/{account_id}/users/{user_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates user details for a specified user ID. Currently, only LicenseType updates are supported for this action.
@@ -5944,14 +7619,25 @@ export def "accounts-users update" [
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), user_id: (encode-path-segment $user_id)} | format pattern "/accounts/{account_id}/users/{user_id}"))
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), user_id: (encode-path-segment $user_id)} | format pattern "/accounts/{account_id}/users/{user_id}") $auth.query)
   let req_body = {"LicenseType": $license_type, "UserType": $user_type, "AlexaForBusinessMetadata": $alexa_for_business_metadata} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieves settings for the specified user ID, such as any associated phone number settings.
@@ -5982,12 +7668,23 @@ export def "accounts-users-settings get" [
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), user_id: (encode-path-segment $user_id)} | format pattern "/accounts/{account_id}/users/{user_id}/settings"))
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), user_id: (encode-path-segment $user_id)} | format pattern "/accounts/{account_id}/users/{user_id}/settings") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates the settings for the specified user, such as phone number settings.
@@ -6021,14 +7718,25 @@ export def "accounts-users-settings update" [
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), user_id: (encode-path-segment $user_id)} | format pattern "/accounts/{account_id}/users/{user_id}/settings"))
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), user_id: (encode-path-segment $user_id)} | format pattern "/accounts/{account_id}/users/{user_id}/settings") $auth.query)
   let req_body = {"UserSettings": $user_settings} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Retrieves the logging configuration details for the specified Amazon Chime Voice Connector. Shows whether SIP message logs are enabled for sending to Amazon CloudWatch Logs.
@@ -6057,12 +7765,23 @@ export def "voice-connectors-logging-configuration get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($voice_connector_id | is-empty) { error make --unspanned { msg: "path parameter 'voiceConnectorId' must be non-empty" } }
-  let full_url = (build-url $base ({voice_connector_id: (encode-path-segment $voice_connector_id)} | format pattern "/voice-connectors/{voice_connector_id}/logging-configuration"))
+  let full_url = (build-url $base ({voice_connector_id: (encode-path-segment $voice_connector_id)} | format pattern "/voice-connectors/{voice_connector_id}/logging-configuration") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Adds a logging configuration for the specified Amazon Chime Voice Connector. The logging configuration specifies whether SIP message logs are enabled for sending to Amazon CloudWatch Logs.
@@ -6094,14 +7813,25 @@ export def "voice-connectors-logging-configuration update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($voice_connector_id | is-empty) { error make --unspanned { msg: "path parameter 'voiceConnectorId' must be non-empty" } }
-  let full_url = (build-url $base ({voice_connector_id: (encode-path-segment $voice_connector_id)} | format pattern "/voice-connectors/{voice_connector_id}/logging-configuration"))
+  let full_url = (build-url $base ({voice_connector_id: (encode-path-segment $voice_connector_id)} | format pattern "/voice-connectors/{voice_connector_id}/logging-configuration") $auth.query)
   let req_body = {"LoggingConfiguration": $logging_configuration} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieves information about the last time a SIP OPTIONS ping was received from your SIP infrastructure for the specified Amazon Chime Voice Connector.
@@ -6130,12 +7860,23 @@ export def "voice-connectors-termination-health get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($voice_connector_id | is-empty) { error make --unspanned { msg: "path parameter 'voiceConnectorId' must be non-empty" } }
-  let full_url = (build-url $base ({voice_connector_id: (encode-path-segment $voice_connector_id)} | format pattern "/voice-connectors/{voice_connector_id}/termination/health"))
+  let full_url = (build-url $base ({voice_connector_id: (encode-path-segment $voice_connector_id)} | format pattern "/voice-connectors/{voice_connector_id}/termination/health") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Sends email to a maximum of 50 users, inviting them to the specified Amazon Chime Team account. Only Team account types are currently supported for this action.
@@ -6169,14 +7910,25 @@ export def "accounts-users create-invite" [
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let qp = [(serialize-qp "operation" $operation "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}/users") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}/users") $qp $auth.query)
   let req_body = {"UserEmailList": $user_email_list, "UserType": $user_type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"operation": $operation} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"operation": $operation} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # List all AppInstanceUsers created under a single AppInstance.
@@ -6209,12 +7961,23 @@ export def "app-instance-users list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "app-instance-arn" $app_instance_arn "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "next-token" $next_token "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/app-instance-users" $qp)
+  let full_url = (build-url $base "/app-instance-users" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"app-instance-arn": $app_instance_arn, "max-results": $max_results, "next-token": $next_token, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"app-instance-arn": $app_instance_arn, "max-results": $max_results, "next-token": $next_token, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Lists the tags applied to an Amazon Chime SDK attendee resource.
@@ -6245,12 +8008,23 @@ export def "meetings-attendees-tags list" [
   let base = ($base_url | default $BASE_URL)
   if ($meeting_id | is-empty) { error make --unspanned { msg: "path parameter 'meetingId' must be non-empty" } }
   if ($attendee_id | is-empty) { error make --unspanned { msg: "path parameter 'attendeeId' must be non-empty" } }
-  let full_url = (build-url $base ({meeting_id: (encode-path-segment $meeting_id), attendee_id: (encode-path-segment $attendee_id)} | format pattern "/meetings/{meeting_id}/attendees/{attendee_id}/tags"))
+  let full_url = (build-url $base ({meeting_id: (encode-path-segment $meeting_id), attendee_id: (encode-path-segment $attendee_id)} | format pattern "/meetings/{meeting_id}/attendees/{attendee_id}/tags") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Lists all channels that a particular AppInstanceUser is a part of. Only an AppInstanceAdmin can call the API with a user ARN that is not their own. The x-amz-chime-bearer request header is mandatory. Use the AppInstanceUserArn of the user that makes the API call as the value in the header.
@@ -6285,12 +8059,23 @@ export def "channels list-memberships-for-app-instance-user" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "app-instance-user-arn" $app_instance_user_arn "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "next-token" $next_token "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar") (serialize-qp "scope" $scope "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/channels" $qp)
+  let full_url = (build-url $base "/channels" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "x-amz-chime-bearer": $x_amz_chime_bearer} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"app-instance-user-arn": $app_instance_user_arn, "max-results": $max_results, "next-token": $next_token, "MaxResults": $max_results_2, "NextToken": $next_token_2, "scope": $scope} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"app-instance-user-arn": $app_instance_user_arn, "max-results": $max_results, "next-token": $next_token, "MaxResults": $max_results_2, "NextToken": $next_token_2, "scope": $scope} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List all the messages in a channel. Returns a paginated list of ChannelMessages. By default, sorted by creation timestamp in descending order. Redacted messages appear in the results as empty, since they are only redacted, not deleted. Deleted messages do not appear in the results. This action always returns the latest version of an edited message. Also, the x-amz-chime-bearer request header is mandatory. Use the AppInstanceUserArn of the user that makes the API call as the value in the header.
@@ -6328,12 +8113,23 @@ export def "channels-messages list" [
   let base = ($base_url | default $BASE_URL)
   if ($channel_arn | is-empty) { error make --unspanned { msg: "path parameter 'channelArn' must be non-empty" } }
   let qp = [(serialize-qp "sort-order" $sort_order "scalar") (serialize-qp "not-before" $not_before "scalar") (serialize-qp "not-after" $not_after "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "next-token" $next_token "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({channel_arn: (encode-path-segment $channel_arn)} | format pattern "/channels/{channel_arn}/messages") $qp)
+  let full_url = (build-url $base ({channel_arn: (encode-path-segment $channel_arn)} | format pattern "/channels/{channel_arn}/messages") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "x-amz-chime-bearer": $x_amz_chime_bearer} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"sort-order": $sort_order, "not-before": $not_before, "not-after": $not_after, "max-results": $max_results, "next-token": $next_token, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"sort-order": $sort_order, "not-before": $not_before, "not-after": $not_after, "max-results": $max_results, "next-token": $next_token, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Sends a message to a particular channel that the member is a part of. The x-amz-chime-bearer request header is mandatory. Use the AppInstanceUserArn of the user that makes the API call as the value in the header. Also, STANDARD messages can contain 4KB of data and the 1KB of metadata. CONTROL messages can contain 30 bytes of data and no metadata.
@@ -6369,14 +8165,25 @@ export def "channels-messages send" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($channel_arn | is-empty) { error make --unspanned { msg: "path parameter 'channelArn' must be non-empty" } }
-  let full_url = (build-url $base ({channel_arn: (encode-path-segment $channel_arn)} | format pattern "/channels/{channel_arn}/messages"))
+  let full_url = (build-url $base ({channel_arn: (encode-path-segment $channel_arn)} | format pattern "/channels/{channel_arn}/messages") $auth.query)
   let req_body = {"Content": $content, "Type": $type, "Persistence": $persistence, "Metadata": $metadata, "ClientRequestToken": $client_request_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "x-amz-chime-bearer": $x_amz_chime_bearer} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Lists all Channels created under a single Chime App as a paginated list. You can specify filters to narrow results. Functionality & restrictions Use privacy = PUBLIC to retrieve all public channels in the account. Only an AppInstanceAdmin can set privacy = PRIVATE to list the private channels in an account. The x-amz-chime-bearer request header is mandatory. Use the AppInstanceUserArn of the user that makes the API call as the value in the header.
@@ -6411,12 +8218,23 @@ export def "channels list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "app-instance-arn" $app_instance_arn "scalar") (serialize-qp "privacy" $privacy "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "next-token" $next_token "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/channels" $qp)
+  let full_url = (build-url $base "/channels" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "x-amz-chime-bearer": $x_amz_chime_bearer} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"app-instance-arn": $app_instance_arn, "privacy": $privacy, "max-results": $max_results, "next-token": $next_token, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"app-instance-arn": $app_instance_arn, "privacy": $privacy, "max-results": $max_results, "next-token": $next_token, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # A list of the channels moderated by an AppInstanceUser. The x-amz-chime-bearer request header is mandatory. Use the AppInstanceUserArn of the user that makes the API call as the value in the header.
@@ -6451,12 +8269,23 @@ export def "channels list-moderated-by-app-instance-user" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "app-instance-user-arn" $app_instance_user_arn "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "next-token" $next_token "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar") (serialize-qp "scope" $scope "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/channels" $qp)
+  let full_url = (build-url $base "/channels" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "x-amz-chime-bearer": $x_amz_chime_bearer} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"app-instance-user-arn": $app_instance_user_arn, "max-results": $max_results, "next-token": $next_token, "MaxResults": $max_results_2, "NextToken": $next_token_2, "scope": $scope} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"app-instance-user-arn": $app_instance_user_arn, "max-results": $max_results, "next-token": $next_token, "MaxResults": $max_results_2, "NextToken": $next_token_2, "scope": $scope} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Lists the tags applied to an Amazon Chime SDK meeting resource.
@@ -6485,12 +8314,23 @@ export def "meetings-tags list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($meeting_id | is-empty) { error make --unspanned { msg: "path parameter 'meetingId' must be non-empty" } }
-  let full_url = (build-url $base ({meeting_id: (encode-path-segment $meeting_id)} | format pattern "/meetings/{meeting_id}/tags"))
+  let full_url = (build-url $base ({meeting_id: (encode-path-segment $meeting_id)} | format pattern "/meetings/{meeting_id}/tags") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Lists the phone numbers for the specified Amazon Chime account, Amazon Chime user, Amazon Chime Voice Connector, or Amazon Chime Voice Connector group.
@@ -6526,12 +8366,23 @@ export def "phone-numbers list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "status" $status "scalar") (serialize-qp "product-type" $product_type "scalar") (serialize-qp "filter-name" $filter_name "scalar") (serialize-qp "filter-value" $filter_value "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "next-token" $next_token "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/phone-numbers" $qp)
+  let full_url = (build-url $base "/phone-numbers" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"status": $status, "product-type": $product_type, "filter-name": $filter_name, "filter-value": $filter_value, "max-results": $max_results, "next-token": $next_token, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"status": $status, "product-type": $product_type, "filter-name": $filter_name, "filter-value": $filter_value, "max-results": $max_results, "next-token": $next_token, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Lists supported phone number countries.
@@ -6560,12 +8411,23 @@ export def "phone-number-countries list-supported" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "product-type" $product_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/phone-number-countries" $qp)
+  let full_url = (build-url $base "/phone-number-countries" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"product-type": $product_type} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"product-type": $product_type} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Lists the tags applied to an Amazon Chime SDK meeting resource.
@@ -6594,12 +8456,23 @@ export def "tags list-for-resource" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "arn" $arn "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/tags" $qp)
+  let full_url = (build-url $base "/tags" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"arn": $arn} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"arn": $arn} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Lists the SIP credentials for the specified Amazon Chime Voice Connector.
@@ -6628,12 +8501,23 @@ export def "voice-connectors-termination-credentials list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($voice_connector_id | is-empty) { error make --unspanned { msg: "path parameter 'voiceConnectorId' must be non-empty" } }
-  let full_url = (build-url $base ({voice_connector_id: (encode-path-segment $voice_connector_id)} | format pattern "/voice-connectors/{voice_connector_id}/termination/credentials"))
+  let full_url = (build-url $base ({voice_connector_id: (encode-path-segment $voice_connector_id)} | format pattern "/voice-connectors/{voice_connector_id}/termination/credentials") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Logs out the specified user from all of the devices they are currently logged into.
@@ -6666,12 +8550,23 @@ export def "accounts-users create-logout" [
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
   let qp = [(serialize-qp "operation" $operation "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), user_id: (encode-path-segment $user_id)} | format pattern "/accounts/{account_id}/users/{user_id}") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), user_id: (encode-path-segment $user_id)} | format pattern "/accounts/{account_id}/users/{user_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"operation": $operation} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"operation": $operation} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Adds termination SIP credentials for the specified Amazon Chime Voice Connector.
@@ -6705,14 +8600,25 @@ export def "voice-connectors-termination-credentials update" [
   let base = ($base_url | default $BASE_URL)
   if ($voice_connector_id | is-empty) { error make --unspanned { msg: "path parameter 'voiceConnectorId' must be non-empty" } }
   let qp = [(serialize-qp "operation" $operation "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({voice_connector_id: (encode-path-segment $voice_connector_id)} | format pattern "/voice-connectors/{voice_connector_id}/termination/credentials") $qp)
+  let full_url = (build-url $base ({voice_connector_id: (encode-path-segment $voice_connector_id)} | format pattern "/voice-connectors/{voice_connector_id}/termination/credentials") $qp $auth.query)
   let req_body = {"Credentials": $credentials} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"operation": $operation} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"operation": $operation} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Redacts message content, but not metadata. The message exists in the back end, but the action returns null content, and the state shows as redacted. The x-amz-chime-bearer request header is mandatory. Use the AppInstanceUserArn of the user that makes the API call as the value in the header.
@@ -6746,12 +8652,23 @@ export def "channels-messages create-redact" [
   if ($channel_arn | is-empty) { error make --unspanned { msg: "path parameter 'channelArn' must be non-empty" } }
   if ($message_id | is-empty) { error make --unspanned { msg: "path parameter 'messageId' must be non-empty" } }
   let qp = [(serialize-qp "operation" $operation "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({channel_arn: (encode-path-segment $channel_arn), message_id: (encode-path-segment $message_id)} | format pattern "/channels/{channel_arn}/messages/{message_id}") $qp)
+  let full_url = (build-url $base ({channel_arn: (encode-path-segment $channel_arn), message_id: (encode-path-segment $message_id)} | format pattern "/channels/{channel_arn}/messages/{message_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "x-amz-chime-bearer": $x_amz_chime_bearer} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"operation": $operation} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"operation": $operation} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Redacts the specified message from the specified Amazon Chime conversation.
@@ -6786,12 +8703,23 @@ export def "accounts-conversations-messages create-redact" [
   if ($conversation_id | is-empty) { error make --unspanned { msg: "path parameter 'conversationId' must be non-empty" } }
   if ($message_id | is-empty) { error make --unspanned { msg: "path parameter 'messageId' must be non-empty" } }
   let qp = [(serialize-qp "operation" $operation "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), conversation_id: (encode-path-segment $conversation_id), message_id: (encode-path-segment $message_id)} | format pattern "/accounts/{account_id}/conversations/{conversation_id}/messages/{message_id}") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), conversation_id: (encode-path-segment $conversation_id), message_id: (encode-path-segment $message_id)} | format pattern "/accounts/{account_id}/conversations/{conversation_id}/messages/{message_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"operation": $operation} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"operation": $operation} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Redacts the specified message from the specified Amazon Chime channel.
@@ -6826,12 +8754,23 @@ export def "accounts-rooms-messages create-redact" [
   if ($room_id | is-empty) { error make --unspanned { msg: "path parameter 'roomId' must be non-empty" } }
   if ($message_id | is-empty) { error make --unspanned { msg: "path parameter 'messageId' must be non-empty" } }
   let qp = [(serialize-qp "operation" $operation "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), room_id: (encode-path-segment $room_id), message_id: (encode-path-segment $message_id)} | format pattern "/accounts/{account_id}/rooms/{room_id}/messages/{message_id}") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), room_id: (encode-path-segment $room_id), message_id: (encode-path-segment $message_id)} | format pattern "/accounts/{account_id}/rooms/{room_id}/messages/{message_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"operation": $operation} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"operation": $operation} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Regenerates the security token for a bot.
@@ -6864,12 +8803,23 @@ export def "accounts-bots create-regenerate-security-token" [
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   if ($bot_id | is-empty) { error make --unspanned { msg: "path parameter 'botId' must be non-empty" } }
   let qp = [(serialize-qp "operation" $operation "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), bot_id: (encode-path-segment $bot_id)} | format pattern "/accounts/{account_id}/bots/{bot_id}") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), bot_id: (encode-path-segment $bot_id)} | format pattern "/accounts/{account_id}/bots/{bot_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"operation": $operation} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"operation": $operation} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Resets the personal meeting PIN for the specified user on an Amazon Chime account. Returns the User object with the updated personal meeting PIN.
@@ -6902,12 +8852,23 @@ export def "accounts-users reset-personal-pin" [
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
   let qp = [(serialize-qp "operation" $operation "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), user_id: (encode-path-segment $user_id)} | format pattern "/accounts/{account_id}/users/{user_id}") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), user_id: (encode-path-segment $user_id)} | format pattern "/accounts/{account_id}/users/{user_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"operation": $operation} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"operation": $operation} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Moves a phone number from the Deletion queue back into the phone number Inventory.
@@ -6938,12 +8899,23 @@ export def "phone-numbers create-restore" [
   let base = ($base_url | default $BASE_URL)
   if ($phone_number_id | is-empty) { error make --unspanned { msg: "path parameter 'phoneNumberId' must be non-empty" } }
   let qp = [(serialize-qp "operation" $operation "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({phone_number_id: (encode-path-segment $phone_number_id)} | format pattern "/phone-numbers/{phone_number_id}") $qp)
+  let full_url = (build-url $base ({phone_number_id: (encode-path-segment $phone_number_id)} | format pattern "/phone-numbers/{phone_number_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"operation": $operation} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"operation": $operation} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Searches for phone numbers that can be ordered. For US numbers, provide at least one of the following search filters: AreaCode, City, State, or TollFreePrefix. If you provide City, you must also provide State. Numbers outside the US only support the PhoneNumberType filter, which you must use.
@@ -6982,12 +8954,23 @@ export def "search list-available-phone-numbers" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "area-code" $area_code "scalar") (serialize-qp "city" $city "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "toll-free-prefix" $toll_free_prefix "scalar") (serialize-qp "phone-number-type" $phone_number_type "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "next-token" $next_token "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar") (serialize-qp "type" $type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/search" $qp)
+  let full_url = (build-url $base "/search" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"area-code": $area_code, "city": $city, "country": $country, "state": $state, "toll-free-prefix": $toll_free_prefix, "phone-number-type": $phone_number_type, "max-results": $max_results, "next-token": $next_token, "MaxResults": $max_results_2, "NextToken": $next_token_2, "type": $type} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"area-code": $area_code, "city": $city, "country": $country, "state": $state, "toll-free-prefix": $toll_free_prefix, "phone-number-type": $phone_number_type, "max-results": $max_results, "next-token": $next_token, "MaxResults": $max_results_2, "NextToken": $next_token_2, "type": $type} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Starts transcription for the specified meetingId. For more information, refer to Using Amazon Chime SDK live transcription (https://docs.aws.amazon.com/chime-sdk/latest/dg/meeting-transcription.html) in the Amazon Chime SDK Developer Guide. If you specify an invalid configuration, a TranscriptFailed event will be sent with the contents of the BadRequestException generated by Amazon Transcribe. For more information on each parameter and which combinations are valid, refer to the StartStreamTranscription (https://docs.aws.amazon.com/transcribe/latest/APIReference/API_streaming_StartStreamTranscription.html) API in the Amazon Transcribe Developer Guide. Amazon Chime SDK live transcription is powered by Amazon Transcribe. Use of Amazon Transcribe is subject to the AWS Service Terms (https://aws.amazon.com/service-terms/), including the terms specific to the AWS Machine Learning and Artificial Intelligence Services.
@@ -7021,14 +9004,25 @@ export def "meetings-transcription start" [
   let base = ($base_url | default $BASE_URL)
   if ($meeting_id | is-empty) { error make --unspanned { msg: "path parameter 'meetingId' must be non-empty" } }
   let qp = [(serialize-qp "operation" $operation "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({meeting_id: (encode-path-segment $meeting_id)} | format pattern "/meetings/{meeting_id}/transcription") $qp)
+  let full_url = (build-url $base ({meeting_id: (encode-path-segment $meeting_id)} | format pattern "/meetings/{meeting_id}/transcription") $qp $auth.query)
   let req_body = {"TranscriptionConfiguration": $transcription_configuration} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"operation": $operation} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"operation": $operation} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Stops transcription for the specified meetingId.
@@ -7059,12 +9053,23 @@ export def "meetings-transcription stop" [
   let base = ($base_url | default $BASE_URL)
   if ($meeting_id | is-empty) { error make --unspanned { msg: "path parameter 'meetingId' must be non-empty" } }
   let qp = [(serialize-qp "operation" $operation "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({meeting_id: (encode-path-segment $meeting_id)} | format pattern "/meetings/{meeting_id}/transcription") $qp)
+  let full_url = (build-url $base ({meeting_id: (encode-path-segment $meeting_id)} | format pattern "/meetings/{meeting_id}/transcription") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"operation": $operation} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"operation": $operation} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Applies the specified tags to the specified Amazon Chime SDK attendee.
@@ -7100,14 +9105,25 @@ export def "meetings-attendees-tags tag" [
   if ($meeting_id | is-empty) { error make --unspanned { msg: "path parameter 'meetingId' must be non-empty" } }
   if ($attendee_id | is-empty) { error make --unspanned { msg: "path parameter 'attendeeId' must be non-empty" } }
   let qp = [(serialize-qp "operation" $operation "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({meeting_id: (encode-path-segment $meeting_id), attendee_id: (encode-path-segment $attendee_id)} | format pattern "/meetings/{meeting_id}/attendees/{attendee_id}/tags") $qp)
+  let full_url = (build-url $base ({meeting_id: (encode-path-segment $meeting_id), attendee_id: (encode-path-segment $attendee_id)} | format pattern "/meetings/{meeting_id}/attendees/{attendee_id}/tags") $qp $auth.query)
   let req_body = {"Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"operation": $operation} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"operation": $operation} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Applies the specified tags to the specified Amazon Chime SDK meeting.
@@ -7141,14 +9157,25 @@ export def "meetings-tags tag" [
   let base = ($base_url | default $BASE_URL)
   if ($meeting_id | is-empty) { error make --unspanned { msg: "path parameter 'meetingId' must be non-empty" } }
   let qp = [(serialize-qp "operation" $operation "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({meeting_id: (encode-path-segment $meeting_id)} | format pattern "/meetings/{meeting_id}/tags") $qp)
+  let full_url = (build-url $base ({meeting_id: (encode-path-segment $meeting_id)} | format pattern "/meetings/{meeting_id}/tags") $qp $auth.query)
   let req_body = {"Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"operation": $operation} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"operation": $operation} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Applies the specified tags to the specified Amazon Chime SDK meeting resource.
@@ -7181,14 +9208,25 @@ export def "tags tag-resource" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "operation" $operation "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/tags" $qp)
+  let full_url = (build-url $base "/tags" $qp $auth.query)
   let req_body = {"ResourceARN": $resource_arn, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"operation": $operation} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"operation": $operation} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Untags the specified tags from the specified Amazon Chime SDK attendee.
@@ -7223,14 +9261,25 @@ export def "meetings-attendees-tags untag" [
   if ($meeting_id | is-empty) { error make --unspanned { msg: "path parameter 'meetingId' must be non-empty" } }
   if ($attendee_id | is-empty) { error make --unspanned { msg: "path parameter 'attendeeId' must be non-empty" } }
   let qp = [(serialize-qp "operation" $operation "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({meeting_id: (encode-path-segment $meeting_id), attendee_id: (encode-path-segment $attendee_id)} | format pattern "/meetings/{meeting_id}/attendees/{attendee_id}/tags") $qp)
+  let full_url = (build-url $base ({meeting_id: (encode-path-segment $meeting_id), attendee_id: (encode-path-segment $attendee_id)} | format pattern "/meetings/{meeting_id}/attendees/{attendee_id}/tags") $qp $auth.query)
   let req_body = {"TagKeys": $tag_keys} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"operation": $operation} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"operation": $operation} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Untags the specified tags from the specified Amazon Chime SDK meeting.
@@ -7263,14 +9312,25 @@ export def "meetings-tags untag" [
   let base = ($base_url | default $BASE_URL)
   if ($meeting_id | is-empty) { error make --unspanned { msg: "path parameter 'meetingId' must be non-empty" } }
   let qp = [(serialize-qp "operation" $operation "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({meeting_id: (encode-path-segment $meeting_id)} | format pattern "/meetings/{meeting_id}/tags") $qp)
+  let full_url = (build-url $base ({meeting_id: (encode-path-segment $meeting_id)} | format pattern "/meetings/{meeting_id}/tags") $qp $auth.query)
   let req_body = {"TagKeys": $tag_keys} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"operation": $operation} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"operation": $operation} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Untags the specified tags from the specified Amazon Chime SDK meeting resource.
@@ -7302,14 +9362,25 @@ export def "tags untag-resource" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "operation" $operation "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/tags" $qp)
+  let full_url = (build-url $base "/tags" $qp $auth.query)
   let req_body = {"ResourceARN": $resource_arn, "TagKeys": $tag_keys} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"operation": $operation} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"operation": $operation} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # The details of the time when a user last read messages in a channel. The x-amz-chime-bearer request header is mandatory. Use the AppInstanceUserArn of the user that makes the API call as the value in the header.
@@ -7339,12 +9410,23 @@ export def "channels-read-marker update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($channel_arn | is-empty) { error make --unspanned { msg: "path parameter 'channelArn' must be non-empty" } }
-  let full_url = (build-url $base ({channel_arn: (encode-path-segment $channel_arn)} | format pattern "/channels/{channel_arn}/readMarker"))
+  let full_url = (build-url $base ({channel_arn: (encode-path-segment $channel_arn)} | format pattern "/channels/{channel_arn}/readMarker") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "x-amz-chime-bearer": $x_amz_chime_bearer} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Invokes the AWS Lambda function associated with the SIP media application and transaction ID in an update request. The Lambda function can then return a new set of actions.
@@ -7377,14 +9459,25 @@ export def "sip-media-applications-calls update" [
   let base = ($base_url | default $BASE_URL)
   if ($sip_media_application_id | is-empty) { error make --unspanned { msg: "path parameter 'sipMediaApplicationId' must be non-empty" } }
   if ($transaction_id | is-empty) { error make --unspanned { msg: "path parameter 'transactionId' must be non-empty" } }
-  let full_url = (build-url $base ({sip_media_application_id: (encode-path-segment $sip_media_application_id), transaction_id: (encode-path-segment $transaction_id)} | format pattern "/sip-media-applications/{sip_media_application_id}/calls/{transaction_id}"))
+  let full_url = (build-url $base ({sip_media_application_id: (encode-path-segment $sip_media_application_id), transaction_id: (encode-path-segment $transaction_id)} | format pattern "/sip-media-applications/{sip_media_application_id}/calls/{transaction_id}") $auth.query)
   let req_body = {"Arguments": $arguments} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [202]
 }
 
 # Validates an address to be used for 911 calls made with Amazon Chime Voice Connectors. You can use validated addresses in a Presence Information Data Format Location Object file that you include in SIP requests. That helps ensure that addresses are routed to the appropriate Public Safety Answering Point.
@@ -7419,12 +9512,23 @@ export def "emergency-calling-address validate-e911" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/emergency-calling/address")
+  let full_url = (build-url $base "/emergency-calling/address" $auth.query)
   let req_body = {"AwsAccountId": $aws_account_id, "StreetNumber": $street_number, "StreetInfo": $street_info, "City": $city, "State": $state, "Country": $country, "PostalCode": $postal_code} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [202]
 }

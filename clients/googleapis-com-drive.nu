@@ -8,7 +8,7 @@ const BASE_URL = "https://www.googleapis.com/drive/v3"
 # `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
 # where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o DRIVE_API_TOKEN | default "" }
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o DRIVE_API_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
@@ -51,14 +51,11 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
-# Trick: `url encode --all` over-encodes, then we decode the four unreserved
-# punctuation chars back. Pre-existing %XX sequences in the input survive
-# because `url encode --all` first turns their % into %25.
 def encode-path-segment [v: any]: nothing -> string {
   $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
-# Serialize an array-typed path parameter (issue 49.A). OpenAPI 3 `style: simple`
+# Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
 # (the default for path params) and Swagger 2 `collectionFormat: csv` both join
 # the elements with a literal comma WITHIN the single path segment, each element
 # RFC-3986-encoded individually (so a comma inside an element stays %2C). Without
@@ -69,51 +66,57 @@ def encode-path-array [v: any]: nothing -> string {
   if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
 }
 
-# Build URL from base, path, and optional query string
-def build-url [base: string, path: string, query?: string]: nothing -> string {
+# Build the request URL from base, path, and any number of pre-encoded query
+# fragments (param serializer output and/or the auth query). Each fragment is an
+# `&`-joinable `key=value` string already percent-encoded by its producer; empty
+# fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
+# delimiters are hand-spliced — and any query already on the base URL is merged in.
+def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
   let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
-  let result = ($parsed | upsert path $full_path)
-  if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
+  let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
+  $parsed | upsert path $full_path | upsert query $query | url join
 }
 
-# Build the dry-run record returned by --dry-run. Shape:
-#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
-#    auth: {scheme, location}}
-# `meta` carries logical-form data (the query record by spec name, the pre-serialization
-# body) that do-request itself cannot reconstruct from its wire-format args.
-def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
-  let m = ($meta | default {})
-  {
-    dry_run: true
-    method: $method
-    url: $url
-    query: ($m | get -o query | default {})
-    headers: $auth.headers
-    body: ($m | get -o body)
-    content_type: $content_type
-    timeout: $timeout
-    auth: {scheme: $auth.scheme, location: $auth.location}
-  }
+# Success policy: did this response succeed? Single source of truth, consulted by
+# handle-response and the HEAD header-unwrap. Empty ok_codes means the spec listed
+# none, so fall back to < 400. Otherwise: any 2xx, plus documented success codes.
+def status-ok [status: int, ok_codes: list<int>]: nothing -> bool {
+  if ($ok_codes | is-empty) { $status < 400 } else { ($status >= 200 and $status < 300) or ($status in $ok_codes) }
 }
 
-# Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
-  let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
-  let timeout = ($max_time | default 30min)
-  let ct = ($content_type | default "application/json")
-  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
-  let resp = match $method {
-    "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
-  }
-  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
-  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
+# Unwrap a `--full` HTTP response into the user-facing value. Response arrives
+# via pipeline; ok_codes gates the error throw (see status-ok).
+def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: record -> any {
+  let resp = $in
+  if $allow_errors { return $resp }
+  if not (status-ok $resp.status $ok_codes) { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } }
+  if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
+  if $resp.status == 204 { return null }
+  $resp.body
+}
+
+# GET — bodyless, honours --raw
+def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+}
+
+# POST — body + content-type
+def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# PATCH — body + content-type
+def send-patch [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http patch --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http patch --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# DELETE — body via --data
+def send-delete [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http delete --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url } else { http delete --headers $req.headers --content-type $req.content_type --data $body --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url }
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 def base-url-completer [] { ["https://www.googleapis.com/drive/v3"] }
@@ -171,10 +174,21 @@ export def "about get" [
   let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DRIVE_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DRIVE_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/about" $qp)
+  let full_url = (build-url $base "/about" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Lists the changes for a user or shared drive.
@@ -216,10 +230,21 @@ export def "changes list" [
   let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DRIVE_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DRIVE_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "driveId" $drive_id "scalar") (serialize-qp "includeCorpusRemovals" $include_corpus_removals "scalar") (serialize-qp "includeItemsFromAllDrives" $include_items_from_all_drives "scalar") (serialize-qp "includeLabels" $include_labels "scalar") (serialize-qp "includePermissionsForView" $include_permissions_for_view "scalar") (serialize-qp "includeRemoved" $include_removed "scalar") (serialize-qp "includeTeamDriveItems" $include_team_drive_items "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "restrictToMyDrive" $restrict_to_my_drive "scalar") (serialize-qp "spaces" $spaces "scalar") (serialize-qp "supportsAllDrives" $supports_all_drives "scalar") (serialize-qp "supportsTeamDrives" $supports_team_drives "scalar") (serialize-qp "teamDriveId" $team_drive_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/changes" $qp)
+  let full_url = (build-url $base "/changes" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "pageToken": $page_token, "driveId": $drive_id, "includeCorpusRemovals": $include_corpus_removals, "includeItemsFromAllDrives": $include_items_from_all_drives, "includeLabels": $include_labels, "includePermissionsForView": $include_permissions_for_view, "includeRemoved": $include_removed, "includeTeamDriveItems": $include_team_drive_items, "pageSize": $page_size, "restrictToMyDrive": $restrict_to_my_drive, "spaces": $spaces, "supportsAllDrives": $supports_all_drives, "supportsTeamDrives": $supports_team_drives, "teamDriveId": $team_drive_id} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "pageToken": $page_token, "driveId": $drive_id, "includeCorpusRemovals": $include_corpus_removals, "includeItemsFromAllDrives": $include_items_from_all_drives, "includeLabels": $include_labels, "includePermissionsForView": $include_permissions_for_view, "includeRemoved": $include_removed, "includeTeamDriveItems": $include_team_drive_items, "pageSize": $page_size, "restrictToMyDrive": $restrict_to_my_drive, "spaces": $spaces, "supportsAllDrives": $supports_all_drives, "supportsTeamDrives": $supports_team_drives, "teamDriveId": $team_drive_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the starting pageToken for listing future changes.
@@ -251,10 +276,21 @@ export def "changes-start-page-token get" [
   let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DRIVE_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DRIVE_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "driveId" $drive_id "scalar") (serialize-qp "supportsAllDrives" $supports_all_drives "scalar") (serialize-qp "supportsTeamDrives" $supports_team_drives "scalar") (serialize-qp "teamDriveId" $team_drive_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/changes/startPageToken" $qp)
+  let full_url = (build-url $base "/changes/startPageToken" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "driveId": $drive_id, "supportsAllDrives": $supports_all_drives, "supportsTeamDrives": $supports_team_drives, "teamDriveId": $team_drive_id} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "driveId": $drive_id, "supportsAllDrives": $supports_all_drives, "supportsTeamDrives": $supports_team_drives, "teamDriveId": $team_drive_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Subscribes to changes for a user. To use this method, you must include the pageToken query parameter.
@@ -307,12 +343,23 @@ export def "changes-watch watch" [
   let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DRIVE_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DRIVE_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "driveId" $drive_id "scalar") (serialize-qp "includeCorpusRemovals" $include_corpus_removals "scalar") (serialize-qp "includeItemsFromAllDrives" $include_items_from_all_drives "scalar") (serialize-qp "includeLabels" $include_labels "scalar") (serialize-qp "includePermissionsForView" $include_permissions_for_view "scalar") (serialize-qp "includeRemoved" $include_removed "scalar") (serialize-qp "includeTeamDriveItems" $include_team_drive_items "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "restrictToMyDrive" $restrict_to_my_drive "scalar") (serialize-qp "spaces" $spaces "scalar") (serialize-qp "supportsAllDrives" $supports_all_drives "scalar") (serialize-qp "supportsTeamDrives" $supports_team_drives "scalar") (serialize-qp "teamDriveId" $team_drive_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/changes/watch" $qp)
+  let full_url = (build-url $base "/changes/watch" $qp $auth.query)
   let req_body = {"address": $address, "expiration": $expiration, "id": $id, "kind": $kind, "params": $params, "payload": $payload, "resourceId": $resource_id, "resourceUri": $resource_uri, "token": $body_token, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "pageToken": $page_token, "driveId": $drive_id, "includeCorpusRemovals": $include_corpus_removals, "includeItemsFromAllDrives": $include_items_from_all_drives, "includeLabels": $include_labels, "includePermissionsForView": $include_permissions_for_view, "includeRemoved": $include_removed, "includeTeamDriveItems": $include_team_drive_items, "pageSize": $page_size, "restrictToMyDrive": $restrict_to_my_drive, "spaces": $spaces, "supportsAllDrives": $supports_all_drives, "supportsTeamDrives": $supports_team_drives, "teamDriveId": $team_drive_id} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "pageToken": $page_token, "driveId": $drive_id, "includeCorpusRemovals": $include_corpus_removals, "includeItemsFromAllDrives": $include_items_from_all_drives, "includeLabels": $include_labels, "includePermissionsForView": $include_permissions_for_view, "includeRemoved": $include_removed, "includeTeamDriveItems": $include_team_drive_items, "pageSize": $page_size, "restrictToMyDrive": $restrict_to_my_drive, "spaces": $spaces, "supportsAllDrives": $supports_all_drives, "supportsTeamDrives": $supports_team_drives, "teamDriveId": $team_drive_id} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Stop watching resources through this channel
@@ -351,12 +398,23 @@ export def "channels-stop stop" [
   let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DRIVE_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DRIVE_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/channels/stop" $qp)
+  let full_url = (build-url $base "/channels/stop" $qp $auth.query)
   let req_body = {"address": $address, "expiration": $expiration, "id": $id, "kind": $kind, "params": $params, "payload": $payload, "resourceId": $resource_id, "resourceUri": $resource_uri, "token": $body_token, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Lists the user's shared drives.
@@ -388,10 +446,21 @@ export def "drives list" [
   let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DRIVE_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DRIVE_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "useDomainAdminAccess" $use_domain_admin_access "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/drives" $qp)
+  let full_url = (build-url $base "/drives" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "pageSize": $page_size, "pageToken": $page_token, "q": $q, "useDomainAdminAccess": $use_domain_admin_access} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "pageSize": $page_size, "pageToken": $page_token, "q": $q, "useDomainAdminAccess": $use_domain_admin_access} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Creates a shared drive.
@@ -436,12 +505,23 @@ export def "drives create" [
   let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DRIVE_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DRIVE_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "requestId" $request_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/drives" $qp)
+  let full_url = (build-url $base "/drives" $qp $auth.query)
   let req_body = {"backgroundImageFile": $background_image_file, "backgroundImageLink": $background_image_link, "capabilities": $capabilities, "colorRgb": $color_rgb, "createdTime": $created_time, "hidden": $hidden, "id": $id, "kind": $kind, "name": $name, "orgUnitId": $org_unit_id, "restrictions": $restrictions, "themeId": $theme_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "requestId": $request_id} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "requestId": $request_id} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Permanently deletes a shared drive for which the user is an organizer. The shared drive cannot contain any untrashed items.
@@ -473,10 +553,21 @@ export def "drives delete" [
   let base = ($base_url | default $BASE_URL)
   if ($drive_id | is-empty) { error make --unspanned { msg: "path parameter 'driveId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "allowItemDeletion" $allow_item_deletion "scalar") (serialize-qp "useDomainAdminAccess" $use_domain_admin_access "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({drive_id: (encode-path-segment $drive_id)} | format pattern "/drives/{drive_id}") $qp)
+  let full_url = (build-url $base ({drive_id: (encode-path-segment $drive_id)} | format pattern "/drives/{drive_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "allowItemDeletion": $allow_item_deletion, "useDomainAdminAccess": $use_domain_admin_access} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "allowItemDeletion": $allow_item_deletion, "useDomainAdminAccess": $use_domain_admin_access} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Gets a shared drive's metadata by ID.
@@ -507,10 +598,21 @@ export def "drives get" [
   let base = ($base_url | default $BASE_URL)
   if ($drive_id | is-empty) { error make --unspanned { msg: "path parameter 'driveId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "useDomainAdminAccess" $use_domain_admin_access "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({drive_id: (encode-path-segment $drive_id)} | format pattern "/drives/{drive_id}") $qp)
+  let full_url = (build-url $base ({drive_id: (encode-path-segment $drive_id)} | format pattern "/drives/{drive_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "useDomainAdminAccess": $use_domain_admin_access} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "useDomainAdminAccess": $use_domain_admin_access} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates the metadata for a shared drive.
@@ -557,12 +659,23 @@ export def "drives update" [
   let base = ($base_url | default $BASE_URL)
   if ($drive_id | is-empty) { error make --unspanned { msg: "path parameter 'driveId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "useDomainAdminAccess" $use_domain_admin_access "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({drive_id: (encode-path-segment $drive_id)} | format pattern "/drives/{drive_id}") $qp)
+  let full_url = (build-url $base ({drive_id: (encode-path-segment $drive_id)} | format pattern "/drives/{drive_id}") $qp $auth.query)
   let req_body = {"backgroundImageFile": $background_image_file, "backgroundImageLink": $background_image_link, "capabilities": $capabilities, "colorRgb": $color_rgb, "createdTime": $created_time, "hidden": $hidden, "id": $id, "kind": $kind, "name": $name, "orgUnitId": $org_unit_id, "restrictions": $restrictions, "themeId": $theme_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "useDomainAdminAccess": $use_domain_admin_access} | compact), body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "useDomainAdminAccess": $use_domain_admin_access} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Hides a shared drive from the default view.
@@ -592,10 +705,21 @@ export def "drives-hide create" [
   let base = ($base_url | default $BASE_URL)
   if ($drive_id | is-empty) { error make --unspanned { msg: "path parameter 'driveId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({drive_id: (encode-path-segment $drive_id)} | format pattern "/drives/{drive_id}/hide") $qp)
+  let full_url = (build-url $base ({drive_id: (encode-path-segment $drive_id)} | format pattern "/drives/{drive_id}/hide") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Restores a shared drive to the default view.
@@ -625,10 +749,21 @@ export def "drives-unhide create" [
   let base = ($base_url | default $BASE_URL)
   if ($drive_id | is-empty) { error make --unspanned { msg: "path parameter 'driveId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({drive_id: (encode-path-segment $drive_id)} | format pattern "/drives/{drive_id}/unhide") $qp)
+  let full_url = (build-url $base ({drive_id: (encode-path-segment $drive_id)} | format pattern "/drives/{drive_id}/unhide") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Lists or searches files.
@@ -671,10 +806,21 @@ export def "files list" [
   let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DRIVE_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DRIVE_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "corpora" $corpora "scalar") (serialize-qp "corpus" $corpus "scalar") (serialize-qp "driveId" $drive_id "scalar") (serialize-qp "includeItemsFromAllDrives" $include_items_from_all_drives "scalar") (serialize-qp "includeLabels" $include_labels "scalar") (serialize-qp "includePermissionsForView" $include_permissions_for_view "scalar") (serialize-qp "includeTeamDriveItems" $include_team_drive_items "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "spaces" $spaces "scalar") (serialize-qp "supportsAllDrives" $supports_all_drives "scalar") (serialize-qp "supportsTeamDrives" $supports_team_drives "scalar") (serialize-qp "teamDriveId" $team_drive_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/files" $qp)
+  let full_url = (build-url $base "/files" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "corpora": $corpora, "corpus": $corpus, "driveId": $drive_id, "includeItemsFromAllDrives": $include_items_from_all_drives, "includeLabels": $include_labels, "includePermissionsForView": $include_permissions_for_view, "includeTeamDriveItems": $include_team_drive_items, "orderBy": $order_by, "pageSize": $page_size, "pageToken": $page_token, "q": $q, "spaces": $spaces, "supportsAllDrives": $supports_all_drives, "supportsTeamDrives": $supports_team_drives, "teamDriveId": $team_drive_id} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "corpora": $corpora, "corpus": $corpus, "driveId": $drive_id, "includeItemsFromAllDrives": $include_items_from_all_drives, "includeLabels": $include_labels, "includePermissionsForView": $include_permissions_for_view, "includeTeamDriveItems": $include_team_drive_items, "orderBy": $order_by, "pageSize": $page_size, "pageToken": $page_token, "q": $q, "spaces": $spaces, "supportsAllDrives": $supports_all_drives, "supportsTeamDrives": $supports_team_drives, "teamDriveId": $team_drive_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Creates a file.
@@ -713,12 +859,23 @@ export def "files create" [
   let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DRIVE_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DRIVE_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "enforceSingleParent" $enforce_single_parent "scalar") (serialize-qp "ignoreDefaultVisibility" $ignore_default_visibility "scalar") (serialize-qp "includeLabels" $include_labels "scalar") (serialize-qp "includePermissionsForView" $include_permissions_for_view "scalar") (serialize-qp "keepRevisionForever" $keep_revision_forever "scalar") (serialize-qp "ocrLanguage" $ocr_language "scalar") (serialize-qp "supportsAllDrives" $supports_all_drives "scalar") (serialize-qp "supportsTeamDrives" $supports_team_drives "scalar") (serialize-qp "useContentAsIndexableText" $use_content_as_indexable_text "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/files" $qp)
+  let full_url = (build-url $base "/files" $qp $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/octet-stream" $req_body {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "enforceSingleParent": $enforce_single_parent, "ignoreDefaultVisibility": $ignore_default_visibility, "includeLabels": $include_labels, "includePermissionsForView": $include_permissions_for_view, "keepRevisionForever": $keep_revision_forever, "ocrLanguage": $ocr_language, "supportsAllDrives": $supports_all_drives, "supportsTeamDrives": $supports_team_drives, "useContentAsIndexableText": $use_content_as_indexable_text} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "enforceSingleParent": $enforce_single_parent, "ignoreDefaultVisibility": $ignore_default_visibility, "includeLabels": $include_labels, "includePermissionsForView": $include_permissions_for_view, "keepRevisionForever": $keep_revision_forever, "ocrLanguage": $ocr_language, "supportsAllDrives": $supports_all_drives, "supportsTeamDrives": $supports_team_drives, "useContentAsIndexableText": $use_content_as_indexable_text} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/octet-stream"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Generates a set of file IDs which can be provided in create or copy requests.
@@ -749,10 +906,21 @@ export def "files-generate-ids generate" [
   let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DRIVE_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DRIVE_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "space" $space "scalar") (serialize-qp "type" $type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/files/generateIds" $qp)
+  let full_url = (build-url $base "/files/generateIds" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "count": $count, "space": $space, "type": $type} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "count": $count, "space": $space, "type": $type} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Permanently deletes all of the user's trashed files.
@@ -782,10 +950,21 @@ export def "files-trash delete-empty" [
   let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DRIVE_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DRIVE_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "driveId" $drive_id "scalar") (serialize-qp "enforceSingleParent" $enforce_single_parent "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/files/trash" $qp)
+  let full_url = (build-url $base "/files/trash" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "driveId": $drive_id, "enforceSingleParent": $enforce_single_parent} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "driveId": $drive_id, "enforceSingleParent": $enforce_single_parent} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Permanently deletes a file owned by the user without moving it to the trash. If the file belongs to a shared drive the user must be an organizer on the parent. If the target is a folder, all descendants owned by the user are also deleted.
@@ -818,10 +997,21 @@ export def "files delete" [
   let base = ($base_url | default $BASE_URL)
   if ($file_id | is-empty) { error make --unspanned { msg: "path parameter 'fileId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "enforceSingleParent" $enforce_single_parent "scalar") (serialize-qp "supportsAllDrives" $supports_all_drives "scalar") (serialize-qp "supportsTeamDrives" $supports_team_drives "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({file_id: (encode-path-segment $file_id)} | format pattern "/files/{file_id}") $qp)
+  let full_url = (build-url $base ({file_id: (encode-path-segment $file_id)} | format pattern "/files/{file_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "enforceSingleParent": $enforce_single_parent, "supportsAllDrives": $supports_all_drives, "supportsTeamDrives": $supports_team_drives} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "enforceSingleParent": $enforce_single_parent, "supportsAllDrives": $supports_all_drives, "supportsTeamDrives": $supports_team_drives} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Gets a file's metadata or content by ID.
@@ -856,10 +1046,21 @@ export def "files get" [
   let base = ($base_url | default $BASE_URL)
   if ($file_id | is-empty) { error make --unspanned { msg: "path parameter 'fileId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "acknowledgeAbuse" $acknowledge_abuse "scalar") (serialize-qp "includeLabels" $include_labels "scalar") (serialize-qp "includePermissionsForView" $include_permissions_for_view "scalar") (serialize-qp "supportsAllDrives" $supports_all_drives "scalar") (serialize-qp "supportsTeamDrives" $supports_team_drives "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({file_id: (encode-path-segment $file_id)} | format pattern "/files/{file_id}") $qp)
+  let full_url = (build-url $base ({file_id: (encode-path-segment $file_id)} | format pattern "/files/{file_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "acknowledgeAbuse": $acknowledge_abuse, "includeLabels": $include_labels, "includePermissionsForView": $include_permissions_for_view, "supportsAllDrives": $supports_all_drives, "supportsTeamDrives": $supports_team_drives} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "acknowledgeAbuse": $acknowledge_abuse, "includeLabels": $include_labels, "includePermissionsForView": $include_permissions_for_view, "supportsAllDrives": $supports_all_drives, "supportsTeamDrives": $supports_team_drives} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates a file's metadata and/or content. When calling this method, only populate fields in the request that you want to modify. When updating fields, some fields might change automatically, such as modifiedDate. This method supports patch semantics.
@@ -901,12 +1102,23 @@ export def "files update" [
   let base = ($base_url | default $BASE_URL)
   if ($file_id | is-empty) { error make --unspanned { msg: "path parameter 'fileId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "addParents" $add_parents "scalar") (serialize-qp "enforceSingleParent" $enforce_single_parent "scalar") (serialize-qp "includeLabels" $include_labels "scalar") (serialize-qp "includePermissionsForView" $include_permissions_for_view "scalar") (serialize-qp "keepRevisionForever" $keep_revision_forever "scalar") (serialize-qp "ocrLanguage" $ocr_language "scalar") (serialize-qp "removeParents" $remove_parents "scalar") (serialize-qp "supportsAllDrives" $supports_all_drives "scalar") (serialize-qp "supportsTeamDrives" $supports_team_drives "scalar") (serialize-qp "useContentAsIndexableText" $use_content_as_indexable_text "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({file_id: (encode-path-segment $file_id)} | format pattern "/files/{file_id}") $qp)
+  let full_url = (build-url $base ({file_id: (encode-path-segment $file_id)} | format pattern "/files/{file_id}") $qp $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/octet-stream" $req_body {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "addParents": $add_parents, "enforceSingleParent": $enforce_single_parent, "includeLabels": $include_labels, "includePermissionsForView": $include_permissions_for_view, "keepRevisionForever": $keep_revision_forever, "ocrLanguage": $ocr_language, "removeParents": $remove_parents, "supportsAllDrives": $supports_all_drives, "supportsTeamDrives": $supports_team_drives, "useContentAsIndexableText": $use_content_as_indexable_text} | compact), body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "addParents": $add_parents, "enforceSingleParent": $enforce_single_parent, "includeLabels": $include_labels, "includePermissionsForView": $include_permissions_for_view, "keepRevisionForever": $keep_revision_forever, "ocrLanguage": $ocr_language, "removeParents": $remove_parents, "supportsAllDrives": $supports_all_drives, "supportsTeamDrives": $supports_team_drives, "useContentAsIndexableText": $use_content_as_indexable_text} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/octet-stream"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Lists a file's comments.
@@ -940,10 +1152,21 @@ export def "files-comments list" [
   let base = ($base_url | default $BASE_URL)
   if ($file_id | is-empty) { error make --unspanned { msg: "path parameter 'fileId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "includeDeleted" $include_deleted "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "startModifiedTime" $start_modified_time "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({file_id: (encode-path-segment $file_id)} | format pattern "/files/{file_id}/comments") $qp)
+  let full_url = (build-url $base ({file_id: (encode-path-segment $file_id)} | format pattern "/files/{file_id}/comments") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "includeDeleted": $include_deleted, "pageSize": $page_size, "pageToken": $page_token, "startModifiedTime": $start_modified_time} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "includeDeleted": $include_deleted, "pageSize": $page_size, "pageToken": $page_token, "startModifiedTime": $start_modified_time} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Creates a comment on a file.
@@ -989,12 +1212,23 @@ export def "files-comments create" [
   let base = ($base_url | default $BASE_URL)
   if ($file_id | is-empty) { error make --unspanned { msg: "path parameter 'fileId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({file_id: (encode-path-segment $file_id)} | format pattern "/files/{file_id}/comments") $qp)
+  let full_url = (build-url $base ({file_id: (encode-path-segment $file_id)} | format pattern "/files/{file_id}/comments") $qp $auth.query)
   let req_body = {"anchor": $anchor, "author": $author, "content": $content, "createdTime": $created_time, "deleted": $deleted, "htmlContent": $html_content, "id": $id, "kind": $kind, "modifiedTime": $modified_time, "quotedFileContent": $quoted_file_content, "replies": $replies, "resolved": $resolved} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes a comment.
@@ -1026,10 +1260,21 @@ export def "files-comments delete" [
   if ($file_id | is-empty) { error make --unspanned { msg: "path parameter 'fileId' must be non-empty" } }
   if ($comment_id | is-empty) { error make --unspanned { msg: "path parameter 'commentId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({file_id: (encode-path-segment $file_id), comment_id: (encode-path-segment $comment_id)} | format pattern "/files/{file_id}/comments/{comment_id}") $qp)
+  let full_url = (build-url $base ({file_id: (encode-path-segment $file_id), comment_id: (encode-path-segment $comment_id)} | format pattern "/files/{file_id}/comments/{comment_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Gets a comment by ID.
@@ -1062,10 +1307,21 @@ export def "files-comments get" [
   if ($file_id | is-empty) { error make --unspanned { msg: "path parameter 'fileId' must be non-empty" } }
   if ($comment_id | is-empty) { error make --unspanned { msg: "path parameter 'commentId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "includeDeleted" $include_deleted "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({file_id: (encode-path-segment $file_id), comment_id: (encode-path-segment $comment_id)} | format pattern "/files/{file_id}/comments/{comment_id}") $qp)
+  let full_url = (build-url $base ({file_id: (encode-path-segment $file_id), comment_id: (encode-path-segment $comment_id)} | format pattern "/files/{file_id}/comments/{comment_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "includeDeleted": $include_deleted} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "includeDeleted": $include_deleted} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates a comment with patch semantics.
@@ -1113,12 +1369,23 @@ export def "files-comments update" [
   if ($file_id | is-empty) { error make --unspanned { msg: "path parameter 'fileId' must be non-empty" } }
   if ($comment_id | is-empty) { error make --unspanned { msg: "path parameter 'commentId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({file_id: (encode-path-segment $file_id), comment_id: (encode-path-segment $comment_id)} | format pattern "/files/{file_id}/comments/{comment_id}") $qp)
+  let full_url = (build-url $base ({file_id: (encode-path-segment $file_id), comment_id: (encode-path-segment $comment_id)} | format pattern "/files/{file_id}/comments/{comment_id}") $qp $auth.query)
   let req_body = {"anchor": $anchor, "author": $author, "content": $content, "createdTime": $created_time, "deleted": $deleted, "htmlContent": $html_content, "id": $id, "kind": $kind, "modifiedTime": $modified_time, "quotedFileContent": $quoted_file_content, "replies": $replies, "resolved": $resolved} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact), body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Lists a comment's replies.
@@ -1153,10 +1420,21 @@ export def "files-comments-replies list" [
   if ($file_id | is-empty) { error make --unspanned { msg: "path parameter 'fileId' must be non-empty" } }
   if ($comment_id | is-empty) { error make --unspanned { msg: "path parameter 'commentId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "includeDeleted" $include_deleted "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({file_id: (encode-path-segment $file_id), comment_id: (encode-path-segment $comment_id)} | format pattern "/files/{file_id}/comments/{comment_id}/replies") $qp)
+  let full_url = (build-url $base ({file_id: (encode-path-segment $file_id), comment_id: (encode-path-segment $comment_id)} | format pattern "/files/{file_id}/comments/{comment_id}/replies") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "includeDeleted": $include_deleted, "pageSize": $page_size, "pageToken": $page_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "includeDeleted": $include_deleted, "pageSize": $page_size, "pageToken": $page_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Creates a reply to a comment.
@@ -1199,12 +1477,23 @@ export def "files-comments-replies create" [
   if ($file_id | is-empty) { error make --unspanned { msg: "path parameter 'fileId' must be non-empty" } }
   if ($comment_id | is-empty) { error make --unspanned { msg: "path parameter 'commentId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({file_id: (encode-path-segment $file_id), comment_id: (encode-path-segment $comment_id)} | format pattern "/files/{file_id}/comments/{comment_id}/replies") $qp)
+  let full_url = (build-url $base ({file_id: (encode-path-segment $file_id), comment_id: (encode-path-segment $comment_id)} | format pattern "/files/{file_id}/comments/{comment_id}/replies") $qp $auth.query)
   let req_body = {"action": $action, "author": $author, "content": $content, "createdTime": $created_time, "deleted": $deleted, "htmlContent": $html_content, "id": $id, "kind": $kind, "modifiedTime": $modified_time} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes a reply.
@@ -1238,10 +1527,21 @@ export def "files-comments-replies delete" [
   if ($comment_id | is-empty) { error make --unspanned { msg: "path parameter 'commentId' must be non-empty" } }
   if ($reply_id | is-empty) { error make --unspanned { msg: "path parameter 'replyId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({file_id: (encode-path-segment $file_id), comment_id: (encode-path-segment $comment_id), reply_id: (encode-path-segment $reply_id)} | format pattern "/files/{file_id}/comments/{comment_id}/replies/{reply_id}") $qp)
+  let full_url = (build-url $base ({file_id: (encode-path-segment $file_id), comment_id: (encode-path-segment $comment_id), reply_id: (encode-path-segment $reply_id)} | format pattern "/files/{file_id}/comments/{comment_id}/replies/{reply_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Gets a reply by ID.
@@ -1276,10 +1576,21 @@ export def "files-comments-replies get" [
   if ($comment_id | is-empty) { error make --unspanned { msg: "path parameter 'commentId' must be non-empty" } }
   if ($reply_id | is-empty) { error make --unspanned { msg: "path parameter 'replyId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "includeDeleted" $include_deleted "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({file_id: (encode-path-segment $file_id), comment_id: (encode-path-segment $comment_id), reply_id: (encode-path-segment $reply_id)} | format pattern "/files/{file_id}/comments/{comment_id}/replies/{reply_id}") $qp)
+  let full_url = (build-url $base ({file_id: (encode-path-segment $file_id), comment_id: (encode-path-segment $comment_id), reply_id: (encode-path-segment $reply_id)} | format pattern "/files/{file_id}/comments/{comment_id}/replies/{reply_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "includeDeleted": $include_deleted} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "includeDeleted": $include_deleted} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates a reply with patch semantics.
@@ -1324,12 +1635,23 @@ export def "files-comments-replies update" [
   if ($comment_id | is-empty) { error make --unspanned { msg: "path parameter 'commentId' must be non-empty" } }
   if ($reply_id | is-empty) { error make --unspanned { msg: "path parameter 'replyId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({file_id: (encode-path-segment $file_id), comment_id: (encode-path-segment $comment_id), reply_id: (encode-path-segment $reply_id)} | format pattern "/files/{file_id}/comments/{comment_id}/replies/{reply_id}") $qp)
+  let full_url = (build-url $base ({file_id: (encode-path-segment $file_id), comment_id: (encode-path-segment $comment_id), reply_id: (encode-path-segment $reply_id)} | format pattern "/files/{file_id}/comments/{comment_id}/replies/{reply_id}") $qp $auth.query)
   let req_body = {"action": $action, "author": $author, "content": $content, "createdTime": $created_time, "deleted": $deleted, "htmlContent": $html_content, "id": $id, "kind": $kind, "modifiedTime": $modified_time} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact), body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Creates a copy of a file and applies any requested updates with patch semantics. Folders cannot be copied.
@@ -1442,12 +1764,23 @@ export def "files-copy copy" [
   let base = ($base_url | default $BASE_URL)
   if ($file_id | is-empty) { error make --unspanned { msg: "path parameter 'fileId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "enforceSingleParent" $enforce_single_parent "scalar") (serialize-qp "ignoreDefaultVisibility" $ignore_default_visibility "scalar") (serialize-qp "includeLabels" $include_labels "scalar") (serialize-qp "includePermissionsForView" $include_permissions_for_view "scalar") (serialize-qp "keepRevisionForever" $keep_revision_forever "scalar") (serialize-qp "ocrLanguage" $ocr_language "scalar") (serialize-qp "supportsAllDrives" $supports_all_drives "scalar") (serialize-qp "supportsTeamDrives" $supports_team_drives "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({file_id: (encode-path-segment $file_id)} | format pattern "/files/{file_id}/copy") $qp)
+  let full_url = (build-url $base ({file_id: (encode-path-segment $file_id)} | format pattern "/files/{file_id}/copy") $qp $auth.query)
   let req_body = {"appProperties": $app_properties, "capabilities": $capabilities, "contentHints": $content_hints, "contentRestrictions": $content_restrictions, "copyRequiresWriterPermission": $copy_requires_writer_permission, "createdTime": $created_time, "description": $description, "driveId": $drive_id, "explicitlyTrashed": $explicitly_trashed, "fileExtension": $file_extension, "folderColorRgb": $folder_color_rgb, "fullFileExtension": $full_file_extension, "hasAugmentedPermissions": $has_augmented_permissions, "hasThumbnail": $has_thumbnail, "headRevisionId": $head_revision_id, "iconLink": $icon_link, "id": $id, "imageMediaMetadata": $image_media_metadata, "isAppAuthorized": $is_app_authorized, "kind": $kind, "labelInfo": $label_info, "lastModifyingUser": $last_modifying_user, "linkShareMetadata": $link_share_metadata, "md5Checksum": $md5_checksum, "mimeType": $mime_type, "modifiedByMe": $modified_by_me, "modifiedByMeTime": $modified_by_me_time, "modifiedTime": $modified_time, "name": $name, "originalFilename": $original_filename, "ownedByMe": $owned_by_me, "owners": $owners, "parents": $parents, "permissionIds": $permission_ids, "permissions": $permissions, "properties": $properties, "quotaBytesUsed": $quota_bytes_used, "resourceKey": $resource_key, "sha1Checksum": $sha1_checksum, "sha256Checksum": $sha256_checksum, "shared": $shared, "sharedWithMeTime": $shared_with_me_time, "sharingUser": $sharing_user, "shortcutDetails": $shortcut_details, "size": $size, "spaces": $spaces, "starred": $starred, "teamDriveId": $team_drive_id, "thumbnailLink": $thumbnail_link, "thumbnailVersion": $thumbnail_version, "trashed": $trashed, "trashedTime": $trashed_time, "trashingUser": $trashing_user, "version": $version, "videoMediaMetadata": $video_media_metadata, "viewedByMe": $viewed_by_me, "viewedByMeTime": $viewed_by_me_time, "viewersCanCopyContent": $viewers_can_copy_content, "webContentLink": $web_content_link, "webViewLink": $web_view_link, "writersCanShare": $writers_can_share} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "enforceSingleParent": $enforce_single_parent, "ignoreDefaultVisibility": $ignore_default_visibility, "includeLabels": $include_labels, "includePermissionsForView": $include_permissions_for_view, "keepRevisionForever": $keep_revision_forever, "ocrLanguage": $ocr_language, "supportsAllDrives": $supports_all_drives, "supportsTeamDrives": $supports_team_drives} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "enforceSingleParent": $enforce_single_parent, "ignoreDefaultVisibility": $ignore_default_visibility, "includeLabels": $include_labels, "includePermissionsForView": $include_permissions_for_view, "keepRevisionForever": $keep_revision_forever, "ocrLanguage": $ocr_language, "supportsAllDrives": $supports_all_drives, "supportsTeamDrives": $supports_team_drives} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Exports a Google Workspace document to the requested MIME type and returns exported byte content. Note that the exported content is limited to 10MB.
@@ -1478,10 +1811,21 @@ export def "files-export export" [
   let base = ($base_url | default $BASE_URL)
   if ($file_id | is-empty) { error make --unspanned { msg: "path parameter 'fileId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "mimeType" $mime_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({file_id: (encode-path-segment $file_id)} | format pattern "/files/{file_id}/export") $qp)
+  let full_url = (build-url $base ({file_id: (encode-path-segment $file_id)} | format pattern "/files/{file_id}/export") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "mimeType": $mime_type} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "mimeType": $mime_type} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Lists the labels on a file.
@@ -1513,10 +1857,21 @@ export def "files-list-labels list" [
   let base = ($base_url | default $BASE_URL)
   if ($file_id | is-empty) { error make --unspanned { msg: "path parameter 'fileId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({file_id: (encode-path-segment $file_id)} | format pattern "/files/{file_id}/listLabels") $qp)
+  let full_url = (build-url $base ({file_id: (encode-path-segment $file_id)} | format pattern "/files/{file_id}/listLabels") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "maxResults": $max_results, "pageToken": $page_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "maxResults": $max_results, "pageToken": $page_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Modifies the set of labels on a file.
@@ -1550,12 +1905,23 @@ export def "files-modify-labels create" [
   let base = ($base_url | default $BASE_URL)
   if ($file_id | is-empty) { error make --unspanned { msg: "path parameter 'fileId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({file_id: (encode-path-segment $file_id)} | format pattern "/files/{file_id}/modifyLabels") $qp)
+  let full_url = (build-url $base ({file_id: (encode-path-segment $file_id)} | format pattern "/files/{file_id}/modifyLabels") $qp $auth.query)
   let req_body = {"kind": $kind, "labelModifications": $label_modifications} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Lists a file's or shared drive's permissions.
@@ -1591,10 +1957,21 @@ export def "files-permissions list" [
   let base = ($base_url | default $BASE_URL)
   if ($file_id | is-empty) { error make --unspanned { msg: "path parameter 'fileId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "includePermissionsForView" $include_permissions_for_view "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "supportsAllDrives" $supports_all_drives "scalar") (serialize-qp "supportsTeamDrives" $supports_team_drives "scalar") (serialize-qp "useDomainAdminAccess" $use_domain_admin_access "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({file_id: (encode-path-segment $file_id)} | format pattern "/files/{file_id}/permissions") $qp)
+  let full_url = (build-url $base ({file_id: (encode-path-segment $file_id)} | format pattern "/files/{file_id}/permissions") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "includePermissionsForView": $include_permissions_for_view, "pageSize": $page_size, "pageToken": $page_token, "supportsAllDrives": $supports_all_drives, "supportsTeamDrives": $supports_team_drives, "useDomainAdminAccess": $use_domain_admin_access} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "includePermissionsForView": $include_permissions_for_view, "pageSize": $page_size, "pageToken": $page_token, "supportsAllDrives": $supports_all_drives, "supportsTeamDrives": $supports_team_drives, "useDomainAdminAccess": $use_domain_admin_access} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Creates a permission for a file or shared drive. For more information on creating permissions, see Share files, folders & drives.
@@ -1648,12 +2025,23 @@ export def "files-permissions create" [
   let base = ($base_url | default $BASE_URL)
   if ($file_id | is-empty) { error make --unspanned { msg: "path parameter 'fileId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "emailMessage" $email_message "scalar") (serialize-qp "enforceSingleParent" $enforce_single_parent "scalar") (serialize-qp "moveToNewOwnersRoot" $move_to_new_owners_root "scalar") (serialize-qp "sendNotificationEmail" $send_notification_email "scalar") (serialize-qp "supportsAllDrives" $supports_all_drives "scalar") (serialize-qp "supportsTeamDrives" $supports_team_drives "scalar") (serialize-qp "transferOwnership" $transfer_ownership "scalar") (serialize-qp "useDomainAdminAccess" $use_domain_admin_access "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({file_id: (encode-path-segment $file_id)} | format pattern "/files/{file_id}/permissions") $qp)
+  let full_url = (build-url $base ({file_id: (encode-path-segment $file_id)} | format pattern "/files/{file_id}/permissions") $qp $auth.query)
   let req_body = {"allowFileDiscovery": $allow_file_discovery, "deleted": $deleted, "displayName": $display_name, "domain": $domain, "emailAddress": $email_address, "expirationTime": $expiration_time, "id": $id, "kind": $kind, "pendingOwner": $pending_owner, "photoLink": $photo_link, "role": $role, "type": $type, "view": $view} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "emailMessage": $email_message, "enforceSingleParent": $enforce_single_parent, "moveToNewOwnersRoot": $move_to_new_owners_root, "sendNotificationEmail": $send_notification_email, "supportsAllDrives": $supports_all_drives, "supportsTeamDrives": $supports_team_drives, "transferOwnership": $transfer_ownership, "useDomainAdminAccess": $use_domain_admin_access} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "emailMessage": $email_message, "enforceSingleParent": $enforce_single_parent, "moveToNewOwnersRoot": $move_to_new_owners_root, "sendNotificationEmail": $send_notification_email, "supportsAllDrives": $supports_all_drives, "supportsTeamDrives": $supports_team_drives, "transferOwnership": $transfer_ownership, "useDomainAdminAccess": $use_domain_admin_access} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes a permission.
@@ -1688,10 +2076,21 @@ export def "files-permissions delete" [
   if ($file_id | is-empty) { error make --unspanned { msg: "path parameter 'fileId' must be non-empty" } }
   if ($permission_id | is-empty) { error make --unspanned { msg: "path parameter 'permissionId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "supportsAllDrives" $supports_all_drives "scalar") (serialize-qp "supportsTeamDrives" $supports_team_drives "scalar") (serialize-qp "useDomainAdminAccess" $use_domain_admin_access "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({file_id: (encode-path-segment $file_id), permission_id: (encode-path-segment $permission_id)} | format pattern "/files/{file_id}/permissions/{permission_id}") $qp)
+  let full_url = (build-url $base ({file_id: (encode-path-segment $file_id), permission_id: (encode-path-segment $permission_id)} | format pattern "/files/{file_id}/permissions/{permission_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "supportsAllDrives": $supports_all_drives, "supportsTeamDrives": $supports_team_drives, "useDomainAdminAccess": $use_domain_admin_access} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "supportsAllDrives": $supports_all_drives, "supportsTeamDrives": $supports_team_drives, "useDomainAdminAccess": $use_domain_admin_access} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Gets a permission by ID.
@@ -1726,10 +2125,21 @@ export def "files-permissions get" [
   if ($file_id | is-empty) { error make --unspanned { msg: "path parameter 'fileId' must be non-empty" } }
   if ($permission_id | is-empty) { error make --unspanned { msg: "path parameter 'permissionId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "supportsAllDrives" $supports_all_drives "scalar") (serialize-qp "supportsTeamDrives" $supports_team_drives "scalar") (serialize-qp "useDomainAdminAccess" $use_domain_admin_access "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({file_id: (encode-path-segment $file_id), permission_id: (encode-path-segment $permission_id)} | format pattern "/files/{file_id}/permissions/{permission_id}") $qp)
+  let full_url = (build-url $base ({file_id: (encode-path-segment $file_id), permission_id: (encode-path-segment $permission_id)} | format pattern "/files/{file_id}/permissions/{permission_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "supportsAllDrives": $supports_all_drives, "supportsTeamDrives": $supports_team_drives, "useDomainAdminAccess": $use_domain_admin_access} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "supportsAllDrives": $supports_all_drives, "supportsTeamDrives": $supports_team_drives, "useDomainAdminAccess": $use_domain_admin_access} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates a permission with patch semantics.
@@ -1782,12 +2192,23 @@ export def "files-permissions update" [
   if ($file_id | is-empty) { error make --unspanned { msg: "path parameter 'fileId' must be non-empty" } }
   if ($permission_id | is-empty) { error make --unspanned { msg: "path parameter 'permissionId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "removeExpiration" $remove_expiration "scalar") (serialize-qp "supportsAllDrives" $supports_all_drives "scalar") (serialize-qp "supportsTeamDrives" $supports_team_drives "scalar") (serialize-qp "transferOwnership" $transfer_ownership "scalar") (serialize-qp "useDomainAdminAccess" $use_domain_admin_access "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({file_id: (encode-path-segment $file_id), permission_id: (encode-path-segment $permission_id)} | format pattern "/files/{file_id}/permissions/{permission_id}") $qp)
+  let full_url = (build-url $base ({file_id: (encode-path-segment $file_id), permission_id: (encode-path-segment $permission_id)} | format pattern "/files/{file_id}/permissions/{permission_id}") $qp $auth.query)
   let req_body = {"allowFileDiscovery": $allow_file_discovery, "deleted": $deleted, "displayName": $display_name, "domain": $domain, "emailAddress": $email_address, "expirationTime": $expiration_time, "id": $id, "kind": $kind, "pendingOwner": $pending_owner, "photoLink": $photo_link, "role": $role, "type": $type, "view": $view} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "removeExpiration": $remove_expiration, "supportsAllDrives": $supports_all_drives, "supportsTeamDrives": $supports_team_drives, "transferOwnership": $transfer_ownership, "useDomainAdminAccess": $use_domain_admin_access} | compact), body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "removeExpiration": $remove_expiration, "supportsAllDrives": $supports_all_drives, "supportsTeamDrives": $supports_team_drives, "transferOwnership": $transfer_ownership, "useDomainAdminAccess": $use_domain_admin_access} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Lists a file's revisions.
@@ -1819,10 +2240,21 @@ export def "files-revisions list" [
   let base = ($base_url | default $BASE_URL)
   if ($file_id | is-empty) { error make --unspanned { msg: "path parameter 'fileId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({file_id: (encode-path-segment $file_id)} | format pattern "/files/{file_id}/revisions") $qp)
+  let full_url = (build-url $base ({file_id: (encode-path-segment $file_id)} | format pattern "/files/{file_id}/revisions") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "pageSize": $page_size, "pageToken": $page_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "pageSize": $page_size, "pageToken": $page_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Permanently deletes a file version. You can only delete revisions for files with binary content in Google Drive, like images or videos. Revisions for other files, like Google Docs or Sheets, and the last remaining file version can't be deleted.
@@ -1854,10 +2286,21 @@ export def "files-revisions delete" [
   if ($file_id | is-empty) { error make --unspanned { msg: "path parameter 'fileId' must be non-empty" } }
   if ($revision_id | is-empty) { error make --unspanned { msg: "path parameter 'revisionId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({file_id: (encode-path-segment $file_id), revision_id: (encode-path-segment $revision_id)} | format pattern "/files/{file_id}/revisions/{revision_id}") $qp)
+  let full_url = (build-url $base ({file_id: (encode-path-segment $file_id), revision_id: (encode-path-segment $revision_id)} | format pattern "/files/{file_id}/revisions/{revision_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Gets a revision's metadata or content by ID.
@@ -1890,10 +2333,21 @@ export def "files-revisions get" [
   if ($file_id | is-empty) { error make --unspanned { msg: "path parameter 'fileId' must be non-empty" } }
   if ($revision_id | is-empty) { error make --unspanned { msg: "path parameter 'revisionId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "acknowledgeAbuse" $acknowledge_abuse "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({file_id: (encode-path-segment $file_id), revision_id: (encode-path-segment $revision_id)} | format pattern "/files/{file_id}/revisions/{revision_id}") $qp)
+  let full_url = (build-url $base ({file_id: (encode-path-segment $file_id), revision_id: (encode-path-segment $revision_id)} | format pattern "/files/{file_id}/revisions/{revision_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "acknowledgeAbuse": $acknowledge_abuse} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "acknowledgeAbuse": $acknowledge_abuse} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates a revision with patch semantics.
@@ -1941,12 +2395,23 @@ export def "files-revisions update" [
   if ($file_id | is-empty) { error make --unspanned { msg: "path parameter 'fileId' must be non-empty" } }
   if ($revision_id | is-empty) { error make --unspanned { msg: "path parameter 'revisionId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({file_id: (encode-path-segment $file_id), revision_id: (encode-path-segment $revision_id)} | format pattern "/files/{file_id}/revisions/{revision_id}") $qp)
+  let full_url = (build-url $base ({file_id: (encode-path-segment $file_id), revision_id: (encode-path-segment $revision_id)} | format pattern "/files/{file_id}/revisions/{revision_id}") $qp $auth.query)
   let req_body = {"exportLinks": $export_links, "id": $id, "keepForever": $keep_forever, "kind": $kind, "lastModifyingUser": $last_modifying_user, "md5Checksum": $md5_checksum, "mimeType": $mime_type, "modifiedTime": $modified_time, "originalFilename": $original_filename, "publishAuto": $publish_auto, "published": $published, "publishedLink": $published_link, "publishedOutsideDomain": $published_outside_domain, "size": $size} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact), body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Subscribes to changes to a file.
@@ -1992,12 +2457,23 @@ export def "files-watch watch" [
   let base = ($base_url | default $BASE_URL)
   if ($file_id | is-empty) { error make --unspanned { msg: "path parameter 'fileId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "acknowledgeAbuse" $acknowledge_abuse "scalar") (serialize-qp "includeLabels" $include_labels "scalar") (serialize-qp "includePermissionsForView" $include_permissions_for_view "scalar") (serialize-qp "supportsAllDrives" $supports_all_drives "scalar") (serialize-qp "supportsTeamDrives" $supports_team_drives "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({file_id: (encode-path-segment $file_id)} | format pattern "/files/{file_id}/watch") $qp)
+  let full_url = (build-url $base ({file_id: (encode-path-segment $file_id)} | format pattern "/files/{file_id}/watch") $qp $auth.query)
   let req_body = {"address": $address, "expiration": $expiration, "id": $id, "kind": $kind, "params": $params, "payload": $payload, "resourceId": $resource_id, "resourceUri": $resource_uri, "token": $body_token, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "acknowledgeAbuse": $acknowledge_abuse, "includeLabels": $include_labels, "includePermissionsForView": $include_permissions_for_view, "supportsAllDrives": $supports_all_drives, "supportsTeamDrives": $supports_team_drives} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "acknowledgeAbuse": $acknowledge_abuse, "includeLabels": $include_labels, "includePermissionsForView": $include_permissions_for_view, "supportsAllDrives": $supports_all_drives, "supportsTeamDrives": $supports_team_drives} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deprecated use drives.list instead.
@@ -2029,10 +2505,21 @@ export def "teamdrives list" [
   let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DRIVE_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DRIVE_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "useDomainAdminAccess" $use_domain_admin_access "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/teamdrives" $qp)
+  let full_url = (build-url $base "/teamdrives" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "pageSize": $page_size, "pageToken": $page_token, "q": $q, "useDomainAdminAccess": $use_domain_admin_access} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "pageSize": $page_size, "pageToken": $page_token, "q": $q, "useDomainAdminAccess": $use_domain_admin_access} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Deprecated use drives.create instead.
@@ -2076,12 +2563,23 @@ export def "teamdrives create" [
   let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DRIVE_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DRIVE_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "requestId" $request_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/teamdrives" $qp)
+  let full_url = (build-url $base "/teamdrives" $qp $auth.query)
   let req_body = {"backgroundImageFile": $background_image_file, "backgroundImageLink": $background_image_link, "capabilities": $capabilities, "colorRgb": $color_rgb, "createdTime": $created_time, "id": $id, "kind": $kind, "name": $name, "orgUnitId": $org_unit_id, "restrictions": $restrictions, "themeId": $theme_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "requestId": $request_id} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "requestId": $request_id} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deprecated use drives.delete instead.
@@ -2111,10 +2609,21 @@ export def "teamdrives delete" [
   let base = ($base_url | default $BASE_URL)
   if ($team_drive_id | is-empty) { error make --unspanned { msg: "path parameter 'teamDriveId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({team_drive_id: (encode-path-segment $team_drive_id)} | format pattern "/teamdrives/{team_drive_id}") $qp)
+  let full_url = (build-url $base ({team_drive_id: (encode-path-segment $team_drive_id)} | format pattern "/teamdrives/{team_drive_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Deprecated use drives.get instead.
@@ -2145,10 +2654,21 @@ export def "teamdrives get" [
   let base = ($base_url | default $BASE_URL)
   if ($team_drive_id | is-empty) { error make --unspanned { msg: "path parameter 'teamDriveId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "useDomainAdminAccess" $use_domain_admin_access "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({team_drive_id: (encode-path-segment $team_drive_id)} | format pattern "/teamdrives/{team_drive_id}") $qp)
+  let full_url = (build-url $base ({team_drive_id: (encode-path-segment $team_drive_id)} | format pattern "/teamdrives/{team_drive_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "useDomainAdminAccess": $use_domain_admin_access} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "useDomainAdminAccess": $use_domain_admin_access} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Deprecated use drives.update instead
@@ -2194,10 +2714,21 @@ export def "teamdrives update" [
   let base = ($base_url | default $BASE_URL)
   if ($team_drive_id | is-empty) { error make --unspanned { msg: "path parameter 'teamDriveId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "useDomainAdminAccess" $use_domain_admin_access "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({team_drive_id: (encode-path-segment $team_drive_id)} | format pattern "/teamdrives/{team_drive_id}") $qp)
+  let full_url = (build-url $base ({team_drive_id: (encode-path-segment $team_drive_id)} | format pattern "/teamdrives/{team_drive_id}") $qp $auth.query)
   let req_body = {"backgroundImageFile": $background_image_file, "backgroundImageLink": $background_image_link, "capabilities": $capabilities, "colorRgb": $color_rgb, "createdTime": $created_time, "id": $id, "kind": $kind, "name": $name, "orgUnitId": $org_unit_id, "restrictions": $restrictions, "themeId": $theme_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "useDomainAdminAccess": $use_domain_admin_access} | compact), body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "useDomainAdminAccess": $use_domain_admin_access} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }

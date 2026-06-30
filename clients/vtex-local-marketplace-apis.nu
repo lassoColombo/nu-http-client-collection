@@ -8,7 +8,7 @@ const BASE_URL = "https://vtex.local"
 # `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
 # where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o MARKETPLACE_API_TOKEN | default "" }
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o MARKETPLACE_API_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
@@ -52,14 +52,11 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
-# Trick: `url encode --all` over-encodes, then we decode the four unreserved
-# punctuation chars back. Pre-existing %XX sequences in the input survive
-# because `url encode --all` first turns their % into %25.
 def encode-path-segment [v: any]: nothing -> string {
   $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
-# Serialize an array-typed path parameter (issue 49.A). OpenAPI 3 `style: simple`
+# Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
 # (the default for path params) and Swagger 2 `collectionFormat: csv` both join
 # the elements with a literal comma WITHIN the single path segment, each element
 # RFC-3986-encoded individually (so a comma inside an element stays %2C). Without
@@ -70,51 +67,63 @@ def encode-path-array [v: any]: nothing -> string {
   if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
 }
 
-# Build URL from base, path, and optional query string
-def build-url [base: string, path: string, query?: string]: nothing -> string {
+# Build the request URL from base, path, and any number of pre-encoded query
+# fragments (param serializer output and/or the auth query). Each fragment is an
+# `&`-joinable `key=value` string already percent-encoded by its producer; empty
+# fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
+# delimiters are hand-spliced — and any query already on the base URL is merged in.
+def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
   let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
-  let result = ($parsed | upsert path $full_path)
-  if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
+  let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
+  $parsed | upsert path $full_path | upsert query $query | url join
 }
 
-# Build the dry-run record returned by --dry-run. Shape:
-#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
-#    auth: {scheme, location}}
-# `meta` carries logical-form data (the query record by spec name, the pre-serialization
-# body) that do-request itself cannot reconstruct from its wire-format args.
-def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
-  let m = ($meta | default {})
-  {
-    dry_run: true
-    method: $method
-    url: $url
-    query: ($m | get -o query | default {})
-    headers: $auth.headers
-    body: ($m | get -o body)
-    content_type: $content_type
-    timeout: $timeout
-    auth: {scheme: $auth.scheme, location: $auth.location}
-  }
+# Success policy: did this response succeed? Single source of truth, consulted by
+# handle-response and the HEAD header-unwrap. Empty ok_codes means the spec listed
+# none, so fall back to < 400. Otherwise: any 2xx, plus documented success codes.
+def status-ok [status: int, ok_codes: list<int>]: nothing -> bool {
+  if ($ok_codes | is-empty) { $status < 400 } else { ($status >= 200 and $status < 300) or ($status in $ok_codes) }
 }
 
-# Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
-  let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
-  let timeout = ($max_time | default 30min)
-  let ct = ($content_type | default "application/json")
-  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
-  let resp = match $method {
-    "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
-  }
-  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
-  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
+# Unwrap a `--full` HTTP response into the user-facing value. Response arrives
+# via pipeline; ok_codes gates the error throw (see status-ok).
+def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: record -> any {
+  let resp = $in
+  if $allow_errors { return $resp }
+  if not (status-ok $resp.status $ok_codes) { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } }
+  if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
+  if $resp.status == 204 { return null }
+  $resp.body
+}
+
+# GET — bodyless, honours --raw
+def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+}
+
+# POST — body + content-type
+def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# PUT — body + content-type
+def send-put [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http put --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http put --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# PATCH — body + content-type
+def send-patch [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http patch --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http patch --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# DELETE — body via --data
+def send-delete [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http delete --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url } else { http delete --headers $req.headers --content-type $req.content_type --data $body --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url }
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 def base-url-completer [] { ["https://vtex.local" "https://{accountName}.{environment}.com.br/api"] }
@@ -170,12 +179,23 @@ export def "notificator-changenotification-inventory create-notification" [
   if ($seller_id | is-empty) { error make --unspanned { msg: "path parameter 'sellerId' must be non-empty" } }
   if ($sku_id | is-empty) { error make --unspanned { msg: "path parameter 'skuId' must be non-empty" } }
   let qp = [(serialize-qp "accountName" $account_name "scalar") (serialize-qp "environment" $environment "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({seller_id: (encode-path-segment $seller_id), sku_id: (encode-path-segment $sku_id)} | format pattern "/notificator/{seller_id}/changenotification/{sku_id}/inventory") $qp)
+  let full_url = (build-url $base ({seller_id: (encode-path-segment $seller_id), sku_id: (encode-path-segment $sku_id)} | format pattern "/notificator/{seller_id}/changenotification/{sku_id}/inventory") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"accountName": $account_name, "environment": $environment} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"accountName": $account_name, "environment": $environment} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [202]
 }
 
 # Notify marketplace of price update
@@ -204,12 +224,23 @@ export def "notificator-changenotification-price create-notification" [
   if ($seller_id | is-empty) { error make --unspanned { msg: "path parameter 'sellerId' must be non-empty" } }
   if ($sku_id | is-empty) { error make --unspanned { msg: "path parameter 'skuId' must be non-empty" } }
   let qp = [(serialize-qp "accountName" $account_name "scalar") (serialize-qp "environment" $environment "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({seller_id: (encode-path-segment $seller_id), sku_id: (encode-path-segment $sku_id)} | format pattern "/notificator/{seller_id}/changenotification/{sku_id}/price") $qp)
+  let full_url = (build-url $base ({seller_id: (encode-path-segment $seller_id), sku_id: (encode-path-segment $sku_id)} | format pattern "/notificator/{seller_id}/changenotification/{sku_id}/price") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"accountName": $account_name, "environment": $environment} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"accountName": $account_name, "environment": $environment} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [202]
 }
 
 # Get Matched Offers List
@@ -238,12 +269,23 @@ export def "offer-manager-pvt-offers get-offerslist" [
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o MARKETPLACE_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o MARKETPLACE_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "sort" $qp_sort "scalar") (serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "fq" $fq "scalar") (serialize-qp "accountName" $account_name "scalar") (serialize-qp "environment" $environment "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/offer-manager/pvt/offers" $qp)
+  let full_url = (build-url $base "/offer-manager/pvt/offers" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"sort": $qp_sort, "rows": $rows, "start": $start, "fq": $fq, "accountName": $account_name, "environment": $environment} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"sort": $qp_sort, "rows": $rows, "start": $start, "fq": $fq, "accountName": $account_name, "environment": $environment} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get Matched Offer's Data by Product ID
@@ -270,12 +312,23 @@ export def "offer-manager-pvt-product get-productoffers" [
   let base = ($base_url | default $BASE_URL)
   if ($product_id | is-empty) { error make --unspanned { msg: "path parameter 'productId' must be non-empty" } }
   let qp = [(serialize-qp "accountName" $account_name "scalar") (serialize-qp "environment" $environment "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({product_id: (encode-path-segment $product_id)} | format pattern "/offer-manager/pvt/product/{product_id}") $qp)
+  let full_url = (build-url $base ({product_id: (encode-path-segment $product_id)} | format pattern "/offer-manager/pvt/product/{product_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"accountName": $account_name, "environment": $environment} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"accountName": $account_name, "environment": $environment} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get Matched Offer's Data by SKU ID
@@ -304,12 +357,23 @@ export def "offer-manager-pvt-product-sku get-sk-uoffers" [
   if ($product_id | is-empty) { error make --unspanned { msg: "path parameter 'productId' must be non-empty" } }
   if ($sku_id | is-empty) { error make --unspanned { msg: "path parameter 'skuId' must be non-empty" } }
   let qp = [(serialize-qp "accountName" $account_name "scalar") (serialize-qp "environment" $environment "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({product_id: (encode-path-segment $product_id), sku_id: (encode-path-segment $sku_id)} | format pattern "/offer-manager/pvt/product/{product_id}/sku/{sku_id}") $qp)
+  let full_url = (build-url $base ({product_id: (encode-path-segment $product_id), sku_id: (encode-path-segment $sku_id)} | format pattern "/offer-manager/pvt/product/{product_id}/sku/{sku_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"accountName": $account_name, "environment": $environment} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"accountName": $account_name, "environment": $environment} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List Seller Leads
@@ -340,12 +404,23 @@ export def "seller-register-pvt-seller-leads list" [
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o MARKETPLACE_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o MARKETPLACE_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "accountName" $account_name "scalar") (serialize-qp "environment" $environment "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "isConnected" $is_connected "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "orderBy" $order_by "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/seller-register/pvt/seller-leads" $qp)
+  let full_url = (build-url $base "/seller-register/pvt/seller-leads" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"accountName": $account_name, "environment": $environment, "offset": $offset, "limit": $limit, "isConnected": $is_connected, "search": $search, "status": $status, "orderBy": $order_by} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"accountName": $account_name, "environment": $environment, "offset": $offset, "limit": $limit, "isConnected": $is_connected, "search": $search, "status": $status, "orderBy": $order_by} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Invite Seller Lead
@@ -384,7 +459,7 @@ export def "seller-register-pvt-seller-leads create" [
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o MARKETPLACE_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o MARKETPLACE_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "accountName" $account_name "scalar") (serialize-qp "environment" $environment "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/seller-register/pvt/seller-leads" $qp)
+  let full_url = (build-url $base "/seller-register/pvt/seller-leads" $qp $auth.query)
   let req_body = {"accountId": $account_id, "accountable": $accountable, "address": $address, "document": $document, "email": $email, "hasAcceptedLegalTerms": $has_accepted_legal_terms, "salesChannel": $sales_channel, "sellerAccountName": $seller_account_name, "sellerEmail": $seller_email, "sellerName": $seller_name, "sellerType": $seller_type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
@@ -393,7 +468,18 @@ export def "seller-register-pvt-seller-leads create" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let effective_ct = ($content_type | default "application/json")
   let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $effective_ct $req_body_wire {query: ({"accountName": $account_name, "environment": $environment} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"accountName": $account_name, "environment": $environment} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: $effective_ct
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Delete Seller Lead
@@ -420,12 +506,23 @@ export def "seller-register-pvt-seller-leads delete" [
   let base = ($base_url | default $BASE_URL)
   if ($seller_lead_id | is-empty) { error make --unspanned { msg: "path parameter 'sellerLeadId' must be non-empty" } }
   let qp = [(serialize-qp "accountName" $account_name "scalar") (serialize-qp "environment" $environment "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({seller_lead_id: (encode-path-segment $seller_lead_id)} | format pattern "/seller-register/pvt/seller-leads/{seller_lead_id}") $qp)
+  let full_url = (build-url $base ({seller_lead_id: (encode-path-segment $seller_lead_id)} | format pattern "/seller-register/pvt/seller-leads/{seller_lead_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"accountName": $account_name, "environment": $environment} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"accountName": $account_name, "environment": $environment} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Get Seller Lead's Data by Id
@@ -452,12 +549,23 @@ export def "seller-register-pvt-seller-leads get" [
   let base = ($base_url | default $BASE_URL)
   if ($seller_lead_id | is-empty) { error make --unspanned { msg: "path parameter 'sellerLeadId' must be non-empty" } }
   let qp = [(serialize-qp "accountName" $account_name "scalar") (serialize-qp "environment" $environment "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({seller_lead_id: (encode-path-segment $seller_lead_id)} | format pattern "/seller-register/pvt/seller-leads/{seller_lead_id}") $qp)
+  let full_url = (build-url $base ({seller_lead_id: (encode-path-segment $seller_lead_id)} | format pattern "/seller-register/pvt/seller-leads/{seller_lead_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"accountName": $account_name, "environment": $environment} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"accountName": $account_name, "environment": $environment} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Accept Seller Lead
@@ -498,7 +606,7 @@ export def "seller-register-pvt-seller-leads update-accept" [
   let base = ($base_url | default $BASE_URL)
   if ($seller_lead_id | is-empty) { error make --unspanned { msg: "path parameter 'sellerLeadId' must be non-empty" } }
   let qp = [(serialize-qp "accountName" $account_name "scalar") (serialize-qp "environment" $environment "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({seller_lead_id: (encode-path-segment $seller_lead_id)} | format pattern "/seller-register/pvt/seller-leads/{seller_lead_id}") $qp)
+  let full_url = (build-url $base ({seller_lead_id: (encode-path-segment $seller_lead_id)} | format pattern "/seller-register/pvt/seller-leads/{seller_lead_id}") $qp $auth.query)
   let req_body = {"accountId": $account_id, "accountable": $accountable, "address": $address, "document": $document, "email": $email, "hasAcceptedLegalTerms": $has_accepted_legal_terms, "salesChannel": $sales_channel, "sellerAccountName": $seller_account_name, "sellerEmail": $seller_email, "sellerName": $seller_name, "sellerType": $seller_type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
@@ -507,7 +615,18 @@ export def "seller-register-pvt-seller-leads update-accept" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let effective_ct = ($content_type | default "application/json")
   let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $effective_ct $req_body_wire {query: ({"accountName": $account_name, "environment": $environment} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"accountName": $account_name, "environment": $environment} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: $effective_ct
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Create Seller From Lead
@@ -535,12 +654,23 @@ export def "seller-register-pvt-seller-leads-seller create" [
   let base = ($base_url | default $BASE_URL)
   if ($seller_lead_id | is-empty) { error make --unspanned { msg: "path parameter 'sellerLeadId' must be non-empty" } }
   let qp = [(serialize-qp "accountName" $account_name "scalar") (serialize-qp "environment" $environment "scalar") (serialize-qp "isActive" $is_active "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({seller_lead_id: (encode-path-segment $seller_lead_id)} | format pattern "/seller-register/pvt/seller-leads/{seller_lead_id}/seller") $qp)
+  let full_url = (build-url $base ({seller_lead_id: (encode-path-segment $seller_lead_id)} | format pattern "/seller-register/pvt/seller-leads/{seller_lead_id}/seller") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"accountName": $account_name, "environment": $environment, "isActive": $is_active} | compact), body: null}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"accountName": $account_name, "environment": $environment, "isActive": $is_active} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Resend Seller Lead Invite
@@ -569,7 +699,7 @@ export def "seller-register-pvt-seller-leads-status resend-request" [
   let base = ($base_url | default $BASE_URL)
   if ($seller_lead_id | is-empty) { error make --unspanned { msg: "path parameter 'sellerLeadId' must be non-empty" } }
   let qp = [(serialize-qp "accountName" $account_name "scalar") (serialize-qp "environment" $environment "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({seller_lead_id: (encode-path-segment $seller_lead_id)} | format pattern "/seller-register/pvt/seller-leads/{seller_lead_id}/status") $qp)
+  let full_url = (build-url $base ({seller_lead_id: (encode-path-segment $seller_lead_id)} | format pattern "/seller-register/pvt/seller-leads/{seller_lead_id}/status") $qp $auth.query)
   let req_body = {"status": $status} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
@@ -578,7 +708,18 @@ export def "seller-register-pvt-seller-leads-status resend-request" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let effective_ct = ($content_type | default "application/json")
   let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $effective_ct $req_body_wire {query: ({"accountName": $account_name, "environment": $environment} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"accountName": $account_name, "environment": $environment} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: $effective_ct
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # List Sellers
@@ -614,12 +755,23 @@ export def "seller-register-pvt-sellers get-list" [
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o MARKETPLACE_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o MARKETPLACE_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "accountName" $account_name "scalar") (serialize-qp "environment" $environment "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar") (serialize-qp "keyword" $keyword "scalar") (serialize-qp "integration" $integration "scalar") (serialize-qp "group " $group "scalar") (serialize-qp "isActive" $is_active "scalar") (serialize-qp "isBetterScope" $is_better_scope "scalar") (serialize-qp "isVtex" $is_vtex "scalar") (serialize-qp "sc" $sc "scalar") (serialize-qp "sellerType" $seller_type "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/seller-register/pvt/sellers" $qp)
+  let full_url = (build-url $base "/seller-register/pvt/sellers" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"accountName": $account_name, "environment": $environment, "from": $qp_from, "to": $qp_to, "keyword": $keyword, "integration": $integration, "group ": $group, "isActive": $is_active, "isBetterScope": $is_better_scope, "isVtex": $is_vtex, "sc": $sc, "sellerType": $seller_type, "sort": $qp_sort} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"accountName": $account_name, "environment": $environment, "from": $qp_from, "to": $qp_to, "keyword": $keyword, "integration": $integration, "group ": $group, "isActive": $is_active, "isBetterScope": $is_better_scope, "isVtex": $is_vtex, "sc": $sc, "sellerType": $seller_type, "sort": $qp_sort} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Configure Seller Account
@@ -674,7 +826,7 @@ export def "seller-register-pvt-sellers update-request" [
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o MARKETPLACE_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o MARKETPLACE_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "accountName" $account_name "scalar") (serialize-qp "environment" $environment "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/seller-register/pvt/sellers" $qp)
+  let full_url = (build-url $base "/seller-register/pvt/sellers" $qp $auth.query)
   let req_body = {"CSCIdentification": $csc_identification, "account": $account, "allowHybridPayments": $allow_hybrid_payments, "availableSalesChannels": $available_sales_channels, "catalogSystemEndpoint": $catalog_system_endpoint, "channel": $channel, "deliveryPolicy": $delivery_policy, "description": $description, "email": $email, "exchangeReturnPolicy": $exchange_return_policy, "fulfillmentEndpoint": $fulfillment_endpoint, "fulfillmentSellerId": $fulfillment_seller_id, "groups": $groups, "id": $id, "isActive": $is_active, "isBetterScope": $is_better_scope, "isVtex": $is_vtex, "name": $name, "password": $password, "salesChannel": $sales_channel, "score": $score, "securityPrivacyPolicy": $security_privacy_policy, "sellerCommissionConfiguration": $seller_commission_configuration, "sellerType": $seller_type, "taxCode": $tax_code, "trustPolicy": $trust_policy, "user": $user} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
@@ -683,7 +835,18 @@ export def "seller-register-pvt-sellers update-request" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let effective_ct = ($content_type | default "application/json")
   let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $effective_ct $req_body_wire {query: ({"accountName": $account_name, "environment": $environment} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"accountName": $account_name, "environment": $environment} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: $effective_ct
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Get Seller data by ID
@@ -711,12 +874,23 @@ export def "seller-register-pvt-sellers get" [
   let base = ($base_url | default $BASE_URL)
   if ($seller_id | is-empty) { error make --unspanned { msg: "path parameter 'sellerId' must be non-empty" } }
   let qp = [(serialize-qp "accountName" $account_name "scalar") (serialize-qp "environment" $environment "scalar") (serialize-qp "sc" $sc "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({seller_id: (encode-path-segment $seller_id)} | format pattern "/seller-register/pvt/sellers/{seller_id}") $qp)
+  let full_url = (build-url $base ({seller_id: (encode-path-segment $seller_id)} | format pattern "/seller-register/pvt/sellers/{seller_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"accountName": $account_name, "environment": $environment, "sc": $sc} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"accountName": $account_name, "environment": $environment, "sc": $sc} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update Seller by Seller ID
@@ -745,7 +919,7 @@ export def "seller-register-pvt-sellers update" [
   let base = ($base_url | default $BASE_URL)
   if ($seller_id | is-empty) { error make --unspanned { msg: "path parameter 'sellerId' must be non-empty" } }
   let qp = [(serialize-qp "accountName" $account_name "scalar") (serialize-qp "environment" $environment "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({seller_id: (encode-path-segment $seller_id)} | format pattern "/seller-register/pvt/sellers/{seller_id}") $qp)
+  let full_url = (build-url $base ({seller_id: (encode-path-segment $seller_id)} | format pattern "/seller-register/pvt/sellers/{seller_id}") $qp $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
@@ -754,7 +928,18 @@ export def "seller-register-pvt-sellers update" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let effective_ct = ($content_type | default "application/json")
   let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $effective_ct $req_body_wire {query: ({"accountName": $account_name, "environment": $environment} | compact), body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: ({"accountName": $account_name, "environment": $environment} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: $effective_ct
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # List Seller Commissions by seller ID
@@ -781,12 +966,23 @@ export def "seller-register-pvt-sellers-commissions list" [
   let base = ($base_url | default $BASE_URL)
   if ($seller_id | is-empty) { error make --unspanned { msg: "path parameter 'sellerId' must be non-empty" } }
   let qp = [(serialize-qp "accountName" $account_name "scalar") (serialize-qp "environment" $environment "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({seller_id: (encode-path-segment $seller_id)} | format pattern "/seller-register/pvt/sellers/{seller_id}/commissions") $qp)
+  let full_url = (build-url $base ({seller_id: (encode-path-segment $seller_id)} | format pattern "/seller-register/pvt/sellers/{seller_id}/commissions") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"accountName": $account_name, "environment": $environment} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"accountName": $account_name, "environment": $environment} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Upsert Seller Commissions in Bulk
@@ -815,7 +1011,7 @@ export def "seller-register-pvt-sellers-commissions-categories update-bulk" [
   let base = ($base_url | default $BASE_URL)
   if ($seller_id | is-empty) { error make --unspanned { msg: "path parameter 'sellerId' must be non-empty" } }
   let qp = [(serialize-qp "accountName" $account_name "scalar") (serialize-qp "environment" $environment "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({seller_id: (encode-path-segment $seller_id)} | format pattern "/seller-register/pvt/sellers/{seller_id}/commissions/categories") $qp)
+  let full_url = (build-url $base ({seller_id: (encode-path-segment $seller_id)} | format pattern "/seller-register/pvt/sellers/{seller_id}/commissions/categories") $qp $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
@@ -824,7 +1020,18 @@ export def "seller-register-pvt-sellers-commissions-categories update-bulk" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let effective_ct = ($content_type | default "application/json")
   let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $effective_ct $req_body_wire {query: ({"accountName": $account_name, "environment": $environment} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"accountName": $account_name, "environment": $environment} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: $effective_ct
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Remove Seller Commissions by Category ID
@@ -853,12 +1060,23 @@ export def "seller-register-pvt-sellers-commissions delete" [
   if ($seller_id | is-empty) { error make --unspanned { msg: "path parameter 'sellerId' must be non-empty" } }
   if ($category_id | is-empty) { error make --unspanned { msg: "path parameter 'categoryId' must be non-empty" } }
   let qp = [(serialize-qp "accountName" $account_name "scalar") (serialize-qp "environment" $environment "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({seller_id: (encode-path-segment $seller_id), category_id: (encode-path-segment $category_id)} | format pattern "/seller-register/pvt/sellers/{seller_id}/commissions/{category_id}") $qp)
+  let full_url = (build-url $base ({seller_id: (encode-path-segment $seller_id), category_id: (encode-path-segment $category_id)} | format pattern "/seller-register/pvt/sellers/{seller_id}/commissions/{category_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"accountName": $account_name, "environment": $environment} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"accountName": $account_name, "environment": $environment} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Get Seller Commissions by Category ID
@@ -887,12 +1105,23 @@ export def "seller-register-pvt-sellers-commissions get" [
   if ($seller_id | is-empty) { error make --unspanned { msg: "path parameter 'sellerId' must be non-empty" } }
   if ($category_id | is-empty) { error make --unspanned { msg: "path parameter 'categoryId' must be non-empty" } }
   let qp = [(serialize-qp "accountName" $account_name "scalar") (serialize-qp "environment" $environment "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({seller_id: (encode-path-segment $seller_id), category_id: (encode-path-segment $category_id)} | format pattern "/seller-register/pvt/sellers/{seller_id}/commissions/{category_id}") $qp)
+  let full_url = (build-url $base ({seller_id: (encode-path-segment $seller_id), category_id: (encode-path-segment $category_id)} | format pattern "/seller-register/pvt/sellers/{seller_id}/commissions/{category_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"accountName": $account_name, "environment": $environment} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"accountName": $account_name, "environment": $environment} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Upsert Seller Commissions by Category ID
@@ -926,7 +1155,7 @@ export def "seller-register-pvt-sellers-commissions update" [
   if ($seller_id | is-empty) { error make --unspanned { msg: "path parameter 'sellerId' must be non-empty" } }
   if ($category_id | is-empty) { error make --unspanned { msg: "path parameter 'categoryId' must be non-empty" } }
   let qp = [(serialize-qp "accountName" $account_name "scalar") (serialize-qp "environment" $environment "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({seller_id: (encode-path-segment $seller_id), category_id: (encode-path-segment $category_id)} | format pattern "/seller-register/pvt/sellers/{seller_id}/commissions/{category_id}") $qp)
+  let full_url = (build-url $base ({seller_id: (encode-path-segment $seller_id), category_id: (encode-path-segment $category_id)} | format pattern "/seller-register/pvt/sellers/{seller_id}/commissions/{category_id}") $qp $auth.query)
   let req_body = {"categoryFullPath": $category_full_path, "categoryId": $body_category_id, "freightCommissionPercentage": $freight_commission_percentage, "productCommissionPercentage": $product_commission_percentage} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
@@ -935,7 +1164,18 @@ export def "seller-register-pvt-sellers-commissions update" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let effective_ct = ($content_type | default "application/json")
   let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $effective_ct $req_body_wire {query: ({"accountName": $account_name, "environment": $environment} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"accountName": $account_name, "environment": $environment} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: $effective_ct
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Get Sales Channel Mapping Data
@@ -963,12 +1203,23 @@ export def "seller-register-pvt-sellers-sales-channel-mapping get" [
   let base = ($base_url | default $BASE_URL)
   if ($seller_id | is-empty) { error make --unspanned { msg: "path parameter 'sellerId' must be non-empty" } }
   let qp = [(serialize-qp "accountName" $account_name "scalar") (serialize-qp "environment" $environment "scalar") (serialize-qp "an" $an "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({seller_id: (encode-path-segment $seller_id)} | format pattern "/seller-register/pvt/sellers/{seller_id}/sales-channel/mapping") $qp)
+  let full_url = (build-url $base ({seller_id: (encode-path-segment $seller_id)} | format pattern "/seller-register/pvt/sellers/{seller_id}/sales-channel/mapping") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"accountName": $account_name, "environment": $environment, "an": $an} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"accountName": $account_name, "environment": $environment, "an": $an} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Upsert Sales Channel Mapping
@@ -998,7 +1249,7 @@ export def "seller-register-pvt-sellers-sales-channel-mapping update" [
   let base = ($base_url | default $BASE_URL)
   if ($seller_id | is-empty) { error make --unspanned { msg: "path parameter 'sellerId' must be non-empty" } }
   let qp = [(serialize-qp "accountName" $account_name "scalar") (serialize-qp "environment" $environment "scalar") (serialize-qp "an" $an "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({seller_id: (encode-path-segment $seller_id)} | format pattern "/seller-register/pvt/sellers/{seller_id}/sales-channel/mapping") $qp)
+  let full_url = (build-url $base ({seller_id: (encode-path-segment $seller_id)} | format pattern "/seller-register/pvt/sellers/{seller_id}/sales-channel/mapping") $qp $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
@@ -1007,5 +1258,16 @@ export def "seller-register-pvt-sellers-sales-channel-mapping update" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let effective_ct = ($content_type | default "application/json")
   let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $effective_ct $req_body_wire {query: ({"accountName": $account_name, "environment": $environment, "an": $an} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"accountName": $account_name, "environment": $environment, "an": $an} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: $effective_ct
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }

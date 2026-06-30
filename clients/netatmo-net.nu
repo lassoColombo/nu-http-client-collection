@@ -8,7 +8,7 @@ const BASE_URL = "https://api.netatmo.net/api"
 # `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
 # where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o NETATMO_TOKEN | default "" }
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o NETATMO_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
@@ -41,14 +41,11 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
-# Trick: `url encode --all` over-encodes, then we decode the four unreserved
-# punctuation chars back. Pre-existing %XX sequences in the input survive
-# because `url encode --all` first turns their % into %25.
 def encode-path-segment [v: any]: nothing -> string {
   $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
-# Serialize an array-typed path parameter (issue 49.A). OpenAPI 3 `style: simple`
+# Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
 # (the default for path params) and Swagger 2 `collectionFormat: csv` both join
 # the elements with a literal comma WITHIN the single path segment, each element
 # RFC-3986-encoded individually (so a comma inside an element stays %2C). Without
@@ -59,51 +56,45 @@ def encode-path-array [v: any]: nothing -> string {
   if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
 }
 
-# Build URL from base, path, and optional query string
-def build-url [base: string, path: string, query?: string]: nothing -> string {
+# Build the request URL from base, path, and any number of pre-encoded query
+# fragments (param serializer output and/or the auth query). Each fragment is an
+# `&`-joinable `key=value` string already percent-encoded by its producer; empty
+# fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
+# delimiters are hand-spliced — and any query already on the base URL is merged in.
+def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
   let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
-  let result = ($parsed | upsert path $full_path)
-  if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
+  let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
+  $parsed | upsert path $full_path | upsert query $query | url join
 }
 
-# Build the dry-run record returned by --dry-run. Shape:
-#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
-#    auth: {scheme, location}}
-# `meta` carries logical-form data (the query record by spec name, the pre-serialization
-# body) that do-request itself cannot reconstruct from its wire-format args.
-def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
-  let m = ($meta | default {})
-  {
-    dry_run: true
-    method: $method
-    url: $url
-    query: ($m | get -o query | default {})
-    headers: $auth.headers
-    body: ($m | get -o body)
-    content_type: $content_type
-    timeout: $timeout
-    auth: {scheme: $auth.scheme, location: $auth.location}
-  }
+# Success policy: did this response succeed? Single source of truth, consulted by
+# handle-response and the HEAD header-unwrap. Empty ok_codes means the spec listed
+# none, so fall back to < 400. Otherwise: any 2xx, plus documented success codes.
+def status-ok [status: int, ok_codes: list<int>]: nothing -> bool {
+  if ($ok_codes | is-empty) { $status < 400 } else { ($status >= 200 and $status < 300) or ($status in $ok_codes) }
 }
 
-# Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
-  let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
-  let timeout = ($max_time | default 30min)
-  let ct = ($content_type | default "application/json")
-  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
-  let resp = match $method {
-    "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
-  }
-  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
-  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
+# Unwrap a `--full` HTTP response into the user-facing value. Response arrives
+# via pipeline; ok_codes gates the error throw (see status-ok).
+def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: record -> any {
+  let resp = $in
+  if $allow_errors { return $resp }
+  if not (status-ok $resp.status $ok_codes) { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } }
+  if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
+  if $resp.status == 204 { return null }
+  $resp.body
+}
+
+# GET — bodyless, honours --raw
+def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+}
+
+# POST — body + content-type
+def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 def base-url-completer [] { ["https://api.netatmo.net/api"] }
@@ -157,10 +148,21 @@ export def "addwebhook get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "url" $url "scalar") (serialize-qp "app_type" $app_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/addwebhook" $qp)
+  let full_url = (build-url $base "/addwebhook" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"url": $url, "app_type": $app_type} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"url": $url, "app_type": $app_type} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # The method createnewschedule creates a new schedule stored in the backup list.
@@ -185,12 +187,23 @@ export def "create-newschedule create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "device_id" $device_id "scalar") (serialize-qp "module_id" $module_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/createnewschedule" $qp)
+  let full_url = (build-url $base "/createnewschedule" $qp $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "text/plain" $req_body {query: ({"device_id": $device_id, "module_id": $module_id} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"device_id": $device_id, "module_id": $module_id} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "text/plain"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # The method devicelist returns the list of devices owned by the user, and their modules. A device is identified by its _id (which is its mac address) and each device may have one, several or no modules, also identified by an _id.
@@ -216,10 +229,21 @@ export def "devicelist get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "app_type" $app_type "scalar") (serialize-qp "device_id" $device_id "scalar") (serialize-qp "get_favorites" $get_favorites "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/devicelist" $qp)
+  let full_url = (build-url $base "/devicelist" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"app_type": $app_type, "device_id": $device_id, "get_favorites": $get_favorites} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"app_type": $app_type, "device_id": $device_id, "get_favorites": $get_favorites} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Dissociates a webhook from a user.
@@ -241,10 +265,21 @@ export def "dropwebhook get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "app_type" $app_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/dropwebhook" $qp)
+  let full_url = (build-url $base "/dropwebhook" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"app_type": $app_type} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"app_type": $app_type} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the snapshot associated to an event.
@@ -267,10 +302,21 @@ export def "get-camerapicture get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "image_id" $image_id "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/getcamerapicture" $qp)
+  let full_url = (build-url $base "/getcamerapicture" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"image_id": $image_id, "key": $key} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"image_id": $image_id, "key": $key} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the snapshot associated to an event.
@@ -293,10 +339,21 @@ export def "get-eventsuntil get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "home_id" $home_id "scalar") (serialize-qp "event_id" $event_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/geteventsuntil" $qp)
+  let full_url = (build-url $base "/geteventsuntil" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"home_id": $home_id, "event_id": $event_id} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"home_id": $home_id, "event_id": $event_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # The method gethomecoachsdata Returns data from a user Healthy Home Coach Station (measures and device specific data).
@@ -318,10 +375,21 @@ export def "get-homecoachsdata get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "device_id" $device_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/gethomecoachsdata" $qp)
+  let full_url = (build-url $base "/gethomecoachsdata" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"device_id": $device_id} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"device_id": $device_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns information about users homes and cameras.
@@ -344,10 +412,21 @@ export def "get-homedata get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "home_id" $home_id "scalar") (serialize-qp "size" $size "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/gethomedata" $qp)
+  let full_url = (build-url $base "/gethomedata" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"home_id": $home_id, "size": $size} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"home_id": $home_id, "size": $size} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns most recent events.
@@ -371,10 +450,21 @@ export def "get-lasteventof get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "home_id" $home_id "scalar") (serialize-qp "person_id" $person_id "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/getlasteventof" $qp)
+  let full_url = (build-url $base "/getlasteventof" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"home_id": $home_id, "person_id": $person_id, "offset": $offset} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"home_id": $home_id, "person_id": $person_id, "offset": $offset} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # The method getmeasure returns the measurements of a device or a module.
@@ -404,10 +494,21 @@ export def "get-measure get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "device_id" $device_id "scalar") (serialize-qp "module_id" $module_id "scalar") (serialize-qp "scale" $scale "scalar") (serialize-qp "type" $type "csv") (serialize-qp "date_begin" $date_begin "scalar") (serialize-qp "date_end" $date_end "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "optimize" $optimize "scalar") (serialize-qp "real_time" $real_time "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/getmeasure" $qp)
+  let full_url = (build-url $base "/getmeasure" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"device_id": $device_id, "module_id": $module_id, "scale": $scale, "type": $type, "date_begin": $date_begin, "date_end": $date_end, "limit": $limit, "optimize": $optimize, "real_time": $real_time} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"device_id": $device_id, "module_id": $module_id, "scale": $scale, "type": $type, "date_begin": $date_begin, "date_end": $date_end, "limit": $limit, "optimize": $optimize, "real_time": $real_time} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns previous events.
@@ -431,10 +532,21 @@ export def "get-nextevents get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "home_id" $home_id "scalar") (serialize-qp "event_id" $event_id "scalar") (serialize-qp "size" $size "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/getnextevents" $qp)
+  let full_url = (build-url $base "/getnextevents" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"home_id": $home_id, "event_id": $event_id, "size": $size} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"home_id": $home_id, "event_id": $event_id, "size": $size} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieves publicly shared weather data from Outdoor Modules within a predefined area.
@@ -461,10 +573,21 @@ export def "get-publicdata get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "lat_ne" $lat_ne "scalar") (serialize-qp "lon_ne" $lon_ne "scalar") (serialize-qp "lat_sw" $lat_sw "scalar") (serialize-qp "lon_sw" $lon_sw "scalar") (serialize-qp "required_data" $required_data "csv") (serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/getpublicdata" $qp)
+  let full_url = (build-url $base "/getpublicdata" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"lat_ne": $lat_ne, "lon_ne": $lon_ne, "lat_sw": $lat_sw, "lon_sw": $lon_sw, "required_data": $required_data, "filter": $filter} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"lat_ne": $lat_ne, "lon_ne": $lon_ne, "lat_sw": $lat_sw, "lon_sw": $lon_sw, "required_data": $required_data, "filter": $filter} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # The method getstationsdata Returns data from a user's Weather Stations (measures and device specific data).
@@ -487,10 +610,21 @@ export def "get-stationsdata get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "device_id" $device_id "scalar") (serialize-qp "get_favorites" $get_favorites "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/getstationsdata" $qp)
+  let full_url = (build-url $base "/getstationsdata" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"device_id": $device_id, "get_favorites": $get_favorites} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"device_id": $device_id, "get_favorites": $get_favorites} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # The method getthermostatsdata returns information about user's thermostats such as their last measurements.
@@ -512,10 +646,21 @@ export def "get-thermostatsdata get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "device_id" $device_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/getthermostatsdata" $qp)
+  let full_url = (build-url $base "/getthermostatsdata" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"device_id": $device_id} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"device_id": $device_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # The method getthermstate returns the last Thermostat measurements, its current weekly schedule, and, if present, its current manual temperature setpoint.
@@ -540,10 +685,21 @@ export def "get-thermstate get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "device_id" $device_id "scalar") (serialize-qp "module_id" $module_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/getthermstate" $qp)
+  let full_url = (build-url $base "/getthermstate" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"device_id": $device_id, "module_id": $module_id} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"device_id": $device_id, "module_id": $module_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # The method getuser returns information about a user such as prefered language, prefered units, and list of devices.
@@ -565,10 +721,21 @@ export def "getuser get" [
 ]: nothing -> record<body: record<_id: string, administrative: record<country: string, feel_like_algo: string, lang: string, pressureunit: string, reg_locale: string, unit: string, windunit: string>, date_creation: record<sec: int, usec: int>, devices: list<string>, friend_devices: list<string>, mail: string, timeline_not_read: int, timeline_size: int>, status: string, time_exec: float, time_server: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/getuser")
+  let full_url = (build-url $base "/getuser" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # The method partnerdevices returns the list of device_id to which your partner application has access to.
@@ -588,10 +755,21 @@ export def "partnerdevices get" [
 ]: nothing -> record<body: list<string>, status: string, time_exec: float, time_server: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/partnerdevices")
+  let full_url = (build-url $base "/partnerdevices" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Sets a person as 'Away' or the Home as 'Empty'. The event will be added to the user’s timeline.
@@ -614,10 +792,21 @@ export def "setpersonsaway create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "home_id" $home_id "scalar") (serialize-qp "person_id" $person_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/setpersonsaway" $qp)
+  let full_url = (build-url $base "/setpersonsaway" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"home_id": $home_id, "person_id": $person_id} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"home_id": $home_id, "person_id": $person_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Sets a person as 'At home'.
@@ -640,10 +829,21 @@ export def "setpersonshome create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "home_id" $home_id "scalar") (serialize-qp "person_ids" $person_ids "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/setpersonshome" $qp)
+  let full_url = (build-url $base "/setpersonshome" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"home_id": $home_id, "person_ids": $person_ids} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"home_id": $home_id, "person_ids": $person_ids} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # The method setthermpoint changes the Thermostat manual temperature setpoint.
@@ -669,10 +869,21 @@ export def "setthermpoint create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "device_id" $device_id "scalar") (serialize-qp "module_id" $module_id "scalar") (serialize-qp "setpoint_mode" $setpoint_mode "scalar") (serialize-qp "setpoint_endtime" $setpoint_endtime "scalar") (serialize-qp "setpoint_temp" $setpoint_temp "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/setthermpoint" $qp)
+  let full_url = (build-url $base "/setthermpoint" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"device_id": $device_id, "module_id": $module_id, "setpoint_mode": $setpoint_mode, "setpoint_endtime": $setpoint_endtime, "setpoint_temp": $setpoint_temp} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"device_id": $device_id, "module_id": $module_id, "setpoint_mode": $setpoint_mode, "setpoint_endtime": $setpoint_endtime, "setpoint_temp": $setpoint_temp} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # The method switchschedule switches the Thermostat's schedule to another existing schedule.
@@ -696,10 +907,21 @@ export def "switchschedule create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "device_id" $device_id "scalar") (serialize-qp "module_id" $module_id "scalar") (serialize-qp "schedule_id" $schedule_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/switchschedule" $qp)
+  let full_url = (build-url $base "/switchschedule" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"device_id": $device_id, "module_id": $module_id, "schedule_id": $schedule_id} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"device_id": $device_id, "module_id": $module_id, "schedule_id": $schedule_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # The method syncschedule changes the Thermostat weekly schedule.
@@ -724,10 +946,21 @@ export def "syncschedule create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "device_id" $device_id "scalar") (serialize-qp "module_id" $module_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/syncschedule" $qp)
+  let full_url = (build-url $base "/syncschedule" $qp $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "text/plain" $req_body {query: ({"device_id": $device_id, "module_id": $module_id} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"device_id": $device_id, "module_id": $module_id} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "text/plain"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }

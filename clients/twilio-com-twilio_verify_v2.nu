@@ -8,7 +8,7 @@ const BASE_URL = "https://verify.twilio.com"
 # `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
 # where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o TWILIO_VERIFY_TOKEN | default "" }
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o TWILIO_VERIFY_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
@@ -42,14 +42,11 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
-# Trick: `url encode --all` over-encodes, then we decode the four unreserved
-# punctuation chars back. Pre-existing %XX sequences in the input survive
-# because `url encode --all` first turns their % into %25.
 def encode-path-segment [v: any]: nothing -> string {
   $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
-# Serialize an array-typed path parameter (issue 49.A). OpenAPI 3 `style: simple`
+# Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
 # (the default for path params) and Swagger 2 `collectionFormat: csv` both join
 # the elements with a literal comma WITHIN the single path segment, each element
 # RFC-3986-encoded individually (so a comma inside an element stays %2C). Without
@@ -60,51 +57,51 @@ def encode-path-array [v: any]: nothing -> string {
   if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
 }
 
-# Build URL from base, path, and optional query string
-def build-url [base: string, path: string, query?: string]: nothing -> string {
+# Build the request URL from base, path, and any number of pre-encoded query
+# fragments (param serializer output and/or the auth query). Each fragment is an
+# `&`-joinable `key=value` string already percent-encoded by its producer; empty
+# fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
+# delimiters are hand-spliced — and any query already on the base URL is merged in.
+def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
   let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
-  let result = ($parsed | upsert path $full_path)
-  if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
+  let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
+  $parsed | upsert path $full_path | upsert query $query | url join
 }
 
-# Build the dry-run record returned by --dry-run. Shape:
-#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
-#    auth: {scheme, location}}
-# `meta` carries logical-form data (the query record by spec name, the pre-serialization
-# body) that do-request itself cannot reconstruct from its wire-format args.
-def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
-  let m = ($meta | default {})
-  {
-    dry_run: true
-    method: $method
-    url: $url
-    query: ($m | get -o query | default {})
-    headers: $auth.headers
-    body: ($m | get -o body)
-    content_type: $content_type
-    timeout: $timeout
-    auth: {scheme: $auth.scheme, location: $auth.location}
-  }
+# Success policy: did this response succeed? Single source of truth, consulted by
+# handle-response and the HEAD header-unwrap. Empty ok_codes means the spec listed
+# none, so fall back to < 400. Otherwise: any 2xx, plus documented success codes.
+def status-ok [status: int, ok_codes: list<int>]: nothing -> bool {
+  if ($ok_codes | is-empty) { $status < 400 } else { ($status >= 200 and $status < 300) or ($status in $ok_codes) }
 }
 
-# Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
-  let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
-  let timeout = ($max_time | default 30min)
-  let ct = ($content_type | default "application/json")
-  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
-  let resp = match $method {
-    "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
-  }
-  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
-  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
+# Unwrap a `--full` HTTP response into the user-facing value. Response arrives
+# via pipeline; ok_codes gates the error throw (see status-ok).
+def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: record -> any {
+  let resp = $in
+  if $allow_errors { return $resp }
+  if not (status-ok $resp.status $ok_codes) { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } }
+  if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
+  if $resp.status == 204 { return null }
+  $resp.body
+}
+
+# GET — bodyless, honours --raw
+def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+}
+
+# POST — body + content-type
+def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# DELETE — body via --data
+def send-delete [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http delete --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url } else { http delete --headers $req.headers --content-type $req.content_type --data $body --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url }
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 def base-url-completer [] { ["https://verify.twilio.com"] }
@@ -175,10 +172,21 @@ export def "attempts list-verification" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://verify.twilio.com")
   let qp = [(serialize-qp "DateCreatedAfter" $date_created_after "scalar") (serialize-qp "DateCreatedBefore" $date_created_before "scalar") (serialize-qp "ChannelData.To" $channel_data_to "scalar") (serialize-qp "Country" $country "scalar") (serialize-qp "Channel" $channel "scalar") (serialize-qp "VerifyServiceSid" $verify_service_sid "scalar") (serialize-qp "VerificationSid" $verification_sid "scalar") (serialize-qp "Status" $status "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v2/Attempts" $qp)
+  let full_url = (build-url $base "/v2/Attempts" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"DateCreatedAfter": $date_created_after, "DateCreatedBefore": $date_created_before, "ChannelData.To": $channel_data_to, "Country": $country, "Channel": $channel, "VerifyServiceSid": $verify_service_sid, "VerificationSid": $verification_sid, "Status": $status, "PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"DateCreatedAfter": $date_created_after, "DateCreatedBefore": $date_created_before, "ChannelData.To": $channel_data_to, "Country": $country, "Channel": $channel, "VerifyServiceSid": $verify_service_sid, "VerificationSid": $verification_sid, "Status": $status, "PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get a summary of how many attempts were made and how many were converted.
@@ -205,10 +213,21 @@ export def "attempts-summary get-verification" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://verify.twilio.com")
   let qp = [(serialize-qp "VerifyServiceSid" $verify_service_sid "scalar") (serialize-qp "DateCreatedAfter" $date_created_after "scalar") (serialize-qp "DateCreatedBefore" $date_created_before "scalar") (serialize-qp "Country" $country "scalar") (serialize-qp "Channel" $channel "scalar") (serialize-qp "DestinationPrefix" $destination_prefix "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v2/Attempts/Summary" $qp)
+  let full_url = (build-url $base "/v2/Attempts/Summary" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"VerifyServiceSid": $verify_service_sid, "DateCreatedAfter": $date_created_after, "DateCreatedBefore": $date_created_before, "Country": $country, "Channel": $channel, "DestinationPrefix": $destination_prefix} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"VerifyServiceSid": $verify_service_sid, "DateCreatedAfter": $date_created_after, "DateCreatedBefore": $date_created_before, "Country": $country, "Channel": $channel, "DestinationPrefix": $destination_prefix} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Fetch a specific verification attempt.
@@ -230,10 +249,21 @@ export def "attempts get-verification" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://verify.twilio.com")
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
-  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v2/Attempts/{sid}"))
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v2/Attempts/{sid}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Fetch the forms for a specific Form Type.
@@ -255,10 +285,21 @@ export def "forms get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://verify.twilio.com")
   if ($form_type | is-empty) { error make --unspanned { msg: "path parameter 'FormType' must be non-empty" } }
-  let full_url = (build-url $base ({form_type: (encode-path-segment $form_type)} | format pattern "/v2/Forms/{form_type}"))
+  let full_url = (build-url $base ({form_type: (encode-path-segment $form_type)} | format pattern "/v2/Forms/{form_type}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Add a new phone number to SafeList.
@@ -280,13 +321,24 @@ export def "safe-list-numbers create-safelist" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://verify.twilio.com")
-  let full_url = (build-url $base "/v2/SafeList/Numbers")
+  let full_url = (build-url $base "/v2/SafeList/Numbers" $auth.query)
   let req_body = {"PhoneNumber": $phone_number} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/x-www-form-urlencoded"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [201]
 }
 
 # Remove a phone number from SafeList.
@@ -308,10 +360,21 @@ export def "safe-list-numbers delete-safelist" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://verify.twilio.com")
   if ($phone_number | is-empty) { error make --unspanned { msg: "path parameter 'PhoneNumber' must be non-empty" } }
-  let full_url = (build-url $base ({phone_number: (encode-path-segment $phone_number)} | format pattern "/v2/SafeList/Numbers/{phone_number}"))
+  let full_url = (build-url $base ({phone_number: (encode-path-segment $phone_number)} | format pattern "/v2/SafeList/Numbers/{phone_number}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Check if a phone number exists in SafeList.
@@ -333,10 +396,21 @@ export def "safe-list-numbers get-safelist" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://verify.twilio.com")
   if ($phone_number | is-empty) { error make --unspanned { msg: "path parameter 'PhoneNumber' must be non-empty" } }
-  let full_url = (build-url $base ({phone_number: (encode-path-segment $phone_number)} | format pattern "/v2/SafeList/Numbers/{phone_number}"))
+  let full_url = (build-url $base ({phone_number: (encode-path-segment $phone_number)} | format pattern "/v2/SafeList/Numbers/{phone_number}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve a list of all Verification Services for an account.
@@ -360,10 +434,21 @@ export def "services list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://verify.twilio.com")
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v2/Services" $qp)
+  let full_url = (build-url $base "/v2/Services" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a new Verification Service.
@@ -401,13 +486,24 @@ export def "services create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://verify.twilio.com")
-  let full_url = (build-url $base "/v2/Services")
+  let full_url = (build-url $base "/v2/Services" $auth.query)
   let req_body = {"CodeLength": $code_length, "CustomCodeEnabled": $custom_code_enabled, "DefaultTemplateSid": $default_template_sid, "DoNotShareWarningEnabled": $do_not_share_warning_enabled, "DtmfInputRequired": $dtmf_input_required, "FriendlyName": $friendly_name, "LookupEnabled": $lookup_enabled, "Psd2Enabled": $psd2_enabled, "Push.ApnCredentialSid": $push_apn_credential_sid, "Push.FcmCredentialSid": $push_fcm_credential_sid, "Push.IncludeDate": $push_include_date, "SkipSmsToLandlines": $skip_sms_to_landlines, "Totp.CodeLength": $totp_code_length, "Totp.Issuer": $totp_issuer, "Totp.Skew": $totp_skew, "Totp.TimeStep": $totp_time_step, "TtsName": $tts_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/x-www-form-urlencoded"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [201]
 }
 
 # Create a new enrollment Access Token for the Entity
@@ -434,13 +530,24 @@ export def "services-access-tokens create" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://verify.twilio.com")
   if ($service_sid | is-empty) { error make --unspanned { msg: "path parameter 'ServiceSid' must be non-empty" } }
-  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid)} | format pattern "/v2/Services/{service_sid}/AccessTokens"))
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid)} | format pattern "/v2/Services/{service_sid}/AccessTokens") $auth.query)
   let req_body = {"FactorFriendlyName": $factor_friendly_name, "FactorType": $factor_type, "Identity": $identity, "Ttl": $ttl} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/x-www-form-urlencoded"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [201]
 }
 
 # Fetch an Access Token for the Entity
@@ -464,10 +571,21 @@ export def "services-access-tokens get" [
   let base = ($base_url | default "https://verify.twilio.com")
   if ($service_sid | is-empty) { error make --unspanned { msg: "path parameter 'ServiceSid' must be non-empty" } }
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
-  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), sid: (encode-path-segment $sid)} | format pattern "/v2/Services/{service_sid}/AccessTokens/{sid}"))
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), sid: (encode-path-segment $sid)} | format pattern "/v2/Services/{service_sid}/AccessTokens/{sid}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve a list of all Entities for a Service.
@@ -493,10 +611,21 @@ export def "services-entities list-entity" [
   let base = ($base_url | default "https://verify.twilio.com")
   if ($service_sid | is-empty) { error make --unspanned { msg: "path parameter 'ServiceSid' must be non-empty" } }
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid)} | format pattern "/v2/Services/{service_sid}/Entities") $qp)
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid)} | format pattern "/v2/Services/{service_sid}/Entities") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a new Entity for the Service
@@ -520,13 +649,24 @@ export def "services-entities create-entity" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://verify.twilio.com")
   if ($service_sid | is-empty) { error make --unspanned { msg: "path parameter 'ServiceSid' must be non-empty" } }
-  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid)} | format pattern "/v2/Services/{service_sid}/Entities"))
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid)} | format pattern "/v2/Services/{service_sid}/Entities") $auth.query)
   let req_body = {"Identity": $identity} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/x-www-form-urlencoded"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [201]
 }
 
 # Delete a specific Entity.
@@ -550,10 +690,21 @@ export def "services-entities delete-entity" [
   let base = ($base_url | default "https://verify.twilio.com")
   if ($service_sid | is-empty) { error make --unspanned { msg: "path parameter 'ServiceSid' must be non-empty" } }
   if ($identity | is-empty) { error make --unspanned { msg: "path parameter 'Identity' must be non-empty" } }
-  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), identity: (encode-path-segment $identity)} | format pattern "/v2/Services/{service_sid}/Entities/{identity}"))
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), identity: (encode-path-segment $identity)} | format pattern "/v2/Services/{service_sid}/Entities/{identity}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Fetch a specific Entity.
@@ -577,10 +728,21 @@ export def "services-entities get-entity" [
   let base = ($base_url | default "https://verify.twilio.com")
   if ($service_sid | is-empty) { error make --unspanned { msg: "path parameter 'ServiceSid' must be non-empty" } }
   if ($identity | is-empty) { error make --unspanned { msg: "path parameter 'Identity' must be non-empty" } }
-  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), identity: (encode-path-segment $identity)} | format pattern "/v2/Services/{service_sid}/Entities/{identity}"))
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), identity: (encode-path-segment $identity)} | format pattern "/v2/Services/{service_sid}/Entities/{identity}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve a list of all Challenges for a Factor.
@@ -611,10 +773,21 @@ export def "services-entities-challenges list" [
   if ($service_sid | is-empty) { error make --unspanned { msg: "path parameter 'ServiceSid' must be non-empty" } }
   if ($identity | is-empty) { error make --unspanned { msg: "path parameter 'Identity' must be non-empty" } }
   let qp = [(serialize-qp "FactorSid" $factor_sid "scalar") (serialize-qp "Status" $status "scalar") (serialize-qp "Order" $order "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), identity: (encode-path-segment $identity)} | format pattern "/v2/Services/{service_sid}/Entities/{identity}/Challenges") $qp)
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), identity: (encode-path-segment $identity)} | format pattern "/v2/Services/{service_sid}/Entities/{identity}/Challenges") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"FactorSid": $factor_sid, "Status": $status, "Order": $order, "PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"FactorSid": $factor_sid, "Status": $status, "Order": $order, "PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a new Challenge for the Factor
@@ -645,13 +818,24 @@ export def "services-entities-challenges create" [
   let base = ($base_url | default "https://verify.twilio.com")
   if ($service_sid | is-empty) { error make --unspanned { msg: "path parameter 'ServiceSid' must be non-empty" } }
   if ($identity | is-empty) { error make --unspanned { msg: "path parameter 'Identity' must be non-empty" } }
-  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), identity: (encode-path-segment $identity)} | format pattern "/v2/Services/{service_sid}/Entities/{identity}/Challenges"))
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), identity: (encode-path-segment $identity)} | format pattern "/v2/Services/{service_sid}/Entities/{identity}/Challenges") $auth.query)
   let req_body = {"AuthPayload": $auth_payload, "Details.Fields": $details_fields, "Details.Message": $details_message, "ExpirationDate": $expiration_date, "FactorSid": $factor_sid, "HiddenDetails": $hidden_details} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/x-www-form-urlencoded"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [201]
 }
 
 # Create a new Notification for the corresponding Challenge
@@ -679,13 +863,24 @@ export def "services-entities-challenges-notifications create" [
   if ($service_sid | is-empty) { error make --unspanned { msg: "path parameter 'ServiceSid' must be non-empty" } }
   if ($identity | is-empty) { error make --unspanned { msg: "path parameter 'Identity' must be non-empty" } }
   if ($challenge_sid | is-empty) { error make --unspanned { msg: "path parameter 'ChallengeSid' must be non-empty" } }
-  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), identity: (encode-path-segment $identity), challenge_sid: (encode-path-segment $challenge_sid)} | format pattern "/v2/Services/{service_sid}/Entities/{identity}/Challenges/{challenge_sid}/Notifications"))
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), identity: (encode-path-segment $identity), challenge_sid: (encode-path-segment $challenge_sid)} | format pattern "/v2/Services/{service_sid}/Entities/{identity}/Challenges/{challenge_sid}/Notifications") $auth.query)
   let req_body = {"Ttl": $ttl} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/x-www-form-urlencoded"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [201]
 }
 
 # Fetch a specific Challenge.
@@ -711,10 +906,21 @@ export def "services-entities-challenges get" [
   if ($service_sid | is-empty) { error make --unspanned { msg: "path parameter 'ServiceSid' must be non-empty" } }
   if ($identity | is-empty) { error make --unspanned { msg: "path parameter 'Identity' must be non-empty" } }
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
-  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), identity: (encode-path-segment $identity), sid: (encode-path-segment $sid)} | format pattern "/v2/Services/{service_sid}/Entities/{identity}/Challenges/{sid}"))
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), identity: (encode-path-segment $identity), sid: (encode-path-segment $sid)} | format pattern "/v2/Services/{service_sid}/Entities/{identity}/Challenges/{sid}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Verify a specific Challenge.
@@ -743,13 +949,24 @@ export def "services-entities-challenges update" [
   if ($service_sid | is-empty) { error make --unspanned { msg: "path parameter 'ServiceSid' must be non-empty" } }
   if ($identity | is-empty) { error make --unspanned { msg: "path parameter 'Identity' must be non-empty" } }
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
-  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), identity: (encode-path-segment $identity), sid: (encode-path-segment $sid)} | format pattern "/v2/Services/{service_sid}/Entities/{identity}/Challenges/{sid}"))
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), identity: (encode-path-segment $identity), sid: (encode-path-segment $sid)} | format pattern "/v2/Services/{service_sid}/Entities/{identity}/Challenges/{sid}") $auth.query)
   let req_body = {"AuthPayload": $auth_payload, "Metadata": $metadata} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/x-www-form-urlencoded"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve a list of all Factors for an Entity.
@@ -777,10 +994,21 @@ export def "services-entities-factors list" [
   if ($service_sid | is-empty) { error make --unspanned { msg: "path parameter 'ServiceSid' must be non-empty" } }
   if ($identity | is-empty) { error make --unspanned { msg: "path parameter 'Identity' must be non-empty" } }
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), identity: (encode-path-segment $identity)} | format pattern "/v2/Services/{service_sid}/Entities/{identity}/Factors") $qp)
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), identity: (encode-path-segment $identity)} | format pattern "/v2/Services/{service_sid}/Entities/{identity}/Factors") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a new Factor for the Entity
@@ -819,13 +1047,24 @@ export def "services-entities-factors create-new" [
   let base = ($base_url | default "https://verify.twilio.com")
   if ($service_sid | is-empty) { error make --unspanned { msg: "path parameter 'ServiceSid' must be non-empty" } }
   if ($identity | is-empty) { error make --unspanned { msg: "path parameter 'Identity' must be non-empty" } }
-  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), identity: (encode-path-segment $identity)} | format pattern "/v2/Services/{service_sid}/Entities/{identity}/Factors"))
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), identity: (encode-path-segment $identity)} | format pattern "/v2/Services/{service_sid}/Entities/{identity}/Factors") $auth.query)
   let req_body = {"Binding.Alg": $binding_alg, "Binding.PublicKey": $binding_public_key, "Binding.Secret": $binding_secret, "Config.Alg": $config_alg, "Config.AppId": $config_app_id, "Config.CodeLength": $config_code_length, "Config.NotificationPlatform": $config_notification_platform, "Config.NotificationToken": $config_notification_token, "Config.SdkVersion": $config_sdk_version, "Config.Skew": $config_skew, "Config.TimeStep": $config_time_step, "FactorType": $factor_type, "FriendlyName": $friendly_name, "Metadata": $metadata} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/x-www-form-urlencoded"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [201]
 }
 
 # Delete a specific Factor.
@@ -851,10 +1090,21 @@ export def "services-entities-factors delete" [
   if ($service_sid | is-empty) { error make --unspanned { msg: "path parameter 'ServiceSid' must be non-empty" } }
   if ($identity | is-empty) { error make --unspanned { msg: "path parameter 'Identity' must be non-empty" } }
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
-  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), identity: (encode-path-segment $identity), sid: (encode-path-segment $sid)} | format pattern "/v2/Services/{service_sid}/Entities/{identity}/Factors/{sid}"))
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), identity: (encode-path-segment $identity), sid: (encode-path-segment $sid)} | format pattern "/v2/Services/{service_sid}/Entities/{identity}/Factors/{sid}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Fetch a specific Factor.
@@ -880,10 +1130,21 @@ export def "services-entities-factors get" [
   if ($service_sid | is-empty) { error make --unspanned { msg: "path parameter 'ServiceSid' must be non-empty" } }
   if ($identity | is-empty) { error make --unspanned { msg: "path parameter 'Identity' must be non-empty" } }
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
-  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), identity: (encode-path-segment $identity), sid: (encode-path-segment $sid)} | format pattern "/v2/Services/{service_sid}/Entities/{identity}/Factors/{sid}"))
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), identity: (encode-path-segment $identity), sid: (encode-path-segment $sid)} | format pattern "/v2/Services/{service_sid}/Entities/{identity}/Factors/{sid}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update a specific Factor. This endpoint can be used to Verify a Factor if passed an `AuthPayload` param.
@@ -919,13 +1180,24 @@ export def "services-entities-factors update" [
   if ($service_sid | is-empty) { error make --unspanned { msg: "path parameter 'ServiceSid' must be non-empty" } }
   if ($identity | is-empty) { error make --unspanned { msg: "path parameter 'Identity' must be non-empty" } }
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
-  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), identity: (encode-path-segment $identity), sid: (encode-path-segment $sid)} | format pattern "/v2/Services/{service_sid}/Entities/{identity}/Factors/{sid}"))
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), identity: (encode-path-segment $identity), sid: (encode-path-segment $sid)} | format pattern "/v2/Services/{service_sid}/Entities/{identity}/Factors/{sid}") $auth.query)
   let req_body = {"AuthPayload": $auth_payload, "Config.Alg": $config_alg, "Config.CodeLength": $config_code_length, "Config.NotificationPlatform": $config_notification_platform, "Config.NotificationToken": $config_notification_token, "Config.SdkVersion": $config_sdk_version, "Config.Skew": $config_skew, "Config.TimeStep": $config_time_step, "FriendlyName": $friendly_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/x-www-form-urlencoded"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve a list of all Messaging Configurations for a Service.
@@ -951,10 +1223,21 @@ export def "services-messaging-configurations list" [
   let base = ($base_url | default "https://verify.twilio.com")
   if ($service_sid | is-empty) { error make --unspanned { msg: "path parameter 'ServiceSid' must be non-empty" } }
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid)} | format pattern "/v2/Services/{service_sid}/MessagingConfigurations") $qp)
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid)} | format pattern "/v2/Services/{service_sid}/MessagingConfigurations") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a new MessagingConfiguration for a service.
@@ -979,13 +1262,24 @@ export def "services-messaging-configurations create" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://verify.twilio.com")
   if ($service_sid | is-empty) { error make --unspanned { msg: "path parameter 'ServiceSid' must be non-empty" } }
-  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid)} | format pattern "/v2/Services/{service_sid}/MessagingConfigurations"))
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid)} | format pattern "/v2/Services/{service_sid}/MessagingConfigurations") $auth.query)
   let req_body = {"Country": $country, "MessagingServiceSid": $messaging_service_sid} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/x-www-form-urlencoded"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [201]
 }
 
 # Delete a specific MessagingConfiguration.
@@ -1009,10 +1303,21 @@ export def "services-messaging-configurations delete" [
   let base = ($base_url | default "https://verify.twilio.com")
   if ($service_sid | is-empty) { error make --unspanned { msg: "path parameter 'ServiceSid' must be non-empty" } }
   if ($country | is-empty) { error make --unspanned { msg: "path parameter 'Country' must be non-empty" } }
-  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), country: (encode-path-segment $country)} | format pattern "/v2/Services/{service_sid}/MessagingConfigurations/{country}"))
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), country: (encode-path-segment $country)} | format pattern "/v2/Services/{service_sid}/MessagingConfigurations/{country}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Fetch a specific MessagingConfiguration.
@@ -1036,10 +1341,21 @@ export def "services-messaging-configurations get" [
   let base = ($base_url | default "https://verify.twilio.com")
   if ($service_sid | is-empty) { error make --unspanned { msg: "path parameter 'ServiceSid' must be non-empty" } }
   if ($country | is-empty) { error make --unspanned { msg: "path parameter 'Country' must be non-empty" } }
-  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), country: (encode-path-segment $country)} | format pattern "/v2/Services/{service_sid}/MessagingConfigurations/{country}"))
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), country: (encode-path-segment $country)} | format pattern "/v2/Services/{service_sid}/MessagingConfigurations/{country}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update a specific MessagingConfiguration
@@ -1065,13 +1381,24 @@ export def "services-messaging-configurations update" [
   let base = ($base_url | default "https://verify.twilio.com")
   if ($service_sid | is-empty) { error make --unspanned { msg: "path parameter 'ServiceSid' must be non-empty" } }
   if ($country | is-empty) { error make --unspanned { msg: "path parameter 'Country' must be non-empty" } }
-  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), country: (encode-path-segment $country)} | format pattern "/v2/Services/{service_sid}/MessagingConfigurations/{country}"))
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), country: (encode-path-segment $country)} | format pattern "/v2/Services/{service_sid}/MessagingConfigurations/{country}") $auth.query)
   let req_body = {"MessagingServiceSid": $messaging_service_sid} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/x-www-form-urlencoded"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve a list of all Rate Limits for a service.
@@ -1097,10 +1424,21 @@ export def "services-rate-limits list" [
   let base = ($base_url | default "https://verify.twilio.com")
   if ($service_sid | is-empty) { error make --unspanned { msg: "path parameter 'ServiceSid' must be non-empty" } }
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid)} | format pattern "/v2/Services/{service_sid}/RateLimits") $qp)
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid)} | format pattern "/v2/Services/{service_sid}/RateLimits") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a new Rate Limit for a Service
@@ -1125,13 +1463,24 @@ export def "services-rate-limits create" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://verify.twilio.com")
   if ($service_sid | is-empty) { error make --unspanned { msg: "path parameter 'ServiceSid' must be non-empty" } }
-  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid)} | format pattern "/v2/Services/{service_sid}/RateLimits"))
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid)} | format pattern "/v2/Services/{service_sid}/RateLimits") $auth.query)
   let req_body = {"Description": $description, "UniqueName": $unique_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/x-www-form-urlencoded"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [201]
 }
 
 # Retrieve a list of all Buckets for a Rate Limit.
@@ -1159,10 +1508,21 @@ export def "services-rate-limits-buckets list" [
   if ($service_sid | is-empty) { error make --unspanned { msg: "path parameter 'ServiceSid' must be non-empty" } }
   if ($rate_limit_sid | is-empty) { error make --unspanned { msg: "path parameter 'RateLimitSid' must be non-empty" } }
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), rate_limit_sid: (encode-path-segment $rate_limit_sid)} | format pattern "/v2/Services/{service_sid}/RateLimits/{rate_limit_sid}/Buckets") $qp)
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), rate_limit_sid: (encode-path-segment $rate_limit_sid)} | format pattern "/v2/Services/{service_sid}/RateLimits/{rate_limit_sid}/Buckets") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a new Bucket for a Rate Limit
@@ -1189,13 +1549,24 @@ export def "services-rate-limits-buckets create" [
   let base = ($base_url | default "https://verify.twilio.com")
   if ($service_sid | is-empty) { error make --unspanned { msg: "path parameter 'ServiceSid' must be non-empty" } }
   if ($rate_limit_sid | is-empty) { error make --unspanned { msg: "path parameter 'RateLimitSid' must be non-empty" } }
-  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), rate_limit_sid: (encode-path-segment $rate_limit_sid)} | format pattern "/v2/Services/{service_sid}/RateLimits/{rate_limit_sid}/Buckets"))
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), rate_limit_sid: (encode-path-segment $rate_limit_sid)} | format pattern "/v2/Services/{service_sid}/RateLimits/{rate_limit_sid}/Buckets") $auth.query)
   let req_body = {"Interval": $interval, "Max": $max} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/x-www-form-urlencoded"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [201]
 }
 
 # Delete a specific Bucket.
@@ -1221,10 +1592,21 @@ export def "services-rate-limits-buckets delete" [
   if ($service_sid | is-empty) { error make --unspanned { msg: "path parameter 'ServiceSid' must be non-empty" } }
   if ($rate_limit_sid | is-empty) { error make --unspanned { msg: "path parameter 'RateLimitSid' must be non-empty" } }
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
-  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), rate_limit_sid: (encode-path-segment $rate_limit_sid), sid: (encode-path-segment $sid)} | format pattern "/v2/Services/{service_sid}/RateLimits/{rate_limit_sid}/Buckets/{sid}"))
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), rate_limit_sid: (encode-path-segment $rate_limit_sid), sid: (encode-path-segment $sid)} | format pattern "/v2/Services/{service_sid}/RateLimits/{rate_limit_sid}/Buckets/{sid}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Fetch a specific Bucket.
@@ -1250,10 +1632,21 @@ export def "services-rate-limits-buckets get" [
   if ($service_sid | is-empty) { error make --unspanned { msg: "path parameter 'ServiceSid' must be non-empty" } }
   if ($rate_limit_sid | is-empty) { error make --unspanned { msg: "path parameter 'RateLimitSid' must be non-empty" } }
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
-  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), rate_limit_sid: (encode-path-segment $rate_limit_sid), sid: (encode-path-segment $sid)} | format pattern "/v2/Services/{service_sid}/RateLimits/{rate_limit_sid}/Buckets/{sid}"))
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), rate_limit_sid: (encode-path-segment $rate_limit_sid), sid: (encode-path-segment $sid)} | format pattern "/v2/Services/{service_sid}/RateLimits/{rate_limit_sid}/Buckets/{sid}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update a specific Bucket.
@@ -1282,13 +1675,24 @@ export def "services-rate-limits-buckets update" [
   if ($service_sid | is-empty) { error make --unspanned { msg: "path parameter 'ServiceSid' must be non-empty" } }
   if ($rate_limit_sid | is-empty) { error make --unspanned { msg: "path parameter 'RateLimitSid' must be non-empty" } }
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
-  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), rate_limit_sid: (encode-path-segment $rate_limit_sid), sid: (encode-path-segment $sid)} | format pattern "/v2/Services/{service_sid}/RateLimits/{rate_limit_sid}/Buckets/{sid}"))
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), rate_limit_sid: (encode-path-segment $rate_limit_sid), sid: (encode-path-segment $sid)} | format pattern "/v2/Services/{service_sid}/RateLimits/{rate_limit_sid}/Buckets/{sid}") $auth.query)
   let req_body = {"Interval": $interval, "Max": $max} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/x-www-form-urlencoded"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Delete a specific Rate Limit.
@@ -1312,10 +1716,21 @@ export def "services-rate-limits delete" [
   let base = ($base_url | default "https://verify.twilio.com")
   if ($service_sid | is-empty) { error make --unspanned { msg: "path parameter 'ServiceSid' must be non-empty" } }
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
-  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), sid: (encode-path-segment $sid)} | format pattern "/v2/Services/{service_sid}/RateLimits/{sid}"))
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), sid: (encode-path-segment $sid)} | format pattern "/v2/Services/{service_sid}/RateLimits/{sid}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Fetch a specific Rate Limit.
@@ -1339,10 +1754,21 @@ export def "services-rate-limits get" [
   let base = ($base_url | default "https://verify.twilio.com")
   if ($service_sid | is-empty) { error make --unspanned { msg: "path parameter 'ServiceSid' must be non-empty" } }
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
-  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), sid: (encode-path-segment $sid)} | format pattern "/v2/Services/{service_sid}/RateLimits/{sid}"))
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), sid: (encode-path-segment $sid)} | format pattern "/v2/Services/{service_sid}/RateLimits/{sid}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update a specific Rate Limit.
@@ -1368,13 +1794,24 @@ export def "services-rate-limits update" [
   let base = ($base_url | default "https://verify.twilio.com")
   if ($service_sid | is-empty) { error make --unspanned { msg: "path parameter 'ServiceSid' must be non-empty" } }
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
-  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), sid: (encode-path-segment $sid)} | format pattern "/v2/Services/{service_sid}/RateLimits/{sid}"))
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), sid: (encode-path-segment $sid)} | format pattern "/v2/Services/{service_sid}/RateLimits/{sid}") $auth.query)
   let req_body = {"Description": $description} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/x-www-form-urlencoded"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # challenge a specific Verification Check.
@@ -1402,13 +1839,24 @@ export def "services-verification-check create" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://verify.twilio.com")
   if ($service_sid | is-empty) { error make --unspanned { msg: "path parameter 'ServiceSid' must be non-empty" } }
-  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid)} | format pattern "/v2/Services/{service_sid}/VerificationCheck"))
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid)} | format pattern "/v2/Services/{service_sid}/VerificationCheck") $auth.query)
   let req_body = {"Amount": $amount, "Code": $code, "Payee": $payee, "To": $body_to, "VerificationSid": $verification_sid} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/x-www-form-urlencoded"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [201]
 }
 
 # Create a new Verification using a Service
@@ -1446,13 +1894,24 @@ export def "services-verifications create" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://verify.twilio.com")
   if ($service_sid | is-empty) { error make --unspanned { msg: "path parameter 'ServiceSid' must be non-empty" } }
-  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid)} | format pattern "/v2/Services/{service_sid}/Verifications"))
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid)} | format pattern "/v2/Services/{service_sid}/Verifications") $auth.query)
   let req_body = {"Amount": $amount, "AppHash": $app_hash, "Channel": $channel, "ChannelConfiguration": $channel_configuration, "CustomCode": $custom_code, "CustomFriendlyName": $custom_friendly_name, "CustomMessage": $custom_message, "DeviceIp": $device_ip, "Locale": $locale, "Payee": $payee, "RateLimits": $rate_limits, "SendDigits": $send_digits, "TemplateCustomSubstitutions": $template_custom_substitutions, "TemplateSid": $template_sid, "To": $body_to} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/x-www-form-urlencoded"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [201]
 }
 
 # Fetch a specific Verification
@@ -1476,10 +1935,21 @@ export def "services-verifications get" [
   let base = ($base_url | default "https://verify.twilio.com")
   if ($service_sid | is-empty) { error make --unspanned { msg: "path parameter 'ServiceSid' must be non-empty" } }
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
-  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), sid: (encode-path-segment $sid)} | format pattern "/v2/Services/{service_sid}/Verifications/{sid}"))
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), sid: (encode-path-segment $sid)} | format pattern "/v2/Services/{service_sid}/Verifications/{sid}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update a Verification status
@@ -1505,13 +1975,24 @@ export def "services-verifications update" [
   let base = ($base_url | default "https://verify.twilio.com")
   if ($service_sid | is-empty) { error make --unspanned { msg: "path parameter 'ServiceSid' must be non-empty" } }
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
-  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), sid: (encode-path-segment $sid)} | format pattern "/v2/Services/{service_sid}/Verifications/{sid}"))
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), sid: (encode-path-segment $sid)} | format pattern "/v2/Services/{service_sid}/Verifications/{sid}") $auth.query)
   let req_body = {"Status": $status} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/x-www-form-urlencoded"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve a list of all Webhooks for a Service.
@@ -1537,10 +2018,21 @@ export def "services-webhooks list" [
   let base = ($base_url | default "https://verify.twilio.com")
   if ($service_sid | is-empty) { error make --unspanned { msg: "path parameter 'ServiceSid' must be non-empty" } }
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid)} | format pattern "/v2/Services/{service_sid}/Webhooks") $qp)
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid)} | format pattern "/v2/Services/{service_sid}/Webhooks") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a new Webhook for the Service
@@ -1568,13 +2060,24 @@ export def "services-webhooks create" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://verify.twilio.com")
   if ($service_sid | is-empty) { error make --unspanned { msg: "path parameter 'ServiceSid' must be non-empty" } }
-  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid)} | format pattern "/v2/Services/{service_sid}/Webhooks"))
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid)} | format pattern "/v2/Services/{service_sid}/Webhooks") $auth.query)
   let req_body = {"EventTypes": $event_types, "FriendlyName": $friendly_name, "Status": $status, "Version": $version, "WebhookUrl": $webhook_url} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/x-www-form-urlencoded"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [201]
 }
 
 # Delete a specific Webhook.
@@ -1598,10 +2101,21 @@ export def "services-webhooks delete" [
   let base = ($base_url | default "https://verify.twilio.com")
   if ($service_sid | is-empty) { error make --unspanned { msg: "path parameter 'ServiceSid' must be non-empty" } }
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
-  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), sid: (encode-path-segment $sid)} | format pattern "/v2/Services/{service_sid}/Webhooks/{sid}"))
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), sid: (encode-path-segment $sid)} | format pattern "/v2/Services/{service_sid}/Webhooks/{sid}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Fetch a specific Webhook.
@@ -1625,10 +2139,21 @@ export def "services-webhooks get" [
   let base = ($base_url | default "https://verify.twilio.com")
   if ($service_sid | is-empty) { error make --unspanned { msg: "path parameter 'ServiceSid' must be non-empty" } }
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
-  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), sid: (encode-path-segment $sid)} | format pattern "/v2/Services/{service_sid}/Webhooks/{sid}"))
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), sid: (encode-path-segment $sid)} | format pattern "/v2/Services/{service_sid}/Webhooks/{sid}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # POST /v2/Services/{ServiceSid}/Webhooks/{Sid}
@@ -1657,13 +2182,24 @@ export def "services-webhooks update" [
   let base = ($base_url | default "https://verify.twilio.com")
   if ($service_sid | is-empty) { error make --unspanned { msg: "path parameter 'ServiceSid' must be non-empty" } }
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
-  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), sid: (encode-path-segment $sid)} | format pattern "/v2/Services/{service_sid}/Webhooks/{sid}"))
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), sid: (encode-path-segment $sid)} | format pattern "/v2/Services/{service_sid}/Webhooks/{sid}") $auth.query)
   let req_body = {"EventTypes": $event_types, "FriendlyName": $friendly_name, "Status": $status, "Version": $version, "WebhookUrl": $webhook_url} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/x-www-form-urlencoded"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Delete a specific Verification Service Instance.
@@ -1685,10 +2221,21 @@ export def "services delete" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://verify.twilio.com")
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
-  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v2/Services/{sid}"))
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v2/Services/{sid}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Fetch specific Verification Service Instance.
@@ -1710,10 +2257,21 @@ export def "services get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://verify.twilio.com")
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
-  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v2/Services/{sid}"))
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v2/Services/{sid}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update a specific Verification Service.
@@ -1753,13 +2311,24 @@ export def "services update" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://verify.twilio.com")
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
-  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v2/Services/{sid}"))
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v2/Services/{sid}") $auth.query)
   let req_body = {"CodeLength": $code_length, "CustomCodeEnabled": $custom_code_enabled, "DefaultTemplateSid": $default_template_sid, "DoNotShareWarningEnabled": $do_not_share_warning_enabled, "DtmfInputRequired": $dtmf_input_required, "FriendlyName": $friendly_name, "LookupEnabled": $lookup_enabled, "Psd2Enabled": $psd2_enabled, "Push.ApnCredentialSid": $push_apn_credential_sid, "Push.FcmCredentialSid": $push_fcm_credential_sid, "Push.IncludeDate": $push_include_date, "SkipSmsToLandlines": $skip_sms_to_landlines, "Totp.CodeLength": $totp_code_length, "Totp.Issuer": $totp_issuer, "Totp.Skew": $totp_skew, "Totp.TimeStep": $totp_time_step, "TtsName": $tts_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/x-www-form-urlencoded"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # List all the available templates for a given Account.
@@ -1784,8 +2353,19 @@ export def "templates list-verification" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://verify.twilio.com")
   let qp = [(serialize-qp "FriendlyName" $friendly_name "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v2/Templates" $qp)
+  let full_url = (build-url $base "/v2/Templates" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"FriendlyName": $friendly_name, "PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"FriendlyName": $friendly_name, "PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }

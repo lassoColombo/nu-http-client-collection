@@ -8,7 +8,7 @@ const BASE_URL = "https://api.lufthansa.com/v1"
 # `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
 # where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o LH_PUBLIC_API_TOKEN | default "" }
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o LH_PUBLIC_API_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
@@ -41,14 +41,11 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
-# Trick: `url encode --all` over-encodes, then we decode the four unreserved
-# punctuation chars back. Pre-existing %XX sequences in the input survive
-# because `url encode --all` first turns their % into %25.
 def encode-path-segment [v: any]: nothing -> string {
   $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
-# Serialize an array-typed path parameter (issue 49.A). OpenAPI 3 `style: simple`
+# Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
 # (the default for path params) and Swagger 2 `collectionFormat: csv` both join
 # the elements with a literal comma WITHIN the single path segment, each element
 # RFC-3986-encoded individually (so a comma inside an element stays %2C). Without
@@ -59,51 +56,39 @@ def encode-path-array [v: any]: nothing -> string {
   if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
 }
 
-# Build URL from base, path, and optional query string
-def build-url [base: string, path: string, query?: string]: nothing -> string {
+# Build the request URL from base, path, and any number of pre-encoded query
+# fragments (param serializer output and/or the auth query). Each fragment is an
+# `&`-joinable `key=value` string already percent-encoded by its producer; empty
+# fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
+# delimiters are hand-spliced — and any query already on the base URL is merged in.
+def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
   let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
-  let result = ($parsed | upsert path $full_path)
-  if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
+  let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
+  $parsed | upsert path $full_path | upsert query $query | url join
 }
 
-# Build the dry-run record returned by --dry-run. Shape:
-#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
-#    auth: {scheme, location}}
-# `meta` carries logical-form data (the query record by spec name, the pre-serialization
-# body) that do-request itself cannot reconstruct from its wire-format args.
-def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
-  let m = ($meta | default {})
-  {
-    dry_run: true
-    method: $method
-    url: $url
-    query: ($m | get -o query | default {})
-    headers: $auth.headers
-    body: ($m | get -o body)
-    content_type: $content_type
-    timeout: $timeout
-    auth: {scheme: $auth.scheme, location: $auth.location}
-  }
+# Success policy: did this response succeed? Single source of truth, consulted by
+# handle-response and the HEAD header-unwrap. Empty ok_codes means the spec listed
+# none, so fall back to < 400. Otherwise: any 2xx, plus documented success codes.
+def status-ok [status: int, ok_codes: list<int>]: nothing -> bool {
+  if ($ok_codes | is-empty) { $status < 400 } else { ($status >= 200 and $status < 300) or ($status in $ok_codes) }
 }
 
-# Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
-  let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
-  let timeout = ($max_time | default 30min)
-  let ct = ($content_type | default "application/json")
-  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
-  let resp = match $method {
-    "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
-  }
-  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
-  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
+# Unwrap a `--full` HTTP response into the user-facing value. Response arrives
+# via pipeline; ok_codes gates the error throw (see status-ok).
+def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: record -> any {
+  let resp = $in
+  if $allow_errors { return $resp }
+  if not (status-ok $resp.status $ok_codes) { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } }
+  if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
+  if $resp.status == 204 { return null }
+  $resp.body
+}
+
+# GET — bodyless, honours --raw
+def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
 }
 
 def base-url-completer [] { ["https://api.lufthansa.com/v1"] }
@@ -159,12 +144,23 @@ export def "cargo-get-route get-from-date-product-code-by-and" [
   if ($destination | is-empty) { error make --unspanned { msg: "path parameter 'destination' must be non-empty" } }
   if ($from_date | is-empty) { error make --unspanned { msg: "path parameter 'fromDate' must be non-empty" } }
   if ($product_code | is-empty) { error make --unspanned { msg: "path parameter 'productCode' must be non-empty" } }
-  let full_url = (build-url $base ({origin: (encode-path-segment $origin), destination: (encode-path-segment $destination), from_date: (encode-path-segment $from_date), product_code: (encode-path-segment $product_code)} | format pattern "/cargo/getRoute/{origin}-{destination}/{from_date}/{product_code}"))
+  let full_url = (build-url $base ({origin: (encode-path-segment $origin), destination: (encode-path-segment $destination), from_date: (encode-path-segment $from_date), product_code: (encode-path-segment $product_code)} | format pattern "/cargo/getRoute/{origin}-{destination}/{from_date}/{product_code}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Shipment Tracking
@@ -189,12 +185,23 @@ export def "cargo-shipment-tracking get-by-awb-prefix-and-awb-number" [
   let base = ($base_url | default $BASE_URL)
   if ($a_wb_prefix | is-empty) { error make --unspanned { msg: "path parameter 'aWBPrefix' must be non-empty" } }
   if ($a_wb_number | is-empty) { error make --unspanned { msg: "path parameter 'aWBNumber' must be non-empty" } }
-  let full_url = (build-url $base ({a_wb_prefix: (encode-path-segment $a_wb_prefix), a_wb_number: (encode-path-segment $a_wb_number)} | format pattern "/cargo/shipmentTracking/{a_wb_prefix}-{a_wb_number}"))
+  let full_url = (build-url $base ({a_wb_prefix: (encode-path-segment $a_wb_prefix), a_wb_number: (encode-path-segment $a_wb_number)} | format pattern "/cargo/shipmentTracking/{a_wb_prefix}-{a_wb_number}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Lounges
@@ -221,12 +228,23 @@ export def "offers-lounges get-by" [
   let base = ($base_url | default $BASE_URL)
   if ($location | is-empty) { error make --unspanned { msg: "path parameter 'location' must be non-empty" } }
   let qp = [(serialize-qp "cabinClass" $cabin_class "scalar") (serialize-qp "tierCode" $tier_code "scalar") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({location: (encode-path-segment $location)} | format pattern "/offers/lounges/{location}") $qp)
+  let full_url = (build-url $base ({location: (encode-path-segment $location)} | format pattern "/offers/lounges/{location}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cabinClass": $cabin_class, "tierCode": $tier_code, "lang": $lang} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"cabinClass": $cabin_class, "tierCode": $tier_code, "lang": $lang} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Seat Maps
@@ -257,12 +275,23 @@ export def "offers-seatmaps get-cabin-class-by-flight-number-and" [
   if ($destination | is-empty) { error make --unspanned { msg: "path parameter 'destination' must be non-empty" } }
   if ($date | is-empty) { error make --unspanned { msg: "path parameter 'date' must be non-empty" } }
   if ($cabin_class | is-empty) { error make --unspanned { msg: "path parameter 'cabinClass' must be non-empty" } }
-  let full_url = (build-url $base ({flight_number: (encode-path-segment $flight_number), origin: (encode-path-segment $origin), destination: (encode-path-segment $destination), date: (encode-path-segment $date), cabin_class: (encode-path-segment $cabin_class)} | format pattern "/offers/seatmaps/{flight_number}/{origin}/{destination}/{date}/{cabin_class}"))
+  let full_url = (build-url $base ({flight_number: (encode-path-segment $flight_number), origin: (encode-path-segment $origin), destination: (encode-path-segment $destination), date: (encode-path-segment $date), cabin_class: (encode-path-segment $cabin_class)} | format pattern "/offers/seatmaps/{flight_number}/{origin}/{destination}/{date}/{cabin_class}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Flight Status at Arrival Airport
@@ -290,12 +319,23 @@ export def "operations-flightstatus-arrivals get-by-airport-code-and-from-date-t
   if ($airport_code | is-empty) { error make --unspanned { msg: "path parameter 'airportCode' must be non-empty" } }
   if ($from_date_time | is-empty) { error make --unspanned { msg: "path parameter 'fromDateTime' must be non-empty" } }
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({airport_code: (encode-path-segment $airport_code), from_date_time: (encode-path-segment $from_date_time)} | format pattern "/operations/flightstatus/arrivals/{airport_code}/{from_date_time}") $qp)
+  let full_url = (build-url $base ({airport_code: (encode-path-segment $airport_code), from_date_time: (encode-path-segment $from_date_time)} | format pattern "/operations/flightstatus/arrivals/{airport_code}/{from_date_time}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"limit": $limit, "offset": $offset} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"limit": $limit, "offset": $offset} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Flight Status at Departure Airport
@@ -323,12 +363,23 @@ export def "operations-flightstatus-departures get-by-airport-code-and-from-date
   if ($airport_code | is-empty) { error make --unspanned { msg: "path parameter 'airportCode' must be non-empty" } }
   if ($from_date_time | is-empty) { error make --unspanned { msg: "path parameter 'fromDateTime' must be non-empty" } }
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({airport_code: (encode-path-segment $airport_code), from_date_time: (encode-path-segment $from_date_time)} | format pattern "/operations/flightstatus/departures/{airport_code}/{from_date_time}") $qp)
+  let full_url = (build-url $base ({airport_code: (encode-path-segment $airport_code), from_date_time: (encode-path-segment $from_date_time)} | format pattern "/operations/flightstatus/departures/{airport_code}/{from_date_time}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"limit": $limit, "offset": $offset} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"limit": $limit, "offset": $offset} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Flight Status by Route
@@ -358,12 +409,23 @@ export def "operations-flightstatus-route get-by-and" [
   if ($destination | is-empty) { error make --unspanned { msg: "path parameter 'destination' must be non-empty" } }
   if ($date | is-empty) { error make --unspanned { msg: "path parameter 'date' must be non-empty" } }
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({origin: (encode-path-segment $origin), destination: (encode-path-segment $destination), date: (encode-path-segment $date)} | format pattern "/operations/flightstatus/route/{origin}/{destination}/{date}") $qp)
+  let full_url = (build-url $base ({origin: (encode-path-segment $origin), destination: (encode-path-segment $destination), date: (encode-path-segment $date)} | format pattern "/operations/flightstatus/route/{origin}/{destination}/{date}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"limit": $limit, "offset": $offset} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"limit": $limit, "offset": $offset} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Flight Status
@@ -391,12 +453,23 @@ export def "operations-flightstatus get-by-flight-number-and" [
   if ($flight_number | is-empty) { error make --unspanned { msg: "path parameter 'flightNumber' must be non-empty" } }
   if ($date | is-empty) { error make --unspanned { msg: "path parameter 'date' must be non-empty" } }
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({flight_number: (encode-path-segment $flight_number), date: (encode-path-segment $date)} | format pattern "/operations/flightstatus/{flight_number}/{date}") $qp)
+  let full_url = (build-url $base ({flight_number: (encode-path-segment $flight_number), date: (encode-path-segment $date)} | format pattern "/operations/flightstatus/{flight_number}/{date}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"limit": $limit, "offset": $offset} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"limit": $limit, "offset": $offset} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Flight Schedules
@@ -427,12 +500,23 @@ export def "operations-schedules get-from-date-time-by-and" [
   if ($destination | is-empty) { error make --unspanned { msg: "path parameter 'destination' must be non-empty" } }
   if ($from_date_time | is-empty) { error make --unspanned { msg: "path parameter 'fromDateTime' must be non-empty" } }
   let qp = [(serialize-qp "directFlights" $direct_flights "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({origin: (encode-path-segment $origin), destination: (encode-path-segment $destination), from_date_time: (encode-path-segment $from_date_time)} | format pattern "/operations/schedules/{origin}/{destination}/{from_date_time}") $qp)
+  let full_url = (build-url $base ({origin: (encode-path-segment $origin), destination: (encode-path-segment $destination), from_date_time: (encode-path-segment $from_date_time)} | format pattern "/operations/schedules/{origin}/{destination}/{from_date_time}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"directFlights": $direct_flights, "limit": $limit, "offset": $offset} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"directFlights": $direct_flights, "limit": $limit, "offset": $offset} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Aircraft
@@ -458,12 +542,23 @@ export def "references-aircraft get-by-code" [
   let base = ($base_url | default $BASE_URL)
   if ($aircraft_code | is-empty) { error make --unspanned { msg: "path parameter 'aircraftCode' must be non-empty" } }
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({aircraft_code: (encode-path-segment $aircraft_code)} | format pattern "/references/aircraft/{aircraft_code}") $qp)
+  let full_url = (build-url $base ({aircraft_code: (encode-path-segment $aircraft_code)} | format pattern "/references/aircraft/{aircraft_code}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"limit": $limit, "offset": $offset} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"limit": $limit, "offset": $offset} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Airlines
@@ -489,12 +584,23 @@ export def "references-airlines get-by-code" [
   let base = ($base_url | default $BASE_URL)
   if ($airline_code | is-empty) { error make --unspanned { msg: "path parameter 'airlineCode' must be non-empty" } }
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({airline_code: (encode-path-segment $airline_code)} | format pattern "/references/airlines/{airline_code}") $qp)
+  let full_url = (build-url $base ({airline_code: (encode-path-segment $airline_code)} | format pattern "/references/airlines/{airline_code}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"limit": $limit, "offset": $offset} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"limit": $limit, "offset": $offset} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Nearest Airports
@@ -521,12 +627,23 @@ export def "references-airports-nearest get-by-and" [
   if ($latitude | is-empty) { error make --unspanned { msg: "path parameter 'latitude' must be non-empty" } }
   if ($longitude | is-empty) { error make --unspanned { msg: "path parameter 'longitude' must be non-empty" } }
   let qp = [(serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({latitude: (encode-path-segment $latitude), longitude: (encode-path-segment $longitude)} | format pattern "/references/airports/nearest/{latitude},{longitude}") $qp)
+  let full_url = (build-url $base ({latitude: (encode-path-segment $latitude), longitude: (encode-path-segment $longitude)} | format pattern "/references/airports/nearest/{latitude},{longitude}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"lang": $lang} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"lang": $lang} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Airports
@@ -554,12 +671,23 @@ export def "references-airports get-by-code" [
   let base = ($base_url | default $BASE_URL)
   if ($airport_code | is-empty) { error make --unspanned { msg: "path parameter 'airportCode' must be non-empty" } }
   let qp = [(serialize-qp "lang" $lang "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "LHoperated" $l_hoperated "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({airport_code: (encode-path-segment $airport_code)} | format pattern "/references/airports/{airport_code}") $qp)
+  let full_url = (build-url $base ({airport_code: (encode-path-segment $airport_code)} | format pattern "/references/airports/{airport_code}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"lang": $lang, "limit": $limit, "offset": $offset, "LHoperated": $l_hoperated} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"lang": $lang, "limit": $limit, "offset": $offset, "LHoperated": $l_hoperated} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Cities
@@ -586,12 +714,23 @@ export def "references-cities get-by-city-code" [
   let base = ($base_url | default $BASE_URL)
   if ($city_code | is-empty) { error make --unspanned { msg: "path parameter 'cityCode' must be non-empty" } }
   let qp = [(serialize-qp "lang" $lang "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({city_code: (encode-path-segment $city_code)} | format pattern "/references/cities/{city_code}") $qp)
+  let full_url = (build-url $base ({city_code: (encode-path-segment $city_code)} | format pattern "/references/cities/{city_code}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"lang": $lang, "limit": $limit, "offset": $offset} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"lang": $lang, "limit": $limit, "offset": $offset} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Countries
@@ -618,10 +757,21 @@ export def "references-countries get-by-country-code" [
   let base = ($base_url | default $BASE_URL)
   if ($country_code | is-empty) { error make --unspanned { msg: "path parameter 'countryCode' must be non-empty" } }
   let qp = [(serialize-qp "lang" $lang "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({country_code: (encode-path-segment $country_code)} | format pattern "/references/countries/{country_code}") $qp)
+  let full_url = (build-url $base ({country_code: (encode-path-segment $country_code)} | format pattern "/references/countries/{country_code}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"lang": $lang, "limit": $limit, "offset": $offset} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"lang": $lang, "limit": $limit, "offset": $offset} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }

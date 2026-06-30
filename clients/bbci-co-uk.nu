@@ -8,7 +8,7 @@ const BASE_URL = "https://ibl.api.bbci.co.uk/ibl/v1"
 # `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
 # where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o BBC_IPLAYER_BUSINESS_LAYER_TOKEN | default "" }
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o BBC_IPLAYER_BUSINESS_LAYER_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
@@ -43,14 +43,11 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
-# Trick: `url encode --all` over-encodes, then we decode the four unreserved
-# punctuation chars back. Pre-existing %XX sequences in the input survive
-# because `url encode --all` first turns their % into %25.
 def encode-path-segment [v: any]: nothing -> string {
   $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
-# Serialize an array-typed path parameter (issue 49.A). OpenAPI 3 `style: simple`
+# Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
 # (the default for path params) and Swagger 2 `collectionFormat: csv` both join
 # the elements with a literal comma WITHIN the single path segment, each element
 # RFC-3986-encoded individually (so a comma inside an element stays %2C). Without
@@ -61,51 +58,39 @@ def encode-path-array [v: any]: nothing -> string {
   if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
 }
 
-# Build URL from base, path, and optional query string
-def build-url [base: string, path: string, query?: string]: nothing -> string {
+# Build the request URL from base, path, and any number of pre-encoded query
+# fragments (param serializer output and/or the auth query). Each fragment is an
+# `&`-joinable `key=value` string already percent-encoded by its producer; empty
+# fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
+# delimiters are hand-spliced — and any query already on the base URL is merged in.
+def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
   let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
-  let result = ($parsed | upsert path $full_path)
-  if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
+  let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
+  $parsed | upsert path $full_path | upsert query $query | url join
 }
 
-# Build the dry-run record returned by --dry-run. Shape:
-#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
-#    auth: {scheme, location}}
-# `meta` carries logical-form data (the query record by spec name, the pre-serialization
-# body) that do-request itself cannot reconstruct from its wire-format args.
-def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
-  let m = ($meta | default {})
-  {
-    dry_run: true
-    method: $method
-    url: $url
-    query: ($m | get -o query | default {})
-    headers: $auth.headers
-    body: ($m | get -o body)
-    content_type: $content_type
-    timeout: $timeout
-    auth: {scheme: $auth.scheme, location: $auth.location}
-  }
+# Success policy: did this response succeed? Single source of truth, consulted by
+# handle-response and the HEAD header-unwrap. Empty ok_codes means the spec listed
+# none, so fall back to < 400. Otherwise: any 2xx, plus documented success codes.
+def status-ok [status: int, ok_codes: list<int>]: nothing -> bool {
+  if ($ok_codes | is-empty) { $status < 400 } else { ($status >= 200 and $status < 300) or ($status in $ok_codes) }
 }
 
-# Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
-  let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
-  let timeout = ($max_time | default 30min)
-  let ct = ($content_type | default "application/json")
-  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
-  let resp = match $method {
-    "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
-  }
-  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
-  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
+# Unwrap a `--full` HTTP response into the user-facing value. Response arrives
+# via pipeline; ok_codes gates the error throw (see status-ok).
+def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: record -> any {
+  let resp = $in
+  if $allow_errors { return $resp }
+  if not (status-ok $resp.status $ok_codes) { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } }
+  if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
+  if $resp.status == 204 { return null }
+  $resp.body
+}
+
+# GET — bodyless, honours --raw
+def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
 }
 
 def base-url-completer [] { ["https://ibl.api.bbci.co.uk/ibl/v1" "http://ibl.api.bbci.co.uk/ibl/v1"] }
@@ -170,10 +155,21 @@ export def "atoz-programmes get-ato-z-list" [
   let base = ($base_url | default $BASE_URL)
   if ($letter | is-empty) { error make --unspanned { msg: "path parameter 'letter' must be non-empty" } }
   let qp = [(serialize-qp "rights" $rights "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "initial_child_count" $initial_child_count "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "sort_direction" $sort_direction "scalar") (serialize-qp "availability" $availability "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({letter: (encode-path-segment $letter)} | format pattern "/atoz/{letter}/programmes") $qp)
+  let full_url = (build-url $base ({letter: (encode-path-segment $letter)} | format pattern "/atoz/{letter}/programmes") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"rights": $rights, "page": $page, "per_page": $per_page, "initial_child_count": $initial_child_count, "sort": $qp_sort, "sort_direction": $sort_direction, "availability": $availability} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"rights": $rights, "page": $page, "per_page": $per_page, "initial_child_count": $initial_child_count, "sort": $qp_sort, "sort_direction": $sort_direction, "availability": $availability} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get categories
@@ -195,10 +191,21 @@ export def "categories get" [
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/categories" $qp)
+  let full_url = (build-url $base "/categories" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"lang": $lang} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"lang": $lang} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get sub-categories
@@ -222,10 +229,21 @@ export def "categories get-sub" [
   let base = ($base_url | default $BASE_URL)
   if ($category | is-empty) { error make --unspanned { msg: "path parameter 'category' must be non-empty" } }
   let qp = [(serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({category: (encode-path-segment $category)} | format pattern "/categories/{category}") $qp)
+  let full_url = (build-url $base ({category: (encode-path-segment $category)} | format pattern "/categories/{category}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"lang": $lang} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"lang": $lang} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List all the episodes for a category.
@@ -254,10 +272,21 @@ export def "categories-episodes get" [
   let base = ($base_url | default $BASE_URL)
   if ($category | is-empty) { error make --unspanned { msg: "path parameter 'category' must be non-empty" } }
   let qp = [(serialize-qp "lang" $lang "scalar") (serialize-qp "rights" $rights "scalar") (serialize-qp "availability" $availability "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({category: (encode-path-segment $category)} | format pattern "/categories/{category}/episodes") $qp)
+  let full_url = (build-url $base ({category: (encode-path-segment $category)} | format pattern "/categories/{category}/episodes") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"lang": $lang, "rights": $rights, "availability": $availability, "page": $page, "per_page": $per_page, "sort": $qp_sort} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"lang": $lang, "rights": $rights, "availability": $availability, "page": $page, "per_page": $per_page, "sort": $qp_sort} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List the highlights for a category.
@@ -284,10 +313,21 @@ export def "categories-highlights get" [
   let base = ($base_url | default $BASE_URL)
   if ($category | is-empty) { error make --unspanned { msg: "path parameter 'category' must be non-empty" } }
   let qp = [(serialize-qp "lang" $lang "scalar") (serialize-qp "rights" $rights "scalar") (serialize-qp "availability" $availability "scalar") (serialize-qp "mixin" $mixin "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({category: (encode-path-segment $category)} | format pattern "/categories/{category}/highlights") $qp)
+  let full_url = (build-url $base ({category: (encode-path-segment $category)} | format pattern "/categories/{category}/highlights") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"lang": $lang, "rights": $rights, "availability": $availability, "mixin": $mixin} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"lang": $lang, "rights": $rights, "availability": $availability, "mixin": $mixin} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List all the programmes for a category.
@@ -315,10 +355,21 @@ export def "categories-programmes get" [
   let base = ($base_url | default $BASE_URL)
   if ($category | is-empty) { error make --unspanned { msg: "path parameter 'category' must be non-empty" } }
   let qp = [(serialize-qp "lang" $lang "scalar") (serialize-qp "rights" $rights "scalar") (serialize-qp "availability" $availability "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({category: (encode-path-segment $category)} | format pattern "/categories/{category}/programmes") $qp)
+  let full_url = (build-url $base ({category: (encode-path-segment $category)} | format pattern "/categories/{category}/programmes") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"lang": $lang, "rights": $rights, "availability": $availability, "page": $page, "per_page": $per_page} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"lang": $lang, "rights": $rights, "availability": $availability, "page": $page, "per_page": $per_page} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List all the channels.
@@ -341,10 +392,21 @@ export def "channels get" [
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "region" $region "scalar") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/channels" $qp)
+  let full_url = (build-url $base "/channels" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"region": $region, "lang": $lang} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"region": $region, "lang": $lang} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get broadcasts by channel
@@ -373,10 +435,21 @@ export def "channels-broadcasts get" [
   let base = ($base_url | default $BASE_URL)
   if ($channel | is-empty) { error make --unspanned { msg: "path parameter 'channel' must be non-empty" } }
   let qp = [(serialize-qp "lang" $lang "scalar") (serialize-qp "rights" $rights "scalar") (serialize-qp "availability" $availability "scalar") (serialize-qp "mixin" $mixin "multi") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "from" $qp_from "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({channel: (encode-path-segment $channel)} | format pattern "/channels/{channel}/broadcasts") $qp)
+  let full_url = (build-url $base ({channel: (encode-path-segment $channel)} | format pattern "/channels/{channel}/broadcasts") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"lang": $lang, "rights": $rights, "availability": $availability, "mixin": $mixin, "per_page": $per_page, "from": $qp_from} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"lang": $lang, "rights": $rights, "availability": $availability, "mixin": $mixin, "per_page": $per_page, "from": $qp_from} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List the highlights for a channel.
@@ -404,10 +477,21 @@ export def "channels-highlights get" [
   let base = ($base_url | default $BASE_URL)
   if ($channel | is-empty) { error make --unspanned { msg: "path parameter 'channel' must be non-empty" } }
   let qp = [(serialize-qp "lang" $lang "scalar") (serialize-qp "rights" $rights "scalar") (serialize-qp "availability" $availability "scalar") (serialize-qp "live" $live "scalar") (serialize-qp "mixin" $mixin "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({channel: (encode-path-segment $channel)} | format pattern "/channels/{channel}/highlights") $qp)
+  let full_url = (build-url $base ({channel: (encode-path-segment $channel)} | format pattern "/channels/{channel}/highlights") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"lang": $lang, "rights": $rights, "availability": $availability, "live": $live, "mixin": $mixin} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"lang": $lang, "rights": $rights, "availability": $availability, "live": $live, "mixin": $mixin} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get programmes by channel
@@ -435,10 +519,21 @@ export def "channels-programmes get" [
   let base = ($base_url | default $BASE_URL)
   if ($channel | is-empty) { error make --unspanned { msg: "path parameter 'channel' must be non-empty" } }
   let qp = [(serialize-qp "lang" $lang "scalar") (serialize-qp "rights" $rights "scalar") (serialize-qp "availability" $availability "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({channel: (encode-path-segment $channel)} | format pattern "/channels/{channel}/programmes") $qp)
+  let full_url = (build-url $base ({channel: (encode-path-segment $channel)} | format pattern "/channels/{channel}/programmes") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"lang": $lang, "rights": $rights, "availability": $availability, "page": $page, "per_page": $per_page} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"lang": $lang, "rights": $rights, "availability": $availability, "page": $page, "per_page": $per_page} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get schedule by channel
@@ -466,10 +561,21 @@ export def "channels-schedule get" [
   if ($channel | is-empty) { error make --unspanned { msg: "path parameter 'channel' must be non-empty" } }
   if ($date | is-empty) { error make --unspanned { msg: "path parameter 'date' must be non-empty" } }
   let qp = [(serialize-qp "lang" $lang "scalar") (serialize-qp "rights" $rights "scalar") (serialize-qp "availability" $availability "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({channel: (encode-path-segment $channel), date: (encode-path-segment $date)} | format pattern "/channels/{channel}/schedule/{date}") $qp)
+  let full_url = (build-url $base ({channel: (encode-path-segment $channel), date: (encode-path-segment $date)} | format pattern "/channels/{channel}/schedule/{date}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"lang": $lang, "rights": $rights, "availability": $availability} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"lang": $lang, "rights": $rights, "availability": $availability} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get Clips
@@ -494,10 +600,21 @@ export def "clips get" [
   let base = ($base_url | default $BASE_URL)
   if ($pid | is-empty) { error make --unspanned { msg: "path parameter 'pid' must be non-empty" } }
   let qp = [(serialize-qp "rights" $rights "scalar") (serialize-qp "availability" $availability "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({pid: (encode-path-segment $pid)} | format pattern "/clips/{pid}") $qp)
+  let full_url = (build-url $base ({pid: (encode-path-segment $pid)} | format pattern "/clips/{pid}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"rights": $rights, "availability": $availability} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"rights": $rights, "availability": $availability} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Episode for a given pid.
@@ -523,10 +640,21 @@ export def "episodes get-programme" [
   let base = ($base_url | default $BASE_URL)
   if ($pid | is-empty) { error make --unspanned { msg: "path parameter 'pid' must be non-empty" } }
   let qp = [(serialize-qp "rights" $rights "scalar") (serialize-qp "availability" $availability "scalar") (serialize-qp "mixin" $mixin "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({pid: (encode-path-segment $pid)} | format pattern "/episodes/{pid}") $qp)
+  let full_url = (build-url $base ({pid: (encode-path-segment $pid)} | format pattern "/episodes/{pid}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"rights": $rights, "availability": $availability, "mixin": $mixin} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"rights": $rights, "availability": $availability, "mixin": $mixin} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get Onward Journey
@@ -551,10 +679,21 @@ export def "episodes-next get-onward-journey" [
   let base = ($base_url | default $BASE_URL)
   if ($pid | is-empty) { error make --unspanned { msg: "path parameter 'pid' must be non-empty" } }
   let qp = [(serialize-qp "rights" $rights "scalar") (serialize-qp "availability" $availability "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({pid: (encode-path-segment $pid)} | format pattern "/episodes/{pid}/next") $qp)
+  let full_url = (build-url $base ({pid: (encode-path-segment $pid)} | format pattern "/episodes/{pid}/next") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"rights": $rights, "availability": $availability} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"rights": $rights, "availability": $availability} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get Follow-ups (post-rolls)
@@ -579,10 +718,21 @@ export def "episodes-post-rolls get" [
   let base = ($base_url | default $BASE_URL)
   if ($pid | is-empty) { error make --unspanned { msg: "path parameter 'pid' must be non-empty" } }
   let qp = [(serialize-qp "rights" $rights "scalar") (serialize-qp "availability" $availability "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({pid: (encode-path-segment $pid)} | format pattern "/episodes/{pid}/postrolls") $qp)
+  let full_url = (build-url $base ({pid: (encode-path-segment $pid)} | format pattern "/episodes/{pid}/postrolls") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"rights": $rights, "availability": $availability} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"rights": $rights, "availability": $availability} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get Trailers (pre-rolls)
@@ -607,10 +757,21 @@ export def "episodes-prerolls get-trailers-pre-rolls" [
   let base = ($base_url | default $BASE_URL)
   if ($pid | is-empty) { error make --unspanned { msg: "path parameter 'pid' must be non-empty" } }
   let qp = [(serialize-qp "rights" $rights "scalar") (serialize-qp "availability" $availability "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({pid: (encode-path-segment $pid)} | format pattern "/episodes/{pid}/prerolls") $qp)
+  let full_url = (build-url $base ({pid: (encode-path-segment $pid)} | format pattern "/episodes/{pid}/prerolls") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"rights": $rights, "availability": $availability} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"rights": $rights, "availability": $availability} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get programme recommendations
@@ -637,10 +798,21 @@ export def "episodes-recommendations get-programme" [
   let base = ($base_url | default $BASE_URL)
   if ($pid | is-empty) { error make --unspanned { msg: "path parameter 'pid' must be non-empty" } }
   let qp = [(serialize-qp "rights" $rights "scalar") (serialize-qp "availability" $availability "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({pid: (encode-path-segment $pid)} | format pattern "/episodes/{pid}/recommendations") $qp)
+  let full_url = (build-url $base ({pid: (encode-path-segment $pid)} | format pattern "/episodes/{pid}/recommendations") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"rights": $rights, "availability": $availability, "page": $page, "per_page": $per_page} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"rights": $rights, "availability": $availability, "page": $page, "per_page": $per_page} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get programmes popular
@@ -669,10 +841,21 @@ export def "groups-popular-episodes get-programmes" [
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "rights" $rights "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "initial_child_count" $initial_child_count "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "sort_direction" $sort_direction "scalar") (serialize-qp "availability" $availability "scalar") (serialize-qp "mixin" $mixin "multi")] | flatten | str join "&"
-  let full_url = (build-url $base "/groups/popular/episodes" $qp)
+  let full_url = (build-url $base "/groups/popular/episodes" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"rights": $rights, "page": $page, "per_page": $per_page, "initial_child_count": $initial_child_count, "sort": $qp_sort, "sort_direction": $sort_direction, "availability": $availability, "mixin": $mixin} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"rights": $rights, "page": $page, "per_page": $per_page, "initial_child_count": $initial_child_count, "sort": $qp_sort, "sort_direction": $sort_direction, "availability": $availability, "mixin": $mixin} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get episodes by group, brand or series
@@ -703,10 +886,21 @@ export def "groups-episodes get" [
   let base = ($base_url | default $BASE_URL)
   if ($pid | is-empty) { error make --unspanned { msg: "path parameter 'pid' must be non-empty" } }
   let qp = [(serialize-qp "rights" $rights "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "initial_child_count" $initial_child_count "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "sort_direction" $sort_direction "scalar") (serialize-qp "availability" $availability "scalar") (serialize-qp "mixin" $mixin "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({pid: (encode-path-segment $pid)} | format pattern "/groups/{pid}/episodes") $qp)
+  let full_url = (build-url $base ({pid: (encode-path-segment $pid)} | format pattern "/groups/{pid}/episodes") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"rights": $rights, "page": $page, "per_page": $per_page, "initial_child_count": $initial_child_count, "sort": $qp_sort, "sort_direction": $sort_direction, "availability": $availability, "mixin": $mixin} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"rights": $rights, "page": $page, "per_page": $per_page, "initial_child_count": $initial_child_count, "sort": $qp_sort, "sort_direction": $sort_direction, "availability": $availability, "mixin": $mixin} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get programme highlights
@@ -731,10 +925,21 @@ export def "home-highlights get-programme" [
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "lang" $lang "scalar") (serialize-qp "rights" $rights "scalar") (serialize-qp "availability" $availability "scalar") (serialize-qp "mixin" $mixin "multi")] | flatten | str join "&"
-  let full_url = (build-url $base "/home/highlights" $qp)
+  let full_url = (build-url $base "/home/highlights" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"lang": $lang, "rights": $rights, "availability": $availability, "mixin": $mixin} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"lang": $lang, "rights": $rights, "availability": $availability, "mixin": $mixin} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Programme for a given pid.
@@ -760,10 +965,21 @@ export def "programmes get-by-parent" [
   let base = ($base_url | default $BASE_URL)
   if ($pid | is-empty) { error make --unspanned { msg: "path parameter 'pid' must be non-empty" } }
   let qp = [(serialize-qp "rights" $rights "scalar") (serialize-qp "availability" $availability "scalar") (serialize-qp "initial_child_count" $initial_child_count "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({pid: (encode-path-segment $pid)} | format pattern "/programmes/{pid}") $qp)
+  let full_url = (build-url $base ({pid: (encode-path-segment $pid)} | format pattern "/programmes/{pid}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"rights": $rights, "availability": $availability, "initial_child_count": $initial_child_count} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"rights": $rights, "availability": $availability, "initial_child_count": $initial_child_count} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Child episodes for a given programme pid.
@@ -789,10 +1005,21 @@ export def "programmes-episodes get-by-parent" [
   let base = ($base_url | default $BASE_URL)
   if ($pid | is-empty) { error make --unspanned { msg: "path parameter 'pid' must be non-empty" } }
   let qp = [(serialize-qp "rights" $rights "scalar") (serialize-qp "availability" $availability "scalar") (serialize-qp "initial_child_count" $initial_child_count "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({pid: (encode-path-segment $pid)} | format pattern "/programmes/{pid}/episodes") $qp)
+  let full_url = (build-url $base ({pid: (encode-path-segment $pid)} | format pattern "/programmes/{pid}/episodes") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"rights": $rights, "availability": $availability, "initial_child_count": $initial_child_count} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"rights": $rights, "availability": $availability, "initial_child_count": $initial_child_count} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List all regions
@@ -814,10 +1041,21 @@ export def "regions get" [
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/regions" $qp)
+  let full_url = (build-url $base "/regions" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"lang": $lang} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"lang": $lang} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get schema
@@ -837,10 +1075,21 @@ export def "schema-ibl-json get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/schema/ibl.json")
+  let full_url = (build-url $base "/schema/ibl.json" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Search
@@ -865,10 +1114,21 @@ export def "search list" [
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "rights" $rights "scalar") (serialize-qp "availability" $availability "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/search" $qp)
+  let full_url = (build-url $base "/search" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"q": $q, "lang": $lang, "rights": $rights, "availability": $availability} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"q": $q, "lang": $lang, "rights": $rights, "availability": $availability} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Search-suggest
@@ -893,10 +1153,21 @@ export def "search-suggest list" [
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "rights" $rights "scalar") (serialize-qp "availability" $availability "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/search-suggest" $qp)
+  let full_url = (build-url $base "/search-suggest" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"q": $q, "lang": $lang, "rights": $rights, "availability": $availability} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"q": $q, "lang": $lang, "rights": $rights, "availability": $availability} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get status
@@ -916,10 +1187,21 @@ export def "status get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/status")
+  let full_url = (build-url $base "/status" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get user store purchases
@@ -941,10 +1223,21 @@ export def "user-purchases get-store" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "identity_cookie" $identity_cookie "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/user/purchases" $qp)
+  let full_url = (build-url $base "/user/purchases" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"identity_cookie": $identity_cookie} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"identity_cookie": $identity_cookie} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get user store recommendations
@@ -966,10 +1259,21 @@ export def "user-recommendations get-store" [
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "identity_cookie" $identity_cookie "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/user/recommendations" $qp)
+  let full_url = (build-url $base "/user/recommendations" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"identity_cookie": $identity_cookie} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"identity_cookie": $identity_cookie} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get user watching
@@ -991,8 +1295,19 @@ export def "user-watching get" [
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "identity_cookie" $identity_cookie "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/user/watching" $qp)
+  let full_url = (build-url $base "/user/watching" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"identity_cookie": $identity_cookie} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"identity_cookie": $identity_cookie} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }

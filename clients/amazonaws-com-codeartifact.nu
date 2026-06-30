@@ -8,7 +8,7 @@ const BASE_URL = "http://codeartifact.us-east-1.amazonaws.com"
 # `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
 # where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o CODEARTIFACT_TOKEN | default "" }
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o CODEARTIFACT_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
@@ -41,14 +41,11 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
-# Trick: `url encode --all` over-encodes, then we decode the four unreserved
-# punctuation chars back. Pre-existing %XX sequences in the input survive
-# because `url encode --all` first turns their % into %25.
 def encode-path-segment [v: any]: nothing -> string {
   $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
-# Serialize an array-typed path parameter (issue 49.A). OpenAPI 3 `style: simple`
+# Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
 # (the default for path params) and Swagger 2 `collectionFormat: csv` both join
 # the elements with a literal comma WITHIN the single path segment, each element
 # RFC-3986-encoded individually (so a comma inside an element stays %2C). Without
@@ -59,51 +56,57 @@ def encode-path-array [v: any]: nothing -> string {
   if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
 }
 
-# Build URL from base, path, and optional query string
-def build-url [base: string, path: string, query?: string]: nothing -> string {
+# Build the request URL from base, path, and any number of pre-encoded query
+# fragments (param serializer output and/or the auth query). Each fragment is an
+# `&`-joinable `key=value` string already percent-encoded by its producer; empty
+# fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
+# delimiters are hand-spliced — and any query already on the base URL is merged in.
+def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
   let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
-  let result = ($parsed | upsert path $full_path)
-  if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
+  let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
+  $parsed | upsert path $full_path | upsert query $query | url join
 }
 
-# Build the dry-run record returned by --dry-run. Shape:
-#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
-#    auth: {scheme, location}}
-# `meta` carries logical-form data (the query record by spec name, the pre-serialization
-# body) that do-request itself cannot reconstruct from its wire-format args.
-def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
-  let m = ($meta | default {})
-  {
-    dry_run: true
-    method: $method
-    url: $url
-    query: ($m | get -o query | default {})
-    headers: $auth.headers
-    body: ($m | get -o body)
-    content_type: $content_type
-    timeout: $timeout
-    auth: {scheme: $auth.scheme, location: $auth.location}
-  }
+# Success policy: did this response succeed? Single source of truth, consulted by
+# handle-response and the HEAD header-unwrap. Empty ok_codes means the spec listed
+# none, so fall back to < 400. Otherwise: any 2xx, plus documented success codes.
+def status-ok [status: int, ok_codes: list<int>]: nothing -> bool {
+  if ($ok_codes | is-empty) { $status < 400 } else { ($status >= 200 and $status < 300) or ($status in $ok_codes) }
 }
 
-# Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
-  let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
-  let timeout = ($max_time | default 30min)
-  let ct = ($content_type | default "application/json")
-  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
-  let resp = match $method {
-    "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
-  }
-  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
-  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
+# Unwrap a `--full` HTTP response into the user-facing value. Response arrives
+# via pipeline; ok_codes gates the error throw (see status-ok).
+def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: record -> any {
+  let resp = $in
+  if $allow_errors { return $resp }
+  if not (status-ok $resp.status $ok_codes) { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } }
+  if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
+  if $resp.status == 204 { return null }
+  $resp.body
+}
+
+# GET — bodyless, honours --raw
+def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+}
+
+# POST — body + content-type
+def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# PUT — body + content-type
+def send-put [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http put --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http put --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# DELETE — body via --data
+def send-delete [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http delete --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url } else { http delete --headers $req.headers --content-type $req.content_type --data $body --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url }
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 def base-url-completer [] { ["http://codeartifact.us-east-1.amazonaws.com" "http://codeartifact.us-east-2.amazonaws.com" "http://codeartifact.us-west-1.amazonaws.com" "http://codeartifact.us-west-2.amazonaws.com" "http://codeartifact.us-gov-west-1.amazonaws.com" "http://codeartifact.us-gov-east-1.amazonaws.com" "http://codeartifact.ca-central-1.amazonaws.com" "http://codeartifact.eu-north-1.amazonaws.com" "http://codeartifact.eu-west-1.amazonaws.com" "http://codeartifact.eu-west-2.amazonaws.com" "http://codeartifact.eu-west-3.amazonaws.com" "http://codeartifact.eu-central-1.amazonaws.com" "http://codeartifact.eu-south-1.amazonaws.com" "http://codeartifact.af-south-1.amazonaws.com" "http://codeartifact.ap-northeast-1.amazonaws.com" "http://codeartifact.ap-northeast-2.amazonaws.com" "http://codeartifact.ap-northeast-3.amazonaws.com" "http://codeartifact.ap-southeast-1.amazonaws.com" "http://codeartifact.ap-southeast-2.amazonaws.com" "http://codeartifact.ap-east-1.amazonaws.com" "http://codeartifact.ap-south-1.amazonaws.com" "http://codeartifact.sa-east-1.amazonaws.com" "http://codeartifact.me-south-1.amazonaws.com" "https://codeartifact.us-east-1.amazonaws.com" "https://codeartifact.us-east-2.amazonaws.com" "https://codeartifact.us-west-1.amazonaws.com" "https://codeartifact.us-west-2.amazonaws.com" "https://codeartifact.us-gov-west-1.amazonaws.com" "https://codeartifact.us-gov-east-1.amazonaws.com" "https://codeartifact.ca-central-1.amazonaws.com" "https://codeartifact.eu-north-1.amazonaws.com" "https://codeartifact.eu-west-1.amazonaws.com" "https://codeartifact.eu-west-2.amazonaws.com" "https://codeartifact.eu-west-3.amazonaws.com" "https://codeartifact.eu-central-1.amazonaws.com" "https://codeartifact.eu-south-1.amazonaws.com" "https://codeartifact.af-south-1.amazonaws.com" "https://codeartifact.ap-northeast-1.amazonaws.com" "https://codeartifact.ap-northeast-2.amazonaws.com" "https://codeartifact.ap-northeast-3.amazonaws.com" "https://codeartifact.ap-southeast-1.amazonaws.com" "https://codeartifact.ap-southeast-2.amazonaws.com" "https://codeartifact.ap-east-1.amazonaws.com" "https://codeartifact.ap-south-1.amazonaws.com" "https://codeartifact.sa-east-1.amazonaws.com" "https://codeartifact.me-south-1.amazonaws.com" "http://codeartifact.cn-north-1.amazonaws.com.cn" "http://codeartifact.cn-northwest-1.amazonaws.com.cn" "https://codeartifact.cn-north-1.amazonaws.com.cn" "https://codeartifact.cn-northwest-1.amazonaws.com.cn"] }
@@ -171,12 +174,23 @@ export def "repository-external-connection create-associate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain" $domain "scalar") (serialize-qp "domain-owner" $domain_owner "scalar") (serialize-qp "repository" $repository "scalar") (serialize-qp "external-connection" $external_connection "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v1/repository/external-connection" $qp)
+  let full_url = (build-url $base "/v1/repository/external-connection" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"domain": $domain, "domain-owner": $domain_owner, "repository": $repository, "external-connection": $external_connection} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"domain": $domain, "domain-owner": $domain_owner, "repository": $repository, "external-connection": $external_connection} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Removes an existing external connection from a repository.
@@ -208,12 +222,23 @@ export def "repository-external-connection delete-disassociate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain" $domain "scalar") (serialize-qp "domain-owner" $domain_owner "scalar") (serialize-qp "repository" $repository "scalar") (serialize-qp "external-connection" $external_connection "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v1/repository/external-connection" $qp)
+  let full_url = (build-url $base "/v1/repository/external-connection" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"domain": $domain, "domain-owner": $domain_owner, "repository": $repository, "external-connection": $external_connection} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"domain": $domain, "domain-owner": $domain_owner, "repository": $repository, "external-connection": $external_connection} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Copies package versions from one repository to another repository in the same domain. You must specify versions or versionRevisions. You cannot specify both.
@@ -253,14 +278,25 @@ export def "package-versions-copy copy" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain" $domain "scalar") (serialize-qp "domain-owner" $domain_owner "scalar") (serialize-qp "source-repository" $source_repository "scalar") (serialize-qp "destination-repository" $destination_repository "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "namespace" $namespace "scalar") (serialize-qp "package" $package "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v1/package/versions/copy" $qp)
+  let full_url = (build-url $base "/v1/package/versions/copy" $qp $auth.query)
   let req_body = {"versions": $versions, "versionRevisions": $version_revisions, "allowOverwrite": $allow_overwrite, "includeFromUpstream": $include_from_upstream} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"domain": $domain, "domain-owner": $domain_owner, "source-repository": $source_repository, "destination-repository": $destination_repository, "format": $format, "namespace": $namespace, "package": $package} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"domain": $domain, "domain-owner": $domain_owner, "source-repository": $source_repository, "destination-repository": $destination_repository, "format": $format, "namespace": $namespace, "package": $package} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Creates a domain. CodeArtifact domains make it easier to manage multiple repositories across an organization. You can use a domain to apply permissions across many repositories owned by different Amazon Web Services accounts. An asset is stored only once in a domain, even if it's in multiple repositories. Although you can have multiple domains, we recommend a single production domain that contains all published artifacts so that your development teams can find and share packages. You can use a second pre-production domain to test changes to the production domain configuration.
@@ -293,14 +329,25 @@ export def "domain create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain" $domain "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v1/domain" $qp)
+  let full_url = (build-url $base "/v1/domain" $qp $auth.query)
   let req_body = {"encryptionKey": $encryption_key, "tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"domain": $domain} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"domain": $domain} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes a domain. You cannot delete a domain that contains repositories. If you want to delete a domain with repositories, first delete its repositories.
@@ -330,12 +377,23 @@ export def "domain delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain" $domain "scalar") (serialize-qp "domain-owner" $domain_owner "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v1/domain" $qp)
+  let full_url = (build-url $base "/v1/domain" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"domain": $domain, "domain-owner": $domain_owner} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"domain": $domain, "domain-owner": $domain_owner} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Returns a DomainDescription (https://docs.aws.amazon.com/codeartifact/latest/APIReference/API_DomainDescription.html) object that contains information about the requested domain.
@@ -365,12 +423,23 @@ export def "domain get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain" $domain "scalar") (serialize-qp "domain-owner" $domain_owner "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v1/domain" $qp)
+  let full_url = (build-url $base "/v1/domain" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"domain": $domain, "domain-owner": $domain_owner} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"domain": $domain, "domain-owner": $domain_owner} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Creates a repository.
@@ -407,14 +476,25 @@ export def "repository create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain" $domain "scalar") (serialize-qp "domain-owner" $domain_owner "scalar") (serialize-qp "repository" $repository "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v1/repository" $qp)
+  let full_url = (build-url $base "/v1/repository" $qp $auth.query)
   let req_body = {"description": $description, "upstreams": $upstreams, "tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"domain": $domain, "domain-owner": $domain_owner, "repository": $repository} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"domain": $domain, "domain-owner": $domain_owner, "repository": $repository} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes a repository.
@@ -445,12 +525,23 @@ export def "repository delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain" $domain "scalar") (serialize-qp "domain-owner" $domain_owner "scalar") (serialize-qp "repository" $repository "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v1/repository" $qp)
+  let full_url = (build-url $base "/v1/repository" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"domain": $domain, "domain-owner": $domain_owner, "repository": $repository} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"domain": $domain, "domain-owner": $domain_owner, "repository": $repository} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Returns a RepositoryDescription object that contains detailed information about the requested repository.
@@ -481,12 +572,23 @@ export def "repository get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain" $domain "scalar") (serialize-qp "domain-owner" $domain_owner "scalar") (serialize-qp "repository" $repository "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v1/repository" $qp)
+  let full_url = (build-url $base "/v1/repository" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"domain": $domain, "domain-owner": $domain_owner, "repository": $repository} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"domain": $domain, "domain-owner": $domain_owner, "repository": $repository} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update the properties of a repository.
@@ -521,14 +623,25 @@ export def "repository update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain" $domain "scalar") (serialize-qp "domain-owner" $domain_owner "scalar") (serialize-qp "repository" $repository "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v1/repository" $qp)
+  let full_url = (build-url $base "/v1/repository" $qp $auth.query)
   let req_body = {"description": $description, "upstreams": $upstreams} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"domain": $domain, "domain-owner": $domain_owner, "repository": $repository} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"domain": $domain, "domain-owner": $domain_owner, "repository": $repository} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes the resource policy set on a domain.
@@ -559,12 +672,23 @@ export def "domain-permissions-policy delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain" $domain "scalar") (serialize-qp "domain-owner" $domain_owner "scalar") (serialize-qp "policy-revision" $policy_revision "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v1/domain/permissions/policy" $qp)
+  let full_url = (build-url $base "/v1/domain/permissions/policy" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"domain": $domain, "domain-owner": $domain_owner, "policy-revision": $policy_revision} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"domain": $domain, "domain-owner": $domain_owner, "policy-revision": $policy_revision} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the resource policy attached to the specified domain. The policy is a resource-based policy, not an identity-based policy. For more information, see Identity-based policies and resource-based policies (https://docs.aws.amazon.com/IAM/latest/UserGuide/access_policies_identity-vs-resource.html) in the IAM User Guide.
@@ -594,12 +718,23 @@ export def "domain-permissions-policy get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain" $domain "scalar") (serialize-qp "domain-owner" $domain_owner "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v1/domain/permissions/policy" $qp)
+  let full_url = (build-url $base "/v1/domain/permissions/policy" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"domain": $domain, "domain-owner": $domain_owner} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"domain": $domain, "domain-owner": $domain_owner} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes a package and all associated package versions. A deleted package cannot be restored. To delete one or more package versions, use the DeletePackageVersions (https://docs.aws.amazon.com/codeartifact/latest/APIReference/API_DeletePackageVersions.html) API.
@@ -633,12 +768,23 @@ export def "package delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain" $domain "scalar") (serialize-qp "domain-owner" $domain_owner "scalar") (serialize-qp "repository" $repository "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "namespace" $namespace "scalar") (serialize-qp "package" $package "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v1/package" $qp)
+  let full_url = (build-url $base "/v1/package" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"domain": $domain, "domain-owner": $domain_owner, "repository": $repository, "format": $format, "namespace": $namespace, "package": $package} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"domain": $domain, "domain-owner": $domain_owner, "repository": $repository, "format": $format, "namespace": $namespace, "package": $package} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Returns a PackageDescription (https://docs.aws.amazon.com/codeartifact/latest/APIReference/API_PackageDescription.html) object that contains information about the requested package.
@@ -672,12 +818,23 @@ export def "package get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain" $domain "scalar") (serialize-qp "domain-owner" $domain_owner "scalar") (serialize-qp "repository" $repository "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "namespace" $namespace "scalar") (serialize-qp "package" $package "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v1/package" $qp)
+  let full_url = (build-url $base "/v1/package" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"domain": $domain, "domain-owner": $domain_owner, "repository": $repository, "format": $format, "namespace": $namespace, "package": $package} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"domain": $domain, "domain-owner": $domain_owner, "repository": $repository, "format": $format, "namespace": $namespace, "package": $package} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Sets the package origin configuration for a package. The package origin configuration determines how new versions of a package can be added to a repository. You can allow or block direct publishing of new package versions, or ingestion and retaining of new package versions from an external connection or upstream source. For more information about package origin controls and configuration, see Editing package origin controls (https://docs.aws.amazon.com/codeartifact/latest/ug/package-origin-controls.html) in the CodeArtifact User Guide. PutPackageOriginConfiguration can be called on a package that doesn't yet exist in the repository. When called on a package that does not exist, a package is created in the repository with no versions and the requested restrictions are set on the package. This can be used to preemptively block ingesting or retaining any versions from external connections or upstream repositories, or to block publishing any versions of the package into the repository before connecting any package managers or publishers to the repository.
@@ -714,14 +871,25 @@ export def "package update-origin-configuration" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain" $domain "scalar") (serialize-qp "domain-owner" $domain_owner "scalar") (serialize-qp "repository" $repository "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "namespace" $namespace "scalar") (serialize-qp "package" $package "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v1/package" $qp)
+  let full_url = (build-url $base "/v1/package" $qp $auth.query)
   let req_body = {"restrictions": $restrictions} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"domain": $domain, "domain-owner": $domain_owner, "repository": $repository, "format": $format, "namespace": $namespace, "package": $package} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"domain": $domain, "domain-owner": $domain_owner, "repository": $repository, "format": $format, "namespace": $namespace, "package": $package} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes one or more versions of a package. A deleted package version cannot be restored in your repository. If you want to remove a package version from your repository and be able to restore it later, set its status to Archived. Archived packages cannot be downloaded from a repository and don't show up with list package APIs (for example, ListPackageVersions (https://docs.aws.amazon.com/codeartifact/latest/APIReference/API_ListPackageVersions.html)), but you can restore them using UpdatePackageVersionsStatus (https://docs.aws.amazon.com/codeartifact/latest/APIReference/API_UpdatePackageVersionsStatus.html).
@@ -758,14 +926,25 @@ export def "package-versions-delete delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain" $domain "scalar") (serialize-qp "domain-owner" $domain_owner "scalar") (serialize-qp "repository" $repository "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "namespace" $namespace "scalar") (serialize-qp "package" $package "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v1/package/versions/delete" $qp)
+  let full_url = (build-url $base "/v1/package/versions/delete" $qp $auth.query)
   let req_body = {"versions": $versions, "expectedStatus": $expected_status} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"domain": $domain, "domain-owner": $domain_owner, "repository": $repository, "format": $format, "namespace": $namespace, "package": $package} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"domain": $domain, "domain-owner": $domain_owner, "repository": $repository, "format": $format, "namespace": $namespace, "package": $package} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes the resource policy that is set on a repository. After a resource policy is deleted, the permissions allowed and denied by the deleted policy are removed. The effect of deleting a resource policy might not be immediate. Use DeleteRepositoryPermissionsPolicy with caution. After a policy is deleted, Amazon Web Services users, roles, and accounts lose permissions to perform the repository actions granted by the deleted policy.
@@ -797,12 +976,23 @@ export def "repository-permissions-policies delete-policy" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain" $domain "scalar") (serialize-qp "domain-owner" $domain_owner "scalar") (serialize-qp "repository" $repository "scalar") (serialize-qp "policy-revision" $policy_revision "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v1/repository/permissions/policies" $qp)
+  let full_url = (build-url $base "/v1/repository/permissions/policies" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"domain": $domain, "domain-owner": $domain_owner, "repository": $repository, "policy-revision": $policy_revision} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"domain": $domain, "domain-owner": $domain_owner, "repository": $repository, "policy-revision": $policy_revision} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Returns a PackageVersionDescription (https://docs.aws.amazon.com/codeartifact/latest/APIReference/API_PackageVersionDescription.html) object that contains information about the requested package version.
@@ -837,12 +1027,23 @@ export def "package-version get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain" $domain "scalar") (serialize-qp "domain-owner" $domain_owner "scalar") (serialize-qp "repository" $repository "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "namespace" $namespace "scalar") (serialize-qp "package" $package "scalar") (serialize-qp "version" $version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v1/package/version" $qp)
+  let full_url = (build-url $base "/v1/package/version" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"domain": $domain, "domain-owner": $domain_owner, "repository": $repository, "format": $format, "namespace": $namespace, "package": $package, "version": $version} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"domain": $domain, "domain-owner": $domain_owner, "repository": $repository, "format": $format, "namespace": $namespace, "package": $package, "version": $version} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes the assets in package versions and sets the package versions' status to Disposed. A disposed package version cannot be restored in your repository because its assets are deleted. To view all disposed package versions in a repository, use ListPackageVersions (https://docs.aws.amazon.com/codeartifact/latest/APIReference/API_ListPackageVersions.html) and set the status (https://docs.aws.amazon.com/codeartifact/latest/APIReference/API_ListPackageVersions.html#API_ListPackageVersions_RequestSyntax) parameter to Disposed. To view information about a disposed package version, use DescribePackageVersion (https://docs.aws.amazon.com/codeartifact/latest/APIReference/API_DescribePackageVersion.html).
@@ -880,14 +1081,25 @@ export def "package-versions-dispose create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain" $domain "scalar") (serialize-qp "domain-owner" $domain_owner "scalar") (serialize-qp "repository" $repository "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "namespace" $namespace "scalar") (serialize-qp "package" $package "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v1/package/versions/dispose" $qp)
+  let full_url = (build-url $base "/v1/package/versions/dispose" $qp $auth.query)
   let req_body = {"versions": $versions, "versionRevisions": $version_revisions, "expectedStatus": $expected_status} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"domain": $domain, "domain-owner": $domain_owner, "repository": $repository, "format": $format, "namespace": $namespace, "package": $package} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"domain": $domain, "domain-owner": $domain_owner, "repository": $repository, "format": $format, "namespace": $namespace, "package": $package} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Generates a temporary authorization token for accessing repositories in the domain. This API requires the codeartifact:GetAuthorizationToken and sts:GetServiceBearerToken permissions. For more information about authorization tokens, see CodeArtifact authentication and tokens (https://docs.aws.amazon.com/codeartifact/latest/ug/tokens-authentication.html). CodeArtifact authorization tokens are valid for a period of 12 hours when created with the login command. You can call login periodically to refresh the token. When you create an authorization token with the GetAuthorizationToken API, you can set a custom authorization period, up to a maximum of 12 hours, with the durationSeconds parameter. The authorization period begins after login or GetAuthorizationToken is called. If login or GetAuthorizationToken is called while assuming a role, the token lifetime is independent of the maximum session duration of the role. For example, if you call sts assume-role and specify a session duration of 15 minutes, then generate a CodeArtifact authorization token, the token will be valid for the full authorization period even though this is longer than the 15-minute session duration. See Using IAM Roles (https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_use.html) for more information on controlling session duration.
@@ -918,12 +1130,23 @@ export def "authorization-token get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain" $domain "scalar") (serialize-qp "domain-owner" $domain_owner "scalar") (serialize-qp "duration" $duration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v1/authorization-token" $qp)
+  let full_url = (build-url $base "/v1/authorization-token" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"domain": $domain, "domain-owner": $domain_owner, "duration": $duration} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"domain": $domain, "domain-owner": $domain_owner, "duration": $duration} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Returns an asset (or file) that is in a package. For example, for a Maven package version, use GetPackageVersionAsset to download a JAR file, a POM file, or any other assets in the package version.
@@ -960,12 +1183,23 @@ export def "package-version-asset get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain" $domain "scalar") (serialize-qp "domain-owner" $domain_owner "scalar") (serialize-qp "repository" $repository "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "namespace" $namespace "scalar") (serialize-qp "package" $package "scalar") (serialize-qp "version" $version "scalar") (serialize-qp "asset" $asset "scalar") (serialize-qp "revision" $revision "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v1/package/version/asset" $qp)
+  let full_url = (build-url $base "/v1/package/version/asset" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"domain": $domain, "domain-owner": $domain_owner, "repository": $repository, "format": $format, "namespace": $namespace, "package": $package, "version": $version, "asset": $asset, "revision": $revision} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"domain": $domain, "domain-owner": $domain_owner, "repository": $repository, "format": $format, "namespace": $namespace, "package": $package, "version": $version, "asset": $asset, "revision": $revision} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the readme file or descriptive text for a package version. The returned text might contain formatting. For example, it might contain formatting for Markdown or reStructuredText.
@@ -1000,12 +1234,23 @@ export def "package-version-readme get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain" $domain "scalar") (serialize-qp "domain-owner" $domain_owner "scalar") (serialize-qp "repository" $repository "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "namespace" $namespace "scalar") (serialize-qp "package" $package "scalar") (serialize-qp "version" $version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v1/package/version/readme" $qp)
+  let full_url = (build-url $base "/v1/package/version/readme" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"domain": $domain, "domain-owner": $domain_owner, "repository": $repository, "format": $format, "namespace": $namespace, "package": $package, "version": $version} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"domain": $domain, "domain-owner": $domain_owner, "repository": $repository, "format": $format, "namespace": $namespace, "package": $package, "version": $version} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the endpoint of a repository for a specific package format. A repository has one endpoint for each package format: maven npm nuget pypi
@@ -1037,12 +1282,23 @@ export def "repository-endpoint get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain" $domain "scalar") (serialize-qp "domain-owner" $domain_owner "scalar") (serialize-qp "repository" $repository "scalar") (serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v1/repository/endpoint" $qp)
+  let full_url = (build-url $base "/v1/repository/endpoint" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"domain": $domain, "domain-owner": $domain_owner, "repository": $repository, "format": $format} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"domain": $domain, "domain-owner": $domain_owner, "repository": $repository, "format": $format} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the resource policy that is set on a repository.
@@ -1073,12 +1329,23 @@ export def "repository-permissions-policy get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain" $domain "scalar") (serialize-qp "domain-owner" $domain_owner "scalar") (serialize-qp "repository" $repository "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v1/repository/permissions/policy" $qp)
+  let full_url = (build-url $base "/v1/repository/permissions/policy" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"domain": $domain, "domain-owner": $domain_owner, "repository": $repository} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"domain": $domain, "domain-owner": $domain_owner, "repository": $repository} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Sets the resource policy on a repository that specifies permissions to access it. When you call PutRepositoryPermissionsPolicy, the resource policy on the repository is ignored when evaluting permissions. This ensures that the owner of a repository cannot lock themselves out of the repository, which would prevent them from being able to update the resource policy.
@@ -1112,14 +1379,25 @@ export def "repository-permissions-policy update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain" $domain "scalar") (serialize-qp "domain-owner" $domain_owner "scalar") (serialize-qp "repository" $repository "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v1/repository/permissions/policy" $qp)
+  let full_url = (build-url $base "/v1/repository/permissions/policy" $qp $auth.query)
   let req_body = {"policyRevision": $policy_revision, "policyDocument": $policy_document} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"domain": $domain, "domain-owner": $domain_owner, "repository": $repository} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"domain": $domain, "domain-owner": $domain_owner, "repository": $repository} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Returns a list of DomainSummary (https://docs.aws.amazon.com/codeartifact/latest/APIReference/API_PackageVersionDescription.html) objects for all domains owned by the Amazon Web Services account that makes this call. Each returned DomainSummary object contains information about a domain.
@@ -1152,14 +1430,25 @@ export def "domains list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v1/domains" $qp)
+  let full_url = (build-url $base "/v1/domains" $qp $auth.query)
   let req_body = {"maxResults": $max_results_body, "nextToken": $next_token_body} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"maxResults": $max_results, "nextToken": $next_token} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"maxResults": $max_results, "nextToken": $next_token} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Returns a list of AssetSummary (https://docs.aws.amazon.com/codeartifact/latest/APIReference/API_AssetSummary.html) objects for assets in a package version.
@@ -1198,12 +1487,23 @@ export def "package-version-assets list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain" $domain "scalar") (serialize-qp "domain-owner" $domain_owner "scalar") (serialize-qp "repository" $repository "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "namespace" $namespace "scalar") (serialize-qp "package" $package "scalar") (serialize-qp "version" $version "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "next-token" $next_token "scalar") (serialize-qp "maxResults" $max_results_2 "scalar") (serialize-qp "nextToken" $next_token_2 "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v1/package/version/assets" $qp)
+  let full_url = (build-url $base "/v1/package/version/assets" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"domain": $domain, "domain-owner": $domain_owner, "repository": $repository, "format": $format, "namespace": $namespace, "package": $package, "version": $version, "max-results": $max_results, "next-token": $next_token, "maxResults": $max_results_2, "nextToken": $next_token_2} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"domain": $domain, "domain-owner": $domain_owner, "repository": $repository, "format": $format, "namespace": $namespace, "package": $package, "version": $version, "max-results": $max_results, "next-token": $next_token, "maxResults": $max_results_2, "nextToken": $next_token_2} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the direct dependencies for a package version. The dependencies are returned as PackageDependency (https://docs.aws.amazon.com/codeartifact/latest/APIReference/API_PackageDependency.html) objects. CodeArtifact extracts the dependencies for a package version from the metadata file for the package format (for example, the package.json file for npm packages and the pom.xml file for Maven). Any package version dependencies that are not listed in the configuration file are not returned.
@@ -1239,12 +1539,23 @@ export def "package-version-dependencies list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain" $domain "scalar") (serialize-qp "domain-owner" $domain_owner "scalar") (serialize-qp "repository" $repository "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "namespace" $namespace "scalar") (serialize-qp "package" $package "scalar") (serialize-qp "version" $version "scalar") (serialize-qp "next-token" $next_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v1/package/version/dependencies" $qp)
+  let full_url = (build-url $base "/v1/package/version/dependencies" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"domain": $domain, "domain-owner": $domain_owner, "repository": $repository, "format": $format, "namespace": $namespace, "package": $package, "version": $version, "next-token": $next_token} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"domain": $domain, "domain-owner": $domain_owner, "repository": $repository, "format": $format, "namespace": $namespace, "package": $package, "version": $version, "next-token": $next_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Returns a list of PackageVersionSummary (https://docs.aws.amazon.com/codeartifact/latest/APIReference/API_PackageVersionSummary.html) objects for package versions in a repository that match the request parameters. Package versions of all statuses will be returned by default when calling list-package-versions with no --status parameter.
@@ -1285,12 +1596,23 @@ export def "package-versions list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain" $domain "scalar") (serialize-qp "domain-owner" $domain_owner "scalar") (serialize-qp "repository" $repository "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "namespace" $namespace "scalar") (serialize-qp "package" $package "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "sortBy" $sort_by "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "next-token" $next_token "scalar") (serialize-qp "originType" $origin_type "scalar") (serialize-qp "maxResults" $max_results_2 "scalar") (serialize-qp "nextToken" $next_token_2 "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v1/package/versions" $qp)
+  let full_url = (build-url $base "/v1/package/versions" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"domain": $domain, "domain-owner": $domain_owner, "repository": $repository, "format": $format, "namespace": $namespace, "package": $package, "status": $status, "sortBy": $sort_by, "max-results": $max_results, "next-token": $next_token, "originType": $origin_type, "maxResults": $max_results_2, "nextToken": $next_token_2} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"domain": $domain, "domain-owner": $domain_owner, "repository": $repository, "format": $format, "namespace": $namespace, "package": $package, "status": $status, "sortBy": $sort_by, "max-results": $max_results, "next-token": $next_token, "originType": $origin_type, "maxResults": $max_results_2, "nextToken": $next_token_2} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Returns a list of PackageSummary (https://docs.aws.amazon.com/codeartifact/latest/APIReference/API_PackageSummary.html) objects for packages in a repository that match the request parameters.
@@ -1330,12 +1652,23 @@ export def "packages list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain" $domain "scalar") (serialize-qp "domain-owner" $domain_owner "scalar") (serialize-qp "repository" $repository "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "namespace" $namespace "scalar") (serialize-qp "package-prefix" $package_prefix "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "next-token" $next_token "scalar") (serialize-qp "publish" $publish "scalar") (serialize-qp "upstream" $upstream "scalar") (serialize-qp "maxResults" $max_results_2 "scalar") (serialize-qp "nextToken" $next_token_2 "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v1/packages" $qp)
+  let full_url = (build-url $base "/v1/packages" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"domain": $domain, "domain-owner": $domain_owner, "repository": $repository, "format": $format, "namespace": $namespace, "package-prefix": $package_prefix, "max-results": $max_results, "next-token": $next_token, "publish": $publish, "upstream": $upstream, "maxResults": $max_results_2, "nextToken": $next_token_2} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"domain": $domain, "domain-owner": $domain_owner, "repository": $repository, "format": $format, "namespace": $namespace, "package-prefix": $package_prefix, "max-results": $max_results, "next-token": $next_token, "publish": $publish, "upstream": $upstream, "maxResults": $max_results_2, "nextToken": $next_token_2} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Returns a list of RepositorySummary (https://docs.aws.amazon.com/codeartifact/latest/APIReference/API_RepositorySummary.html) objects. Each RepositorySummary contains information about a repository in the specified Amazon Web Services account and that matches the input parameters.
@@ -1368,12 +1701,23 @@ export def "repositories list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "repository-prefix" $repository_prefix "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "next-token" $next_token "scalar") (serialize-qp "maxResults" $max_results_2 "scalar") (serialize-qp "nextToken" $next_token_2 "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v1/repositories" $qp)
+  let full_url = (build-url $base "/v1/repositories" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"repository-prefix": $repository_prefix, "max-results": $max_results, "next-token": $next_token, "maxResults": $max_results_2, "nextToken": $next_token_2} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"repository-prefix": $repository_prefix, "max-results": $max_results, "next-token": $next_token, "maxResults": $max_results_2, "nextToken": $next_token_2} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Returns a list of RepositorySummary (https://docs.aws.amazon.com/codeartifact/latest/APIReference/API_RepositorySummary.html) objects. Each RepositorySummary contains information about a repository in the specified domain and that matches the input parameters.
@@ -1409,12 +1753,23 @@ export def "domain-repositories list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain" $domain "scalar") (serialize-qp "domain-owner" $domain_owner "scalar") (serialize-qp "administrator-account" $administrator_account "scalar") (serialize-qp "repository-prefix" $repository_prefix "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "next-token" $next_token "scalar") (serialize-qp "maxResults" $max_results_2 "scalar") (serialize-qp "nextToken" $next_token_2 "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v1/domain/repositories" $qp)
+  let full_url = (build-url $base "/v1/domain/repositories" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"domain": $domain, "domain-owner": $domain_owner, "administrator-account": $administrator_account, "repository-prefix": $repository_prefix, "max-results": $max_results, "next-token": $next_token, "maxResults": $max_results_2, "nextToken": $next_token_2} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"domain": $domain, "domain-owner": $domain_owner, "administrator-account": $administrator_account, "repository-prefix": $repository_prefix, "max-results": $max_results, "next-token": $next_token, "maxResults": $max_results_2, "nextToken": $next_token_2} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Gets information about Amazon Web Services tags for a specified Amazon Resource Name (ARN) in CodeArtifact.
@@ -1443,12 +1798,23 @@ export def "tags list-for-resource" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "resourceArn" $resource_arn "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v1/tags" $qp)
+  let full_url = (build-url $base "/v1/tags" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"resourceArn": $resource_arn} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"resourceArn": $resource_arn} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Creates a new package version containing one or more assets (or files). The unfinished flag can be used to keep the package version in the Unfinished state until all of its assets have been uploaded (see Package version status (https://docs.aws.amazon.com/codeartifact/latest/ug/packages-overview.html#package-version-status.html#package-version-status) in the CodeArtifact user guide). To set the package version’s status to Published, omit the unfinished flag when uploading the final asset, or set the status using UpdatePackageVersionStatus (https://docs.aws.amazon.com/codeartifact/latest/APIReference/API_UpdatePackageVersionsStatus.html). Once a package version’s status is set to Published, it cannot change back to Unfinished. Only generic packages can be published using this API. For more information, see Using generic packages (https://docs.aws.amazon.com/codeartifact/latest/ug/using-generic.html) in the CodeArtifact User Guide.
@@ -1488,14 +1854,25 @@ export def "package-version-publish publish" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain" $domain "scalar") (serialize-qp "domain-owner" $domain_owner "scalar") (serialize-qp "repository" $repository "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "namespace" $namespace "scalar") (serialize-qp "package" $package "scalar") (serialize-qp "version" $version "scalar") (serialize-qp "asset" $asset "scalar") (serialize-qp "unfinished" $unfinished "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v1/package/version/publish" $qp)
+  let full_url = (build-url $base "/v1/package/version/publish" $qp $auth.query)
   let req_body = {"assetContent": $asset_content} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "x-amz-content-sha256": $x_amz_content_sha256_2} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"domain": $domain, "domain-owner": $domain_owner, "repository": $repository, "format": $format, "namespace": $namespace, "package": $package, "version": $version, "asset": $asset, "unfinished": $unfinished} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"domain": $domain, "domain-owner": $domain_owner, "repository": $repository, "format": $format, "namespace": $namespace, "package": $package, "version": $version, "asset": $asset, "unfinished": $unfinished} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Sets a resource policy on a domain that specifies permissions to access it. When you call PutDomainPermissionsPolicy, the resource policy on the domain is ignored when evaluting permissions. This ensures that the owner of a domain cannot lock themselves out of the domain, which would prevent them from being able to update the resource policy.
@@ -1527,14 +1904,25 @@ export def "domain-permissions-policy update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v1/domain/permissions/policy")
+  let full_url = (build-url $base "/v1/domain/permissions/policy" $auth.query)
   let req_body = {"domain": $domain, "domainOwner": $domain_owner, "policyRevision": $policy_revision, "policyDocument": $policy_document} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Adds or updates tags for a resource in CodeArtifact.
@@ -1566,14 +1954,25 @@ export def "tag tag-resource" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "resourceArn" $resource_arn "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v1/tag" $qp)
+  let full_url = (build-url $base "/v1/tag" $qp $auth.query)
   let req_body = {"tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"resourceArn": $resource_arn} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"resourceArn": $resource_arn} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Removes tags from a resource in CodeArtifact.
@@ -1604,14 +2003,25 @@ export def "untag untag-resource" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "resourceArn" $resource_arn "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v1/untag" $qp)
+  let full_url = (build-url $base "/v1/untag" $qp $auth.query)
   let req_body = {"tagKeys": $tag_keys} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"resourceArn": $resource_arn} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"resourceArn": $resource_arn} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Updates the status of one or more versions of a package. Using UpdatePackageVersionsStatus, you can update the status of package versions to Archived, Published, or Unlisted. To set the status of a package version to Disposed, use DisposePackageVersions (https://docs.aws.amazon.com/codeartifact/latest/APIReference/API_DisposePackageVersions.html).
@@ -1650,12 +2060,23 @@ export def "package-versions-update-status update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain" $domain "scalar") (serialize-qp "domain-owner" $domain_owner "scalar") (serialize-qp "repository" $repository "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "namespace" $namespace "scalar") (serialize-qp "package" $package "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v1/package/versions/update_status" $qp)
+  let full_url = (build-url $base "/v1/package/versions/update_status" $qp $auth.query)
   let req_body = {"versions": $versions, "versionRevisions": $version_revisions, "expectedStatus": $expected_status, "targetStatus": $target_status} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"domain": $domain, "domain-owner": $domain_owner, "repository": $repository, "format": $format, "namespace": $namespace, "package": $package} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"domain": $domain, "domain-owner": $domain_owner, "repository": $repository, "format": $format, "namespace": $namespace, "package": $package} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }

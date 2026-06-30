@@ -8,7 +8,7 @@ const BASE_URL = "https://api-test.qualpay.com/pg"
 # `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
 # where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o QUALPAY_PAYMENT_GATEWAY_API_TOKEN | default "" }
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o QUALPAY_PAYMENT_GATEWAY_API_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
@@ -42,14 +42,11 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
-# Trick: `url encode --all` over-encodes, then we decode the four unreserved
-# punctuation chars back. Pre-existing %XX sequences in the input survive
-# because `url encode --all` first turns their % into %25.
 def encode-path-segment [v: any]: nothing -> string {
   $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
-# Serialize an array-typed path parameter (issue 49.A). OpenAPI 3 `style: simple`
+# Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
 # (the default for path params) and Swagger 2 `collectionFormat: csv` both join
 # the elements with a literal comma WITHIN the single path segment, each element
 # RFC-3986-encoded individually (so a comma inside an element stays %2C). Without
@@ -60,51 +57,40 @@ def encode-path-array [v: any]: nothing -> string {
   if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
 }
 
-# Build URL from base, path, and optional query string
-def build-url [base: string, path: string, query?: string]: nothing -> string {
+# Build the request URL from base, path, and any number of pre-encoded query
+# fragments (param serializer output and/or the auth query). Each fragment is an
+# `&`-joinable `key=value` string already percent-encoded by its producer; empty
+# fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
+# delimiters are hand-spliced — and any query already on the base URL is merged in.
+def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
   let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
-  let result = ($parsed | upsert path $full_path)
-  if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
+  let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
+  $parsed | upsert path $full_path | upsert query $query | url join
 }
 
-# Build the dry-run record returned by --dry-run. Shape:
-#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
-#    auth: {scheme, location}}
-# `meta` carries logical-form data (the query record by spec name, the pre-serialization
-# body) that do-request itself cannot reconstruct from its wire-format args.
-def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
-  let m = ($meta | default {})
-  {
-    dry_run: true
-    method: $method
-    url: $url
-    query: ($m | get -o query | default {})
-    headers: $auth.headers
-    body: ($m | get -o body)
-    content_type: $content_type
-    timeout: $timeout
-    auth: {scheme: $auth.scheme, location: $auth.location}
-  }
+# Success policy: did this response succeed? Single source of truth, consulted by
+# handle-response and the HEAD header-unwrap. Empty ok_codes means the spec listed
+# none, so fall back to < 400. Otherwise: any 2xx, plus documented success codes.
+def status-ok [status: int, ok_codes: list<int>]: nothing -> bool {
+  if ($ok_codes | is-empty) { $status < 400 } else { ($status >= 200 and $status < 300) or ($status in $ok_codes) }
 }
 
-# Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
-  let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
-  let timeout = ($max_time | default 30min)
-  let ct = ($content_type | default "application/json")
-  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
-  let resp = match $method {
-    "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
-  }
-  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
-  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
+# Unwrap a `--full` HTTP response into the user-facing value. Response arrives
+# via pipeline; ok_codes gates the error throw (see status-ok).
+def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: record -> any {
+  let resp = $in
+  if $allow_errors { return $resp }
+  if not (status-ok $resp.status $ok_codes) { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } }
+  if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
+  if $resp.status == 204 { return null }
+  $resp.body
+}
+
+# POST — body + content-type
+def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 def base-url-completer [] { ["https://api-test.qualpay.com/pg"] }
@@ -154,12 +140,23 @@ export def "ardef get-card-type-information" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/ardef")
+  let full_url = (build-url $base "/ardef" $auth.query)
   let req_body = {"card_number": $card_number, "merchant_id": $merchant_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Authorize Transaction
@@ -236,12 +233,23 @@ export def "auth create-authorization" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/auth")
+  let full_url = (build-url $base "/auth" $auth.query)
   let req_body = {"amt_convenience_fee": $amt_convenience_fee, "amt_fbo": $amt_fbo, "amt_tax": $amt_tax, "amt_tran": $amt_tran, "amt_tran_fee": $amt_tran_fee, "auth_code": $auth_code, "avs_address": $avs_address, "avs_zip": $avs_zip, "card_id": $card_id, "card_number": $card_number, "card_swipe": $card_swipe, "cardholder_name": $cardholder_name, "cavv_3ds": $cavv_3ds, "client_ip": $client_ip, "customer": $customer, "customer_code": $customer_code, "customer_email": $customer_email, "customer_id": $customer_id, "cvv2": $cvv2, "dba_name": $dba_name, "dba_suffix": $dba_suffix, "dda_number": $dda_number, "developer_id": $developer_id, "duplicate_seconds": $duplicate_seconds, "echo_fields": $echo_fields, "email_address": $email_address, "email_receipt": $email_receipt, "emv_tran_id": $emv_tran_id, "exp_date": $exp_date, "fbo_id": $fbo_id, "line_items": $line_items, "loc_id": $loc_id, "mc_ucaf_data": $mc_ucaf_data, "mc_ucaf_ind": $mc_ucaf_ind, "merch_ref_num": $merch_ref_num, "merchant_id": $merchant_id, "moto_ecomm_ind": $moto_ecomm_ind, "partial_auth": $partial_auth, "payload_apple_pay": $payload_apple_pay, "payload_google_pay": $payload_google_pay, "pg_id": $pg_id, "profile_id": $profile_id, "purchase_id": $purchase_id, "report_data": $report_data, "retry_attempt": $retry_attempt, "retry_id": $retry_id, "session_id": $session_id, "subscription_id": $subscription_id, "tokenize": $tokenize, "tr_number": $tr_number, "tran_currency": $tran_currency, "type_id": $type_id, "user_id": $user_id, "vendor_id": $vendor_id, "xid_3ds": $xid_3ds} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Close Batch
@@ -273,12 +281,23 @@ export def "batch-close close" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/batchClose")
+  let full_url = (build-url $base "/batchClose" $auth.query)
   let req_body = {"developer_id": $developer_id, "echo_fields": $echo_fields, "loc_id": $loc_id, "merchant_id": $merchant_id, "profile_id": $profile_id, "report_data": $report_data, "retry_attempt": $retry_attempt, "retry_id": $retry_id, "session_id": $session_id, "tran_currency": $tran_currency, "user_id": $user_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Capture an Authorized Transaction
@@ -313,12 +332,23 @@ export def "capture create" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($pg_id_orig | is-empty) { error make --unspanned { msg: "path parameter 'pgIdOrig' must be non-empty" } }
-  let full_url = (build-url $base ({pg_id_orig: (encode-path-segment $pg_id_orig)} | format pattern "/capture/{pg_id_orig}"))
+  let full_url = (build-url $base ({pg_id_orig: (encode-path-segment $pg_id_orig)} | format pattern "/capture/{pg_id_orig}") $auth.query)
   let req_body = {"amt_tran": $amt_tran, "developer_id": $developer_id, "echo_fields": $echo_fields, "loc_id": $loc_id, "merchant_id": $merchant_id, "profile_id": $profile_id, "report_data": $report_data, "retry_attempt": $retry_attempt, "retry_id": $retry_id, "session_id": $session_id, "user_id": $user_id, "vendor_id": $vendor_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Issue Credit to Cardholder
@@ -395,12 +425,23 @@ export def "credit create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/credit")
+  let full_url = (build-url $base "/credit" $auth.query)
   let req_body = {"amt_convenience_fee": $amt_convenience_fee, "amt_fbo": $amt_fbo, "amt_tax": $amt_tax, "amt_tran": $amt_tran, "amt_tran_fee": $amt_tran_fee, "auth_code": $auth_code, "avs_address": $avs_address, "avs_zip": $avs_zip, "card_id": $card_id, "card_number": $card_number, "card_swipe": $card_swipe, "cardholder_name": $cardholder_name, "cavv_3ds": $cavv_3ds, "client_ip": $client_ip, "customer": $customer, "customer_code": $customer_code, "customer_email": $customer_email, "customer_id": $customer_id, "cvv2": $cvv2, "dba_name": $dba_name, "dba_suffix": $dba_suffix, "dda_number": $dda_number, "developer_id": $developer_id, "duplicate_seconds": $duplicate_seconds, "echo_fields": $echo_fields, "email_address": $email_address, "email_receipt": $email_receipt, "emv_tran_id": $emv_tran_id, "exp_date": $exp_date, "fbo_id": $fbo_id, "line_items": $line_items, "loc_id": $loc_id, "mc_ucaf_data": $mc_ucaf_data, "mc_ucaf_ind": $mc_ucaf_ind, "merch_ref_num": $merch_ref_num, "merchant_id": $merchant_id, "moto_ecomm_ind": $moto_ecomm_ind, "partial_auth": $partial_auth, "payload_apple_pay": $payload_apple_pay, "payload_google_pay": $payload_google_pay, "pg_id": $pg_id, "profile_id": $profile_id, "purchase_id": $purchase_id, "report_data": $report_data, "retry_attempt": $retry_attempt, "retry_id": $retry_id, "session_id": $session_id, "subscription_id": $subscription_id, "tokenize": $tokenize, "tr_number": $tr_number, "tran_currency": $tran_currency, "type_id": $type_id, "user_id": $user_id, "vendor_id": $vendor_id, "xid_3ds": $xid_3ds} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Send Transaction Receipt Email
@@ -428,12 +469,23 @@ export def "email-receipt send" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($pg_id | is-empty) { error make --unspanned { msg: "path parameter 'pgId' must be non-empty" } }
-  let full_url = (build-url $base ({pg_id: (encode-path-segment $pg_id)} | format pattern "/emailReceipt/{pg_id}"))
+  let full_url = (build-url $base ({pg_id: (encode-path-segment $pg_id)} | format pattern "/emailReceipt/{pg_id}") $auth.query)
   let req_body = {"developer_id": $developer_id, "email_address": $email_address, "logo_url": $logo_url, "merchant_id": $merchant_id, "vendor_id": $vendor_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Expire Token
@@ -466,12 +518,23 @@ export def "expire-token create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/expireToken")
+  let full_url = (build-url $base "/expireToken" $auth.query)
   let req_body = {"card_id": $card_id, "developer_id": $developer_id, "echo_fields": $echo_fields, "loc_id": $loc_id, "merchant_id": $merchant_id, "profile_id": $profile_id, "report_data": $report_data, "retry_attempt": $retry_attempt, "retry_id": $retry_id, "session_id": $session_id, "user_id": $user_id, "vendor_id": $vendor_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Force Transaction Approval
@@ -548,12 +611,23 @@ export def "force create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/force")
+  let full_url = (build-url $base "/force" $auth.query)
   let req_body = {"amt_convenience_fee": $amt_convenience_fee, "amt_fbo": $amt_fbo, "amt_tax": $amt_tax, "amt_tran": $amt_tran, "amt_tran_fee": $amt_tran_fee, "auth_code": $auth_code, "avs_address": $avs_address, "avs_zip": $avs_zip, "card_id": $card_id, "card_number": $card_number, "card_swipe": $card_swipe, "cardholder_name": $cardholder_name, "cavv_3ds": $cavv_3ds, "client_ip": $client_ip, "customer": $customer, "customer_code": $customer_code, "customer_email": $customer_email, "customer_id": $customer_id, "cvv2": $cvv2, "dba_name": $dba_name, "dba_suffix": $dba_suffix, "dda_number": $dda_number, "developer_id": $developer_id, "duplicate_seconds": $duplicate_seconds, "echo_fields": $echo_fields, "email_address": $email_address, "email_receipt": $email_receipt, "emv_tran_id": $emv_tran_id, "exp_date": $exp_date, "fbo_id": $fbo_id, "line_items": $line_items, "loc_id": $loc_id, "mc_ucaf_data": $mc_ucaf_data, "mc_ucaf_ind": $mc_ucaf_ind, "merch_ref_num": $merch_ref_num, "merchant_id": $merchant_id, "moto_ecomm_ind": $moto_ecomm_ind, "partial_auth": $partial_auth, "payload_apple_pay": $payload_apple_pay, "payload_google_pay": $payload_google_pay, "pg_id": $pg_id, "profile_id": $profile_id, "purchase_id": $purchase_id, "report_data": $report_data, "retry_attempt": $retry_attempt, "retry_id": $retry_id, "session_id": $session_id, "subscription_id": $subscription_id, "tokenize": $tokenize, "tr_number": $tr_number, "tran_currency": $tran_currency, "type_id": $type_id, "user_id": $user_id, "vendor_id": $vendor_id, "xid_3ds": $xid_3ds} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Recharge Previously Settled Transaction
@@ -587,12 +661,23 @@ export def "recharge create" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($pg_id_orig | is-empty) { error make --unspanned { msg: "path parameter 'pgIdOrig' must be non-empty" } }
-  let full_url = (build-url $base ({pg_id_orig: (encode-path-segment $pg_id_orig)} | format pattern "/recharge/{pg_id_orig}"))
+  let full_url = (build-url $base ({pg_id_orig: (encode-path-segment $pg_id_orig)} | format pattern "/recharge/{pg_id_orig}") $auth.query)
   let req_body = {"amt_tran": $amt_tran, "developer_id": $developer_id, "echo_fields": $echo_fields, "loc_id": $loc_id, "merchant_id": $merchant_id, "profile_id": $profile_id, "report_data": $report_data, "retry_attempt": $retry_attempt, "retry_id": $retry_id, "session_id": $session_id, "user_id": $user_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Refund Previously Captured Transaction
@@ -627,12 +712,23 @@ export def "refund create" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($pg_id_orig | is-empty) { error make --unspanned { msg: "path parameter 'pgIdOrig' must be non-empty" } }
-  let full_url = (build-url $base ({pg_id_orig: (encode-path-segment $pg_id_orig)} | format pattern "/refund/{pg_id_orig}"))
+  let full_url = (build-url $base ({pg_id_orig: (encode-path-segment $pg_id_orig)} | format pattern "/refund/{pg_id_orig}") $auth.query)
   let req_body = {"amt_tran": $amt_tran, "developer_id": $developer_id, "echo_fields": $echo_fields, "loc_id": $loc_id, "merchant_id": $merchant_id, "profile_id": $profile_id, "report_data": $report_data, "retry_attempt": $retry_attempt, "retry_id": $retry_id, "session_id": $session_id, "user_id": $user_id, "vendor_id": $vendor_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Sale (Auth + Capture)
@@ -709,12 +805,23 @@ export def "sale create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/sale")
+  let full_url = (build-url $base "/sale" $auth.query)
   let req_body = {"amt_convenience_fee": $amt_convenience_fee, "amt_fbo": $amt_fbo, "amt_tax": $amt_tax, "amt_tran": $amt_tran, "amt_tran_fee": $amt_tran_fee, "auth_code": $auth_code, "avs_address": $avs_address, "avs_zip": $avs_zip, "card_id": $card_id, "card_number": $card_number, "card_swipe": $card_swipe, "cardholder_name": $cardholder_name, "cavv_3ds": $cavv_3ds, "client_ip": $client_ip, "customer": $customer, "customer_code": $customer_code, "customer_email": $customer_email, "customer_id": $customer_id, "cvv2": $cvv2, "dba_name": $dba_name, "dba_suffix": $dba_suffix, "dda_number": $dda_number, "developer_id": $developer_id, "duplicate_seconds": $duplicate_seconds, "echo_fields": $echo_fields, "email_address": $email_address, "email_receipt": $email_receipt, "emv_tran_id": $emv_tran_id, "exp_date": $exp_date, "fbo_id": $fbo_id, "line_items": $line_items, "loc_id": $loc_id, "mc_ucaf_data": $mc_ucaf_data, "mc_ucaf_ind": $mc_ucaf_ind, "merch_ref_num": $merch_ref_num, "merchant_id": $merchant_id, "moto_ecomm_ind": $moto_ecomm_ind, "partial_auth": $partial_auth, "payload_apple_pay": $payload_apple_pay, "payload_google_pay": $payload_google_pay, "pg_id": $pg_id, "profile_id": $profile_id, "purchase_id": $purchase_id, "report_data": $report_data, "retry_attempt": $retry_attempt, "retry_id": $retry_id, "session_id": $session_id, "subscription_id": $subscription_id, "tokenize": $tokenize, "tr_number": $tr_number, "tran_currency": $tran_currency, "type_id": $type_id, "user_id": $user_id, "vendor_id": $vendor_id, "xid_3ds": $xid_3ds} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Tokenize Card
@@ -762,12 +869,23 @@ export def "tokenize create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/tokenize")
+  let full_url = (build-url $base "/tokenize" $auth.query)
   let req_body = {"avs_address": $avs_address, "avs_zip": $avs_zip, "card_id": $card_id, "card_number": $card_number, "card_swipe": $card_swipe, "cardholder_name": $cardholder_name, "client_ip": $client_ip, "cvv2": $cvv2, "dda_number": $dda_number, "developer_id": $developer_id, "echo_fields": $echo_fields, "email_address": $email_address, "exp_date": $exp_date, "loc_id": $loc_id, "merchant_id": $merchant_id, "payload_apple_pay": $payload_apple_pay, "payload_google_pay": $payload_google_pay, "profile_id": $profile_id, "report_data": $report_data, "retry_attempt": $retry_attempt, "retry_id": $retry_id, "session_id": $session_id, "single_use": $single_use, "tr_number": $tr_number, "type_id": $type_id, "user_id": $user_id, "vendor_id": $vendor_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Verify Card
@@ -819,12 +937,23 @@ export def "verify create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/verify")
+  let full_url = (build-url $base "/verify" $auth.query)
   let req_body = {"avs_address": $avs_address, "avs_zip": $avs_zip, "card_id": $card_id, "card_number": $card_number, "card_swipe": $card_swipe, "cardholder_name": $cardholder_name, "client_ip": $client_ip, "customer": $customer, "customer_code": $customer_code, "cvv2": $cvv2, "dda_number": $dda_number, "developer_id": $developer_id, "echo_fields": $echo_fields, "email_address": $email_address, "exp_date": $exp_date, "loc_id": $loc_id, "merch_ref_num": $merch_ref_num, "merchant_id": $merchant_id, "moto_ecomm_ind": $moto_ecomm_ind, "payload_apple_pay": $payload_apple_pay, "payload_google_pay": $payload_google_pay, "profile_id": $profile_id, "report_data": $report_data, "retry_attempt": $retry_attempt, "retry_id": $retry_id, "session_id": $session_id, "tokenize": $tokenize, "tr_number": $tr_number, "type_id": $type_id, "user_id": $user_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Void a Previously Authorized Transaction
@@ -858,10 +987,21 @@ export def "void create" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($pg_id_orig | is-empty) { error make --unspanned { msg: "path parameter 'pgIdOrig' must be non-empty" } }
-  let full_url = (build-url $base ({pg_id_orig: (encode-path-segment $pg_id_orig)} | format pattern "/void/{pg_id_orig}"))
+  let full_url = (build-url $base ({pg_id_orig: (encode-path-segment $pg_id_orig)} | format pattern "/void/{pg_id_orig}") $auth.query)
   let req_body = {"developer_id": $developer_id, "echo_fields": $echo_fields, "loc_id": $loc_id, "merchant_id": $merchant_id, "profile_id": $profile_id, "report_data": $report_data, "retry_attempt": $retry_attempt, "retry_id": $retry_id, "session_id": $session_id, "user_id": $user_id, "vendor_id": $vendor_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }

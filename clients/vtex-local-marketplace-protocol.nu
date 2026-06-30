@@ -8,7 +8,7 @@ const BASE_URL = "https://vtex.local"
 # `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
 # where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o MARKETPLACE_PROTOCOL_TOKEN | default "" }
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o MARKETPLACE_PROTOCOL_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
@@ -52,14 +52,11 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
-# Trick: `url encode --all` over-encodes, then we decode the four unreserved
-# punctuation chars back. Pre-existing %XX sequences in the input survive
-# because `url encode --all` first turns their % into %25.
 def encode-path-segment [v: any]: nothing -> string {
   $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
-# Serialize an array-typed path parameter (issue 49.A). OpenAPI 3 `style: simple`
+# Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
 # (the default for path params) and Swagger 2 `collectionFormat: csv` both join
 # the elements with a literal comma WITHIN the single path segment, each element
 # RFC-3986-encoded individually (so a comma inside an element stays %2C). Without
@@ -70,51 +67,46 @@ def encode-path-array [v: any]: nothing -> string {
   if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
 }
 
-# Build URL from base, path, and optional query string
-def build-url [base: string, path: string, query?: string]: nothing -> string {
+# Build the request URL from base, path, and any number of pre-encoded query
+# fragments (param serializer output and/or the auth query). Each fragment is an
+# `&`-joinable `key=value` string already percent-encoded by its producer; empty
+# fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
+# delimiters are hand-spliced — and any query already on the base URL is merged in.
+def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
   let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
-  let result = ($parsed | upsert path $full_path)
-  if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
+  let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
+  $parsed | upsert path $full_path | upsert query $query | url join
 }
 
-# Build the dry-run record returned by --dry-run. Shape:
-#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
-#    auth: {scheme, location}}
-# `meta` carries logical-form data (the query record by spec name, the pre-serialization
-# body) that do-request itself cannot reconstruct from its wire-format args.
-def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
-  let m = ($meta | default {})
-  {
-    dry_run: true
-    method: $method
-    url: $url
-    query: ($m | get -o query | default {})
-    headers: $auth.headers
-    body: ($m | get -o body)
-    content_type: $content_type
-    timeout: $timeout
-    auth: {scheme: $auth.scheme, location: $auth.location}
-  }
+# Success policy: did this response succeed? Single source of truth, consulted by
+# handle-response and the HEAD header-unwrap. Empty ok_codes means the spec listed
+# none, so fall back to < 400. Otherwise: any 2xx, plus documented success codes.
+def status-ok [status: int, ok_codes: list<int>]: nothing -> bool {
+  if ($ok_codes | is-empty) { $status < 400 } else { ($status >= 200 and $status < 300) or ($status in $ok_codes) }
 }
 
-# Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
-  let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
-  let timeout = ($max_time | default 30min)
-  let ct = ($content_type | default "application/json")
-  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
-  let resp = match $method {
-    "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
-  }
-  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
-  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
+# Unwrap a `--full` HTTP response into the user-facing value. Response arrives
+# via pipeline; ok_codes gates the error throw (see status-ok).
+def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: record -> any {
+  let resp = $in
+  if $allow_errors { return $resp }
+  if not (status-ok $resp.status $ok_codes) { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } }
+  if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
+  if $resp.status == 204 { return null }
+  $resp.body
+}
+
+# POST — body + content-type
+def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# PUT — body + content-type
+def send-put [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http put --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http put --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 def base-url-completer [] { ["https://vtex.local" "http://localhost"] }
@@ -179,7 +171,7 @@ export def "checkout-pub-order-forms-simulation create-fulfillment-external-mark
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o MARKETPLACE_PROTOCOL_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o MARKETPLACE_PROTOCOL_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "affiliateId" $affiliate_id "scalar") (serialize-qp "sc" $sc "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/checkout/pub/orderForms/simulation" $qp)
+  let full_url = (build-url $base "/api/checkout/pub/orderForms/simulation" $qp $auth.query)
   let req_body = {"clientProfileData": $client_profile_data, "country": $country, "geoCoordinates": $geo_coordinates, "isCheckedIn": $is_checked_in, "items": $items, "marketingData": $marketing_data, "postalCode": $postal_code, "selectedSla": $selected_sla, "storeId": $store_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
@@ -188,7 +180,18 @@ export def "checkout-pub-order-forms-simulation create-fulfillment-external-mark
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let effective_ct = ($content_type | default "application/json")
   let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $effective_ct $req_body_wire {query: ({"affiliateId": $affiliate_id, "sc": $sc} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"affiliateId": $affiliate_id, "sc": $sc} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: $effective_ct
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Send Category Mapping to VTEX Mapper
@@ -215,7 +218,7 @@ export def "portal-vtexcommercestable-com-br-mkp-category-mapper-categories-mark
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o MARKETPLACE_PROTOCOL_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o MARKETPLACE_PROTOCOL_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/portal.vtexcommercestable.com.br/api/mkp-category-mapper/categories/marketplace/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/portal.vtexcommercestable.com.br/api/mkp-category-mapper/categories/marketplace/{id}") $auth.query)
   let req_body = {"categories": $categories} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
@@ -224,7 +227,18 @@ export def "portal-vtexcommercestable-com-br-mkp-category-mapper-categories-mark
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let effective_ct = ($content_type | default "application/json")
   let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $effective_ct $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: $effective_ct
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # VTEX Mapper Registration
@@ -254,7 +268,7 @@ export def "portal-vtexcommercestable-com-br-mkp-category-mapper-connector-regis
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o MARKETPLACE_PROTOCOL_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o MARKETPLACE_PROTOCOL_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "an" $an "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/portal.vtexcommercestable.com.br/api/mkp-category-mapper/connector/register" $qp)
+  let full_url = (build-url $base "/portal.vtexcommercestable.com.br/api/mkp-category-mapper/connector/register" $qp $auth.query)
   let req_body = {"CategoryTreeProcessingNotificationEndpoint": $category_tree_processing_notification_endpoint, "categoryTreeEndPoint": $category_tree_end_point, "displayName": $display_name, "mappingEndPoint": $mapping_end_point, "properties": $properties} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
@@ -263,7 +277,18 @@ export def "portal-vtexcommercestable-com-br-mkp-category-mapper-connector-regis
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let effective_ct = ($content_type | default "application/json")
   let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $effective_ct $req_body_wire {query: ({"an": $an} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"an": $an} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: $effective_ct
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # New Order Integration
@@ -308,7 +333,7 @@ export def "order-integration-orders create-enqueue-new" [
   let base = ($base_url | default $BASE_URL)
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
   let qp = [(serialize-qp "an" $an "scalar") (serialize-qp "affiliateId" $affiliate_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_name: (encode-path-segment $account_name)} | format pattern "/{account_name}.vtexcommercestable.com.br/api/order-integration/orders") $qp)
+  let full_url = (build-url $base ({account_name: (encode-path-segment $account_name)} | format pattern "/{account_name}.vtexcommercestable.com.br/api/order-integration/orders") $qp $auth.query)
   let req_body = {"allowFranchises": $allow_franchises, "clientProfileData": $client_profile_data, "connectorEndpoint": $connector_endpoint, "connectorName": $connector_name, "customData": $custom_data, "invoiceData": $invoice_data, "items": $items, "marketplaceOrderId": $marketplace_order_id, "marketplaceOrderStatus": $marketplace_order_status, "marketplacePaymentValue": $marketplace_payment_value, "pickupAccountName": $pickup_account_name, "shippingData": $shipping_data} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
@@ -317,7 +342,18 @@ export def "order-integration-orders create-enqueue-new" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let effective_ct = ($content_type | default "application/json")
   let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $effective_ct $req_body_wire {query: ({"an": $an, "affiliateId": $affiliate_id} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"an": $an, "affiliateId": $affiliate_id} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: $effective_ct
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Update Order Status
@@ -348,7 +384,7 @@ export def "order-integration-orders-status update" [
   let base = ($base_url | default $BASE_URL)
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
   let qp = [(serialize-qp "an" $an "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_name: (encode-path-segment $account_name)} | format pattern "/{account_name}.vtexcommercestable.com.br/api/order-integration/orders/status") $qp)
+  let full_url = (build-url $base ({account_name: (encode-path-segment $account_name)} | format pattern "/{account_name}.vtexcommercestable.com.br/api/order-integration/orders/status") $qp $auth.query)
   let req_body = {"connectorEndpoint": $connector_endpoint, "connectorName": $connector_name, "marketplaceOrderId": $marketplace_order_id, "marketplaceOrderStatus": $marketplace_order_status} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
@@ -357,7 +393,18 @@ export def "order-integration-orders-status update" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let effective_ct = ($content_type | default "application/json")
   let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $effective_ct $req_body_wire {query: ({"an": $an} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"an": $an} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: $effective_ct
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Place fulfillment order
@@ -401,7 +448,7 @@ export def "fulfillment-pvt-orders create-place" [
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
   if ($environment | is-empty) { error make --unspanned { msg: "path parameter 'environment' must be non-empty" } }
   let qp = [(serialize-qp "sc" $sc "scalar") (serialize-qp "affiliateId" $affiliate_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_name: (encode-path-segment $account_name), environment: (encode-path-segment $environment)} | format pattern "/{account_name}.{environment}.com.br/api/fulfillment/pvt/orders") $qp)
+  let full_url = (build-url $base ({account_name: (encode-path-segment $account_name), environment: (encode-path-segment $environment)} | format pattern "/{account_name}.{environment}.com.br/api/fulfillment/pvt/orders") $qp $auth.query)
   let req_body = {"clientProfileData": $client_profile_data, "isCreatedAsync": $is_created_async, "items": $items, "marketingData": $marketing_data, "marketplaceOrderId": $marketplace_order_id, "marketplacePaymentValue": $marketplace_payment_value, "marketplaceServicesEndpoint": $marketplace_services_endpoint, "openTextField": $open_text_field, "paymentData": $payment_data, "shippingData": $shipping_data} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
@@ -410,7 +457,18 @@ export def "fulfillment-pvt-orders create-place" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let effective_ct = ($content_type | default "application/json")
   let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $effective_ct $req_body_wire {query: ({"sc": $sc, "affiliateId": $affiliate_id} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"sc": $sc, "affiliateId": $affiliate_id} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: $effective_ct
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Authorize dispatch for fulfillment order
@@ -443,7 +501,7 @@ export def "fulfillment-pvt-orders-fulfill create-authorize-dispatch" [
   if ($environment | is-empty) { error make --unspanned { msg: "path parameter 'environment' must be non-empty" } }
   if ($order_id | is-empty) { error make --unspanned { msg: "path parameter 'orderId' must be non-empty" } }
   let qp = [(serialize-qp "sc" $sc "scalar") (serialize-qp "affiliateId" $affiliate_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_name: (encode-path-segment $account_name), environment: (encode-path-segment $environment), order_id: (encode-path-segment $order_id)} | format pattern "/{account_name}.{environment}.com.br/api/fulfillment/pvt/orders/{order_id}/fulfill") $qp)
+  let full_url = (build-url $base ({account_name: (encode-path-segment $account_name), environment: (encode-path-segment $environment), order_id: (encode-path-segment $order_id)} | format pattern "/{account_name}.{environment}.com.br/api/fulfillment/pvt/orders/{order_id}/fulfill") $qp $auth.query)
   let req_body = {"marketplaceOrderId": $marketplace_order_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
@@ -452,7 +510,18 @@ export def "fulfillment-pvt-orders-fulfill create-authorize-dispatch" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let effective_ct = ($content_type | default "application/json")
   let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $effective_ct $req_body_wire {query: ({"sc": $sc, "affiliateId": $affiliate_id} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"sc": $sc, "affiliateId": $affiliate_id} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: $effective_ct
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Fulfillment simulation - External Seller
@@ -483,7 +552,7 @@ export def "pvt-order-forms-simulation create-fulfillment" [
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o MARKETPLACE_PROTOCOL_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o MARKETPLACE_PROTOCOL_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($fulfillment_endpoint | is-empty) { error make --unspanned { msg: "path parameter 'fulfillmentEndpoint' must be non-empty" } }
-  let full_url = (build-url $base ({fulfillment_endpoint: (encode-path-segment $fulfillment_endpoint)} | format pattern "/{fulfillment_endpoint}/pvt/orderForms/simulation"))
+  let full_url = (build-url $base ({fulfillment_endpoint: (encode-path-segment $fulfillment_endpoint)} | format pattern "/{fulfillment_endpoint}/pvt/orderForms/simulation") $auth.query)
   let req_body = {"country": $country, "geoCoordinates": $geo_coordinates, "items": $items, "postalCode": $postal_code, "sc": $sc} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
@@ -492,7 +561,18 @@ export def "pvt-order-forms-simulation create-fulfillment" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let effective_ct = ($content_type | default "application/json")
   let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $effective_ct $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: $effective_ct
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Order placement
@@ -540,7 +620,7 @@ export def "pvt-orders create-placement" [
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o MARKETPLACE_PROTOCOL_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o MARKETPLACE_PROTOCOL_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($fulfillment_endpoint | is-empty) { error make --unspanned { msg: "path parameter 'fulfillmentEndpoint' must be non-empty" } }
-  let full_url = (build-url $base ({fulfillment_endpoint: (encode-path-segment $fulfillment_endpoint)} | format pattern "/{fulfillment_endpoint}/pvt/orders"))
+  let full_url = (build-url $base ({fulfillment_endpoint: (encode-path-segment $fulfillment_endpoint)} | format pattern "/{fulfillment_endpoint}/pvt/orders") $auth.query)
   let req_body = {"clientProfileData": $client_profile_data, "items": $items, "marketingData": $marketing_data, "marketplaceOrderId": $marketplace_order_id, "marketplacePaymentValue": $marketplace_payment_value, "marketplaceServicesEndpoint": $marketplace_services_endpoint, "openTextField": $open_text_field, "paymentData": $payment_data, "shippingData": $shipping_data} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
@@ -549,7 +629,18 @@ export def "pvt-orders create-placement" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let effective_ct = ($content_type | default "application/json")
   let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $effective_ct $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: $effective_ct
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Marketplace order cancellation
@@ -577,7 +668,7 @@ export def "pvt-orders-cancel create-mkp-cancellation" [
   let base = ($base_url | default $BASE_URL)
   if ($fulfillment_endpoint | is-empty) { error make --unspanned { msg: "path parameter 'fulfillmentEndpoint' must be non-empty" } }
   if ($order_id | is-empty) { error make --unspanned { msg: "path parameter 'orderId' must be non-empty" } }
-  let full_url = (build-url $base ({fulfillment_endpoint: (encode-path-segment $fulfillment_endpoint), order_id: (encode-path-segment $order_id)} | format pattern "/{fulfillment_endpoint}/pvt/orders/{order_id}/cancel"))
+  let full_url = (build-url $base ({fulfillment_endpoint: (encode-path-segment $fulfillment_endpoint), order_id: (encode-path-segment $order_id)} | format pattern "/{fulfillment_endpoint}/pvt/orders/{order_id}/cancel") $auth.query)
   let req_body = {"marketplaceOrderId": $marketplace_order_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
@@ -586,7 +677,18 @@ export def "pvt-orders-cancel create-mkp-cancellation" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let effective_ct = ($content_type | default "application/json")
   let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $effective_ct $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: $effective_ct
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Authorize fulfillment
@@ -614,7 +716,7 @@ export def "pvt-orders-fulfill create-authorize-fulfillment" [
   let base = ($base_url | default $BASE_URL)
   if ($fulfillment_endpoint | is-empty) { error make --unspanned { msg: "path parameter 'fulfillmentEndpoint' must be non-empty" } }
   if ($seller_order_id | is-empty) { error make --unspanned { msg: "path parameter 'sellerOrderId' must be non-empty" } }
-  let full_url = (build-url $base ({fulfillment_endpoint: (encode-path-segment $fulfillment_endpoint), seller_order_id: (encode-path-segment $seller_order_id)} | format pattern "/{fulfillment_endpoint}/pvt/orders/{seller_order_id}/fulfill"))
+  let full_url = (build-url $base ({fulfillment_endpoint: (encode-path-segment $fulfillment_endpoint), seller_order_id: (encode-path-segment $seller_order_id)} | format pattern "/{fulfillment_endpoint}/pvt/orders/{seller_order_id}/fulfill") $auth.query)
   let req_body = {"marketplaceOrderId": $marketplace_order_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
@@ -623,7 +725,18 @@ export def "pvt-orders-fulfill create-authorize-fulfillment" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let effective_ct = ($content_type | default "application/json")
   let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $effective_ct $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: $effective_ct
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Cancel order in marketplace
@@ -651,7 +764,7 @@ export def "pvt-orders-cancel cancel-in-marketplace" [
   let base = ($base_url | default $BASE_URL)
   if ($marketplace_services_endpoint | is-empty) { error make --unspanned { msg: "path parameter 'marketplaceServicesEndpoint' must be non-empty" } }
   if ($marketplace_order_id | is-empty) { error make --unspanned { msg: "path parameter 'marketplaceOrderId' must be non-empty" } }
-  let full_url = (build-url $base ({marketplace_services_endpoint: (encode-path-segment $marketplace_services_endpoint), marketplace_order_id: (encode-path-segment $marketplace_order_id)} | format pattern "/{marketplace_services_endpoint}/pvt/orders/{marketplace_order_id}/cancel"))
+  let full_url = (build-url $base ({marketplace_services_endpoint: (encode-path-segment $marketplace_services_endpoint), marketplace_order_id: (encode-path-segment $marketplace_order_id)} | format pattern "/{marketplace_services_endpoint}/pvt/orders/{marketplace_order_id}/cancel") $auth.query)
   let req_body = {"reason": $reason} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
@@ -660,7 +773,18 @@ export def "pvt-orders-cancel cancel-in-marketplace" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let effective_ct = ($content_type | default "application/json")
   let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $effective_ct $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: $effective_ct
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Send invoice
@@ -696,7 +820,7 @@ export def "pvt-orders-invoice send" [
   let base = ($base_url | default $BASE_URL)
   if ($marketplace_services_endpoint | is-empty) { error make --unspanned { msg: "path parameter 'marketplaceServicesEndpoint' must be non-empty" } }
   if ($marketplace_order_id | is-empty) { error make --unspanned { msg: "path parameter 'marketplaceOrderId' must be non-empty" } }
-  let full_url = (build-url $base ({marketplace_services_endpoint: (encode-path-segment $marketplace_services_endpoint), marketplace_order_id: (encode-path-segment $marketplace_order_id)} | format pattern "/{marketplace_services_endpoint}/pvt/orders/{marketplace_order_id}/invoice"))
+  let full_url = (build-url $base ({marketplace_services_endpoint: (encode-path-segment $marketplace_services_endpoint), marketplace_order_id: (encode-path-segment $marketplace_order_id)} | format pattern "/{marketplace_services_endpoint}/pvt/orders/{marketplace_order_id}/invoice") $auth.query)
   let req_body = {"courier": $courier, "invoiceNumber": $invoice_number, "invoiceValue": $invoice_value, "issuanceDate": $issuance_date, "items": $items, "trackingNumber": $tracking_number, "trackingUrl": $tracking_url, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
@@ -705,7 +829,18 @@ export def "pvt-orders-invoice send" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let effective_ct = ($content_type | default "application/json")
   let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $effective_ct $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: $effective_ct
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Send tracking information
@@ -738,7 +873,7 @@ export def "pvt-orders-invoice send-tracking-information" [
   if ($marketplace_services_endpoint | is-empty) { error make --unspanned { msg: "path parameter 'marketplaceServicesEndpoint' must be non-empty" } }
   if ($marketplace_order_id | is-empty) { error make --unspanned { msg: "path parameter 'marketplaceOrderId' must be non-empty" } }
   if ($invoice_number | is-empty) { error make --unspanned { msg: "path parameter 'invoiceNumber' must be non-empty" } }
-  let full_url = (build-url $base ({marketplace_services_endpoint: (encode-path-segment $marketplace_services_endpoint), marketplace_order_id: (encode-path-segment $marketplace_order_id), invoice_number: (encode-path-segment $invoice_number)} | format pattern "/{marketplace_services_endpoint}/pvt/orders/{marketplace_order_id}/invoice/{invoice_number}"))
+  let full_url = (build-url $base ({marketplace_services_endpoint: (encode-path-segment $marketplace_services_endpoint), marketplace_order_id: (encode-path-segment $marketplace_order_id), invoice_number: (encode-path-segment $invoice_number)} | format pattern "/{marketplace_services_endpoint}/pvt/orders/{marketplace_order_id}/invoice/{invoice_number}") $auth.query)
   let req_body = {"courier": $courier, "dispatchedDate": $dispatched_date, "trackingNumber": $tracking_number, "trackingUrl": $tracking_url} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
@@ -747,7 +882,18 @@ export def "pvt-orders-invoice send-tracking-information" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let effective_ct = ($content_type | default "application/json")
   let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $effective_ct $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: $effective_ct
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Update tracking status
@@ -779,7 +925,7 @@ export def "pvt-orders-invoice-tracking update-status" [
   if ($marketplace_services_endpoint | is-empty) { error make --unspanned { msg: "path parameter 'marketplaceServicesEndpoint' must be non-empty" } }
   if ($marketplace_order_id | is-empty) { error make --unspanned { msg: "path parameter 'marketplaceOrderId' must be non-empty" } }
   if ($invoice_number | is-empty) { error make --unspanned { msg: "path parameter 'invoiceNumber' must be non-empty" } }
-  let full_url = (build-url $base ({marketplace_services_endpoint: (encode-path-segment $marketplace_services_endpoint), marketplace_order_id: (encode-path-segment $marketplace_order_id), invoice_number: (encode-path-segment $invoice_number)} | format pattern "/{marketplace_services_endpoint}/pvt/orders/{marketplace_order_id}/invoice/{invoice_number}/tracking"))
+  let full_url = (build-url $base ({marketplace_services_endpoint: (encode-path-segment $marketplace_services_endpoint), marketplace_order_id: (encode-path-segment $marketplace_order_id), invoice_number: (encode-path-segment $invoice_number)} | format pattern "/{marketplace_services_endpoint}/pvt/orders/{marketplace_order_id}/invoice/{invoice_number}/tracking") $auth.query)
   let req_body = {"events": $events, "isDelivered": $is_delivered} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
@@ -788,5 +934,16 @@ export def "pvt-orders-invoice-tracking update-status" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let effective_ct = ($content_type | default "application/json")
   let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $effective_ct $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: $effective_ct
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }

@@ -8,7 +8,7 @@ const BASE_URL = "https://bigquery.googleapis.com/bigquery/v2"
 # `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
 # where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o BIGQUERY_API_TOKEN | default "" }
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o BIGQUERY_API_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
@@ -51,14 +51,11 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
-# Trick: `url encode --all` over-encodes, then we decode the four unreserved
-# punctuation chars back. Pre-existing %XX sequences in the input survive
-# because `url encode --all` first turns their % into %25.
 def encode-path-segment [v: any]: nothing -> string {
   $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
-# Serialize an array-typed path parameter (issue 49.A). OpenAPI 3 `style: simple`
+# Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
 # (the default for path params) and Swagger 2 `collectionFormat: csv` both join
 # the elements with a literal comma WITHIN the single path segment, each element
 # RFC-3986-encoded individually (so a comma inside an element stays %2C). Without
@@ -69,51 +66,63 @@ def encode-path-array [v: any]: nothing -> string {
   if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
 }
 
-# Build URL from base, path, and optional query string
-def build-url [base: string, path: string, query?: string]: nothing -> string {
+# Build the request URL from base, path, and any number of pre-encoded query
+# fragments (param serializer output and/or the auth query). Each fragment is an
+# `&`-joinable `key=value` string already percent-encoded by its producer; empty
+# fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
+# delimiters are hand-spliced — and any query already on the base URL is merged in.
+def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
   let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
-  let result = ($parsed | upsert path $full_path)
-  if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
+  let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
+  $parsed | upsert path $full_path | upsert query $query | url join
 }
 
-# Build the dry-run record returned by --dry-run. Shape:
-#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
-#    auth: {scheme, location}}
-# `meta` carries logical-form data (the query record by spec name, the pre-serialization
-# body) that do-request itself cannot reconstruct from its wire-format args.
-def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
-  let m = ($meta | default {})
-  {
-    dry_run: true
-    method: $method
-    url: $url
-    query: ($m | get -o query | default {})
-    headers: $auth.headers
-    body: ($m | get -o body)
-    content_type: $content_type
-    timeout: $timeout
-    auth: {scheme: $auth.scheme, location: $auth.location}
-  }
+# Success policy: did this response succeed? Single source of truth, consulted by
+# handle-response and the HEAD header-unwrap. Empty ok_codes means the spec listed
+# none, so fall back to < 400. Otherwise: any 2xx, plus documented success codes.
+def status-ok [status: int, ok_codes: list<int>]: nothing -> bool {
+  if ($ok_codes | is-empty) { $status < 400 } else { ($status >= 200 and $status < 300) or ($status in $ok_codes) }
 }
 
-# Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
-  let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
-  let timeout = ($max_time | default 30min)
-  let ct = ($content_type | default "application/json")
-  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
-  let resp = match $method {
-    "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
-  }
-  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
-  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
+# Unwrap a `--full` HTTP response into the user-facing value. Response arrives
+# via pipeline; ok_codes gates the error throw (see status-ok).
+def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: record -> any {
+  let resp = $in
+  if $allow_errors { return $resp }
+  if not (status-ok $resp.status $ok_codes) { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } }
+  if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
+  if $resp.status == 204 { return null }
+  $resp.body
+}
+
+# GET — bodyless, honours --raw
+def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+}
+
+# POST — body + content-type
+def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# PUT — body + content-type
+def send-put [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http put --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http put --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# PATCH — body + content-type
+def send-patch [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http patch --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http patch --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# DELETE — body via --data
+def send-delete [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http delete --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url } else { http delete --headers $req.headers --content-type $req.content_type --data $body --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url }
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 def base-url-completer [] { ["https://bigquery.googleapis.com/bigquery/v2"] }
@@ -177,10 +186,21 @@ export def "projects list" [
   let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o BIGQUERY_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o BIGQUERY_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/projects" $qp)
+  let full_url = (build-url $base "/projects" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "maxResults": $max_results, "pageToken": $page_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "maxResults": $max_results, "pageToken": $page_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Lists all datasets in the specified project to which you have been granted the READER dataset role.
@@ -214,10 +234,21 @@ export def "projects-datasets list" [
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "all" $all "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/projects/{project_id}/datasets") $qp)
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/projects/{project_id}/datasets") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "all": $all, "filter": $filter, "maxResults": $max_results, "pageToken": $page_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "all": $all, "filter": $filter, "maxResults": $max_results, "pageToken": $page_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Creates a new empty dataset.
@@ -274,12 +305,23 @@ export def "projects-datasets create" [
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/projects/{project_id}/datasets") $qp)
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/projects/{project_id}/datasets") $qp $auth.query)
   let req_body = {"access": $access, "creationTime": $creation_time, "datasetReference": $dataset_reference, "defaultCollation": $default_collation, "defaultEncryptionConfiguration": $default_encryption_configuration, "defaultPartitionExpirationMs": $default_partition_expiration_ms, "defaultRoundingMode": $default_rounding_mode, "defaultTableExpirationMs": $default_table_expiration_ms, "description": $description, "etag": $etag, "friendlyName": $friendly_name, "id": $id, "isCaseInsensitive": $is_case_insensitive, "kind": $kind, "labels": $labels, "lastModifiedTime": $last_modified_time, "location": $location, "maxTimeTravelHours": $max_time_travel_hours, "satisfiesPzs": $satisfies_pzs, "selfLink": $self_link, "storageBillingModel": $storage_billing_model, "tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes the dataset specified by the datasetId value. Before you can delete a dataset, you must delete all its tables, either manually or by specifying deleteContents. Immediately after deletion, you can create another dataset with the same name.
@@ -312,10 +354,21 @@ export def "projects-datasets delete" [
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   if ($dataset_id | is-empty) { error make --unspanned { msg: "path parameter 'datasetId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "deleteContents" $delete_contents "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), dataset_id: (encode-path-segment $dataset_id)} | format pattern "/projects/{project_id}/datasets/{dataset_id}") $qp)
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), dataset_id: (encode-path-segment $dataset_id)} | format pattern "/projects/{project_id}/datasets/{dataset_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "deleteContents": $delete_contents} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "deleteContents": $delete_contents} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the dataset specified by datasetID.
@@ -347,10 +400,21 @@ export def "projects-datasets get" [
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   if ($dataset_id | is-empty) { error make --unspanned { msg: "path parameter 'datasetId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), dataset_id: (encode-path-segment $dataset_id)} | format pattern "/projects/{project_id}/datasets/{dataset_id}") $qp)
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), dataset_id: (encode-path-segment $dataset_id)} | format pattern "/projects/{project_id}/datasets/{dataset_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates information in an existing dataset. The update method replaces the entire dataset resource, whereas the patch method only replaces fields that are provided in the submitted dataset resource. This method supports patch semantics.
@@ -409,12 +473,23 @@ export def "projects-datasets update-by-project-id-dataset-id" [
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   if ($dataset_id | is-empty) { error make --unspanned { msg: "path parameter 'datasetId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), dataset_id: (encode-path-segment $dataset_id)} | format pattern "/projects/{project_id}/datasets/{dataset_id}") $qp)
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), dataset_id: (encode-path-segment $dataset_id)} | format pattern "/projects/{project_id}/datasets/{dataset_id}") $qp $auth.query)
   let req_body = {"access": $access, "creationTime": $creation_time, "datasetReference": $dataset_reference, "defaultCollation": $default_collation, "defaultEncryptionConfiguration": $default_encryption_configuration, "defaultPartitionExpirationMs": $default_partition_expiration_ms, "defaultRoundingMode": $default_rounding_mode, "defaultTableExpirationMs": $default_table_expiration_ms, "description": $description, "etag": $etag, "friendlyName": $friendly_name, "id": $id, "isCaseInsensitive": $is_case_insensitive, "kind": $kind, "labels": $labels, "lastModifiedTime": $last_modified_time, "location": $location, "maxTimeTravelHours": $max_time_travel_hours, "satisfiesPzs": $satisfies_pzs, "selfLink": $self_link, "storageBillingModel": $storage_billing_model, "tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact), body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Updates information in an existing dataset. The update method replaces the entire dataset resource, whereas the patch method only replaces fields that are provided in the submitted dataset resource.
@@ -473,12 +548,23 @@ export def "projects-datasets update-by-project-id-dataset-id-1" [
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   if ($dataset_id | is-empty) { error make --unspanned { msg: "path parameter 'datasetId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), dataset_id: (encode-path-segment $dataset_id)} | format pattern "/projects/{project_id}/datasets/{dataset_id}") $qp)
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), dataset_id: (encode-path-segment $dataset_id)} | format pattern "/projects/{project_id}/datasets/{dataset_id}") $qp $auth.query)
   let req_body = {"access": $access, "creationTime": $creation_time, "datasetReference": $dataset_reference, "defaultCollation": $default_collation, "defaultEncryptionConfiguration": $default_encryption_configuration, "defaultPartitionExpirationMs": $default_partition_expiration_ms, "defaultRoundingMode": $default_rounding_mode, "defaultTableExpirationMs": $default_table_expiration_ms, "description": $description, "etag": $etag, "friendlyName": $friendly_name, "id": $id, "isCaseInsensitive": $is_case_insensitive, "kind": $kind, "labels": $labels, "lastModifiedTime": $last_modified_time, "location": $location, "maxTimeTravelHours": $max_time_travel_hours, "satisfiesPzs": $satisfies_pzs, "selfLink": $self_link, "storageBillingModel": $storage_billing_model, "tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Lists all models in the specified dataset. Requires the READER dataset role. After retrieving the list of models, you can get information about a particular model by calling the models.get method.
@@ -512,10 +598,21 @@ export def "projects-datasets-models list" [
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   if ($dataset_id | is-empty) { error make --unspanned { msg: "path parameter 'datasetId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), dataset_id: (encode-path-segment $dataset_id)} | format pattern "/projects/{project_id}/datasets/{dataset_id}/models") $qp)
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), dataset_id: (encode-path-segment $dataset_id)} | format pattern "/projects/{project_id}/datasets/{dataset_id}/models") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "maxResults": $max_results, "pageToken": $page_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "maxResults": $max_results, "pageToken": $page_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes the model specified by modelId from the dataset.
@@ -549,10 +646,21 @@ export def "projects-datasets-models delete" [
   if ($dataset_id | is-empty) { error make --unspanned { msg: "path parameter 'datasetId' must be non-empty" } }
   if ($model_id | is-empty) { error make --unspanned { msg: "path parameter 'modelId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), dataset_id: (encode-path-segment $dataset_id), model_id: (encode-path-segment $model_id)} | format pattern "/projects/{project_id}/datasets/{dataset_id}/models/{model_id}") $qp)
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), dataset_id: (encode-path-segment $dataset_id), model_id: (encode-path-segment $model_id)} | format pattern "/projects/{project_id}/datasets/{dataset_id}/models/{model_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the specified model resource by model ID.
@@ -586,10 +694,21 @@ export def "projects-datasets-models get" [
   if ($dataset_id | is-empty) { error make --unspanned { msg: "path parameter 'datasetId' must be non-empty" } }
   if ($model_id | is-empty) { error make --unspanned { msg: "path parameter 'modelId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), dataset_id: (encode-path-segment $dataset_id), model_id: (encode-path-segment $model_id)} | format pattern "/projects/{project_id}/datasets/{dataset_id}/models/{model_id}") $qp)
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), dataset_id: (encode-path-segment $dataset_id), model_id: (encode-path-segment $model_id)} | format pattern "/projects/{project_id}/datasets/{dataset_id}/models/{model_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Patch specific fields in the specified model.
@@ -640,12 +759,23 @@ export def "projects-datasets-models update" [
   if ($dataset_id | is-empty) { error make --unspanned { msg: "path parameter 'datasetId' must be non-empty" } }
   if ($model_id | is-empty) { error make --unspanned { msg: "path parameter 'modelId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), dataset_id: (encode-path-segment $dataset_id), model_id: (encode-path-segment $model_id)} | format pattern "/projects/{project_id}/datasets/{dataset_id}/models/{model_id}") $qp)
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), dataset_id: (encode-path-segment $dataset_id), model_id: (encode-path-segment $model_id)} | format pattern "/projects/{project_id}/datasets/{dataset_id}/models/{model_id}") $qp $auth.query)
   let req_body = {"bestTrialId": $best_trial_id, "description": $description, "encryptionConfiguration": $encryption_configuration, "expirationTime": $expiration_time, "friendlyName": $friendly_name, "hparamSearchSpaces": $hparam_search_spaces, "labels": $labels, "modelReference": $model_reference, "trainingRuns": $training_runs} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact), body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Lists all routines in the specified dataset. Requires the READER dataset role.
@@ -681,10 +811,21 @@ export def "projects-datasets-routines list" [
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   if ($dataset_id | is-empty) { error make --unspanned { msg: "path parameter 'datasetId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "readMask" $read_mask "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), dataset_id: (encode-path-segment $dataset_id)} | format pattern "/projects/{project_id}/datasets/{dataset_id}/routines") $qp)
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), dataset_id: (encode-path-segment $dataset_id)} | format pattern "/projects/{project_id}/datasets/{dataset_id}/routines") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "filter": $filter, "maxResults": $max_results, "pageToken": $page_token, "readMask": $read_mask} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "filter": $filter, "maxResults": $max_results, "pageToken": $page_token, "readMask": $read_mask} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Creates a new routine in the dataset.
@@ -736,12 +877,23 @@ export def "projects-datasets-routines create" [
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   if ($dataset_id | is-empty) { error make --unspanned { msg: "path parameter 'datasetId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), dataset_id: (encode-path-segment $dataset_id)} | format pattern "/projects/{project_id}/datasets/{dataset_id}/routines") $qp)
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), dataset_id: (encode-path-segment $dataset_id)} | format pattern "/projects/{project_id}/datasets/{dataset_id}/routines") $qp $auth.query)
   let req_body = {"arguments": $arguments, "definitionBody": $definition_body, "description": $description, "determinismLevel": $determinism_level, "importedLibraries": $imported_libraries, "language": $language, "remoteFunctionOptions": $remote_function_options, "returnTableType": $return_table_type, "returnType": $return_type, "routineReference": $routine_reference, "routineType": $routine_type, "sparkOptions": $spark_options, "strictMode": $strict_mode} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes the routine specified by routineId from the dataset.
@@ -775,10 +927,21 @@ export def "projects-datasets-routines delete" [
   if ($dataset_id | is-empty) { error make --unspanned { msg: "path parameter 'datasetId' must be non-empty" } }
   if ($routine_id | is-empty) { error make --unspanned { msg: "path parameter 'routineId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), dataset_id: (encode-path-segment $dataset_id), routine_id: (encode-path-segment $routine_id)} | format pattern "/projects/{project_id}/datasets/{dataset_id}/routines/{routine_id}") $qp)
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), dataset_id: (encode-path-segment $dataset_id), routine_id: (encode-path-segment $routine_id)} | format pattern "/projects/{project_id}/datasets/{dataset_id}/routines/{routine_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the specified routine resource by routine ID.
@@ -813,10 +976,21 @@ export def "projects-datasets-routines get" [
   if ($dataset_id | is-empty) { error make --unspanned { msg: "path parameter 'datasetId' must be non-empty" } }
   if ($routine_id | is-empty) { error make --unspanned { msg: "path parameter 'routineId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "readMask" $read_mask "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), dataset_id: (encode-path-segment $dataset_id), routine_id: (encode-path-segment $routine_id)} | format pattern "/projects/{project_id}/datasets/{dataset_id}/routines/{routine_id}") $qp)
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), dataset_id: (encode-path-segment $dataset_id), routine_id: (encode-path-segment $routine_id)} | format pattern "/projects/{project_id}/datasets/{dataset_id}/routines/{routine_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "readMask": $read_mask} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "readMask": $read_mask} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates information in an existing routine. The update method replaces the entire Routine resource.
@@ -870,12 +1044,23 @@ export def "projects-datasets-routines update" [
   if ($dataset_id | is-empty) { error make --unspanned { msg: "path parameter 'datasetId' must be non-empty" } }
   if ($routine_id | is-empty) { error make --unspanned { msg: "path parameter 'routineId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), dataset_id: (encode-path-segment $dataset_id), routine_id: (encode-path-segment $routine_id)} | format pattern "/projects/{project_id}/datasets/{dataset_id}/routines/{routine_id}") $qp)
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), dataset_id: (encode-path-segment $dataset_id), routine_id: (encode-path-segment $routine_id)} | format pattern "/projects/{project_id}/datasets/{dataset_id}/routines/{routine_id}") $qp $auth.query)
   let req_body = {"arguments": $arguments, "definitionBody": $definition_body, "description": $description, "determinismLevel": $determinism_level, "importedLibraries": $imported_libraries, "language": $language, "remoteFunctionOptions": $remote_function_options, "returnTableType": $return_table_type, "returnType": $return_type, "routineReference": $routine_reference, "routineType": $routine_type, "sparkOptions": $spark_options, "strictMode": $strict_mode} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Lists all tables in the specified dataset. Requires the READER dataset role.
@@ -909,10 +1094,21 @@ export def "projects-datasets-tables list" [
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   if ($dataset_id | is-empty) { error make --unspanned { msg: "path parameter 'datasetId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), dataset_id: (encode-path-segment $dataset_id)} | format pattern "/projects/{project_id}/datasets/{dataset_id}/tables") $qp)
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), dataset_id: (encode-path-segment $dataset_id)} | format pattern "/projects/{project_id}/datasets/{dataset_id}/tables") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "maxResults": $max_results, "pageToken": $page_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "maxResults": $max_results, "pageToken": $page_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Creates a new, empty table in the dataset.
@@ -999,12 +1195,23 @@ export def "projects-datasets-tables create" [
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   if ($dataset_id | is-empty) { error make --unspanned { msg: "path parameter 'datasetId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), dataset_id: (encode-path-segment $dataset_id)} | format pattern "/projects/{project_id}/datasets/{dataset_id}/tables") $qp)
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), dataset_id: (encode-path-segment $dataset_id)} | format pattern "/projects/{project_id}/datasets/{dataset_id}/tables") $qp $auth.query)
   let req_body = {"cloneDefinition": $clone_definition, "clustering": $clustering, "creationTime": $creation_time, "defaultCollation": $default_collation, "defaultRoundingMode": $default_rounding_mode, "description": $description, "encryptionConfiguration": $encryption_configuration, "etag": $etag, "expirationTime": $expiration_time, "externalDataConfiguration": $external_data_configuration, "friendlyName": $friendly_name, "id": $id, "kind": $kind, "labels": $labels, "lastModifiedTime": $last_modified_time, "location": $location, "materializedView": $materialized_view, "maxStaleness": $max_staleness, "model": $model, "numBytes": $num_bytes, "numLongTermBytes": $num_long_term_bytes, "numPhysicalBytes": $num_physical_bytes, "numRows": $num_rows, "num_active_logical_bytes": $num_active_logical_bytes, "num_active_physical_bytes": $num_active_physical_bytes, "num_long_term_logical_bytes": $num_long_term_logical_bytes, "num_long_term_physical_bytes": $num_long_term_physical_bytes, "num_partitions": $num_partitions, "num_time_travel_physical_bytes": $num_time_travel_physical_bytes, "num_total_logical_bytes": $num_total_logical_bytes, "num_total_physical_bytes": $num_total_physical_bytes, "rangePartitioning": $range_partitioning, "requirePartitionFilter": $require_partition_filter, "schema": $schema, "selfLink": $self_link, "snapshotDefinition": $snapshot_definition, "streamingBuffer": $streaming_buffer, "tableReference": $table_reference, "timePartitioning": $time_partitioning, "type": $type, "view": $view} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes the table specified by tableId from the dataset. If the table contains data, all the data will be deleted.
@@ -1038,10 +1245,21 @@ export def "projects-datasets-tables delete" [
   if ($dataset_id | is-empty) { error make --unspanned { msg: "path parameter 'datasetId' must be non-empty" } }
   if ($table_id | is-empty) { error make --unspanned { msg: "path parameter 'tableId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), dataset_id: (encode-path-segment $dataset_id), table_id: (encode-path-segment $table_id)} | format pattern "/projects/{project_id}/datasets/{dataset_id}/tables/{table_id}") $qp)
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), dataset_id: (encode-path-segment $dataset_id), table_id: (encode-path-segment $table_id)} | format pattern "/projects/{project_id}/datasets/{dataset_id}/tables/{table_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the specified table resource by table ID. This method does not return the data in the table, it only returns the table resource, which describes the structure of this table.
@@ -1077,10 +1295,21 @@ export def "projects-datasets-tables get" [
   if ($dataset_id | is-empty) { error make --unspanned { msg: "path parameter 'datasetId' must be non-empty" } }
   if ($table_id | is-empty) { error make --unspanned { msg: "path parameter 'tableId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), dataset_id: (encode-path-segment $dataset_id), table_id: (encode-path-segment $table_id)} | format pattern "/projects/{project_id}/datasets/{dataset_id}/tables/{table_id}") $qp)
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), dataset_id: (encode-path-segment $dataset_id), table_id: (encode-path-segment $table_id)} | format pattern "/projects/{project_id}/datasets/{dataset_id}/tables/{table_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "selectedFields": $selected_fields, "view": $view} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "selectedFields": $selected_fields, "view": $view} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates information in an existing table. The update method replaces the entire table resource, whereas the patch method only replaces fields that are provided in the submitted table resource. This method supports patch semantics.
@@ -1170,12 +1399,23 @@ export def "projects-datasets-tables update-by-project-id-dataset-id-table-id" [
   if ($dataset_id | is-empty) { error make --unspanned { msg: "path parameter 'datasetId' must be non-empty" } }
   if ($table_id | is-empty) { error make --unspanned { msg: "path parameter 'tableId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "autodetect_schema" $autodetect_schema "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), dataset_id: (encode-path-segment $dataset_id), table_id: (encode-path-segment $table_id)} | format pattern "/projects/{project_id}/datasets/{dataset_id}/tables/{table_id}") $qp)
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), dataset_id: (encode-path-segment $dataset_id), table_id: (encode-path-segment $table_id)} | format pattern "/projects/{project_id}/datasets/{dataset_id}/tables/{table_id}") $qp $auth.query)
   let req_body = {"cloneDefinition": $clone_definition, "clustering": $clustering, "creationTime": $creation_time, "defaultCollation": $default_collation, "defaultRoundingMode": $default_rounding_mode, "description": $description, "encryptionConfiguration": $encryption_configuration, "etag": $etag, "expirationTime": $expiration_time, "externalDataConfiguration": $external_data_configuration, "friendlyName": $friendly_name, "id": $id, "kind": $kind, "labels": $labels, "lastModifiedTime": $last_modified_time, "location": $location, "materializedView": $materialized_view, "maxStaleness": $max_staleness, "model": $model, "numBytes": $num_bytes, "numLongTermBytes": $num_long_term_bytes, "numPhysicalBytes": $num_physical_bytes, "numRows": $num_rows, "num_active_logical_bytes": $num_active_logical_bytes, "num_active_physical_bytes": $num_active_physical_bytes, "num_long_term_logical_bytes": $num_long_term_logical_bytes, "num_long_term_physical_bytes": $num_long_term_physical_bytes, "num_partitions": $num_partitions, "num_time_travel_physical_bytes": $num_time_travel_physical_bytes, "num_total_logical_bytes": $num_total_logical_bytes, "num_total_physical_bytes": $num_total_physical_bytes, "rangePartitioning": $range_partitioning, "requirePartitionFilter": $require_partition_filter, "schema": $schema, "selfLink": $self_link, "snapshotDefinition": $snapshot_definition, "streamingBuffer": $streaming_buffer, "tableReference": $table_reference, "timePartitioning": $time_partitioning, "type": $type, "view": $view} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "autodetect_schema": $autodetect_schema} | compact), body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "autodetect_schema": $autodetect_schema} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Updates information in an existing table. The update method replaces the entire table resource, whereas the patch method only replaces fields that are provided in the submitted table resource.
@@ -1265,12 +1505,23 @@ export def "projects-datasets-tables update-by-project-id-dataset-id-table-id-1"
   if ($dataset_id | is-empty) { error make --unspanned { msg: "path parameter 'datasetId' must be non-empty" } }
   if ($table_id | is-empty) { error make --unspanned { msg: "path parameter 'tableId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "autodetect_schema" $autodetect_schema "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), dataset_id: (encode-path-segment $dataset_id), table_id: (encode-path-segment $table_id)} | format pattern "/projects/{project_id}/datasets/{dataset_id}/tables/{table_id}") $qp)
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), dataset_id: (encode-path-segment $dataset_id), table_id: (encode-path-segment $table_id)} | format pattern "/projects/{project_id}/datasets/{dataset_id}/tables/{table_id}") $qp $auth.query)
   let req_body = {"cloneDefinition": $clone_definition, "clustering": $clustering, "creationTime": $creation_time, "defaultCollation": $default_collation, "defaultRoundingMode": $default_rounding_mode, "description": $description, "encryptionConfiguration": $encryption_configuration, "etag": $etag, "expirationTime": $expiration_time, "externalDataConfiguration": $external_data_configuration, "friendlyName": $friendly_name, "id": $id, "kind": $kind, "labels": $labels, "lastModifiedTime": $last_modified_time, "location": $location, "materializedView": $materialized_view, "maxStaleness": $max_staleness, "model": $model, "numBytes": $num_bytes, "numLongTermBytes": $num_long_term_bytes, "numPhysicalBytes": $num_physical_bytes, "numRows": $num_rows, "num_active_logical_bytes": $num_active_logical_bytes, "num_active_physical_bytes": $num_active_physical_bytes, "num_long_term_logical_bytes": $num_long_term_logical_bytes, "num_long_term_physical_bytes": $num_long_term_physical_bytes, "num_partitions": $num_partitions, "num_time_travel_physical_bytes": $num_time_travel_physical_bytes, "num_total_logical_bytes": $num_total_logical_bytes, "num_total_physical_bytes": $num_total_physical_bytes, "rangePartitioning": $range_partitioning, "requirePartitionFilter": $require_partition_filter, "schema": $schema, "selfLink": $self_link, "snapshotDefinition": $snapshot_definition, "streamingBuffer": $streaming_buffer, "tableReference": $table_reference, "timePartitioning": $time_partitioning, "type": $type, "view": $view} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "autodetect_schema": $autodetect_schema} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "autodetect_schema": $autodetect_schema} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieves table data from a specified set of rows. Requires the READER dataset role.
@@ -1308,10 +1559,21 @@ export def "projects-datasets-tables-data list" [
   if ($dataset_id | is-empty) { error make --unspanned { msg: "path parameter 'datasetId' must be non-empty" } }
   if ($table_id | is-empty) { error make --unspanned { msg: "path parameter 'tableId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "startIndex" $start_index "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), dataset_id: (encode-path-segment $dataset_id), table_id: (encode-path-segment $table_id)} | format pattern "/projects/{project_id}/datasets/{dataset_id}/tables/{table_id}/data") $qp)
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), dataset_id: (encode-path-segment $dataset_id), table_id: (encode-path-segment $table_id)} | format pattern "/projects/{project_id}/datasets/{dataset_id}/tables/{table_id}/data") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "maxResults": $max_results, "pageToken": $page_token, "selectedFields": $selected_fields, "startIndex": $start_index} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "maxResults": $max_results, "pageToken": $page_token, "selectedFields": $selected_fields, "startIndex": $start_index} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Streams data into BigQuery one record at a time without needing to run a load job. Requires the WRITER dataset role.
@@ -1352,12 +1614,23 @@ export def "projects-datasets-tables-insert-all create" [
   if ($dataset_id | is-empty) { error make --unspanned { msg: "path parameter 'datasetId' must be non-empty" } }
   if ($table_id | is-empty) { error make --unspanned { msg: "path parameter 'tableId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), dataset_id: (encode-path-segment $dataset_id), table_id: (encode-path-segment $table_id)} | format pattern "/projects/{project_id}/datasets/{dataset_id}/tables/{table_id}/insertAll") $qp)
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), dataset_id: (encode-path-segment $dataset_id), table_id: (encode-path-segment $table_id)} | format pattern "/projects/{project_id}/datasets/{dataset_id}/tables/{table_id}/insertAll") $qp $auth.query)
   let req_body = {"ignoreUnknownValues": $ignore_unknown_values, "kind": $kind, "rows": $rows, "skipInvalidRows": $skip_invalid_rows, "templateSuffix": $template_suffix} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Lists all row access policies on the specified table.
@@ -1393,10 +1666,21 @@ export def "projects-datasets-tables-row-access-policies list" [
   if ($dataset_id | is-empty) { error make --unspanned { msg: "path parameter 'datasetId' must be non-empty" } }
   if ($table_id | is-empty) { error make --unspanned { msg: "path parameter 'tableId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), dataset_id: (encode-path-segment $dataset_id), table_id: (encode-path-segment $table_id)} | format pattern "/projects/{project_id}/datasets/{dataset_id}/tables/{table_id}/rowAccessPolicies") $qp)
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), dataset_id: (encode-path-segment $dataset_id), table_id: (encode-path-segment $table_id)} | format pattern "/projects/{project_id}/datasets/{dataset_id}/tables/{table_id}/rowAccessPolicies") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "pageSize": $page_size, "pageToken": $page_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "pageSize": $page_size, "pageToken": $page_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Lists all jobs that you started in the specified project. Job information is available for a six month period after creation. The job list is sorted in reverse chronological order, by job creation time. Requires the Can View project role, or the Is Owner project role if you set the allUsers property.
@@ -1434,10 +1718,21 @@ export def "projects-jobs list" [
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "allUsers" $all_users "scalar") (serialize-qp "maxCreationTime" $max_creation_time "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "minCreationTime" $min_creation_time "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "parentJobId" $parent_job_id "scalar") (serialize-qp "projection" $projection "scalar") (serialize-qp "stateFilter" $state_filter "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/projects/{project_id}/jobs") $qp)
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/projects/{project_id}/jobs") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "allUsers": $all_users, "maxCreationTime": $max_creation_time, "maxResults": $max_results, "minCreationTime": $min_creation_time, "pageToken": $page_token, "parentJobId": $parent_job_id, "projection": $projection, "stateFilter": $state_filter} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "allUsers": $all_users, "maxCreationTime": $max_creation_time, "maxResults": $max_results, "minCreationTime": $min_creation_time, "pageToken": $page_token, "parentJobId": $parent_job_id, "projection": $projection, "stateFilter": $state_filter} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Starts a new asynchronous job. Requires the Can View project role.
@@ -1469,12 +1764,23 @@ export def "projects-jobs create" [
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/projects/{project_id}/jobs") $qp)
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/projects/{project_id}/jobs") $qp $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/octet-stream" $req_body {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/octet-stream"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Returns information about a specific job. Job information is available for a six month period after creation. Requires that you're the person who ran the job, or have the Is Owner project role.
@@ -1507,10 +1813,21 @@ export def "projects-jobs get" [
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'jobId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "location" $location "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), job_id: (encode-path-segment $job_id)} | format pattern "/projects/{project_id}/jobs/{job_id}") $qp)
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), job_id: (encode-path-segment $job_id)} | format pattern "/projects/{project_id}/jobs/{job_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "location": $location} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "location": $location} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Requests that a job be cancelled. This call will return immediately, and the client will need to poll for the job status to see if the cancel completed successfully. Cancelled jobs may still incur costs.
@@ -1543,10 +1860,21 @@ export def "projects-jobs-cancel cancel" [
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'jobId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "location" $location "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), job_id: (encode-path-segment $job_id)} | format pattern "/projects/{project_id}/jobs/{job_id}/cancel") $qp)
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), job_id: (encode-path-segment $job_id)} | format pattern "/projects/{project_id}/jobs/{job_id}/cancel") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "location": $location} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "location": $location} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Requests the deletion of the metadata of a job. This call returns when the job's metadata is deleted.
@@ -1579,10 +1907,21 @@ export def "projects-jobs-delete delete" [
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'jobId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "location" $location "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), job_id: (encode-path-segment $job_id)} | format pattern "/projects/{project_id}/jobs/{job_id}/delete") $qp)
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), job_id: (encode-path-segment $job_id)} | format pattern "/projects/{project_id}/jobs/{job_id}/delete") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "location": $location} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "location": $location} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Runs a BigQuery SQL query synchronously and returns query results if the query completes within a specified timeout.
@@ -1634,12 +1973,23 @@ export def "projects-queries list" [
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/projects/{project_id}/queries") $qp)
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/projects/{project_id}/queries") $qp $auth.query)
   let req_body = {"connectionProperties": $connection_properties, "continuous": $continuous, "createSession": $create_session, "defaultDataset": $default_dataset, "dryRun": $body_dry_run, "kind": $kind, "labels": $labels, "location": $location, "maxResults": $max_results, "maximumBytesBilled": $maximum_bytes_billed, "parameterMode": $parameter_mode, "preserveNulls": $preserve_nulls, "query": $query, "queryParameters": $query_parameters, "requestId": $request_id, "timeoutMs": $timeout_ms, "useLegacySql": $use_legacy_sql, "useQueryCache": $use_query_cache} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieves the results of a query job.
@@ -1676,10 +2026,21 @@ export def "projects-queries get-list-results" [
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'jobId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "location" $location "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "startIndex" $start_index "scalar") (serialize-qp "timeoutMs" $timeout_ms "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), job_id: (encode-path-segment $job_id)} | format pattern "/projects/{project_id}/queries/{job_id}") $qp)
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), job_id: (encode-path-segment $job_id)} | format pattern "/projects/{project_id}/queries/{job_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "location": $location, "maxResults": $max_results, "pageToken": $page_token, "startIndex": $start_index, "timeoutMs": $timeout_ms} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "location": $location, "maxResults": $max_results, "pageToken": $page_token, "startIndex": $start_index, "timeoutMs": $timeout_ms} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the email address of the service account for your project used for interactions with Google Cloud KMS.
@@ -1709,10 +2070,21 @@ export def "projects-service-account get" [
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/projects/{project_id}/serviceAccount") $qp)
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/projects/{project_id}/serviceAccount") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the access control policy for a resource. Returns an empty policy if the resource exists and does not have a policy set.
@@ -1745,12 +2117,23 @@ export def "tables get-iam-policy" [
   let base = ($base_url | default $BASE_URL)
   if ($resource | is-empty) { error make --unspanned { msg: "path parameter 'resource' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource: (encode-path-segment $resource)} | format pattern "/{resource}:getIamPolicy") $qp)
+  let full_url = (build-url $base ({resource: (encode-path-segment $resource)} | format pattern "/{resource}:getIamPolicy") $qp $auth.query)
   let req_body = {"options": $options} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Sets the access control policy on the specified resource. Replaces any existing policy. Can return `NOT_FOUND`, `INVALID_ARGUMENT`, and `PERMISSION_DENIED` errors.
@@ -1784,12 +2167,23 @@ export def "tables update-iam-policy" [
   let base = ($base_url | default $BASE_URL)
   if ($resource | is-empty) { error make --unspanned { msg: "path parameter 'resource' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource: (encode-path-segment $resource)} | format pattern "/{resource}:setIamPolicy") $qp)
+  let full_url = (build-url $base ({resource: (encode-path-segment $resource)} | format pattern "/{resource}:setIamPolicy") $qp $auth.query)
   let req_body = {"policy": $policy, "updateMask": $update_mask} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Returns permissions that a caller has on the specified resource. If the resource does not exist, this will return an empty set of permissions, not a `NOT_FOUND` error. Note: This operation is designed to be used for building permission-aware UIs and command-line tools, not for authorization checking. This operation may "fail open" without warning.
@@ -1821,10 +2215,21 @@ export def "tables test-iam-permissions" [
   let base = ($base_url | default $BASE_URL)
   if ($resource | is-empty) { error make --unspanned { msg: "path parameter 'resource' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource: (encode-path-segment $resource)} | format pattern "/{resource}:testIamPermissions") $qp)
+  let full_url = (build-url $base ({resource: (encode-path-segment $resource)} | format pattern "/{resource}:testIamPermissions") $qp $auth.query)
   let req_body = {"permissions": $permissions} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }

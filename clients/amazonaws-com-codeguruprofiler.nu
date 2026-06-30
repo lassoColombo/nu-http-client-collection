@@ -8,7 +8,7 @@ const BASE_URL = "http://codeguru-profiler.us-east-1.amazonaws.com"
 # `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
 # where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o AMAZON_CODEGURU_PROFILER_TOKEN | default "" }
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o AMAZON_CODEGURU_PROFILER_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
@@ -41,14 +41,11 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
-# Trick: `url encode --all` over-encodes, then we decode the four unreserved
-# punctuation chars back. Pre-existing %XX sequences in the input survive
-# because `url encode --all` first turns their % into %25.
 def encode-path-segment [v: any]: nothing -> string {
   $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
-# Serialize an array-typed path parameter (issue 49.A). OpenAPI 3 `style: simple`
+# Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
 # (the default for path params) and Swagger 2 `collectionFormat: csv` both join
 # the elements with a literal comma WITHIN the single path segment, each element
 # RFC-3986-encoded individually (so a comma inside an element stays %2C). Without
@@ -59,51 +56,57 @@ def encode-path-array [v: any]: nothing -> string {
   if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
 }
 
-# Build URL from base, path, and optional query string
-def build-url [base: string, path: string, query?: string]: nothing -> string {
+# Build the request URL from base, path, and any number of pre-encoded query
+# fragments (param serializer output and/or the auth query). Each fragment is an
+# `&`-joinable `key=value` string already percent-encoded by its producer; empty
+# fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
+# delimiters are hand-spliced — and any query already on the base URL is merged in.
+def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
   let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
-  let result = ($parsed | upsert path $full_path)
-  if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
+  let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
+  $parsed | upsert path $full_path | upsert query $query | url join
 }
 
-# Build the dry-run record returned by --dry-run. Shape:
-#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
-#    auth: {scheme, location}}
-# `meta` carries logical-form data (the query record by spec name, the pre-serialization
-# body) that do-request itself cannot reconstruct from its wire-format args.
-def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
-  let m = ($meta | default {})
-  {
-    dry_run: true
-    method: $method
-    url: $url
-    query: ($m | get -o query | default {})
-    headers: $auth.headers
-    body: ($m | get -o body)
-    content_type: $content_type
-    timeout: $timeout
-    auth: {scheme: $auth.scheme, location: $auth.location}
-  }
+# Success policy: did this response succeed? Single source of truth, consulted by
+# handle-response and the HEAD header-unwrap. Empty ok_codes means the spec listed
+# none, so fall back to < 400. Otherwise: any 2xx, plus documented success codes.
+def status-ok [status: int, ok_codes: list<int>]: nothing -> bool {
+  if ($ok_codes | is-empty) { $status < 400 } else { ($status >= 200 and $status < 300) or ($status in $ok_codes) }
 }
 
-# Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
-  let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
-  let timeout = ($max_time | default 30min)
-  let ct = ($content_type | default "application/json")
-  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
-  let resp = match $method {
-    "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
-  }
-  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
-  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
+# Unwrap a `--full` HTTP response into the user-facing value. Response arrives
+# via pipeline; ok_codes gates the error throw (see status-ok).
+def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: record -> any {
+  let resp = $in
+  if $allow_errors { return $resp }
+  if not (status-ok $resp.status $ok_codes) { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } }
+  if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
+  if $resp.status == 204 { return null }
+  $resp.body
+}
+
+# GET — bodyless, honours --raw
+def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+}
+
+# POST — body + content-type
+def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# PUT — body + content-type
+def send-put [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http put --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http put --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# DELETE — body via --data
+def send-delete [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http delete --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url } else { http delete --headers $req.headers --content-type $req.content_type --data $body --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url }
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 def base-url-completer [] { ["http://codeguru-profiler.us-east-1.amazonaws.com" "http://codeguru-profiler.us-east-2.amazonaws.com" "http://codeguru-profiler.us-west-1.amazonaws.com" "http://codeguru-profiler.us-west-2.amazonaws.com" "http://codeguru-profiler.us-gov-west-1.amazonaws.com" "http://codeguru-profiler.us-gov-east-1.amazonaws.com" "http://codeguru-profiler.ca-central-1.amazonaws.com" "http://codeguru-profiler.eu-north-1.amazonaws.com" "http://codeguru-profiler.eu-west-1.amazonaws.com" "http://codeguru-profiler.eu-west-2.amazonaws.com" "http://codeguru-profiler.eu-west-3.amazonaws.com" "http://codeguru-profiler.eu-central-1.amazonaws.com" "http://codeguru-profiler.eu-south-1.amazonaws.com" "http://codeguru-profiler.af-south-1.amazonaws.com" "http://codeguru-profiler.ap-northeast-1.amazonaws.com" "http://codeguru-profiler.ap-northeast-2.amazonaws.com" "http://codeguru-profiler.ap-northeast-3.amazonaws.com" "http://codeguru-profiler.ap-southeast-1.amazonaws.com" "http://codeguru-profiler.ap-southeast-2.amazonaws.com" "http://codeguru-profiler.ap-east-1.amazonaws.com" "http://codeguru-profiler.ap-south-1.amazonaws.com" "http://codeguru-profiler.sa-east-1.amazonaws.com" "http://codeguru-profiler.me-south-1.amazonaws.com" "https://codeguru-profiler.us-east-1.amazonaws.com" "https://codeguru-profiler.us-east-2.amazonaws.com" "https://codeguru-profiler.us-west-1.amazonaws.com" "https://codeguru-profiler.us-west-2.amazonaws.com" "https://codeguru-profiler.us-gov-west-1.amazonaws.com" "https://codeguru-profiler.us-gov-east-1.amazonaws.com" "https://codeguru-profiler.ca-central-1.amazonaws.com" "https://codeguru-profiler.eu-north-1.amazonaws.com" "https://codeguru-profiler.eu-west-1.amazonaws.com" "https://codeguru-profiler.eu-west-2.amazonaws.com" "https://codeguru-profiler.eu-west-3.amazonaws.com" "https://codeguru-profiler.eu-central-1.amazonaws.com" "https://codeguru-profiler.eu-south-1.amazonaws.com" "https://codeguru-profiler.af-south-1.amazonaws.com" "https://codeguru-profiler.ap-northeast-1.amazonaws.com" "https://codeguru-profiler.ap-northeast-2.amazonaws.com" "https://codeguru-profiler.ap-northeast-3.amazonaws.com" "https://codeguru-profiler.ap-southeast-1.amazonaws.com" "https://codeguru-profiler.ap-southeast-2.amazonaws.com" "https://codeguru-profiler.ap-east-1.amazonaws.com" "https://codeguru-profiler.ap-south-1.amazonaws.com" "https://codeguru-profiler.sa-east-1.amazonaws.com" "https://codeguru-profiler.me-south-1.amazonaws.com" "http://codeguru-profiler.cn-north-1.amazonaws.com.cn" "http://codeguru-profiler.cn-northwest-1.amazonaws.com.cn" "https://codeguru-profiler.cn-north-1.amazonaws.com.cn" "https://codeguru-profiler.cn-northwest-1.amazonaws.com.cn"] }
@@ -168,14 +171,25 @@ export def "profiling-groups-notification-configuration create-channels" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($profiling_group_name | is-empty) { error make --unspanned { msg: "path parameter 'profilingGroupName' must be non-empty" } }
-  let full_url = (build-url $base ({profiling_group_name: (encode-path-segment $profiling_group_name)} | format pattern "/profilingGroups/{profiling_group_name}/notificationConfiguration"))
+  let full_url = (build-url $base ({profiling_group_name: (encode-path-segment $profiling_group_name)} | format pattern "/profilingGroups/{profiling_group_name}/notificationConfiguration") $auth.query)
   let req_body = {"channels": $channels} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get the current configuration for anomaly notifications for a profiling group.
@@ -204,12 +218,23 @@ export def "profiling-groups-notification-configuration get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($profiling_group_name | is-empty) { error make --unspanned { msg: "path parameter 'profilingGroupName' must be non-empty" } }
-  let full_url = (build-url $base ({profiling_group_name: (encode-path-segment $profiling_group_name)} | format pattern "/profilingGroups/{profiling_group_name}/notificationConfiguration"))
+  let full_url = (build-url $base ({profiling_group_name: (encode-path-segment $profiling_group_name)} | format pattern "/profilingGroups/{profiling_group_name}/notificationConfiguration") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the time series of values for a requested list of frame metrics from a time period.
@@ -246,14 +271,25 @@ export def "profiling-groups-frames-metrics get-batch-data" [
   let base = ($base_url | default $BASE_URL)
   if ($profiling_group_name | is-empty) { error make --unspanned { msg: "path parameter 'profilingGroupName' must be non-empty" } }
   let qp = [(serialize-qp "endTime" $end_time "scalar") (serialize-qp "period" $period "scalar") (serialize-qp "startTime" $start_time "scalar") (serialize-qp "targetResolution" $target_resolution "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profiling_group_name: (encode-path-segment $profiling_group_name)} | format pattern "/profilingGroups/{profiling_group_name}/frames/-/metrics") $qp)
+  let full_url = (build-url $base ({profiling_group_name: (encode-path-segment $profiling_group_name)} | format pattern "/profilingGroups/{profiling_group_name}/frames/-/metrics") $qp $auth.query)
   let req_body = {"frameMetrics": $frame_metrics} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"endTime": $end_time, "period": $period, "startTime": $start_time, "targetResolution": $target_resolution} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"endTime": $end_time, "period": $period, "startTime": $start_time, "targetResolution": $target_resolution} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Used by profiler agents to report their current state and to receive remote configuration updates. For example, ConfigureAgent can be used to tell an agent whether to profile or not and for how long to return profiling data.
@@ -285,14 +321,25 @@ export def "profiling-groups-configure-agent create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($profiling_group_name | is-empty) { error make --unspanned { msg: "path parameter 'profilingGroupName' must be non-empty" } }
-  let full_url = (build-url $base ({profiling_group_name: (encode-path-segment $profiling_group_name)} | format pattern "/profilingGroups/{profiling_group_name}/configureAgent"))
+  let full_url = (build-url $base ({profiling_group_name: (encode-path-segment $profiling_group_name)} | format pattern "/profilingGroups/{profiling_group_name}/configureAgent") $auth.query)
   let req_body = {"fleetInstanceId": $fleet_instance_id, "metadata": $metadata} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Creates a profiling group.
@@ -327,14 +374,25 @@ export def "profiling-groups create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "clientToken" $client_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/profilingGroups" $qp)
+  let full_url = (build-url $base "/profilingGroups" $qp $auth.query)
   let req_body = {"agentOrchestrationConfig": $agent_orchestration_config, "computePlatform": $compute_platform, "profilingGroupName": $profiling_group_name, "tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"clientToken": $client_token} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"clientToken": $client_token} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Deletes a profiling group.
@@ -363,12 +421,23 @@ export def "profiling-groups delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($profiling_group_name | is-empty) { error make --unspanned { msg: "path parameter 'profilingGroupName' must be non-empty" } }
-  let full_url = (build-url $base ({profiling_group_name: (encode-path-segment $profiling_group_name)} | format pattern "/profilingGroups/{profiling_group_name}"))
+  let full_url = (build-url $base ({profiling_group_name: (encode-path-segment $profiling_group_name)} | format pattern "/profilingGroups/{profiling_group_name}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Returns a ProfilingGroupDescription (https://docs.aws.amazon.com/codeguru/latest/profiler-api/API_ProfilingGroupDescription.html) object that contains information about the requested profiling group.
@@ -397,12 +466,23 @@ export def "profiling-groups get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($profiling_group_name | is-empty) { error make --unspanned { msg: "path parameter 'profilingGroupName' must be non-empty" } }
-  let full_url = (build-url $base ({profiling_group_name: (encode-path-segment $profiling_group_name)} | format pattern "/profilingGroups/{profiling_group_name}"))
+  let full_url = (build-url $base ({profiling_group_name: (encode-path-segment $profiling_group_name)} | format pattern "/profilingGroups/{profiling_group_name}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates a profiling group.
@@ -434,14 +514,25 @@ export def "profiling-groups update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($profiling_group_name | is-empty) { error make --unspanned { msg: "path parameter 'profilingGroupName' must be non-empty" } }
-  let full_url = (build-url $base ({profiling_group_name: (encode-path-segment $profiling_group_name)} | format pattern "/profilingGroups/{profiling_group_name}"))
+  let full_url = (build-url $base ({profiling_group_name: (encode-path-segment $profiling_group_name)} | format pattern "/profilingGroups/{profiling_group_name}") $auth.query)
   let req_body = {"agentOrchestrationConfig": $agent_orchestration_config} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Returns a list of FindingsReportSummary (https://docs.aws.amazon.com/codeguru/latest/profiler-api/API_FindingsReportSummary.html) objects that contain analysis results for all profiling groups in your AWS account.
@@ -472,12 +563,23 @@ export def "internal-findings-reports get-account-summary" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "dailyReportsOnly" $daily_reports_only "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/internal/findingsReports" $qp)
+  let full_url = (build-url $base "/internal/findingsReports" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"dailyReportsOnly": $daily_reports_only, "maxResults": $max_results, "nextToken": $next_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"dailyReportsOnly": $daily_reports_only, "maxResults": $max_results, "nextToken": $next_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the JSON-formatted resource-based policy on a profiling group.
@@ -506,12 +608,23 @@ export def "profiling-groups-policy get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($profiling_group_name | is-empty) { error make --unspanned { msg: "path parameter 'profilingGroupName' must be non-empty" } }
-  let full_url = (build-url $base ({profiling_group_name: (encode-path-segment $profiling_group_name)} | format pattern "/profilingGroups/{profiling_group_name}/policy"))
+  let full_url = (build-url $base ({profiling_group_name: (encode-path-segment $profiling_group_name)} | format pattern "/profilingGroups/{profiling_group_name}/policy") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the aggregated profile of a profiling group for a specified time range. Amazon CodeGuru Profiler collects posted agent profiles for a profiling group into aggregated profiles. <note> <p> Because aggregated profiles expire over time <code>GetProfile</code> is not idempotent. </p> </note> <p> Specify the time range for the requested aggregated profile using 1 or 2 of the following parameters: <code>startTime</code>, <code>endTime</code>, <code>period</code>. The maximum time range allowed is 7 days. If you specify all 3 parameters, an exception is thrown. If you specify only <code>period</code>, the latest aggregated profile is returned. </p> <p> Aggregated profiles are available with aggregation periods of 5 minutes, 1 hour, and 1 day, aligned to UTC. The aggregation period of an aggregated profile determines how long it is retained. For more information, see <a href="https://docs.aws.amazon.com/codeguru/latest/profiler-api/API_AggregatedProfileTime.html"> <code>AggregatedProfileTime</code> </a>. The aggregated profile's aggregation period determines how long it is retained by CodeGuru Profiler. </p> <ul> <li> <p> If the aggregation period is 5 minutes, the aggregated profile is retained for 15 days. </p> </li> <li> <p> If the aggregation period is 1 hour, the aggregated profile is retained for 60 days. </p> </li> <li> <p> If the aggregation period is 1 day, the aggregated profile is retained for 3 years. </p> </li> </ul> <p>There are two use cases for calling <code>GetProfile</code>.</p> <ol> <li> <p> If you want to return an aggregated profile that already exists, use <a href="https://docs.aws.amazon.com/codeguru/latest/profiler-api/API_ListProfileTimes.html"> <code>ListProfileTimes</code> </a> to view the time ranges of existing aggregated profiles. Use them in a <code>GetProfile</code> request to return a specific, existing aggregated profile. </p> </li> <li> <p> If you want to return an aggregated profile for a time range that doesn't align with an existing aggregated profile, then CodeGuru Profiler makes a best effort to combine existing aggregated profiles from the requested time range and return them as one aggregated profile. </p> <p> If aggregated profiles do not exist for the full time range requested, then aggregated profiles for a smaller time range are returned. For example, if the requested time range is from 00:00 to 00:20, and the existing aggregated profiles are from 00:15 and 00:25, then the aggregated profiles from 00:15 to 00:20 are returned. </p> </li> </ol>
@@ -546,12 +659,23 @@ export def "profiling-groups-profile get" [
   let base = ($base_url | default $BASE_URL)
   if ($profiling_group_name | is-empty) { error make --unspanned { msg: "path parameter 'profilingGroupName' must be non-empty" } }
   let qp = [(serialize-qp "endTime" $end_time "scalar") (serialize-qp "maxDepth" $max_depth "scalar") (serialize-qp "period" $period "scalar") (serialize-qp "startTime" $start_time "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profiling_group_name: (encode-path-segment $profiling_group_name)} | format pattern "/profilingGroups/{profiling_group_name}/profile") $qp)
+  let full_url = (build-url $base ({profiling_group_name: (encode-path-segment $profiling_group_name)} | format pattern "/profilingGroups/{profiling_group_name}/profile") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"endTime": $end_time, "maxDepth": $max_depth, "period": $period, "startTime": $start_time} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"endTime": $end_time, "maxDepth": $max_depth, "period": $period, "startTime": $start_time} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns a list of Recommendation (https://docs.aws.amazon.com/codeguru/latest/profiler-api/API_Recommendation.html) objects that contain recommendations for a profiling group for a given time period. A list of Anomaly (https://docs.aws.amazon.com/codeguru/latest/profiler-api/API_Anomaly.html) objects that contains details about anomalies detected in the profiling group for the same time period is also returned.
@@ -584,12 +708,23 @@ export def "internal-profiling-groups-recommendations get" [
   let base = ($base_url | default $BASE_URL)
   if ($profiling_group_name | is-empty) { error make --unspanned { msg: "path parameter 'profilingGroupName' must be non-empty" } }
   let qp = [(serialize-qp "endTime" $end_time "scalar") (serialize-qp "locale" $locale "scalar") (serialize-qp "startTime" $start_time "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profiling_group_name: (encode-path-segment $profiling_group_name)} | format pattern "/internal/profilingGroups/{profiling_group_name}/recommendations") $qp)
+  let full_url = (build-url $base ({profiling_group_name: (encode-path-segment $profiling_group_name)} | format pattern "/internal/profilingGroups/{profiling_group_name}/recommendations") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"endTime": $end_time, "locale": $locale, "startTime": $start_time} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"endTime": $end_time, "locale": $locale, "startTime": $start_time} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List the available reports for a given profiling group and time range.
@@ -624,12 +759,23 @@ export def "internal-profiling-groups-findings-reports list" [
   let base = ($base_url | default $BASE_URL)
   if ($profiling_group_name | is-empty) { error make --unspanned { msg: "path parameter 'profilingGroupName' must be non-empty" } }
   let qp = [(serialize-qp "dailyReportsOnly" $daily_reports_only "scalar") (serialize-qp "endTime" $end_time "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "startTime" $start_time "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profiling_group_name: (encode-path-segment $profiling_group_name)} | format pattern "/internal/profilingGroups/{profiling_group_name}/findingsReports") $qp)
+  let full_url = (build-url $base ({profiling_group_name: (encode-path-segment $profiling_group_name)} | format pattern "/internal/profilingGroups/{profiling_group_name}/findingsReports") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"dailyReportsOnly": $daily_reports_only, "endTime": $end_time, "maxResults": $max_results, "nextToken": $next_token, "startTime": $start_time} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"dailyReportsOnly": $daily_reports_only, "endTime": $end_time, "maxResults": $max_results, "nextToken": $next_token, "startTime": $start_time} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Lists the start times of the available aggregated profiles of a profiling group for an aggregation period within the specified time range.
@@ -665,12 +811,23 @@ export def "profiling-groups-profile-times list" [
   let base = ($base_url | default $BASE_URL)
   if ($profiling_group_name | is-empty) { error make --unspanned { msg: "path parameter 'profilingGroupName' must be non-empty" } }
   let qp = [(serialize-qp "endTime" $end_time "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "period" $period "scalar") (serialize-qp "startTime" $start_time "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profiling_group_name: (encode-path-segment $profiling_group_name)} | format pattern "/profilingGroups/{profiling_group_name}/profileTimes") $qp)
+  let full_url = (build-url $base ({profiling_group_name: (encode-path-segment $profiling_group_name)} | format pattern "/profilingGroups/{profiling_group_name}/profileTimes") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"endTime": $end_time, "maxResults": $max_results, "nextToken": $next_token, "orderBy": $order_by, "period": $period, "startTime": $start_time} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"endTime": $end_time, "maxResults": $max_results, "nextToken": $next_token, "orderBy": $order_by, "period": $period, "startTime": $start_time} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns a list of profiling groups. The profiling groups are returned as ProfilingGroupDescription (https://docs.aws.amazon.com/codeguru/latest/profiler-api/API_ProfilingGroupDescription.html) objects.
@@ -701,12 +858,23 @@ export def "profiling-groups list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "includeDescription" $include_description "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/profilingGroups" $qp)
+  let full_url = (build-url $base "/profilingGroups" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"includeDescription": $include_description, "maxResults": $max_results, "nextToken": $next_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"includeDescription": $include_description, "maxResults": $max_results, "nextToken": $next_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns a list of the tags that are assigned to a specified resource.
@@ -735,12 +903,23 @@ export def "tags list-for-resource" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn | is-empty) { error make --unspanned { msg: "path parameter 'resourceArn' must be non-empty" } }
-  let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn)} | format pattern "/tags/{resource_arn}"))
+  let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn)} | format pattern "/tags/{resource_arn}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Use to assign one or more tags to a resource.
@@ -771,14 +950,25 @@ export def "tags tag-resource" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn | is-empty) { error make --unspanned { msg: "path parameter 'resourceArn' must be non-empty" } }
-  let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn)} | format pattern "/tags/{resource_arn}"))
+  let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn)} | format pattern "/tags/{resource_arn}") $auth.query)
   let req_body = {"tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Submits profiling data to an aggregated profile of a profiling group. To get an aggregated profile that is created with this profiling data, use GetProfile (https://docs.aws.amazon.com/codeguru/latest/profiler-api/API_GetProfile.html).
@@ -812,7 +1002,7 @@ export def "profiling-groups-agent-profile create" [
   let base = ($base_url | default $BASE_URL)
   if ($profiling_group_name | is-empty) { error make --unspanned { msg: "path parameter 'profilingGroupName' must be non-empty" } }
   let qp = [(serialize-qp "profileToken" $profile_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profiling_group_name: (encode-path-segment $profiling_group_name)} | format pattern "/profilingGroups/{profiling_group_name}/agentProfile") $qp)
+  let full_url = (build-url $base ({profiling_group_name: (encode-path-segment $profiling_group_name)} | format pattern "/profilingGroups/{profiling_group_name}/agentProfile") $qp $auth.query)
   let req_body = {"agentProfile": $agent_profile} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
@@ -821,7 +1011,18 @@ export def "profiling-groups-agent-profile create" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let effective_ct = ($content_type | default "application/json")
   let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $effective_ct $req_body_wire {query: ({"profileToken": $profile_token} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"profileToken": $profile_token} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: $effective_ct
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [204]
 }
 
 # Adds permissions to a profiling group's resource-based policy that are provided using an action group. If a profiling group doesn't have a resource-based policy, one is created for it using the permissions in the action group and the roles and users in the principals parameter. <p> The one supported action group that can be added is <code>agentPermission</code> which grants <code>ConfigureAgent</code> and <code>PostAgent</code> permissions. For more information, see <a href="https://docs.aws.amazon.com/codeguru/latest/profiler-ug/resource-based-policies.html">Resource-based policies in CodeGuru Profiler</a> in the <i>Amazon CodeGuru Profiler User Guide</i>, <a href="https://docs.aws.amazon.com/codeguru/latest/profiler-api/API_ConfigureAgent.html"> <code>ConfigureAgent</code> </a>, and <a href="https://docs.aws.amazon.com/codeguru/latest/profiler-api/API_PostAgentProfile.html"> <code>PostAgentProfile</code> </a>. </p> <p> The first time you call <code>PutPermission</code> on a profiling group, do not specify a <code>revisionId</code> because it doesn't have a resource-based policy. Subsequent calls must provide a <code>revisionId</code> to specify which revision of the resource-based policy to add the permissions to. </p> <p> The response contains the profiling group's JSON-formatted resource policy. </p>
@@ -855,14 +1056,25 @@ export def "profiling-groups-policy update-permission" [
   let base = ($base_url | default $BASE_URL)
   if ($profiling_group_name | is-empty) { error make --unspanned { msg: "path parameter 'profilingGroupName' must be non-empty" } }
   if ($action_group | is-empty) { error make --unspanned { msg: "path parameter 'actionGroup' must be non-empty" } }
-  let full_url = (build-url $base ({profiling_group_name: (encode-path-segment $profiling_group_name), action_group: (encode-path-segment $action_group)} | format pattern "/profilingGroups/{profiling_group_name}/policy/{action_group}"))
+  let full_url = (build-url $base ({profiling_group_name: (encode-path-segment $profiling_group_name), action_group: (encode-path-segment $action_group)} | format pattern "/profilingGroups/{profiling_group_name}/policy/{action_group}") $auth.query)
   let req_body = {"principals": $principals, "revisionId": $revision_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Remove one anomaly notifications channel for a profiling group.
@@ -893,12 +1105,23 @@ export def "profiling-groups-notification-configuration delete-channel" [
   let base = ($base_url | default $BASE_URL)
   if ($profiling_group_name | is-empty) { error make --unspanned { msg: "path parameter 'profilingGroupName' must be non-empty" } }
   if ($channel_id | is-empty) { error make --unspanned { msg: "path parameter 'channelId' must be non-empty" } }
-  let full_url = (build-url $base ({profiling_group_name: (encode-path-segment $profiling_group_name), channel_id: (encode-path-segment $channel_id)} | format pattern "/profilingGroups/{profiling_group_name}/notificationConfiguration/{channel_id}"))
+  let full_url = (build-url $base ({profiling_group_name: (encode-path-segment $profiling_group_name), channel_id: (encode-path-segment $channel_id)} | format pattern "/profilingGroups/{profiling_group_name}/notificationConfiguration/{channel_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Removes permissions from a profiling group's resource-based policy that are provided using an action group. The one supported action group that can be removed is agentPermission which grants ConfigureAgent and PostAgent permissions. For more information, see Resource-based policies in CodeGuru Profiler (https://docs.aws.amazon.com/codeguru/latest/profiler-ug/resource-based-policies.html) in the Amazon CodeGuru Profiler User Guide, ConfigureAgent (https://docs.aws.amazon.com/codeguru/latest/profiler-api/API_ConfigureAgent.html), and PostAgentProfile (https://docs.aws.amazon.com/codeguru/latest/profiler-api/API_PostAgentProfile.html).
@@ -931,12 +1154,23 @@ export def "profiling-groups-policy delete-permission" [
   if ($profiling_group_name | is-empty) { error make --unspanned { msg: "path parameter 'profilingGroupName' must be non-empty" } }
   if ($action_group | is-empty) { error make --unspanned { msg: "path parameter 'actionGroup' must be non-empty" } }
   let qp = [(serialize-qp "revisionId" $revision_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profiling_group_name: (encode-path-segment $profiling_group_name), action_group: (encode-path-segment $action_group)} | format pattern "/profilingGroups/{profiling_group_name}/policy/{action_group}") $qp)
+  let full_url = (build-url $base ({profiling_group_name: (encode-path-segment $profiling_group_name), action_group: (encode-path-segment $action_group)} | format pattern "/profilingGroups/{profiling_group_name}/policy/{action_group}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"revisionId": $revision_id} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"revisionId": $revision_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Sends feedback to CodeGuru Profiler about whether the anomaly detected by the analysis is useful or not.
@@ -970,14 +1204,25 @@ export def "internal-profiling-groups-anomalies-feedback submit" [
   let base = ($base_url | default $BASE_URL)
   if ($profiling_group_name | is-empty) { error make --unspanned { msg: "path parameter 'profilingGroupName' must be non-empty" } }
   if ($anomaly_instance_id | is-empty) { error make --unspanned { msg: "path parameter 'anomalyInstanceId' must be non-empty" } }
-  let full_url = (build-url $base ({profiling_group_name: (encode-path-segment $profiling_group_name), anomaly_instance_id: (encode-path-segment $anomaly_instance_id)} | format pattern "/internal/profilingGroups/{profiling_group_name}/anomalies/{anomaly_instance_id}/feedback"))
+  let full_url = (build-url $base ({profiling_group_name: (encode-path-segment $profiling_group_name), anomaly_instance_id: (encode-path-segment $anomaly_instance_id)} | format pattern "/internal/profilingGroups/{profiling_group_name}/anomalies/{anomaly_instance_id}/feedback") $auth.query)
   let req_body = {"comment": $comment, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Use to remove one or more tags from a resource.
@@ -1008,10 +1253,21 @@ export def "tags untag-resource" [
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn | is-empty) { error make --unspanned { msg: "path parameter 'resourceArn' must be non-empty" } }
   let qp = [(serialize-qp "tagKeys" $tag_keys "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn)} | format pattern "/tags/{resource_arn}") $qp)
+  let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn)} | format pattern "/tags/{resource_arn}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"tagKeys": $tag_keys} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"tagKeys": $tag_keys} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }

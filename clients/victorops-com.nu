@@ -8,7 +8,7 @@ const BASE_URL = "https://api.victorops.com"
 # `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
 # where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o VICTOROPS_TOKEN | default "" }
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o VICTOROPS_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
@@ -40,14 +40,11 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
-# Trick: `url encode --all` over-encodes, then we decode the four unreserved
-# punctuation chars back. Pre-existing %XX sequences in the input survive
-# because `url encode --all` first turns their % into %25.
 def encode-path-segment [v: any]: nothing -> string {
   $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
-# Serialize an array-typed path parameter (issue 49.A). OpenAPI 3 `style: simple`
+# Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
 # (the default for path params) and Swagger 2 `collectionFormat: csv` both join
 # the elements with a literal comma WITHIN the single path segment, each element
 # RFC-3986-encoded individually (so a comma inside an element stays %2C). Without
@@ -58,51 +55,63 @@ def encode-path-array [v: any]: nothing -> string {
   if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
 }
 
-# Build URL from base, path, and optional query string
-def build-url [base: string, path: string, query?: string]: nothing -> string {
+# Build the request URL from base, path, and any number of pre-encoded query
+# fragments (param serializer output and/or the auth query). Each fragment is an
+# `&`-joinable `key=value` string already percent-encoded by its producer; empty
+# fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
+# delimiters are hand-spliced — and any query already on the base URL is merged in.
+def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
   let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
-  let result = ($parsed | upsert path $full_path)
-  if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
+  let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
+  $parsed | upsert path $full_path | upsert query $query | url join
 }
 
-# Build the dry-run record returned by --dry-run. Shape:
-#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
-#    auth: {scheme, location}}
-# `meta` carries logical-form data (the query record by spec name, the pre-serialization
-# body) that do-request itself cannot reconstruct from its wire-format args.
-def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
-  let m = ($meta | default {})
-  {
-    dry_run: true
-    method: $method
-    url: $url
-    query: ($m | get -o query | default {})
-    headers: $auth.headers
-    body: ($m | get -o body)
-    content_type: $content_type
-    timeout: $timeout
-    auth: {scheme: $auth.scheme, location: $auth.location}
-  }
+# Success policy: did this response succeed? Single source of truth, consulted by
+# handle-response and the HEAD header-unwrap. Empty ok_codes means the spec listed
+# none, so fall back to < 400. Otherwise: any 2xx, plus documented success codes.
+def status-ok [status: int, ok_codes: list<int>]: nothing -> bool {
+  if ($ok_codes | is-empty) { $status < 400 } else { ($status >= 200 and $status < 300) or ($status in $ok_codes) }
 }
 
-# Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
-  let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
-  let timeout = ($max_time | default 30min)
-  let ct = ($content_type | default "application/json")
-  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
-  let resp = match $method {
-    "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
-  }
-  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
-  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
+# Unwrap a `--full` HTTP response into the user-facing value. Response arrives
+# via pipeline; ok_codes gates the error throw (see status-ok).
+def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: record -> any {
+  let resp = $in
+  if $allow_errors { return $resp }
+  if not (status-ok $resp.status $ok_codes) { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } }
+  if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
+  if $resp.status == 204 { return null }
+  $resp.body
+}
+
+# GET — bodyless, honours --raw
+def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+}
+
+# POST — body + content-type
+def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# PUT — body + content-type
+def send-put [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http put --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http put --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# PATCH — body + content-type
+def send-patch [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http patch --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http patch --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# DELETE — body via --data
+def send-delete [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http delete --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url } else { http delete --headers $req.headers --content-type $req.content_type --data $body --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url }
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 def base-url-completer [] { ["https://api.victorops.com"] }
@@ -156,12 +165,23 @@ export def "api-public-alerts get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($uuid | is-empty) { error make --unspanned { msg: "path parameter 'uuid' must be non-empty" } }
-  let full_url = (build-url $base ({uuid: (encode-path-segment $uuid)} | format pattern "/api-public/v1/alerts/{uuid}"))
+  let full_url = (build-url $base ({uuid: (encode-path-segment $uuid)} | format pattern "/api-public/v1/alerts/{uuid}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get current incident information
@@ -182,12 +202,23 @@ export def "api-public-incidents get" [
 ]: nothing -> record<incidents: table<alertCount: float, currentPhase: string, entityId: string, host: string, incidentNumber: string, lastAlertId: string, lastAlertTime: string, pagedPolicies: list, pagedTeams: list, pagedUsers: list, service: string, startTime: string, transitions: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api-public/v1/incidents")
+  let full_url = (build-url $base "/api-public/v1/incidents" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a new incident
@@ -214,14 +245,25 @@ export def "api-public-incidents create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api-public/v1/incidents")
+  let full_url = (build-url $base "/api-public/v1/incidents" $auth.query)
   let req_body = {"details": $details, "summary": $summary, "targets": $targets, "userName": $user_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Acknowledge an incident or list of incidents
@@ -246,14 +288,25 @@ export def "api-public-incidents-ack update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api-public/v1/incidents/ack")
+  let full_url = (build-url $base "/api-public/v1/incidents/ack" $auth.query)
   let req_body = {"incidentNames": $incident_names, "message": $message, "userName": $user_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Acknowledge all incidents for which a user was paged.
@@ -277,14 +330,25 @@ export def "api-public-incidents-by-user-ack update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api-public/v1/incidents/byUser/ack")
+  let full_url = (build-url $base "/api-public/v1/incidents/byUser/ack" $auth.query)
   let req_body = {"message": $message, "userName": $user_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Resolve all incidents for which a user was paged.
@@ -308,14 +372,25 @@ export def "api-public-incidents-by-user-resolve update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api-public/v1/incidents/byUser/resolve")
+  let full_url = (build-url $base "/api-public/v1/incidents/byUser/resolve" $auth.query)
   let req_body = {"message": $message, "userName": $user_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Reroute one or more incidents to one or more new routable destinations.
@@ -340,14 +415,25 @@ export def "api-public-incidents-reroute create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api-public/v1/incidents/reroute")
+  let full_url = (build-url $base "/api-public/v1/incidents/reroute" $auth.query)
   let req_body = {"reroutes": $reroutes, "userName": $user_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Resolve an incident or list of incidents
@@ -372,14 +458,25 @@ export def "api-public-incidents-resolve update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api-public/v1/incidents/resolve")
+  let full_url = (build-url $base "/api-public/v1/incidents/resolve" $auth.query)
   let req_body = {"incidentNames": $incident_names, "message": $message, "userName": $user_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get an organization's current maintenance mode state
@@ -400,12 +497,23 @@ export def "api-public-maintenancemode get" [
 ]: nothing -> record<activeInstances: table<instanceId: string, isGlobal: bool, startedAt: float, startedBy: string, targets: list>, companyId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api-public/v1/maintenancemode")
+  let full_url = (build-url $base "/api-public/v1/maintenancemode" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Start maintenance mode for routing keys
@@ -430,14 +538,25 @@ export def "api-public-maintenancemode-start create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api-public/v1/maintenancemode/start")
+  let full_url = (build-url $base "/api-public/v1/maintenancemode/start" $auth.query)
   let req_body = {"names": $names, "purpose": $purpose, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # End maintenance mode for routing keys
@@ -460,12 +579,23 @@ export def "api-public-maintenancemode-end update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($maintenancemodeid | is-empty) { error make --unspanned { msg: "path parameter 'maintenancemodeid' must be non-empty" } }
-  let full_url = (build-url $base ({maintenancemodeid: (encode-path-segment $maintenancemodeid)} | format pattern "/api-public/v1/maintenancemode/{maintenancemodeid}/end"))
+  let full_url = (build-url $base ({maintenancemodeid: (encode-path-segment $maintenancemodeid)} | format pattern "/api-public/v1/maintenancemode/{maintenancemodeid}/end") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Get an organization's on-call users
@@ -486,12 +616,23 @@ export def "api-public-oncall-current get" [
 ]: nothing -> record<teamsOnCall: table<onCallNow: list, team: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api-public/v1/oncall/current")
+  let full_url = (build-url $base "/api-public/v1/oncall/current" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List routing keys with associated teams
@@ -512,12 +653,23 @@ export def "api-public-org-routing-keys get" [
 ]: nothing -> record<_selfUrl: string, routingKeys: table<isDefault: bool, routingKey: string, targets: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api-public/v1/org/routing-keys")
+  let full_url = (build-url $base "/api-public/v1/org/routing-keys" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List the scheduled overrides
@@ -538,12 +690,23 @@ export def "api-public-overrides list" [
 ]: nothing -> record<_selfUrl: string, overrides: table<assignments: list, end: string, publicId: string, start: string, timezone: string, user: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api-public/v1/overrides")
+  let full_url = (build-url $base "/api-public/v1/overrides" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Creates a new scheduled override
@@ -569,14 +732,25 @@ export def "api-public-overrides create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api-public/v1/overrides")
+  let full_url = (build-url $base "/api-public/v1/overrides" $auth.query)
   let req_body = {"end": $end, "start": $start, "timezone": $timezone, "username": $username} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes a scheduled override
@@ -599,12 +773,23 @@ export def "api-public-overrides delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($public_id | is-empty) { error make --unspanned { msg: "path parameter 'publicId' must be non-empty" } }
-  let full_url = (build-url $base ({public_id: (encode-path-segment $public_id)} | format pattern "/api-public/v1/overrides/{public_id}"))
+  let full_url = (build-url $base ({public_id: (encode-path-segment $public_id)} | format pattern "/api-public/v1/overrides/{public_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Get the specified scheduled override
@@ -627,12 +812,23 @@ export def "api-public-overrides get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($public_id | is-empty) { error make --unspanned { msg: "path parameter 'publicId' must be non-empty" } }
-  let full_url = (build-url $base ({public_id: (encode-path-segment $public_id)} | format pattern "/api-public/v1/overrides/{public_id}"))
+  let full_url = (build-url $base ({public_id: (encode-path-segment $public_id)} | format pattern "/api-public/v1/overrides/{public_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get the specified scheduled override
@@ -655,12 +851,23 @@ export def "api-public-overrides-assignments list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($public_id | is-empty) { error make --unspanned { msg: "path parameter 'publicId' must be non-empty" } }
-  let full_url = (build-url $base ({public_id: (encode-path-segment $public_id)} | format pattern "/api-public/v1/overrides/{public_id}/assignments"))
+  let full_url = (build-url $base ({public_id: (encode-path-segment $public_id)} | format pattern "/api-public/v1/overrides/{public_id}/assignments") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Delete the scheduled override assignment
@@ -685,12 +892,23 @@ export def "api-public-overrides-assignments delete" [
   let base = ($base_url | default $BASE_URL)
   if ($public_id | is-empty) { error make --unspanned { msg: "path parameter 'publicId' must be non-empty" } }
   if ($policy_slug | is-empty) { error make --unspanned { msg: "path parameter 'policySlug' must be non-empty" } }
-  let full_url = (build-url $base ({public_id: (encode-path-segment $public_id), policy_slug: (encode-path-segment $policy_slug)} | format pattern "/api-public/v1/overrides/{public_id}/assignments/{policy_slug}"))
+  let full_url = (build-url $base ({public_id: (encode-path-segment $public_id), policy_slug: (encode-path-segment $policy_slug)} | format pattern "/api-public/v1/overrides/{public_id}/assignments/{policy_slug}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Get the specified scheduled override assignment
@@ -715,12 +933,23 @@ export def "api-public-overrides-assignments get" [
   let base = ($base_url | default $BASE_URL)
   if ($public_id | is-empty) { error make --unspanned { msg: "path parameter 'publicId' must be non-empty" } }
   if ($policy_slug | is-empty) { error make --unspanned { msg: "path parameter 'policySlug' must be non-empty" } }
-  let full_url = (build-url $base ({public_id: (encode-path-segment $public_id), policy_slug: (encode-path-segment $policy_slug)} | format pattern "/api-public/v1/overrides/{public_id}/assignments/{policy_slug}"))
+  let full_url = (build-url $base ({public_id: (encode-path-segment $public_id), policy_slug: (encode-path-segment $policy_slug)} | format pattern "/api-public/v1/overrides/{public_id}/assignments/{policy_slug}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update the scheduled override assignment
@@ -748,14 +977,25 @@ export def "api-public-overrides-assignments update" [
   let base = ($base_url | default $BASE_URL)
   if ($public_id | is-empty) { error make --unspanned { msg: "path parameter 'publicId' must be non-empty" } }
   if ($policy_slug | is-empty) { error make --unspanned { msg: "path parameter 'policySlug' must be non-empty" } }
-  let full_url = (build-url $base ({public_id: (encode-path-segment $public_id), policy_slug: (encode-path-segment $policy_slug)} | format pattern "/api-public/v1/overrides/{public_id}/assignments/{policy_slug}"))
+  let full_url = (build-url $base ({public_id: (encode-path-segment $public_id), policy_slug: (encode-path-segment $policy_slug)} | format pattern "/api-public/v1/overrides/{public_id}/assignments/{policy_slug}") $auth.query)
   let req_body = {"policy": $policy, "username": $username} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get escalation policy info
@@ -776,12 +1016,23 @@ export def "api-public-policies get" [
 ]: nothing -> record<policies: table<policy: record, team: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api-public/v1/policies")
+  let full_url = (build-url $base "/api-public/v1/policies" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get the available contact types
@@ -802,12 +1053,23 @@ export def "api-public-policies-types-contacts get" [
 ]: nothing -> record<_selfUrl: string, contactTypes: table<description: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api-public/v1/policies/types/contacts")
+  let full_url = (build-url $base "/api-public/v1/policies/types/contacts" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get the available notification types
@@ -828,12 +1090,23 @@ export def "api-public-policies-types-notifications get" [
 ]: nothing -> record<_selfUrl: string, notificationTypes: table<description: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api-public/v1/policies/types/notifications")
+  let full_url = (build-url $base "/api-public/v1/policies/types/notifications" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get the available timeout values
@@ -854,12 +1127,23 @@ export def "api-public-policies-types-timeouts get" [
 ]: nothing -> record<_selfUrl: string, timeoutTypes: table<description: string, type: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api-public/v1/policies/types/timeouts")
+  let full_url = (build-url $base "/api-public/v1/policies/types/timeouts" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create an on-call override (take on-call)
@@ -885,14 +1169,25 @@ export def "api-public-policies-oncall-user update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($policy | is-empty) { error make --unspanned { msg: "path parameter 'policy' must be non-empty" } }
-  let full_url = (build-url $base ({policy: (encode-path-segment $policy)} | format pattern "/api-public/v1/policies/{policy}/oncall/user"))
+  let full_url = (build-url $base ({policy: (encode-path-segment $policy)} | format pattern "/api-public/v1/policies/{policy}/oncall/user") $auth.query)
   let req_body = {"fromUser": $from_user, "toUser": $to_user} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get the user's paging policy
@@ -915,12 +1210,23 @@ export def "api-public-profile-policies get-by-username" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
-  let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/api-public/v1/profile/{username}/policies"))
+  let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/api-public/v1/profile/{username}/policies") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a paging policy step
@@ -947,14 +1253,25 @@ export def "api-public-profile-policies create-by-username" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
-  let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/api-public/v1/profile/{username}/policies"))
+  let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/api-public/v1/profile/{username}/policies") $auth.query)
   let req_body = {"rules": $rules, "timeout": $timeout} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get a paging policy step
@@ -979,12 +1296,23 @@ export def "api-public-profile-policies get-by-username-step" [
   let base = ($base_url | default $BASE_URL)
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   if ($step | is-empty) { error make --unspanned { msg: "path parameter 'step' must be non-empty" } }
-  let full_url = (build-url $base ({username: (encode-path-segment $username), step: (encode-path-segment $step)} | format pattern "/api-public/v1/profile/{username}/policies/{step}"))
+  let full_url = (build-url $base ({username: (encode-path-segment $username), step: (encode-path-segment $step)} | format pattern "/api-public/v1/profile/{username}/policies/{step}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a rule for a paging policy step
@@ -1013,14 +1341,25 @@ export def "api-public-profile-policies create-by-username-step" [
   let base = ($base_url | default $BASE_URL)
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   if ($step | is-empty) { error make --unspanned { msg: "path parameter 'step' must be non-empty" } }
-  let full_url = (build-url $base ({username: (encode-path-segment $username), step: (encode-path-segment $step)} | format pattern "/api-public/v1/profile/{username}/policies/{step}"))
+  let full_url = (build-url $base ({username: (encode-path-segment $username), step: (encode-path-segment $step)} | format pattern "/api-public/v1/profile/{username}/policies/{step}") $auth.query)
   let req_body = {"contact": $contact, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Update a paging policy step
@@ -1049,14 +1388,25 @@ export def "api-public-profile-policies update-by-username-step" [
   let base = ($base_url | default $BASE_URL)
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   if ($step | is-empty) { error make --unspanned { msg: "path parameter 'step' must be non-empty" } }
-  let full_url = (build-url $base ({username: (encode-path-segment $username), step: (encode-path-segment $step)} | format pattern "/api-public/v1/profile/{username}/policies/{step}"))
+  let full_url = (build-url $base ({username: (encode-path-segment $username), step: (encode-path-segment $step)} | format pattern "/api-public/v1/profile/{username}/policies/{step}") $auth.query)
   let req_body = {"rules": $rules, "timeout": $timeout} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Delete a rule from a paging policy step
@@ -1083,12 +1433,23 @@ export def "api-public-profile-policies delete" [
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   if ($step | is-empty) { error make --unspanned { msg: "path parameter 'step' must be non-empty" } }
   if ($rule | is-empty) { error make --unspanned { msg: "path parameter 'rule' must be non-empty" } }
-  let full_url = (build-url $base ({username: (encode-path-segment $username), step: (encode-path-segment $step), rule: (encode-path-segment $rule)} | format pattern "/api-public/v1/profile/{username}/policies/{step}/{rule}"))
+  let full_url = (build-url $base ({username: (encode-path-segment $username), step: (encode-path-segment $step), rule: (encode-path-segment $rule)} | format pattern "/api-public/v1/profile/{username}/policies/{step}/{rule}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Get a rule from a paging policy step
@@ -1115,12 +1476,23 @@ export def "api-public-profile-policies get-by-username-step-rule" [
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   if ($step | is-empty) { error make --unspanned { msg: "path parameter 'step' must be non-empty" } }
   if ($rule | is-empty) { error make --unspanned { msg: "path parameter 'rule' must be non-empty" } }
-  let full_url = (build-url $base ({username: (encode-path-segment $username), step: (encode-path-segment $step), rule: (encode-path-segment $rule)} | format pattern "/api-public/v1/profile/{username}/policies/{step}/{rule}"))
+  let full_url = (build-url $base ({username: (encode-path-segment $username), step: (encode-path-segment $step), rule: (encode-path-segment $rule)} | format pattern "/api-public/v1/profile/{username}/policies/{step}/{rule}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update a rule for a paging policy step
@@ -1151,14 +1523,25 @@ export def "api-public-profile-policies update-by-username-step-rule" [
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   if ($step | is-empty) { error make --unspanned { msg: "path parameter 'step' must be non-empty" } }
   if ($rule | is-empty) { error make --unspanned { msg: "path parameter 'rule' must be non-empty" } }
-  let full_url = (build-url $base ({username: (encode-path-segment $username), step: (encode-path-segment $step), rule: (encode-path-segment $rule)} | format pattern "/api-public/v1/profile/{username}/policies/{step}/{rule}"))
+  let full_url = (build-url $base ({username: (encode-path-segment $username), step: (encode-path-segment $step), rule: (encode-path-segment $rule)} | format pattern "/api-public/v1/profile/{username}/policies/{step}/{rule}") $auth.query)
   let req_body = {"contact": $contact, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # List teams
@@ -1179,12 +1562,23 @@ export def "api-public-team list" [
 ]: nothing -> table<_adminsUrl: string, _membersUrl: string, _policiesUrl: string, _selfUrl: string, isDefaultTeam: bool, memberCount: float, name: string, slug: string, version: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api-public/v1/team")
+  let full_url = (build-url $base "/api-public/v1/team" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Add a team
@@ -1207,14 +1601,25 @@ export def "api-public-team create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api-public/v1/team")
+  let full_url = (build-url $base "/api-public/v1/team" $auth.query)
   let req_body = {"name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Remove a team
@@ -1237,12 +1642,23 @@ export def "api-public-team delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($team | is-empty) { error make --unspanned { msg: "path parameter 'team' must be non-empty" } }
-  let full_url = (build-url $base ({team: (encode-path-segment $team)} | format pattern "/api-public/v1/team/{team}"))
+  let full_url = (build-url $base ({team: (encode-path-segment $team)} | format pattern "/api-public/v1/team/{team}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve information for a team
@@ -1265,12 +1681,23 @@ export def "api-public-team get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($team | is-empty) { error make --unspanned { msg: "path parameter 'team' must be non-empty" } }
-  let full_url = (build-url $base ({team: (encode-path-segment $team)} | format pattern "/api-public/v1/team/{team}"))
+  let full_url = (build-url $base ({team: (encode-path-segment $team)} | format pattern "/api-public/v1/team/{team}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update a team
@@ -1295,14 +1722,25 @@ export def "api-public-team update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($team | is-empty) { error make --unspanned { msg: "path parameter 'team' must be non-empty" } }
-  let full_url = (build-url $base ({team: (encode-path-segment $team)} | format pattern "/api-public/v1/team/{team}"))
+  let full_url = (build-url $base ({team: (encode-path-segment $team)} | format pattern "/api-public/v1/team/{team}") $auth.query)
   let req_body = {"name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve a list of team admins for a team
@@ -1325,12 +1763,23 @@ export def "api-public-team-admins get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($team | is-empty) { error make --unspanned { msg: "path parameter 'team' must be non-empty" } }
-  let full_url = (build-url $base ({team: (encode-path-segment $team)} | format pattern "/api-public/v1/team/{team}/admins"))
+  let full_url = (build-url $base ({team: (encode-path-segment $team)} | format pattern "/api-public/v1/team/{team}/admins") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve a list of members for a team
@@ -1353,12 +1802,23 @@ export def "api-public-team-members get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($team | is-empty) { error make --unspanned { msg: "path parameter 'team' must be non-empty" } }
-  let full_url = (build-url $base ({team: (encode-path-segment $team)} | format pattern "/api-public/v1/team/{team}/members"))
+  let full_url = (build-url $base ({team: (encode-path-segment $team)} | format pattern "/api-public/v1/team/{team}/members") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Add a team member
@@ -1383,14 +1843,25 @@ export def "api-public-team-members create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($team | is-empty) { error make --unspanned { msg: "path parameter 'team' must be non-empty" } }
-  let full_url = (build-url $base ({team: (encode-path-segment $team)} | format pattern "/api-public/v1/team/{team}/members"))
+  let full_url = (build-url $base ({team: (encode-path-segment $team)} | format pattern "/api-public/v1/team/{team}/members") $auth.query)
   let req_body = {"username": $username} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Remove a team member
@@ -1417,14 +1888,25 @@ export def "api-public-team-members delete" [
   let base = ($base_url | default $BASE_URL)
   if ($team | is-empty) { error make --unspanned { msg: "path parameter 'team' must be non-empty" } }
   if ($user | is-empty) { error make --unspanned { msg: "path parameter 'user' must be non-empty" } }
-  let full_url = (build-url $base ({team: (encode-path-segment $team), user: (encode-path-segment $user)} | format pattern "/api-public/v1/team/{team}/members/{user}"))
+  let full_url = (build-url $base ({team: (encode-path-segment $team), user: (encode-path-segment $user)} | format pattern "/api-public/v1/team/{team}/members/{user}") $auth.query)
   let req_body = {"replacement": $replacement} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get a team's on-call schedule
@@ -1453,12 +1935,23 @@ export def "api-public-team-oncall-schedule get-by-team" [
   let base = ($base_url | default $BASE_URL)
   if ($team | is-empty) { error make --unspanned { msg: "path parameter 'team' must be non-empty" } }
   let qp = [(serialize-qp "daysForward" $days_forward "scalar") (serialize-qp "daysSkip" $days_skip "scalar") (serialize-qp "step" $step "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({team: (encode-path-segment $team)} | format pattern "/api-public/v1/team/{team}/oncall/schedule") $qp)
+  let full_url = (build-url $base ({team: (encode-path-segment $team)} | format pattern "/api-public/v1/team/{team}/oncall/schedule") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"daysForward": $days_forward, "daysSkip": $days_skip, "step": $step} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"daysForward": $days_forward, "daysSkip": $days_skip, "step": $step} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create an on-call override (take on-call)
@@ -1486,14 +1979,25 @@ export def "api-public-team-oncall-user update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($team | is-empty) { error make --unspanned { msg: "path parameter 'team' must be non-empty" } }
-  let full_url = (build-url $base ({team: (encode-path-segment $team)} | format pattern "/api-public/v1/team/{team}/oncall/user"))
+  let full_url = (build-url $base ({team: (encode-path-segment $team)} | format pattern "/api-public/v1/team/{team}/oncall/user") $auth.query)
   let req_body = {"fromUser": $from_user, "toUser": $to_user} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve a list of escalation policies for a team
@@ -1516,12 +2020,23 @@ export def "api-public-team-policies get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($team | is-empty) { error make --unspanned { msg: "path parameter 'team' must be non-empty" } }
-  let full_url = (build-url $base ({team: (encode-path-segment $team)} | format pattern "/api-public/v1/team/{team}/policies"))
+  let full_url = (build-url $base ({team: (encode-path-segment $team)} | format pattern "/api-public/v1/team/{team}/policies") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List users
@@ -1542,12 +2057,23 @@ export def "api-public-user list" [
 ]: nothing -> record<_selfUrl: string, users: table<_selfUrl: string, createdAt: string, email: string, firstName: string, lastName: string, passwordLastUpdated: string, username: string, verified: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api-public/v1/user")
+  let full_url = (build-url $base "/api-public/v1/user" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Add a user
@@ -1575,14 +2101,25 @@ export def "api-public-user create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api-public/v1/user")
+  let full_url = (build-url $base "/api-public/v1/user" $auth.query)
   let req_body = {"admin": $admin, "email": $email, "expirationHours": $expiration_hours, "firstName": $first_name, "lastName": $last_name, "username": $username} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Remove a user
@@ -1607,14 +2144,25 @@ export def "api-public-user delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user | is-empty) { error make --unspanned { msg: "path parameter 'user' must be non-empty" } }
-  let full_url = (build-url $base ({user: (encode-path-segment $user)} | format pattern "/api-public/v1/user/{user}"))
+  let full_url = (build-url $base ({user: (encode-path-segment $user)} | format pattern "/api-public/v1/user/{user}") $auth.query)
   let req_body = {"replacement": $replacement} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve information for a user
@@ -1637,12 +2185,23 @@ export def "api-public-user get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user | is-empty) { error make --unspanned { msg: "path parameter 'user' must be non-empty" } }
-  let full_url = (build-url $base ({user: (encode-path-segment $user)} | format pattern "/api-public/v1/user/{user}"))
+  let full_url = (build-url $base ({user: (encode-path-segment $user)} | format pattern "/api-public/v1/user/{user}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update a user
@@ -1672,14 +2231,25 @@ export def "api-public-user update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user | is-empty) { error make --unspanned { msg: "path parameter 'user' must be non-empty" } }
-  let full_url = (build-url $base ({user: (encode-path-segment $user)} | format pattern "/api-public/v1/user/{user}"))
+  let full_url = (build-url $base ({user: (encode-path-segment $user)} | format pattern "/api-public/v1/user/{user}") $auth.query)
   let req_body = {"admin": $admin, "email": $email, "expirationHours": $expiration_hours, "firstName": $first_name, "lastName": $last_name, "username": $username} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get a list of all contact methods for a user
@@ -1702,12 +2272,23 @@ export def "api-public-user-contact-methods get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user | is-empty) { error make --unspanned { msg: "path parameter 'user' must be non-empty" } }
-  let full_url = (build-url $base ({user: (encode-path-segment $user)} | format pattern "/api-public/v1/user/{user}/contact-methods"))
+  let full_url = (build-url $base ({user: (encode-path-segment $user)} | format pattern "/api-public/v1/user/{user}/contact-methods") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get a list of all contact devices for a user
@@ -1730,12 +2311,23 @@ export def "api-public-user-contact-methods-devices list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user | is-empty) { error make --unspanned { msg: "path parameter 'user' must be non-empty" } }
-  let full_url = (build-url $base ({user: (encode-path-segment $user)} | format pattern "/api-public/v1/user/{user}/contact-methods/devices"))
+  let full_url = (build-url $base ({user: (encode-path-segment $user)} | format pattern "/api-public/v1/user/{user}/contact-methods/devices") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Delete a contact device for a user
@@ -1760,12 +2352,23 @@ export def "api-public-user-contact-methods-devices delete" [
   let base = ($base_url | default $BASE_URL)
   if ($user | is-empty) { error make --unspanned { msg: "path parameter 'user' must be non-empty" } }
   if ($contact_id | is-empty) { error make --unspanned { msg: "path parameter 'contactId' must be non-empty" } }
-  let full_url = (build-url $base ({user: (encode-path-segment $user), contact_id: (encode-path-segment $contact_id)} | format pattern "/api-public/v1/user/{user}/contact-methods/devices/{contact_id}"))
+  let full_url = (build-url $base ({user: (encode-path-segment $user), contact_id: (encode-path-segment $contact_id)} | format pattern "/api-public/v1/user/{user}/contact-methods/devices/{contact_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Get the indicated contact device for a user
@@ -1790,12 +2393,23 @@ export def "api-public-user-contact-methods-devices get" [
   let base = ($base_url | default $BASE_URL)
   if ($user | is-empty) { error make --unspanned { msg: "path parameter 'user' must be non-empty" } }
   if ($contact_id | is-empty) { error make --unspanned { msg: "path parameter 'contactId' must be non-empty" } }
-  let full_url = (build-url $base ({user: (encode-path-segment $user), contact_id: (encode-path-segment $contact_id)} | format pattern "/api-public/v1/user/{user}/contact-methods/devices/{contact_id}"))
+  let full_url = (build-url $base ({user: (encode-path-segment $user), contact_id: (encode-path-segment $contact_id)} | format pattern "/api-public/v1/user/{user}/contact-methods/devices/{contact_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update a contact device for a user
@@ -1825,14 +2439,25 @@ export def "api-public-user-contact-methods-devices update" [
   let base = ($base_url | default $BASE_URL)
   if ($user | is-empty) { error make --unspanned { msg: "path parameter 'user' must be non-empty" } }
   if ($contact_id | is-empty) { error make --unspanned { msg: "path parameter 'contactId' must be non-empty" } }
-  let full_url = (build-url $base ({user: (encode-path-segment $user), contact_id: (encode-path-segment $contact_id)} | format pattern "/api-public/v1/user/{user}/contact-methods/devices/{contact_id}"))
+  let full_url = (build-url $base ({user: (encode-path-segment $user), contact_id: (encode-path-segment $contact_id)} | format pattern "/api-public/v1/user/{user}/contact-methods/devices/{contact_id}") $auth.query)
   let req_body = {"chat_escalation_sound": $chat_escalation_sound, "device_label": $device_label, "escalation_notification_sound": $escalation_notification_sound, "resolved_notification_sound": $resolved_notification_sound} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get a list of all contact emails for a user
@@ -1855,12 +2480,23 @@ export def "api-public-user-contact-methods-emails list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user | is-empty) { error make --unspanned { msg: "path parameter 'user' must be non-empty" } }
-  let full_url = (build-url $base ({user: (encode-path-segment $user)} | format pattern "/api-public/v1/user/{user}/contact-methods/emails"))
+  let full_url = (build-url $base ({user: (encode-path-segment $user)} | format pattern "/api-public/v1/user/{user}/contact-methods/emails") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a contact emails for a user
@@ -1887,14 +2523,25 @@ export def "api-public-user-contact-methods-emails create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user | is-empty) { error make --unspanned { msg: "path parameter 'user' must be non-empty" } }
-  let full_url = (build-url $base ({user: (encode-path-segment $user)} | format pattern "/api-public/v1/user/{user}/contact-methods/emails"))
+  let full_url = (build-url $base ({user: (encode-path-segment $user)} | format pattern "/api-public/v1/user/{user}/contact-methods/emails") $auth.query)
   let req_body = {"email": $email, "label": $label, "rank": $rank} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Delete a contact email for a user
@@ -1919,12 +2566,23 @@ export def "api-public-user-contact-methods-emails delete" [
   let base = ($base_url | default $BASE_URL)
   if ($user | is-empty) { error make --unspanned { msg: "path parameter 'user' must be non-empty" } }
   if ($contact_id | is-empty) { error make --unspanned { msg: "path parameter 'contactId' must be non-empty" } }
-  let full_url = (build-url $base ({user: (encode-path-segment $user), contact_id: (encode-path-segment $contact_id)} | format pattern "/api-public/v1/user/{user}/contact-methods/emails/{contact_id}"))
+  let full_url = (build-url $base ({user: (encode-path-segment $user), contact_id: (encode-path-segment $contact_id)} | format pattern "/api-public/v1/user/{user}/contact-methods/emails/{contact_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Get the indicated contact email for a user
@@ -1949,12 +2607,23 @@ export def "api-public-user-contact-methods-emails get" [
   let base = ($base_url | default $BASE_URL)
   if ($user | is-empty) { error make --unspanned { msg: "path parameter 'user' must be non-empty" } }
   if ($contact_id | is-empty) { error make --unspanned { msg: "path parameter 'contactId' must be non-empty" } }
-  let full_url = (build-url $base ({user: (encode-path-segment $user), contact_id: (encode-path-segment $contact_id)} | format pattern "/api-public/v1/user/{user}/contact-methods/emails/{contact_id}"))
+  let full_url = (build-url $base ({user: (encode-path-segment $user), contact_id: (encode-path-segment $contact_id)} | format pattern "/api-public/v1/user/{user}/contact-methods/emails/{contact_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get a list of all contact phones for a user
@@ -1977,12 +2646,23 @@ export def "api-public-user-contact-methods-phones list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user | is-empty) { error make --unspanned { msg: "path parameter 'user' must be non-empty" } }
-  let full_url = (build-url $base ({user: (encode-path-segment $user)} | format pattern "/api-public/v1/user/{user}/contact-methods/phones"))
+  let full_url = (build-url $base ({user: (encode-path-segment $user)} | format pattern "/api-public/v1/user/{user}/contact-methods/phones") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a contact phones for a user
@@ -2009,14 +2689,25 @@ export def "api-public-user-contact-methods-phones create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user | is-empty) { error make --unspanned { msg: "path parameter 'user' must be non-empty" } }
-  let full_url = (build-url $base ({user: (encode-path-segment $user)} | format pattern "/api-public/v1/user/{user}/contact-methods/phones"))
+  let full_url = (build-url $base ({user: (encode-path-segment $user)} | format pattern "/api-public/v1/user/{user}/contact-methods/phones") $auth.query)
   let req_body = {"label": $label, "phone": $phone, "rank": $rank} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Delete a contact phone for a user
@@ -2041,12 +2732,23 @@ export def "api-public-user-contact-methods-phones delete" [
   let base = ($base_url | default $BASE_URL)
   if ($user | is-empty) { error make --unspanned { msg: "path parameter 'user' must be non-empty" } }
   if ($contact_id | is-empty) { error make --unspanned { msg: "path parameter 'contactId' must be non-empty" } }
-  let full_url = (build-url $base ({user: (encode-path-segment $user), contact_id: (encode-path-segment $contact_id)} | format pattern "/api-public/v1/user/{user}/contact-methods/phones/{contact_id}"))
+  let full_url = (build-url $base ({user: (encode-path-segment $user), contact_id: (encode-path-segment $contact_id)} | format pattern "/api-public/v1/user/{user}/contact-methods/phones/{contact_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Get the indicated contact phone for a user
@@ -2071,12 +2773,23 @@ export def "api-public-user-contact-methods-phones get" [
   let base = ($base_url | default $BASE_URL)
   if ($user | is-empty) { error make --unspanned { msg: "path parameter 'user' must be non-empty" } }
   if ($contact_id | is-empty) { error make --unspanned { msg: "path parameter 'contactId' must be non-empty" } }
-  let full_url = (build-url $base ({user: (encode-path-segment $user), contact_id: (encode-path-segment $contact_id)} | format pattern "/api-public/v1/user/{user}/contact-methods/phones/{contact_id}"))
+  let full_url = (build-url $base ({user: (encode-path-segment $user), contact_id: (encode-path-segment $contact_id)} | format pattern "/api-public/v1/user/{user}/contact-methods/phones/{contact_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get a user's on-call schedule
@@ -2105,12 +2818,23 @@ export def "api-public-user-oncall-schedule get-by-user" [
   let base = ($base_url | default $BASE_URL)
   if ($user | is-empty) { error make --unspanned { msg: "path parameter 'user' must be non-empty" } }
   let qp = [(serialize-qp "daysForward" $days_forward "scalar") (serialize-qp "daysSkip" $days_skip "scalar") (serialize-qp "step" $step "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user: (encode-path-segment $user)} | format pattern "/api-public/v1/user/{user}/oncall/schedule") $qp)
+  let full_url = (build-url $base ({user: (encode-path-segment $user)} | format pattern "/api-public/v1/user/{user}/oncall/schedule") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"daysForward": $days_forward, "daysSkip": $days_skip, "step": $step} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"daysForward": $days_forward, "daysSkip": $days_skip, "step": $step} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get a list of paging policies for a user
@@ -2133,12 +2857,23 @@ export def "api-public-user-policies get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user | is-empty) { error make --unspanned { msg: "path parameter 'user' must be non-empty" } }
-  let full_url = (build-url $base ({user: (encode-path-segment $user)} | format pattern "/api-public/v1/user/{user}/policies"))
+  let full_url = (build-url $base ({user: (encode-path-segment $user)} | format pattern "/api-public/v1/user/{user}/policies") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve the user's team membership
@@ -2161,12 +2896,23 @@ export def "api-public-user-teams get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user | is-empty) { error make --unspanned { msg: "path parameter 'user' must be non-empty" } }
-  let full_url = (build-url $base ({user: (encode-path-segment $user)} | format pattern "/api-public/v1/user/{user}/teams"))
+  let full_url = (build-url $base ({user: (encode-path-segment $user)} | format pattern "/api-public/v1/user/{user}/teams") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get a team's on-call schedule
@@ -2193,12 +2939,23 @@ export def "api-public-team-oncall-schedule get-by-team-1" [
   let base = ($base_url | default $BASE_URL)
   if ($team | is-empty) { error make --unspanned { msg: "path parameter 'team' must be non-empty" } }
   let qp = [(serialize-qp "daysForward" $days_forward "scalar") (serialize-qp "daysSkip" $days_skip "scalar") (serialize-qp "step" $step "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({team: (encode-path-segment $team)} | format pattern "/api-public/v2/team/{team}/oncall/schedule") $qp)
+  let full_url = (build-url $base ({team: (encode-path-segment $team)} | format pattern "/api-public/v2/team/{team}/oncall/schedule") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"daysForward": $days_forward, "daysSkip": $days_skip, "step": $step} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"daysForward": $days_forward, "daysSkip": $days_skip, "step": $step} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get a user's on-call schedule
@@ -2225,12 +2982,23 @@ export def "api-public-user-oncall-schedule get-by-user-1" [
   let base = ($base_url | default $BASE_URL)
   if ($user | is-empty) { error make --unspanned { msg: "path parameter 'user' must be non-empty" } }
   let qp = [(serialize-qp "daysForward" $days_forward "scalar") (serialize-qp "daysSkip" $days_skip "scalar") (serialize-qp "step" $step "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user: (encode-path-segment $user)} | format pattern "/api-public/v2/user/{user}/oncall/schedule") $qp)
+  let full_url = (build-url $base ({user: (encode-path-segment $user)} | format pattern "/api-public/v2/user/{user}/oncall/schedule") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"daysForward": $days_forward, "daysSkip": $days_skip, "step": $step} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"daysForward": $days_forward, "daysSkip": $days_skip, "step": $step} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get/search incident history
@@ -2263,12 +3031,23 @@ export def "api-reporting-incidents get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "entityId" $entity_id "scalar") (serialize-qp "incidentNumber" $incident_number "scalar") (serialize-qp "startedAfter" $started_after "scalar") (serialize-qp "startedBefore" $started_before "scalar") (serialize-qp "host" $host "scalar") (serialize-qp "service" $service "scalar") (serialize-qp "currentPhase" $current_phase "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api-reporting/v1/incidents" $qp)
+  let full_url = (build-url $base "/api-reporting/v1/incidents" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"offset": $offset, "limit": $limit, "entityId": $entity_id, "incidentNumber": $incident_number, "startedAfter": $started_after, "startedBefore": $started_before, "host": $host, "service": $service, "currentPhase": $current_phase} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"offset": $offset, "limit": $limit, "entityId": $entity_id, "incidentNumber": $incident_number, "startedAfter": $started_after, "startedBefore": $started_before, "host": $host, "service": $service, "currentPhase": $current_phase} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # A list of shift changes for a team
@@ -2295,12 +3074,23 @@ export def "api-reporting-team-oncall-log get" [
   let base = ($base_url | default $BASE_URL)
   if ($team | is-empty) { error make --unspanned { msg: "path parameter 'team' must be non-empty" } }
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "userName" $user_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({team: (encode-path-segment $team)} | format pattern "/api-reporting/v1/team/{team}/oncall/log") $qp)
+  let full_url = (build-url $base ({team: (encode-path-segment $team)} | format pattern "/api-reporting/v1/team/{team}/oncall/log") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"start": $start, "end": $end, "userName": $user_name} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"start": $start, "end": $end, "userName": $user_name} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get/search incident history
@@ -2332,10 +3122,21 @@ export def "api-reporting-incidents get-1" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "entityId" $entity_id "scalar") (serialize-qp "incidentNumber" $incident_number "scalar") (serialize-qp "startedAfter" $started_after "scalar") (serialize-qp "startedBefore" $started_before "scalar") (serialize-qp "host" $host "scalar") (serialize-qp "service" $service "scalar") (serialize-qp "currentPhase" $current_phase "scalar") (serialize-qp "routingKey" $routing_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api-reporting/v2/incidents" $qp)
+  let full_url = (build-url $base "/api-reporting/v2/incidents" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"offset": $offset, "limit": $limit, "entityId": $entity_id, "incidentNumber": $incident_number, "startedAfter": $started_after, "startedBefore": $started_before, "host": $host, "service": $service, "currentPhase": $current_phase, "routingKey": $routing_key} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"offset": $offset, "limit": $limit, "entityId": $entity_id, "incidentNumber": $incident_number, "startedAfter": $started_after, "startedBefore": $started_before, "host": $host, "service": $service, "currentPhase": $current_phase, "routingKey": $routing_key} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }

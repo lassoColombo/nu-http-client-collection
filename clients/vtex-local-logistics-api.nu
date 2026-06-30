@@ -8,7 +8,7 @@ const BASE_URL = "https://vtex.local"
 # `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
 # where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o LOGISTICS_API_TOKEN | default "" }
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o LOGISTICS_API_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
@@ -52,14 +52,11 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
-# Trick: `url encode --all` over-encodes, then we decode the four unreserved
-# punctuation chars back. Pre-existing %XX sequences in the input survive
-# because `url encode --all` first turns their % into %25.
 def encode-path-segment [v: any]: nothing -> string {
   $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
-# Serialize an array-typed path parameter (issue 49.A). OpenAPI 3 `style: simple`
+# Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
 # (the default for path params) and Swagger 2 `collectionFormat: csv` both join
 # the elements with a literal comma WITHIN the single path segment, each element
 # RFC-3986-encoded individually (so a comma inside an element stays %2C). Without
@@ -70,51 +67,57 @@ def encode-path-array [v: any]: nothing -> string {
   if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
 }
 
-# Build URL from base, path, and optional query string
-def build-url [base: string, path: string, query?: string]: nothing -> string {
+# Build the request URL from base, path, and any number of pre-encoded query
+# fragments (param serializer output and/or the auth query). Each fragment is an
+# `&`-joinable `key=value` string already percent-encoded by its producer; empty
+# fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
+# delimiters are hand-spliced — and any query already on the base URL is merged in.
+def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
   let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
-  let result = ($parsed | upsert path $full_path)
-  if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
+  let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
+  $parsed | upsert path $full_path | upsert query $query | url join
 }
 
-# Build the dry-run record returned by --dry-run. Shape:
-#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
-#    auth: {scheme, location}}
-# `meta` carries logical-form data (the query record by spec name, the pre-serialization
-# body) that do-request itself cannot reconstruct from its wire-format args.
-def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
-  let m = ($meta | default {})
-  {
-    dry_run: true
-    method: $method
-    url: $url
-    query: ($m | get -o query | default {})
-    headers: $auth.headers
-    body: ($m | get -o body)
-    content_type: $content_type
-    timeout: $timeout
-    auth: {scheme: $auth.scheme, location: $auth.location}
-  }
+# Success policy: did this response succeed? Single source of truth, consulted by
+# handle-response and the HEAD header-unwrap. Empty ok_codes means the spec listed
+# none, so fall back to < 400. Otherwise: any 2xx, plus documented success codes.
+def status-ok [status: int, ok_codes: list<int>]: nothing -> bool {
+  if ($ok_codes | is-empty) { $status < 400 } else { ($status >= 200 and $status < 300) or ($status in $ok_codes) }
 }
 
-# Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
-  let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
-  let timeout = ($max_time | default 30min)
-  let ct = ($content_type | default "application/json")
-  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
-  let resp = match $method {
-    "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
-  }
-  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
-  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
+# Unwrap a `--full` HTTP response into the user-facing value. Response arrives
+# via pipeline; ok_codes gates the error throw (see status-ok).
+def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: record -> any {
+  let resp = $in
+  if $allow_errors { return $resp }
+  if not (status-ok $resp.status $ok_codes) { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } }
+  if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
+  if $resp.status == 204 { return null }
+  $resp.body
+}
+
+# GET — bodyless, honours --raw
+def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+}
+
+# POST — body + content-type
+def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# PUT — body + content-type
+def send-put [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http put --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http put --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# DELETE — body via --data
+def send-delete [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http delete --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url } else { http delete --headers $req.headers --content-type $req.content_type --data $body --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url }
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 def base-url-completer [] { ["https://vtex.local" "https://{accountName}.{environment}.com.br"] }
@@ -169,12 +172,23 @@ export def "logistics-capacity-resources-carriercapacity-typeshipping-policy-id-
   if ($capacity_type | is-empty) { error make --unspanned { msg: "path parameter 'capacityType' must be non-empty" } }
   if ($shipping_policy_id | is-empty) { error make --unspanned { msg: "path parameter 'shippingPolicyId' must be non-empty" } }
   let qp = [(serialize-qp "rangeStart" $range_start "scalar") (serialize-qp "rangeEnd" $range_end "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({capacity_type: (encode-path-segment $capacity_type), shipping_policy_id: (encode-path-segment $shipping_policy_id)} | format pattern "/api/logistics-capacity/resources/carrier@{capacity_type}@{shipping_policy_id}/time-frames") $qp)
+  let full_url = (build-url $base ({capacity_type: (encode-path-segment $capacity_type), shipping_policy_id: (encode-path-segment $shipping_policy_id)} | format pattern "/api/logistics-capacity/resources/carrier@{capacity_type}@{shipping_policy_id}/time-frames") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"rangeStart": $range_start, "rangeEnd": $range_end} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"rangeStart": $range_start, "rangeEnd": $range_end} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get capacity reservation usage by window
@@ -205,12 +219,23 @@ export def "logistics-capacity-resources-carriercapacity-typeshipping-policy-id-
   if ($window_day | is-empty) { error make --unspanned { msg: "path parameter 'windowDay' must be non-empty" } }
   if ($window_start_time | is-empty) { error make --unspanned { msg: "path parameter 'windowStartTime' must be non-empty" } }
   if ($window_end_time | is-empty) { error make --unspanned { msg: "path parameter 'windowEndTime' must be non-empty" } }
-  let full_url = (build-url $base ({capacity_type: (encode-path-segment $capacity_type), shipping_policy_id: (encode-path-segment $shipping_policy_id), window_day: (encode-path-segment $window_day), window_start_time: (encode-path-segment $window_start_time), window_end_time: (encode-path-segment $window_end_time)} | format pattern "/api/logistics-capacity/resources/carrier@{capacity_type}@{shipping_policy_id}/time-frames/{window_day}F{window_start_time}T{window_end_time}"))
+  let full_url = (build-url $base ({capacity_type: (encode-path-segment $capacity_type), shipping_policy_id: (encode-path-segment $shipping_policy_id), window_day: (encode-path-segment $window_day), window_start_time: (encode-path-segment $window_start_time), window_end_time: (encode-path-segment $window_end_time)} | format pattern "/api/logistics-capacity/resources/carrier@{capacity_type}@{shipping_policy_id}/time-frames/{window_day}F{window_start_time}T{window_end_time}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Add blocked delivery windows
@@ -236,7 +261,7 @@ export def "logistics-pvt-configuration-carriers-adddayofweekblocked create-bloc
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o LOGISTICS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o LOGISTICS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($carrier_id | is-empty) { error make --unspanned { msg: "path parameter 'carrierId' must be non-empty" } }
-  let full_url = (build-url $base ({carrier_id: (encode-path-segment $carrier_id)} | format pattern "/api/logistics/pvt/configuration/carriers/{carrier_id}/adddayofweekblocked"))
+  let full_url = (build-url $base ({carrier_id: (encode-path-segment $carrier_id)} | format pattern "/api/logistics/pvt/configuration/carriers/{carrier_id}/adddayofweekblocked") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
@@ -245,7 +270,18 @@ export def "logistics-pvt-configuration-carriers-adddayofweekblocked create-bloc
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let effective_ct = ($content_type | default "application/json; charset=utf-8")
   let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $effective_ct $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: $effective_ct
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve blocked delivery windows
@@ -269,12 +305,23 @@ export def "logistics-pvt-configuration-carriers-get-dayofweekblocked get-blocke
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o LOGISTICS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o LOGISTICS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($carrier_id | is-empty) { error make --unspanned { msg: "path parameter 'carrierId' must be non-empty" } }
-  let full_url = (build-url $base ({carrier_id: (encode-path-segment $carrier_id)} | format pattern "/api/logistics/pvt/configuration/carriers/{carrier_id}/getdayofweekblocked"))
+  let full_url = (build-url $base ({carrier_id: (encode-path-segment $carrier_id)} | format pattern "/api/logistics/pvt/configuration/carriers/{carrier_id}/getdayofweekblocked") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Remove blocked delivery windows
@@ -300,7 +347,7 @@ export def "logistics-pvt-configuration-carriers-remove-dayofweekblocked delete-
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o LOGISTICS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o LOGISTICS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($carrier_id | is-empty) { error make --unspanned { msg: "path parameter 'carrierId' must be non-empty" } }
-  let full_url = (build-url $base ({carrier_id: (encode-path-segment $carrier_id)} | format pattern "/api/logistics/pvt/configuration/carriers/{carrier_id}/removedayofweekblocked"))
+  let full_url = (build-url $base ({carrier_id: (encode-path-segment $carrier_id)} | format pattern "/api/logistics/pvt/configuration/carriers/{carrier_id}/removedayofweekblocked") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
@@ -309,7 +356,18 @@ export def "logistics-pvt-configuration-carriers-remove-dayofweekblocked delete-
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let effective_ct = ($content_type | default "application/json; charset=utf-8")
   let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $effective_ct $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: $effective_ct
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # List all docks
@@ -331,12 +389,23 @@ export def "logistics-pvt-configuration-docks list" [
 ]: nothing -> table<dockTimeFake: string, freightTableIds: list<string>, id: string, name: string, pickupStoreInfo: record<additionalInfo: string, address: string, dockId: string, friendlyName: string, isPickupStore: bool, storeId: string>, priority: int, salesChannel: string, salesChannels: list<string>, timeFakeOverhead: string, wmsEndPoint: string> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o LOGISTICS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o LOGISTICS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/logistics/pvt/configuration/docks")
+  let full_url = (build-url $base "/api/logistics/pvt/configuration/docks" $auth.query)
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create/update dock
@@ -370,7 +439,7 @@ export def "logistics-pvt-configuration-docks create-update" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o LOGISTICS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o LOGISTICS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/logistics/pvt/configuration/docks")
+  let full_url = (build-url $base "/api/logistics/pvt/configuration/docks" $auth.query)
   let req_body = {"address": $address, "dockTimeFake": $dock_time_fake, "freightTableIds": $freight_table_ids, "id": $id, "name": $name, "priority": $priority, "salesChannel": $sales_channel, "salesChannels": $sales_channels, "timeFakeOverhead": $time_fake_overhead, "wmsEndPoint": $wms_end_point} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
@@ -379,7 +448,18 @@ export def "logistics-pvt-configuration-docks create-update" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let effective_ct = ($content_type | default "application/json; charset=utf-8")
   let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $effective_ct $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: $effective_ct
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Delete dock
@@ -403,12 +483,23 @@ export def "logistics-pvt-configuration-docks delete" [
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o LOGISTICS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o LOGISTICS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($dock_id | is-empty) { error make --unspanned { msg: "path parameter 'dockId' must be non-empty" } }
-  let full_url = (build-url $base ({dock_id: (encode-path-segment $dock_id)} | format pattern "/api/logistics/pvt/configuration/docks/{dock_id}"))
+  let full_url = (build-url $base ({dock_id: (encode-path-segment $dock_id)} | format pattern "/api/logistics/pvt/configuration/docks/{dock_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # List dock by ID
@@ -432,12 +523,23 @@ export def "logistics-pvt-configuration-docks get" [
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o LOGISTICS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o LOGISTICS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($dock_id | is-empty) { error make --unspanned { msg: "path parameter 'dockId' must be non-empty" } }
-  let full_url = (build-url $base ({dock_id: (encode-path-segment $dock_id)} | format pattern "/api/logistics/pvt/configuration/docks/{dock_id}"))
+  let full_url = (build-url $base ({dock_id: (encode-path-segment $dock_id)} | format pattern "/api/logistics/pvt/configuration/docks/{dock_id}") $auth.query)
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Activate dock
@@ -461,12 +563,23 @@ export def "logistics-pvt-configuration-docks-activation create-activate" [
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o LOGISTICS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o LOGISTICS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($dock_id | is-empty) { error make --unspanned { msg: "path parameter 'dockId' must be non-empty" } }
-  let full_url = (build-url $base ({dock_id: (encode-path-segment $dock_id)} | format pattern "/api/logistics/pvt/configuration/docks/{dock_id}/activation"))
+  let full_url = (build-url $base ({dock_id: (encode-path-segment $dock_id)} | format pattern "/api/logistics/pvt/configuration/docks/{dock_id}/activation") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Deactivate dock
@@ -490,12 +603,23 @@ export def "logistics-pvt-configuration-docks-deactivation create-deactivate" [
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o LOGISTICS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o LOGISTICS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($dock_id | is-empty) { error make --unspanned { msg: "path parameter 'dockId' must be non-empty" } }
-  let full_url = (build-url $base ({dock_id: (encode-path-segment $dock_id)} | format pattern "/api/logistics/pvt/configuration/docks/{dock_id}/deactivation"))
+  let full_url = (build-url $base ({dock_id: (encode-path-segment $dock_id)} | format pattern "/api/logistics/pvt/configuration/docks/{dock_id}/deactivation") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Create/update freight values
@@ -521,7 +645,7 @@ export def "logistics-pvt-configuration-freights-values-update create" [
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o LOGISTICS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o LOGISTICS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($carrier_id | is-empty) { error make --unspanned { msg: "path parameter 'carrierId' must be non-empty" } }
-  let full_url = (build-url $base ({carrier_id: (encode-path-segment $carrier_id)} | format pattern "/api/logistics/pvt/configuration/freights/{carrier_id}/values/update"))
+  let full_url = (build-url $base ({carrier_id: (encode-path-segment $carrier_id)} | format pattern "/api/logistics/pvt/configuration/freights/{carrier_id}/values/update") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
@@ -530,7 +654,18 @@ export def "logistics-pvt-configuration-freights-values-update create" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let effective_ct = ($content_type | default "application/json; charset=utf-8")
   let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $effective_ct $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: $effective_ct
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # List freight values
@@ -556,12 +691,23 @@ export def "logistics-pvt-configuration-freights-values get" [
   let base = ($base_url | default $BASE_URL)
   if ($carrier_id | is-empty) { error make --unspanned { msg: "path parameter 'carrierId' must be non-empty" } }
   if ($cep | is-empty) { error make --unspanned { msg: "path parameter 'cep' must be non-empty" } }
-  let full_url = (build-url $base ({carrier_id: (encode-path-segment $carrier_id), cep: (encode-path-segment $cep)} | format pattern "/api/logistics/pvt/configuration/freights/{carrier_id}/{cep}/values"))
+  let full_url = (build-url $base ({carrier_id: (encode-path-segment $carrier_id), cep: (encode-path-segment $cep)} | format pattern "/api/logistics/pvt/configuration/freights/{carrier_id}/{cep}/values") $auth.query)
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List paged polygons
@@ -586,12 +732,23 @@ export def "logistics-pvt-configuration-geoshape get-paged-polygons" [
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o LOGISTICS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o LOGISTICS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "perPage" $per_page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/logistics/pvt/configuration/geoshape" $qp)
+  let full_url = (build-url $base "/api/logistics/pvt/configuration/geoshape" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "perPage": $per_page} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"page": $page, "perPage": $per_page} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create/update polygon
@@ -617,7 +774,7 @@ export def "logistics-pvt-configuration-geoshape create-update-polygon" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o LOGISTICS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o LOGISTICS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/logistics/pvt/configuration/geoshape")
+  let full_url = (build-url $base "/api/logistics/pvt/configuration/geoshape" $auth.query)
   let req_body = {"geoShape": $geo_shape, "name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
@@ -626,7 +783,18 @@ export def "logistics-pvt-configuration-geoshape create-update-polygon" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let effective_ct = ($content_type | default "application/json; charset=utf-8")
   let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $effective_ct $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: $effective_ct
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Delete polygon
@@ -650,12 +818,23 @@ export def "logistics-pvt-configuration-geoshape delete-polygon" [
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o LOGISTICS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o LOGISTICS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($polygon_name | is-empty) { error make --unspanned { msg: "path parameter 'polygonName' must be non-empty" } }
-  let full_url = (build-url $base ({polygon_name: (encode-path-segment $polygon_name)} | format pattern "/api/logistics/pvt/configuration/geoshape/{polygon_name}"))
+  let full_url = (build-url $base ({polygon_name: (encode-path-segment $polygon_name)} | format pattern "/api/logistics/pvt/configuration/geoshape/{polygon_name}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # List polygon by ID
@@ -679,12 +858,23 @@ export def "logistics-pvt-configuration-geoshape get-polygonby" [
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o LOGISTICS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o LOGISTICS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($polygon_name | is-empty) { error make --unspanned { msg: "path parameter 'polygonName' must be non-empty" } }
-  let full_url = (build-url $base ({polygon_name: (encode-path-segment $polygon_name)} | format pattern "/api/logistics/pvt/configuration/geoshape/{polygon_name}"))
+  let full_url = (build-url $base ({polygon_name: (encode-path-segment $polygon_name)} | format pattern "/api/logistics/pvt/configuration/geoshape/{polygon_name}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List all holidays
@@ -706,12 +896,23 @@ export def "logistics-pvt-configuration-holidays list" [
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o LOGISTICS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o LOGISTICS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/logistics/pvt/configuration/holidays")
+  let full_url = (build-url $base "/api/logistics/pvt/configuration/holidays" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Delete holiday
@@ -735,12 +936,23 @@ export def "logistics-pvt-configuration-holidays delete" [
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o LOGISTICS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o LOGISTICS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($holiday_id | is-empty) { error make --unspanned { msg: "path parameter 'holidayId' must be non-empty" } }
-  let full_url = (build-url $base ({holiday_id: (encode-path-segment $holiday_id)} | format pattern "/api/logistics/pvt/configuration/holidays/{holiday_id}"))
+  let full_url = (build-url $base ({holiday_id: (encode-path-segment $holiday_id)} | format pattern "/api/logistics/pvt/configuration/holidays/{holiday_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # List holiday by ID
@@ -764,12 +976,23 @@ export def "logistics-pvt-configuration-holidays get" [
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o LOGISTICS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o LOGISTICS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($holiday_id | is-empty) { error make --unspanned { msg: "path parameter 'holidayId' must be non-empty" } }
-  let full_url = (build-url $base ({holiday_id: (encode-path-segment $holiday_id)} | format pattern "/api/logistics/pvt/configuration/holidays/{holiday_id}"))
+  let full_url = (build-url $base ({holiday_id: (encode-path-segment $holiday_id)} | format pattern "/api/logistics/pvt/configuration/holidays/{holiday_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create/update holiday
@@ -796,7 +1019,7 @@ export def "logistics-pvt-configuration-holidays create-update" [
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o LOGISTICS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o LOGISTICS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($holiday_id | is-empty) { error make --unspanned { msg: "path parameter 'holidayId' must be non-empty" } }
-  let full_url = (build-url $base ({holiday_id: (encode-path-segment $holiday_id)} | format pattern "/api/logistics/pvt/configuration/holidays/{holiday_id}"))
+  let full_url = (build-url $base ({holiday_id: (encode-path-segment $holiday_id)} | format pattern "/api/logistics/pvt/configuration/holidays/{holiday_id}") $auth.query)
   let req_body = {"name": $name, "startDate": $start_date} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
@@ -805,7 +1028,18 @@ export def "logistics-pvt-configuration-holidays create-update" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let effective_ct = ($content_type | default "application/json; charset=utf-8")
   let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $effective_ct $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: $effective_ct
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # List all pickup points
@@ -827,12 +1061,23 @@ export def "logistics-pvt-configuration-pickuppoints list-pickup-ppoints" [
 ]: nothing -> table<accountGroupId: string, accountOwnerId: string, accountOwnerName: string, address: record<city: string, complement: string, country: record, location: record, neighborhood: string, number: string, postalCode: string, state: string, street: string>, businessHours: list<record>, description: string, distance: float, formatted_address: string, id: string, instructions: string, isActive: bool, isThirdPartyPickup: bool, name: string, originalId: string, parentAccountName: string, pickupHolidays: list<string>, seller: string, tagsLabel: list<string>> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o LOGISTICS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o LOGISTICS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/logistics/pvt/configuration/pickuppoints")
+  let full_url = (build-url $base "/api/logistics/pvt/configuration/pickuppoints" $auth.query)
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List paged Pickup Points
@@ -858,12 +1103,23 @@ export def "logistics-pvt-configuration-pickuppoints-search get-paged" [
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o LOGISTICS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o LOGISTICS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "keyword" $keyword "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/logistics/pvt/configuration/pickuppoints/_search" $qp)
+  let full_url = (build-url $base "/api/logistics/pvt/configuration/pickuppoints/_search" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "pageSize": $page_size, "keyword": $keyword} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"page": $page, "pageSize": $page_size, "keyword": $keyword} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Delete Pickup Point
@@ -887,12 +1143,23 @@ export def "logistics-pvt-configuration-pickuppoints delete" [
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o LOGISTICS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o LOGISTICS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($pickup_point_id | is-empty) { error make --unspanned { msg: "path parameter 'pickupPointId' must be non-empty" } }
-  let full_url = (build-url $base ({pickup_point_id: (encode-path-segment $pickup_point_id)} | format pattern "/api/logistics/pvt/configuration/pickuppoints/{pickup_point_id}"))
+  let full_url = (build-url $base ({pickup_point_id: (encode-path-segment $pickup_point_id)} | format pattern "/api/logistics/pvt/configuration/pickuppoints/{pickup_point_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # List Pickup Point By ID
@@ -916,12 +1183,23 @@ export def "logistics-pvt-configuration-pickuppoints get" [
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o LOGISTICS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o LOGISTICS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($pickup_point_id | is-empty) { error make --unspanned { msg: "path parameter 'pickupPointId' must be non-empty" } }
-  let full_url = (build-url $base ({pickup_point_id: (encode-path-segment $pickup_point_id)} | format pattern "/api/logistics/pvt/configuration/pickuppoints/{pickup_point_id}"))
+  let full_url = (build-url $base ({pickup_point_id: (encode-path-segment $pickup_point_id)} | format pattern "/api/logistics/pvt/configuration/pickuppoints/{pickup_point_id}") $auth.query)
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create/Update Pickup Point
@@ -958,7 +1236,7 @@ export def "logistics-pvt-configuration-pickuppoints create-update-pickup-point"
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o LOGISTICS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o LOGISTICS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($pickup_point_id | is-empty) { error make --unspanned { msg: "path parameter 'pickupPointId' must be non-empty" } }
-  let full_url = (build-url $base ({pickup_point_id: (encode-path-segment $pickup_point_id)} | format pattern "/api/logistics/pvt/configuration/pickuppoints/{pickup_point_id}"))
+  let full_url = (build-url $base ({pickup_point_id: (encode-path-segment $pickup_point_id)} | format pattern "/api/logistics/pvt/configuration/pickuppoints/{pickup_point_id}") $auth.query)
   let req_body = {"address": $address, "businessHours": $business_hours, "description": $description, "formatted_address": $formatted_address, "id": $id, "instructions": $instructions, "isActive": $is_active, "isThirdPartyPickup": $is_third_party_pickup, "name": $name, "tagsLabel": $tags_label} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json; charset=utf-8"
@@ -967,7 +1245,18 @@ export def "logistics-pvt-configuration-pickuppoints create-update-pickup-point"
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let effective_ct = ($content_type | default "application/json; charset=utf-8")
   let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $effective_ct $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: $effective_ct
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # List all warehouses
@@ -989,12 +1278,23 @@ export def "logistics-pvt-configuration-warehouses list" [
 ]: nothing -> table<id: string, isActive: bool, name: string, pickupPointIds: list<any>, priority: int, warehouseDocks: list<record>> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o LOGISTICS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o LOGISTICS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/logistics/pvt/configuration/warehouses")
+  let full_url = (build-url $base "/api/logistics/pvt/configuration/warehouses" $auth.query)
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create/update warehouse
@@ -1021,7 +1321,7 @@ export def "logistics-pvt-configuration-warehouses create-update" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o LOGISTICS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o LOGISTICS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/logistics/pvt/configuration/warehouses")
+  let full_url = (build-url $base "/api/logistics/pvt/configuration/warehouses" $auth.query)
   let req_body = {"id": $id, "name": $name, "warehouseDocks": $warehouse_docks} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
@@ -1030,7 +1330,18 @@ export def "logistics-pvt-configuration-warehouses create-update" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let effective_ct = ($content_type | default "application/json; charset=utf-8")
   let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $effective_ct $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: $effective_ct
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Remove warehouse
@@ -1054,12 +1365,23 @@ export def "logistics-pvt-configuration-warehouses delete" [
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o LOGISTICS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o LOGISTICS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($warehouse_id | is-empty) { error make --unspanned { msg: "path parameter 'warehouseId' must be non-empty" } }
-  let full_url = (build-url $base ({warehouse_id: (encode-path-segment $warehouse_id)} | format pattern "/api/logistics/pvt/configuration/warehouses/{warehouse_id}"))
+  let full_url = (build-url $base ({warehouse_id: (encode-path-segment $warehouse_id)} | format pattern "/api/logistics/pvt/configuration/warehouses/{warehouse_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # List warehouse by ID
@@ -1083,12 +1405,23 @@ export def "logistics-pvt-configuration-warehouses get" [
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o LOGISTICS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o LOGISTICS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($warehouse_id | is-empty) { error make --unspanned { msg: "path parameter 'warehouseId' must be non-empty" } }
-  let full_url = (build-url $base ({warehouse_id: (encode-path-segment $warehouse_id)} | format pattern "/api/logistics/pvt/configuration/warehouses/{warehouse_id}"))
+  let full_url = (build-url $base ({warehouse_id: (encode-path-segment $warehouse_id)} | format pattern "/api/logistics/pvt/configuration/warehouses/{warehouse_id}") $auth.query)
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Activate warehouse
@@ -1112,12 +1445,23 @@ export def "logistics-pvt-configuration-warehouses-activation create-activate" [
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o LOGISTICS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o LOGISTICS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($warehouse_id | is-empty) { error make --unspanned { msg: "path parameter 'warehouseId' must be non-empty" } }
-  let full_url = (build-url $base ({warehouse_id: (encode-path-segment $warehouse_id)} | format pattern "/api/logistics/pvt/configuration/warehouses/{warehouse_id}/activation"))
+  let full_url = (build-url $base ({warehouse_id: (encode-path-segment $warehouse_id)} | format pattern "/api/logistics/pvt/configuration/warehouses/{warehouse_id}/activation") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Deactivate warehouse
@@ -1141,12 +1485,23 @@ export def "logistics-pvt-configuration-warehouses-deactivation create-deactivat
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o LOGISTICS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o LOGISTICS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($warehouse_id | is-empty) { error make --unspanned { msg: "path parameter 'warehouseId' must be non-empty" } }
-  let full_url = (build-url $base ({warehouse_id: (encode-path-segment $warehouse_id)} | format pattern "/api/logistics/pvt/configuration/warehouses/{warehouse_id}/deactivation"))
+  let full_url = (build-url $base ({warehouse_id: (encode-path-segment $warehouse_id)} | format pattern "/api/logistics/pvt/configuration/warehouses/{warehouse_id}/deactivation") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # List inventory with dispatched reservations
@@ -1172,12 +1527,23 @@ export def "logistics-pvt-inventory-items-warehouses-dispatched get-inventorywit
   let base = ($base_url | default $BASE_URL)
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
   if ($warehouse_id | is-empty) { error make --unspanned { msg: "path parameter 'warehouseId' must be non-empty" } }
-  let full_url = (build-url $base ({item_id: (encode-path-segment $item_id), warehouse_id: (encode-path-segment $warehouse_id)} | format pattern "/api/logistics/pvt/inventory/items/{item_id}/warehouses/{warehouse_id}/dispatched"))
+  let full_url = (build-url $base ({item_id: (encode-path-segment $item_id), warehouse_id: (encode-path-segment $warehouse_id)} | format pattern "/api/logistics/pvt/inventory/items/{item_id}/warehouses/{warehouse_id}/dispatched") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List inventory per dock
@@ -1203,12 +1569,23 @@ export def "logistics-pvt-inventory-items-docks get-inventoryperdock" [
   let base = ($base_url | default $BASE_URL)
   if ($sku_id | is-empty) { error make --unspanned { msg: "path parameter 'skuId' must be non-empty" } }
   if ($dock_id | is-empty) { error make --unspanned { msg: "path parameter 'dockId' must be non-empty" } }
-  let full_url = (build-url $base ({sku_id: (encode-path-segment $sku_id), dock_id: (encode-path-segment $dock_id)} | format pattern "/api/logistics/pvt/inventory/items/{sku_id}/docks/{dock_id}"))
+  let full_url = (build-url $base ({sku_id: (encode-path-segment $sku_id), dock_id: (encode-path-segment $dock_id)} | format pattern "/api/logistics/pvt/inventory/items/{sku_id}/docks/{dock_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List inventory per dock and warehouse
@@ -1236,12 +1613,23 @@ export def "logistics-pvt-inventory-items-docks-warehouses get-inventoryperdocka
   if ($sku_id | is-empty) { error make --unspanned { msg: "path parameter 'skuId' must be non-empty" } }
   if ($dock_id | is-empty) { error make --unspanned { msg: "path parameter 'dockId' must be non-empty" } }
   if ($warehouse_id | is-empty) { error make --unspanned { msg: "path parameter 'warehouseId' must be non-empty" } }
-  let full_url = (build-url $base ({sku_id: (encode-path-segment $sku_id), dock_id: (encode-path-segment $dock_id), warehouse_id: (encode-path-segment $warehouse_id)} | format pattern "/api/logistics/pvt/inventory/items/{sku_id}/docks/{dock_id}/warehouses/{warehouse_id}"))
+  let full_url = (build-url $base ({sku_id: (encode-path-segment $sku_id), dock_id: (encode-path-segment $dock_id), warehouse_id: (encode-path-segment $warehouse_id)} | format pattern "/api/logistics/pvt/inventory/items/{sku_id}/docks/{dock_id}/warehouses/{warehouse_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List inventory per warehouse
@@ -1267,12 +1655,23 @@ export def "logistics-pvt-inventory-items-warehouses get-inventoryperwarehouse" 
   let base = ($base_url | default $BASE_URL)
   if ($sku_id | is-empty) { error make --unspanned { msg: "path parameter 'skuId' must be non-empty" } }
   if ($warehouse_id | is-empty) { error make --unspanned { msg: "path parameter 'warehouseId' must be non-empty" } }
-  let full_url = (build-url $base ({sku_id: (encode-path-segment $sku_id), warehouse_id: (encode-path-segment $warehouse_id)} | format pattern "/api/logistics/pvt/inventory/items/{sku_id}/warehouses/{warehouse_id}"))
+  let full_url = (build-url $base ({sku_id: (encode-path-segment $sku_id), warehouse_id: (encode-path-segment $warehouse_id)} | format pattern "/api/logistics/pvt/inventory/items/{sku_id}/warehouses/{warehouse_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List supply lots
@@ -1298,12 +1697,23 @@ export def "logistics-pvt-inventory-items-warehouses-supply-lots get" [
   let base = ($base_url | default $BASE_URL)
   if ($sku_id | is-empty) { error make --unspanned { msg: "path parameter 'skuId' must be non-empty" } }
   if ($warehouse_id | is-empty) { error make --unspanned { msg: "path parameter 'warehouseId' must be non-empty" } }
-  let full_url = (build-url $base ({sku_id: (encode-path-segment $sku_id), warehouse_id: (encode-path-segment $warehouse_id)} | format pattern "/api/logistics/pvt/inventory/items/{sku_id}/warehouses/{warehouse_id}/supplyLots"))
+  let full_url = (build-url $base ({sku_id: (encode-path-segment $sku_id), warehouse_id: (encode-path-segment $warehouse_id)} | format pattern "/api/logistics/pvt/inventory/items/{sku_id}/warehouses/{warehouse_id}/supplyLots") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Save supply lot
@@ -1335,7 +1745,7 @@ export def "logistics-pvt-inventory-items-warehouses-supply-lots update-save" [
   if ($sku_id | is-empty) { error make --unspanned { msg: "path parameter 'skuId' must be non-empty" } }
   if ($warehouse_id | is-empty) { error make --unspanned { msg: "path parameter 'warehouseId' must be non-empty" } }
   if ($supply_lot_id | is-empty) { error make --unspanned { msg: "path parameter 'supplyLotId' must be non-empty" } }
-  let full_url = (build-url $base ({sku_id: (encode-path-segment $sku_id), warehouse_id: (encode-path-segment $warehouse_id), supply_lot_id: (encode-path-segment $supply_lot_id)} | format pattern "/api/logistics/pvt/inventory/items/{sku_id}/warehouses/{warehouse_id}/supplyLots/{supply_lot_id}"))
+  let full_url = (build-url $base ({sku_id: (encode-path-segment $sku_id), warehouse_id: (encode-path-segment $warehouse_id), supply_lot_id: (encode-path-segment $supply_lot_id)} | format pattern "/api/logistics/pvt/inventory/items/{sku_id}/warehouses/{warehouse_id}/supplyLots/{supply_lot_id}") $auth.query)
   let req_body = {"dateOfSupplyUtc": $date_of_supply_utc, "keepSellingAfterExpiration": $keep_selling_after_expiration, "quantity": $quantity} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
@@ -1344,7 +1754,18 @@ export def "logistics-pvt-inventory-items-warehouses-supply-lots update-save" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let effective_ct = ($content_type | default "application/json; charset=utf-8")
   let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $effective_ct $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: $effective_ct
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Transfer supply lot
@@ -1372,12 +1793,23 @@ export def "logistics-pvt-inventory-items-warehouses-supply-lots-transfer create
   if ($sku_id | is-empty) { error make --unspanned { msg: "path parameter 'skuId' must be non-empty" } }
   if ($warehouse_id | is-empty) { error make --unspanned { msg: "path parameter 'warehouseId' must be non-empty" } }
   if ($supply_lot_id | is-empty) { error make --unspanned { msg: "path parameter 'supplyLotId' must be non-empty" } }
-  let full_url = (build-url $base ({sku_id: (encode-path-segment $sku_id), warehouse_id: (encode-path-segment $warehouse_id), supply_lot_id: (encode-path-segment $supply_lot_id)} | format pattern "/api/logistics/pvt/inventory/items/{sku_id}/warehouses/{warehouse_id}/supplyLots/{supply_lot_id}/transfer"))
+  let full_url = (build-url $base ({sku_id: (encode-path-segment $sku_id), warehouse_id: (encode-path-segment $warehouse_id), supply_lot_id: (encode-path-segment $supply_lot_id)} | format pattern "/api/logistics/pvt/inventory/items/{sku_id}/warehouses/{warehouse_id}/supplyLots/{supply_lot_id}/transfer") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Create reservation
@@ -1405,7 +1837,7 @@ export def "logistics-pvt-inventory-reservations create" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o LOGISTICS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o LOGISTICS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/logistics/pvt/inventory/reservations")
+  let full_url = (build-url $base "/api/logistics/pvt/inventory/reservations" $auth.query)
   let req_body = {"autorizationExpirationTTL": $autorization_expiration_ttl, "deliveryItemOptions": $delivery_item_options, "lockId": $lock_id, "salesChannel": $sales_channel} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json; charset=utf-8"
@@ -1414,7 +1846,18 @@ export def "logistics-pvt-inventory-reservations create" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let effective_ct = ($content_type | default "application/json; charset=utf-8")
   let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $effective_ct $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: $effective_ct
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # List reservation by ID
@@ -1438,12 +1881,23 @@ export def "logistics-pvt-inventory-reservations get" [
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o LOGISTICS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o LOGISTICS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($reservation_id | is-empty) { error make --unspanned { msg: "path parameter 'reservationId' must be non-empty" } }
-  let full_url = (build-url $base ({reservation_id: (encode-path-segment $reservation_id)} | format pattern "/api/logistics/pvt/inventory/reservations/{reservation_id}"))
+  let full_url = (build-url $base ({reservation_id: (encode-path-segment $reservation_id)} | format pattern "/api/logistics/pvt/inventory/reservations/{reservation_id}") $auth.query)
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Acknowledgment reservation
@@ -1467,12 +1921,23 @@ export def "logistics-pvt-inventory-reservations-acknowledge create-acknowledgme
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o LOGISTICS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o LOGISTICS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($reservation_id | is-empty) { error make --unspanned { msg: "path parameter 'reservationId' must be non-empty" } }
-  let full_url = (build-url $base ({reservation_id: (encode-path-segment $reservation_id)} | format pattern "/api/logistics/pvt/inventory/reservations/{reservation_id}/acknowledge"))
+  let full_url = (build-url $base ({reservation_id: (encode-path-segment $reservation_id)} | format pattern "/api/logistics/pvt/inventory/reservations/{reservation_id}/acknowledge") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Cancel reservation
@@ -1496,12 +1961,23 @@ export def "logistics-pvt-inventory-reservations-cancel cancel" [
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o LOGISTICS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o LOGISTICS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($reservation_id | is-empty) { error make --unspanned { msg: "path parameter 'reservationId' must be non-empty" } }
-  let full_url = (build-url $base ({reservation_id: (encode-path-segment $reservation_id)} | format pattern "/api/logistics/pvt/inventory/reservations/{reservation_id}/cancel"))
+  let full_url = (build-url $base ({reservation_id: (encode-path-segment $reservation_id)} | format pattern "/api/logistics/pvt/inventory/reservations/{reservation_id}/cancel") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Confirm reservation
@@ -1525,12 +2001,23 @@ export def "logistics-pvt-inventory-reservations-confirm confirm" [
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o LOGISTICS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o LOGISTICS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($reservation_id | is-empty) { error make --unspanned { msg: "path parameter 'reservationId' must be non-empty" } }
-  let full_url = (build-url $base ({reservation_id: (encode-path-segment $reservation_id)} | format pattern "/api/logistics/pvt/inventory/reservations/{reservation_id}/confirm"))
+  let full_url = (build-url $base ({reservation_id: (encode-path-segment $reservation_id)} | format pattern "/api/logistics/pvt/inventory/reservations/{reservation_id}/confirm") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # List reservation by warehouse and SKU
@@ -1556,12 +2043,23 @@ export def "logistics-pvt-inventory-reservations get-reservationby-warehouseand-
   let base = ($base_url | default $BASE_URL)
   if ($warehouse_id | is-empty) { error make --unspanned { msg: "path parameter 'warehouseId' must be non-empty" } }
   if ($sku_id | is-empty) { error make --unspanned { msg: "path parameter 'skuId' must be non-empty" } }
-  let full_url = (build-url $base ({warehouse_id: (encode-path-segment $warehouse_id), sku_id: (encode-path-segment $sku_id)} | format pattern "/api/logistics/pvt/inventory/reservations/{warehouse_id}/{sku_id}"))
+  let full_url = (build-url $base ({warehouse_id: (encode-path-segment $warehouse_id), sku_id: (encode-path-segment $sku_id)} | format pattern "/api/logistics/pvt/inventory/reservations/{warehouse_id}/{sku_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List inventory by SKU
@@ -1585,12 +2083,23 @@ export def "logistics-pvt-inventory-skus get" [
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o LOGISTICS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o LOGISTICS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($sku_id | is-empty) { error make --unspanned { msg: "path parameter 'skuId' must be non-empty" } }
-  let full_url = (build-url $base ({sku_id: (encode-path-segment $sku_id)} | format pattern "/api/logistics/pvt/inventory/skus/{sku_id}"))
+  let full_url = (build-url $base ({sku_id: (encode-path-segment $sku_id)} | format pattern "/api/logistics/pvt/inventory/skus/{sku_id}") $auth.query)
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update inventory by SKU and warehouse
@@ -1621,7 +2130,7 @@ export def "logistics-pvt-inventory-skus-warehouses update-by-skuand" [
   let base = ($base_url | default $BASE_URL)
   if ($sku_id | is-empty) { error make --unspanned { msg: "path parameter 'skuId' must be non-empty" } }
   if ($warehouse_id | is-empty) { error make --unspanned { msg: "path parameter 'warehouseId' must be non-empty" } }
-  let full_url = (build-url $base ({sku_id: (encode-path-segment $sku_id), warehouse_id: (encode-path-segment $warehouse_id)} | format pattern "/api/logistics/pvt/inventory/skus/{sku_id}/warehouses/{warehouse_id}"))
+  let full_url = (build-url $base ({sku_id: (encode-path-segment $sku_id), warehouse_id: (encode-path-segment $warehouse_id)} | format pattern "/api/logistics/pvt/inventory/skus/{sku_id}/warehouses/{warehouse_id}") $auth.query)
   let req_body = {"dateUtcOnBalanceSystem": $date_utc_on_balance_system, "quantity": $quantity, "timeToRefill (deprecated)": $time_to_refill_deprecated, "unlimitedQuantity": $unlimited_quantity} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
@@ -1630,7 +2139,18 @@ export def "logistics-pvt-inventory-skus-warehouses update-by-skuand" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let effective_ct = ($content_type | default "application/json; charset=utf-8")
   let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $effective_ct $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: $effective_ct
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # List shipping policies
@@ -1654,12 +2174,23 @@ export def "logistics-pvt-shipping-policies list" [
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o LOGISTICS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o LOGISTICS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "perPage" $per_page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/logistics/pvt/shipping-policies" $qp)
+  let full_url = (build-url $base "/api/logistics/pvt/shipping-policies" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "perPage": $per_page} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"page": $page, "perPage": $per_page} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create shipping policy
@@ -1704,7 +2235,7 @@ export def "logistics-pvt-shipping-policies create" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o LOGISTICS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o LOGISTICS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/logistics/pvt/shipping-policies")
+  let full_url = (build-url $base "/api/logistics/pvt/shipping-policies" $auth.query)
   let req_body = {"businessHourSettings": $business_hour_settings, "carrierSchedule": $carrier_schedule, "cubicWeightSettings": $cubic_weight_settings, "deliveryScheduleSettings": $delivery_schedule_settings, "id": $id, "isActive": $is_active, "maxDimension": $max_dimension, "maximumValueAceptable": $maximum_value_aceptable, "minimumValueAceptable": $minimum_value_aceptable, "modalSettings": $modal_settings, "name": $name, "numberOfItemsPerShipment": $number_of_items_per_shipment, "pickupPointsSettings": $pickup_points_settings, "shippingMethod": $shipping_method, "weekendAndHolidays": $weekend_and_holidays} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
@@ -1713,7 +2244,18 @@ export def "logistics-pvt-shipping-policies create" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let effective_ct = ($content_type | default "application/json")
   let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $effective_ct $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: $effective_ct
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Delete shipping policies by ID
@@ -1736,12 +2278,23 @@ export def "logistics-pvt-shipping-policies delete" [
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o LOGISTICS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o LOGISTICS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/logistics/pvt/shipping-policies/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/logistics/pvt/shipping-policies/{id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve shipping policy by ID
@@ -1764,12 +2317,23 @@ export def "logistics-pvt-shipping-policies get" [
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o LOGISTICS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o LOGISTICS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/logistics/pvt/shipping-policies/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/logistics/pvt/shipping-policies/{id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update shipping policy
@@ -1801,7 +2365,7 @@ export def "logistics-pvt-shipping-policies update" [
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o LOGISTICS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o LOGISTICS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/logistics/pvt/shipping-policies/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/logistics/pvt/shipping-policies/{id}") $auth.query)
   let req_body = {"deliveryOnWeekends": $delivery_on_weekends, "deliveryScheduleSettings": $delivery_schedule_settings, "isActive": $is_active, "maxDimension": $max_dimension, "name": $name, "shippingMethod": $shipping_method} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
@@ -1810,7 +2374,18 @@ export def "logistics-pvt-shipping-policies update" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let effective_ct = ($content_type | default "application/json")
   let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $effective_ct $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: $effective_ct
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Calculate SLA
@@ -1834,7 +2409,7 @@ export def "logistics-pvt-shipping-calculate create-sla" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o LOGISTICS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o LOGISTICS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/logistics/pvt/shipping/calculate")
+  let full_url = (build-url $base "/api/logistics/pvt/shipping/calculate" $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json; charset=utf-8"
@@ -1843,5 +2418,16 @@ export def "logistics-pvt-shipping-calculate create-sla" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let effective_ct = ($content_type | default "application/json; charset=utf-8")
   let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $effective_ct $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: $effective_ct
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }

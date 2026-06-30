@@ -8,7 +8,7 @@ const BASE_URL = "http://api.funtranslations.com"
 # `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
 # where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o FUNTRANSLATIONS_API_TOKEN | default "" }
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o FUNTRANSLATIONS_API_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
@@ -41,14 +41,11 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
-# Trick: `url encode --all` over-encodes, then we decode the four unreserved
-# punctuation chars back. Pre-existing %XX sequences in the input survive
-# because `url encode --all` first turns their % into %25.
 def encode-path-segment [v: any]: nothing -> string {
   $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
-# Serialize an array-typed path parameter (issue 49.A). OpenAPI 3 `style: simple`
+# Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
 # (the default for path params) and Swagger 2 `collectionFormat: csv` both join
 # the elements with a literal comma WITHIN the single path segment, each element
 # RFC-3986-encoded individually (so a comma inside an element stays %2C). Without
@@ -59,51 +56,39 @@ def encode-path-array [v: any]: nothing -> string {
   if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
 }
 
-# Build URL from base, path, and optional query string
-def build-url [base: string, path: string, query?: string]: nothing -> string {
+# Build the request URL from base, path, and any number of pre-encoded query
+# fragments (param serializer output and/or the auth query). Each fragment is an
+# `&`-joinable `key=value` string already percent-encoded by its producer; empty
+# fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
+# delimiters are hand-spliced — and any query already on the base URL is merged in.
+def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
   let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
-  let result = ($parsed | upsert path $full_path)
-  if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
+  let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
+  $parsed | upsert path $full_path | upsert query $query | url join
 }
 
-# Build the dry-run record returned by --dry-run. Shape:
-#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
-#    auth: {scheme, location}}
-# `meta` carries logical-form data (the query record by spec name, the pre-serialization
-# body) that do-request itself cannot reconstruct from its wire-format args.
-def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
-  let m = ($meta | default {})
-  {
-    dry_run: true
-    method: $method
-    url: $url
-    query: ($m | get -o query | default {})
-    headers: $auth.headers
-    body: ($m | get -o body)
-    content_type: $content_type
-    timeout: $timeout
-    auth: {scheme: $auth.scheme, location: $auth.location}
-  }
+# Success policy: did this response succeed? Single source of truth, consulted by
+# handle-response and the HEAD header-unwrap. Empty ok_codes means the spec listed
+# none, so fall back to < 400. Otherwise: any 2xx, plus documented success codes.
+def status-ok [status: int, ok_codes: list<int>]: nothing -> bool {
+  if ($ok_codes | is-empty) { $status < 400 } else { ($status >= 200 and $status < 300) or ($status in $ok_codes) }
 }
 
-# Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
-  let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
-  let timeout = ($max_time | default 30min)
-  let ct = ($content_type | default "application/json")
-  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
-  let resp = match $method {
-    "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
-  }
-  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
-  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
+# Unwrap a `--full` HTTP response into the user-facing value. Response arrives
+# via pipeline; ok_codes gates the error throw (see status-ok).
+def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: record -> any {
+  let resp = $in
+  if $allow_errors { return $resp }
+  if not (status-ok $resp.status $ok_codes) { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } }
+  if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
+  if $resp.status == 204 { return null }
+  $resp.body
+}
+
+# GET — bodyless, honours --raw
+def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
 }
 
 def base-url-completer [] { ["http://api.funtranslations.com"] }
@@ -154,10 +139,21 @@ export def "translate-braille get" [
   let auth = (build-auth $token ($auth_scheme | default "x-funtranslations-api-secret"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "text" $text "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/translate/braille" $qp)
+  let full_url = (build-url $base "/translate/braille" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"text": $text} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Use this to see which dots are enabled for each Braille letters. This is highly educational (to see which dots are enabled) and can potentially drive a non braille display which works on individual dots.
@@ -179,10 +175,21 @@ export def "translate-braille-dots get" [
   let auth = (build-auth $token ($auth_scheme | default "x-funtranslations-api-secret"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "text" $text "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/translate/braille/dots" $qp)
+  let full_url = (build-url $base "/translate/braille/dots" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"text": $text} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Translate from English to Braille Image characters. This is probably what you want to use if you are displaying braille in a browser.
@@ -204,10 +211,21 @@ export def "translate-braille-html get" [
   let auth = (build-auth $token ($auth_scheme | default "x-funtranslations-api-secret"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "text" $text "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/translate/braille/html" $qp)
+  let full_url = (build-url $base "/translate/braille/html" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"text": $text} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Translate from English to Braille image characters. This is probably what you want to use if you are displaying braille in a browser.
@@ -229,10 +247,21 @@ export def "translate-braille-image get" [
   let auth = (build-auth $token ($auth_scheme | default "x-funtranslations-api-secret"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "text" $text "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/translate/braille/image" $qp)
+  let full_url = (build-url $base "/translate/braille/image" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"text": $text} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Translate from English to Braille Unicode characters.
@@ -254,10 +283,21 @@ export def "translate-braille-unicode get" [
   let auth = (build-auth $token ($auth_scheme | default "x-funtranslations-api-secret"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "text" $text "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/translate/braille/unicode" $qp)
+  let full_url = (build-url $base "/translate/braille/unicode" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"text": $text} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Translate from English to Brooklyn Speak.
@@ -279,10 +319,21 @@ export def "translate-brooklyn get" [
   let auth = (build-auth $token ($auth_scheme | default "x-funtranslations-api-secret"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "text" $text "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/translate/brooklyn" $qp)
+  let full_url = (build-url $base "/translate/brooklyn" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"text": $text} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Translate from English to Swedish Chef speak.
@@ -304,10 +355,21 @@ export def "translate-chef get" [
   let auth = (build-auth $token ($auth_scheme | default "x-funtranslations-api-secret"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "text" $text "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/translate/chef" $qp)
+  let full_url = (build-url $base "/translate/chef" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"text": $text} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Translate from English to Starwars cheunh.
@@ -329,10 +391,21 @@ export def "translate-cheunh get" [
   let auth = (build-auth $token ($auth_scheme | default "x-funtranslations-api-secret"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "text" $text "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/translate/cheunh" $qp)
+  let full_url = (build-url $base "/translate/cheunh" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"text": $text} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Translate from English to Cockney Speak.
@@ -354,10 +427,21 @@ export def "translate-cockney get" [
   let auth = (build-auth $token ($auth_scheme | default "x-funtranslations-api-secret"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "text" $text "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/translate/cockney" $qp)
+  let full_url = (build-url $base "/translate/cockney" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"text": $text} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Translate from English to Dolan Speak.
@@ -379,10 +463,21 @@ export def "translate-dolan get" [
   let auth = (build-auth $token ($auth_scheme | default "x-funtranslations-api-secret"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "text" $text "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/translate/dolan" $qp)
+  let full_url = (build-url $base "/translate/dolan" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"text": $text} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Translate from English to Dothraki.
@@ -404,10 +499,21 @@ export def "translate-dothraki get" [
   let auth = (build-auth $token ($auth_scheme | default "x-funtranslations-api-secret"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "text" $text "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/translate/dothraki" $qp)
+  let full_url = (build-url $base "/translate/dothraki" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"text": $text} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Translate from English to ERMAHGERD.
@@ -429,10 +535,21 @@ export def "translate-ermahgerd get" [
   let auth = (build-auth $token ($auth_scheme | default "x-funtranslations-api-secret"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "text" $text "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/translate/ermahgerd" $qp)
+  let full_url = (build-url $base "/translate/ermahgerd" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"text": $text} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Translate from English to Ferb Latin.
@@ -454,10 +571,21 @@ export def "translate-ferblatin get" [
   let auth = (build-auth $token ($auth_scheme | default "x-funtranslations-api-secret"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "text" $text "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/translate/ferblatin" $qp)
+  let full_url = (build-url $base "/translate/ferblatin" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"text": $text} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Translate from English to Fudd Speak.
@@ -479,10 +607,21 @@ export def "translate-fudd get" [
   let auth = (build-auth $token ($auth_scheme | default "x-funtranslations-api-secret"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "text" $text "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/translate/fudd" $qp)
+  let full_url = (build-url $base "/translate/fudd" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"text": $text} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Translate from English to Starwars Gungan Language.
@@ -504,10 +643,21 @@ export def "translate-gungan get" [
   let auth = (build-auth $token ($auth_scheme | default "x-funtranslations-api-secret"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "text" $text "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/translate/gungan" $qp)
+  let full_url = (build-url $base "/translate/gungan" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"text": $text} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Translate from English to Starwars Huttese Language.
@@ -529,10 +679,21 @@ export def "translate-huttese get" [
   let auth = (build-auth $token ($auth_scheme | default "x-funtranslations-api-secret"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "text" $text "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/translate/huttese" $qp)
+  let full_url = (build-url $base "/translate/huttese" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"text": $text} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Translate from normal English to Jive Speak.
@@ -554,10 +715,21 @@ export def "translate-jive get" [
   let auth = (build-auth $token ($auth_scheme | default "x-funtranslations-api-secret"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "text" $text "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/translate/jive" $qp)
+  let full_url = (build-url $base "/translate/jive" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"text": $text} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Translate from English to Startrek Klingon Language.
@@ -579,10 +751,21 @@ export def "translate-klingon get" [
   let auth = (build-auth $token ($auth_scheme | default "x-funtranslations-api-secret"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "text" $text "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/translate/klingon" $qp)
+  let full_url = (build-url $base "/translate/klingon" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"text": $text} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Translate from English to Starwars Mandalorian Language.
@@ -604,10 +787,21 @@ export def "translate-mandalorian get" [
   let auth = (build-auth $token ($auth_scheme | default "x-funtranslations-api-secret"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "text" $text "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/translate/mandalorian" $qp)
+  let full_url = (build-url $base "/translate/mandalorian" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"text": $text} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Translate from English to Minion Speak.
@@ -629,10 +823,21 @@ export def "translate-minion get" [
   let auth = (build-auth $token ($auth_scheme | default "x-funtranslations-api-secret"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "text" $text "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/translate/minion" $qp)
+  let full_url = (build-url $base "/translate/minion" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"text": $text} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Translate from English to morse code.
@@ -654,10 +859,21 @@ export def "translate-morse get" [
   let auth = (build-auth $token ($auth_scheme | default "x-funtranslations-api-secret"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "text" $text "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/translate/morse" $qp)
+  let full_url = (build-url $base "/translate/morse" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"text": $text} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Translate from English to morse code and get the result as an audio file.
@@ -681,10 +897,21 @@ export def "translate-morse-audio get" [
   let auth = (build-auth $token ($auth_scheme | default "x-funtranslations-api-secret"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "speed" $speed "scalar") (serialize-qp "tone" $tone "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/translate/morse/audio" $qp)
+  let full_url = (build-url $base "/translate/morse/audio" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "speed": $speed, "tone": $tone} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"text": $text, "speed": $speed, "tone": $tone} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Translate from Morse code to English.
@@ -706,10 +933,21 @@ export def "translate-morse2english get" [
   let auth = (build-auth $token ($auth_scheme | default "x-funtranslations-api-secret"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "text" $text "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/translate/morse2english" $qp)
+  let full_url = (build-url $base "/translate/morse2english" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"text": $text} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Translate from English to Old English.
@@ -731,10 +969,21 @@ export def "translate-oldenglish get" [
   let auth = (build-auth $token ($auth_scheme | default "x-funtranslations-api-secret"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "text" $text "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/translate/oldenglish" $qp)
+  let full_url = (build-url $base "/translate/oldenglish" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"text": $text} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Translate from English to Pig Latin.
@@ -756,10 +1005,21 @@ export def "translate-piglatin get" [
   let auth = (build-auth $token ($auth_scheme | default "x-funtranslations-api-secret"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "text" $text "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/translate/piglatin" $qp)
+  let full_url = (build-url $base "/translate/piglatin" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"text": $text} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Translate from English to Pirate Speak.
@@ -781,10 +1041,21 @@ export def "translate-pirate get" [
   let auth = (build-auth $token ($auth_scheme | default "x-funtranslations-api-secret"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "text" $text "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/translate/pirate" $qp)
+  let full_url = (build-url $base "/translate/pirate" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"text": $text} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Translate from English to Elvish Quenya Language.
@@ -806,10 +1077,21 @@ export def "translate-quneya get" [
   let auth = (build-auth $token ($auth_scheme | default "x-funtranslations-api-secret"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "text" $text "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/translate/quneya" $qp)
+  let full_url = (build-url $base "/translate/quneya" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"text": $text} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Translate from English to Shakespeare English.
@@ -831,10 +1113,21 @@ export def "translate-shakespeare get" [
   let auth = (build-auth $token ($auth_scheme | default "x-funtranslations-api-secret"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "text" $text "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/translate/shakespeare" $qp)
+  let full_url = (build-url $base "/translate/shakespeare" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"text": $text} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Translate from English to Elvish Sindarin Language.
@@ -856,10 +1149,21 @@ export def "translate-sindarin get" [
   let auth = (build-auth $token ($auth_scheme | default "x-funtranslations-api-secret"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "text" $text "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/translate/sindarin" $qp)
+  let full_url = (build-url $base "/translate/sindarin" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"text": $text} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Translate from English to Sith Speak.
@@ -881,10 +1185,21 @@ export def "translate-sith get" [
   let auth = (build-auth $token ($auth_scheme | default "x-funtranslations-api-secret"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "text" $text "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/translate/sith" $qp)
+  let full_url = (build-url $base "/translate/sith" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"text": $text} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Translate from UK English to US English.
@@ -906,10 +1221,21 @@ export def "translate-uk2us get" [
   let auth = (build-auth $token ($auth_scheme | default "x-funtranslations-api-secret"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "text" $text "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/translate/uk2us" $qp)
+  let full_url = (build-url $base "/translate/uk2us" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"text": $text} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Translate from US English to UK English.
@@ -931,10 +1257,21 @@ export def "translate-us2uk get" [
   let auth = (build-auth $token ($auth_scheme | default "x-funtranslations-api-secret"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "text" $text "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/translate/us2uk" $qp)
+  let full_url = (build-url $base "/translate/us2uk" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"text": $text} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Translate from English to Valley Speak.
@@ -956,10 +1293,21 @@ export def "translate-valspeak get" [
   let auth = (build-auth $token ($auth_scheme | default "x-funtranslations-api-secret"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "text" $text "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/translate/valspeak" $qp)
+  let full_url = (build-url $base "/translate/valspeak" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"text": $text} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Translate from English to Valyrian.
@@ -981,10 +1329,21 @@ export def "translate-valyrian get" [
   let auth = (build-auth $token ($auth_scheme | default "x-funtranslations-api-secret"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "text" $text "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/translate/valyrian" $qp)
+  let full_url = (build-url $base "/translate/valyrian" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"text": $text} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Translate from English to Startrek Vulcan Language.
@@ -1006,10 +1365,21 @@ export def "translate-vulcan get" [
   let auth = (build-auth $token ($auth_scheme | default "x-funtranslations-api-secret"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "text" $text "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/translate/vulcan" $qp)
+  let full_url = (build-url $base "/translate/vulcan" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"text": $text} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Translate from English to Yoda Speak.
@@ -1031,8 +1401,19 @@ export def "translate-yoda get" [
   let auth = (build-auth $token ($auth_scheme | default "x-funtranslations-api-secret"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "text" $text "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/translate/yoda" $qp)
+  let full_url = (build-url $base "/translate/yoda" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"text": $text} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }

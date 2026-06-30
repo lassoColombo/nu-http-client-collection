@@ -8,7 +8,7 @@ const BASE_URL = "https://live-api.letmc.com"
 # `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
 # where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o AGENTOS_API_V2_CUSTOMER_LOGIN_CALL_GROUP_TOKEN | default "" }
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o AGENTOS_API_V2_CUSTOMER_LOGIN_CALL_GROUP_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
@@ -43,14 +43,11 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
-# Trick: `url encode --all` over-encodes, then we decode the four unreserved
-# punctuation chars back. Pre-existing %XX sequences in the input survive
-# because `url encode --all` first turns their % into %25.
 def encode-path-segment [v: any]: nothing -> string {
   $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
-# Serialize an array-typed path parameter (issue 49.A). OpenAPI 3 `style: simple`
+# Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
 # (the default for path params) and Swagger 2 `collectionFormat: csv` both join
 # the elements with a literal comma WITHIN the single path segment, each element
 # RFC-3986-encoded individually (so a comma inside an element stays %2C). Without
@@ -61,51 +58,57 @@ def encode-path-array [v: any]: nothing -> string {
   if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
 }
 
-# Build URL from base, path, and optional query string
-def build-url [base: string, path: string, query?: string]: nothing -> string {
+# Build the request URL from base, path, and any number of pre-encoded query
+# fragments (param serializer output and/or the auth query). Each fragment is an
+# `&`-joinable `key=value` string already percent-encoded by its producer; empty
+# fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
+# delimiters are hand-spliced — and any query already on the base URL is merged in.
+def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
   let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
-  let result = ($parsed | upsert path $full_path)
-  if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
+  let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
+  $parsed | upsert path $full_path | upsert query $query | url join
 }
 
-# Build the dry-run record returned by --dry-run. Shape:
-#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
-#    auth: {scheme, location}}
-# `meta` carries logical-form data (the query record by spec name, the pre-serialization
-# body) that do-request itself cannot reconstruct from its wire-format args.
-def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
-  let m = ($meta | default {})
-  {
-    dry_run: true
-    method: $method
-    url: $url
-    query: ($m | get -o query | default {})
-    headers: $auth.headers
-    body: ($m | get -o body)
-    content_type: $content_type
-    timeout: $timeout
-    auth: {scheme: $auth.scheme, location: $auth.location}
-  }
+# Success policy: did this response succeed? Single source of truth, consulted by
+# handle-response and the HEAD header-unwrap. Empty ok_codes means the spec listed
+# none, so fall back to < 400. Otherwise: any 2xx, plus documented success codes.
+def status-ok [status: int, ok_codes: list<int>]: nothing -> bool {
+  if ($ok_codes | is-empty) { $status < 400 } else { ($status >= 200 and $status < 300) or ($status in $ok_codes) }
 }
 
-# Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
-  let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
-  let timeout = ($max_time | default 30min)
-  let ct = ($content_type | default "application/json")
-  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
-  let resp = match $method {
-    "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
-  }
-  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
-  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
+# Unwrap a `--full` HTTP response into the user-facing value. Response arrives
+# via pipeline; ok_codes gates the error throw (see status-ok).
+def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: record -> any {
+  let resp = $in
+  if $allow_errors { return $resp }
+  if not (status-ok $resp.status $ok_codes) { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } }
+  if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
+  if $resp.status == 204 { return null }
+  $resp.body
+}
+
+# GET — bodyless, honours --raw
+def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+}
+
+# POST — body + content-type
+def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# PUT — body + content-type
+def send-put [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http put --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http put --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# DELETE — body via --data
+def send-delete [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http delete --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url } else { http delete --headers $req.headers --content-type $req.content_type --data $body --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url }
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 def base-url-completer [] { ["https://live-api.letmc.com"] }
@@ -161,10 +164,21 @@ export def "customer-branch-branches get-controller" [
   let base = ($base_url | default $BASE_URL)
   if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/customer/{short_name}/branch/branches") $qp)
+  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/customer/{short_name}/branch/branches") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"offset": $offset, "count": $count} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"offset": $offset, "count": $count} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get a specific branch given its unique Object ID (OID)
@@ -188,10 +202,21 @@ export def "customer-branch-branches get" [
   let base = ($base_url | default $BASE_URL)
   if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
   if ($branch_id | is-empty) { error make --unspanned { msg: "path parameter 'branchID' must be non-empty" } }
-  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name), branch_id: (encode-path-segment $branch_id)} | format pattern "/v2/customer/{short_name}/branch/branches/{branch_id}"))
+  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name), branch_id: (encode-path-segment $branch_id)} | format pattern "/v2/customer/{short_name}/branch/branches/{branch_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get the accounting details for the landlord.
@@ -216,10 +241,21 @@ export def "customer-landlord-accounting get-controller-accounts" [
   let base = ($base_url | default $BASE_URL)
   if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
   let qp = [(serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/customer/{short_name}/landlord/accounting") $qp)
+  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/customer/{short_name}/landlord/accounting") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"token": $qp_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"token": $qp_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Download a Document
@@ -245,10 +281,21 @@ export def "customer-landlord-document get-controller" [
   let base = ($base_url | default $BASE_URL)
   if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
   let qp = [(serialize-qp "token" $qp_token "scalar") (serialize-qp "ID" $id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/customer/{short_name}/landlord/document") $qp)
+  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/customer/{short_name}/landlord/document") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"token": $qp_token, "ID": $id} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"token": $qp_token, "ID": $id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Generate a Inventory PDF for a tenancy
@@ -274,10 +321,21 @@ export def "customer-landlord-inventory get-controller-invetory-report" [
   let base = ($base_url | default $BASE_URL)
   if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
   let qp = [(serialize-qp "token" $qp_token "scalar") (serialize-qp "tenancyID" $tenancy_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/customer/{short_name}/landlord/inventory") $qp)
+  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/customer/{short_name}/landlord/inventory") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"token": $qp_token, "tenancyID": $tenancy_id} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"token": $qp_token, "tenancyID": $tenancy_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get an invoice pdf belonging to the landlord.
@@ -303,10 +361,21 @@ export def "customer-landlord-invoice get-controller" [
   let base = ($base_url | default $BASE_URL)
   if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
   let qp = [(serialize-qp "token" $qp_token "scalar") (serialize-qp "invoiceID" $invoice_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/customer/{short_name}/landlord/invoice") $qp)
+  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/customer/{short_name}/landlord/invoice") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"token": $qp_token, "invoiceID": $invoice_id} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"token": $qp_token, "invoiceID": $invoice_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve landlord's CRM ID
@@ -331,10 +400,21 @@ export def "customer-landlord-landlordcrmentries get-controller-crm-entries" [
   let base = ($base_url | default $BASE_URL)
   if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
   let qp = [(serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/customer/{short_name}/landlord/landlordcrmentries") $qp)
+  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/customer/{short_name}/landlord/landlordcrmentries") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"token": $qp_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"token": $qp_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get Active maintenance jobs.
@@ -359,10 +439,21 @@ export def "customer-landlord-maintenance get-controller-jobs" [
   let base = ($base_url | default $BASE_URL)
   if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
   let qp = [(serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/customer/{short_name}/landlord/maintenance") $qp)
+  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/customer/{short_name}/landlord/maintenance") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"token": $qp_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"token": $qp_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Generate a Profit and Loss Report
@@ -387,10 +478,21 @@ export def "customer-landlord-profitloss get-controller-profit-loss-report" [
   let base = ($base_url | default $BASE_URL)
   if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
   let qp = [(serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/customer/{short_name}/landlord/profitloss") $qp)
+  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/customer/{short_name}/landlord/profitloss") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"token": $qp_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"token": $qp_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Rent Arrears
@@ -415,10 +517,21 @@ export def "customer-landlord-rentarrears get-controller-rent-arrears" [
   let base = ($base_url | default $BASE_URL)
   if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
   let qp = [(serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/customer/{short_name}/landlord/rentarrears") $qp)
+  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/customer/{short_name}/landlord/rentarrears") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"token": $qp_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"token": $qp_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Generate a Self Assessment Tax Report
@@ -444,10 +557,21 @@ export def "customer-landlord-sas get-controller-report" [
   let base = ($base_url | default $BASE_URL)
   if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
   let qp = [(serialize-qp "token" $qp_token "scalar") (serialize-qp "yearEnd" $year_end "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/customer/{short_name}/landlord/sas") $qp)
+  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/customer/{short_name}/landlord/sas") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"token": $qp_token, "yearEnd": $year_end} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"token": $qp_token, "yearEnd": $year_end} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get contact details of all linked landlords.
@@ -472,10 +596,21 @@ export def "customer-landlord-settings get-controller" [
   let base = ($base_url | default $BASE_URL)
   if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
   let qp = [(serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/customer/{short_name}/landlord/settings") $qp)
+  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/customer/{short_name}/landlord/settings") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"token": $qp_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"token": $qp_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get the summary details for the landlord.
@@ -500,10 +635,21 @@ export def "customer-landlord-summary get-controller-details" [
   let base = ($base_url | default $BASE_URL)
   if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
   let qp = [(serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/customer/{short_name}/landlord/summary") $qp)
+  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/customer/{short_name}/landlord/summary") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"token": $qp_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"token": $qp_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get tenancy details.
@@ -529,10 +675,21 @@ export def "customer-landlord-tenancy get-controller" [
   let base = ($base_url | default $BASE_URL)
   if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
   let qp = [(serialize-qp "token" $qp_token "scalar") (serialize-qp "tenancyID" $tenancy_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/customer/{short_name}/landlord/tenancy") $qp)
+  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/customer/{short_name}/landlord/tenancy") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"token": $qp_token, "tenancyID": $tenancy_id} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"token": $qp_token, "tenancyID": $tenancy_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Post tenancy maintenance preferences:-
@@ -560,10 +717,21 @@ export def "customer-landlord-tenancy-maintenance-preference create-controller" 
   let base = ($base_url | default $BASE_URL)
   if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
   let qp = [(serialize-qp "token" $qp_token "scalar") (serialize-qp "tenancyID" $tenancy_id "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "notes" $notes "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/customer/{short_name}/landlord/tenancy/maintenance/preference") $qp)
+  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/customer/{short_name}/landlord/tenancy/maintenance/preference") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"token": $qp_token, "tenancyID": $tenancy_id, "name": $name, "notes": $notes} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"token": $qp_token, "tenancyID": $tenancy_id, "name": $name, "notes": $notes} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Generate a Tenancy Agreement Copy (PDF)
@@ -589,10 +757,21 @@ export def "customer-landlord-tenancyagreement get-controller-tenancy-agreement-
   let base = ($base_url | default $BASE_URL)
   if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
   let qp = [(serialize-qp "token" $qp_token "scalar") (serialize-qp "tenancyID" $tenancy_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/customer/{short_name}/landlord/tenancyagreement") $qp)
+  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/customer/{short_name}/landlord/tenancyagreement") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"token": $qp_token, "tenancyID": $tenancy_id} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"token": $qp_token, "tenancyID": $tenancy_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Downloads the photo of a property given the photo ID.
@@ -620,10 +799,21 @@ export def "customer-photo-download get-controller" [
   let base = ($base_url | default $BASE_URL)
   if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
   let qp = [(serialize-qp "token" $qp_token "scalar") (serialize-qp "photoID" $photo_id "scalar") (serialize-qp "width" $width "scalar") (serialize-qp "height" $height "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/customer/{short_name}/photo/download") $qp)
+  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/customer/{short_name}/photo/download") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"token": $qp_token, "photoID": $photo_id, "width": $width, "height": $height} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"token": $qp_token, "photoID": $photo_id, "width": $width, "height": $height} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # A collection showing all the photos linked to a specific block, property or room
@@ -652,10 +842,21 @@ export def "customer-property-photos get-controller-properties" [
   if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
   if ($property_id | is-empty) { error make --unspanned { msg: "path parameter 'propertyID' must be non-empty" } }
   let qp = [(serialize-qp "token" $qp_token "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name), property_id: (encode-path-segment $property_id)} | format pattern "/v2/customer/{short_name}/property/{property_id}/photos") $qp)
+  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name), property_id: (encode-path-segment $property_id)} | format pattern "/v2/customer/{short_name}/property/{property_id}/photos") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"token": $qp_token, "offset": $offset, "count": $count} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"token": $qp_token, "offset": $offset, "count": $count} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Logout a customer previously logged in via the Login endpoint.
@@ -679,10 +880,21 @@ export def "customer-session delete-controller-logout" [
   let base = ($base_url | default $BASE_URL)
   if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
   let qp = [(serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/customer/{short_name}/session") $qp)
+  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/customer/{short_name}/session") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"token": $qp_token} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"token": $qp_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Gets information about the currently logged on customer.
@@ -707,10 +919,21 @@ export def "customer-session get-controller" [
   let base = ($base_url | default $BASE_URL)
   if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
   let qp = [(serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/customer/{short_name}/session") $qp)
+  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/customer/{short_name}/session") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"token": $qp_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"token": $qp_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Login as a customer given their username and password.
@@ -736,10 +959,21 @@ export def "customer-session create-controller-login" [
   let base = ($base_url | default $BASE_URL)
   if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
   let qp = [(serialize-qp "username" $username "scalar") (serialize-qp "password" $password "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/customer/{short_name}/session") $qp)
+  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/customer/{short_name}/session") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"username": $username, "password": $password} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"username": $username, "password": $password} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Send a request to the in-tray to create a landlord login.
@@ -769,10 +1003,21 @@ export def "customer-session-create-landlordlogin create-controller-landlord-log
   let base = ($base_url | default $BASE_URL)
   if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
   let qp = [(serialize-qp "email" $email "scalar") (serialize-qp "title" $title "scalar") (serialize-qp "forename" $forename "scalar") (serialize-qp "surname" $surname "scalar") (serialize-qp "propertyAddress" $property_address "scalar") (serialize-qp "contactDetails" $contact_details "scalar") (serialize-qp "branchID" $branch_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/customer/{short_name}/session/createlandlordlogin") $qp)
+  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/customer/{short_name}/session/createlandlordlogin") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"email": $email, "title": $title, "forename": $forename, "surname": $surname, "propertyAddress": $property_address, "contactDetails": $contact_details, "branchID": $branch_id} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"email": $email, "title": $title, "forename": $forename, "surname": $surname, "propertyAddress": $property_address, "contactDetails": $contact_details, "branchID": $branch_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Change the password of a customer given their existing and new password.
@@ -798,10 +1043,21 @@ export def "customer-session-password update-controller-change" [
   let base = ($base_url | default $BASE_URL)
   if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
   let qp = [(serialize-qp "token" $qp_token "scalar") (serialize-qp "oldPassword" $old_password "scalar") (serialize-qp "newPassword" $new_password "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/customer/{short_name}/session/password") $qp)
+  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/customer/{short_name}/session/password") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"token": $qp_token, "oldPassword": $old_password, "newPassword": $new_password} | compact), body: null}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"token": $qp_token, "oldPassword": $old_password, "newPassword": $new_password} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Reset the customer's password. An email will be sent out to reset.
@@ -825,8 +1081,19 @@ export def "customer-session-resetpassword reset-controller-password" [
   let base = ($base_url | default $BASE_URL)
   if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
   let qp = [(serialize-qp "email" $email "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/customer/{short_name}/session/resetpassword") $qp)
+  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/customer/{short_name}/session/resetpassword") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"email": $email} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"email": $email} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [204]
 }

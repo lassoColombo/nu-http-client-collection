@@ -8,7 +8,7 @@ const BASE_URL = "http://connect.us-east-1.amazonaws.com"
 # `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
 # where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o AMAZON_CONNECT_SERVICE_TOKEN | default "" }
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o AMAZON_CONNECT_SERVICE_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
@@ -41,14 +41,11 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
-# Trick: `url encode --all` over-encodes, then we decode the four unreserved
-# punctuation chars back. Pre-existing %XX sequences in the input survive
-# because `url encode --all` first turns their % into %25.
 def encode-path-segment [v: any]: nothing -> string {
   $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
-# Serialize an array-typed path parameter (issue 49.A). OpenAPI 3 `style: simple`
+# Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
 # (the default for path params) and Swagger 2 `collectionFormat: csv` both join
 # the elements with a literal comma WITHIN the single path segment, each element
 # RFC-3986-encoded individually (so a comma inside an element stays %2C). Without
@@ -59,51 +56,57 @@ def encode-path-array [v: any]: nothing -> string {
   if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
 }
 
-# Build URL from base, path, and optional query string
-def build-url [base: string, path: string, query?: string]: nothing -> string {
+# Build the request URL from base, path, and any number of pre-encoded query
+# fragments (param serializer output and/or the auth query). Each fragment is an
+# `&`-joinable `key=value` string already percent-encoded by its producer; empty
+# fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
+# delimiters are hand-spliced — and any query already on the base URL is merged in.
+def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
   let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
-  let result = ($parsed | upsert path $full_path)
-  if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
+  let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
+  $parsed | upsert path $full_path | upsert query $query | url join
 }
 
-# Build the dry-run record returned by --dry-run. Shape:
-#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
-#    auth: {scheme, location}}
-# `meta` carries logical-form data (the query record by spec name, the pre-serialization
-# body) that do-request itself cannot reconstruct from its wire-format args.
-def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
-  let m = ($meta | default {})
-  {
-    dry_run: true
-    method: $method
-    url: $url
-    query: ($m | get -o query | default {})
-    headers: $auth.headers
-    body: ($m | get -o body)
-    content_type: $content_type
-    timeout: $timeout
-    auth: {scheme: $auth.scheme, location: $auth.location}
-  }
+# Success policy: did this response succeed? Single source of truth, consulted by
+# handle-response and the HEAD header-unwrap. Empty ok_codes means the spec listed
+# none, so fall back to < 400. Otherwise: any 2xx, plus documented success codes.
+def status-ok [status: int, ok_codes: list<int>]: nothing -> bool {
+  if ($ok_codes | is-empty) { $status < 400 } else { ($status >= 200 and $status < 300) or ($status in $ok_codes) }
 }
 
-# Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
-  let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
-  let timeout = ($max_time | default 30min)
-  let ct = ($content_type | default "application/json")
-  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
-  let resp = match $method {
-    "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
-  }
-  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
-  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
+# Unwrap a `--full` HTTP response into the user-facing value. Response arrives
+# via pipeline; ok_codes gates the error throw (see status-ok).
+def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: record -> any {
+  let resp = $in
+  if $allow_errors { return $resp }
+  if not (status-ok $resp.status $ok_codes) { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } }
+  if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
+  if $resp.status == 204 { return null }
+  $resp.body
+}
+
+# GET — bodyless, honours --raw
+def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+}
+
+# POST — body + content-type
+def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# PUT — body + content-type
+def send-put [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http put --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http put --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# DELETE — body via --data
+def send-delete [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http delete --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url } else { http delete --headers $req.headers --content-type $req.content_type --data $body --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url }
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 def base-url-completer [] { ["http://connect.us-east-1.amazonaws.com" "http://connect.us-east-2.amazonaws.com" "http://connect.us-west-1.amazonaws.com" "http://connect.us-west-2.amazonaws.com" "http://connect.us-gov-west-1.amazonaws.com" "http://connect.us-gov-east-1.amazonaws.com" "http://connect.ca-central-1.amazonaws.com" "http://connect.eu-north-1.amazonaws.com" "http://connect.eu-west-1.amazonaws.com" "http://connect.eu-west-2.amazonaws.com" "http://connect.eu-west-3.amazonaws.com" "http://connect.eu-central-1.amazonaws.com" "http://connect.eu-south-1.amazonaws.com" "http://connect.af-south-1.amazonaws.com" "http://connect.ap-northeast-1.amazonaws.com" "http://connect.ap-northeast-2.amazonaws.com" "http://connect.ap-northeast-3.amazonaws.com" "http://connect.ap-southeast-1.amazonaws.com" "http://connect.ap-southeast-2.amazonaws.com" "http://connect.ap-east-1.amazonaws.com" "http://connect.ap-south-1.amazonaws.com" "http://connect.sa-east-1.amazonaws.com" "http://connect.me-south-1.amazonaws.com" "https://connect.us-east-1.amazonaws.com" "https://connect.us-east-2.amazonaws.com" "https://connect.us-west-1.amazonaws.com" "https://connect.us-west-2.amazonaws.com" "https://connect.us-gov-west-1.amazonaws.com" "https://connect.us-gov-east-1.amazonaws.com" "https://connect.ca-central-1.amazonaws.com" "https://connect.eu-north-1.amazonaws.com" "https://connect.eu-west-1.amazonaws.com" "https://connect.eu-west-2.amazonaws.com" "https://connect.eu-west-3.amazonaws.com" "https://connect.eu-central-1.amazonaws.com" "https://connect.eu-south-1.amazonaws.com" "https://connect.af-south-1.amazonaws.com" "https://connect.ap-northeast-1.amazonaws.com" "https://connect.ap-northeast-2.amazonaws.com" "https://connect.ap-northeast-3.amazonaws.com" "https://connect.ap-southeast-1.amazonaws.com" "https://connect.ap-southeast-2.amazonaws.com" "https://connect.ap-east-1.amazonaws.com" "https://connect.ap-south-1.amazonaws.com" "https://connect.sa-east-1.amazonaws.com" "https://connect.me-south-1.amazonaws.com" "http://connect.cn-north-1.amazonaws.com.cn" "http://connect.cn-northwest-1.amazonaws.com.cn" "https://connect.cn-north-1.amazonaws.com.cn" "https://connect.cn-northwest-1.amazonaws.com.cn"] }
@@ -181,14 +184,25 @@ export def "instance-approved-origin update-associate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'InstanceId' must be non-empty" } }
-  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/instance/{instance_id}/approved-origin"))
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/instance/{instance_id}/approved-origin") $auth.query)
   let req_body = {"Origin": $origin} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # This API is in preview release for Amazon Connect and is subject to change. Allows the specified Amazon Connect instance to access the specified Amazon Lex or Amazon Lex V2 bot.
@@ -222,14 +236,25 @@ export def "instance-bot update-associate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'InstanceId' must be non-empty" } }
-  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/instance/{instance_id}/bot"))
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/instance/{instance_id}/bot") $auth.query)
   let req_body = {"LexBot": $lex_bot, "LexV2Bot": $lex_v2_bot} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # This API is in preview release for Amazon Connect and is subject to change. Revokes authorization from the specified instance to access the specified Amazon Lex or Amazon Lex V2 bot.
@@ -263,14 +288,25 @@ export def "instance-bot create-disassociate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'InstanceId' must be non-empty" } }
-  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/instance/{instance_id}/bot"))
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/instance/{instance_id}/bot") $auth.query)
   let req_body = {"LexBot": $lex_bot, "LexV2Bot": $lex_v2_bot} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Associates an existing vocabulary as the default. Contact Lens for Amazon Connect uses the vocabulary in post-call and real-time analysis sessions for the given language.
@@ -303,14 +339,25 @@ export def "default-vocabulary update-associate" [
   let base = ($base_url | default $BASE_URL)
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'InstanceId' must be non-empty" } }
   if ($language_code | is-empty) { error make --unspanned { msg: "path parameter 'LanguageCode' must be non-empty" } }
-  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), language_code: (encode-path-segment $language_code)} | format pattern "/default-vocabulary/{instance_id}/{language_code}"))
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), language_code: (encode-path-segment $language_code)} | format pattern "/default-vocabulary/{instance_id}/{language_code}") $auth.query)
   let req_body = {"VocabularyId": $vocabulary_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # This API is in preview release for Amazon Connect and is subject to change. Associates a storage resource type for the first time. You can only associate one type of storage configuration in a single call. This means, for example, that you can't define an instance with multiple S3 buckets for storing chat transcripts. This API does not create a resource that doesn't exist. It only associates it to the instance. Ensure that the resource being specified in the storage configuration, like an S3 bucket, exists when being used for association.
@@ -343,14 +390,25 @@ export def "instance-storage-config update-associate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'InstanceId' must be non-empty" } }
-  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/instance/{instance_id}/storage-config"))
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/instance/{instance_id}/storage-config") $auth.query)
   let req_body = {"ResourceType": $resource_type, "StorageConfig": $storage_config} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # This API is in preview release for Amazon Connect and is subject to change. Allows the specified Amazon Connect instance to access the specified Lambda function.
@@ -381,14 +439,25 @@ export def "instance-lambda-function update-associate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'InstanceId' must be non-empty" } }
-  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/instance/{instance_id}/lambda-function"))
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/instance/{instance_id}/lambda-function") $auth.query)
   let req_body = {"FunctionArn": $function_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # This API is in preview release for Amazon Connect and is subject to change. Allows the specified Amazon Connect instance to access the specified Amazon Lex V1 bot. This API only supports the association of Amazon Lex V1 bots.
@@ -420,14 +489,25 @@ export def "instance-lex-bot update-associate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'InstanceId' must be non-empty" } }
-  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/instance/{instance_id}/lex-bot"))
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/instance/{instance_id}/lex-bot") $auth.query)
   let req_body = {"LexBot": $lex_bot} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Associates a flow with a phone number claimed to your Amazon Connect instance. If the number is claimed to a traffic distribution group, and you are calling this API using an instance in the Amazon Web Services Region where the traffic distribution group was created, you can use either a full phone number ARN or UUID value for the PhoneNumberId URI request parameter. However, if the number is claimed to a traffic distribution group and you are calling this API using an instance in the alternate Amazon Web Services Region associated with the traffic distribution group, you must provide a full phone number ARN. If a UUID is provided in this scenario, you will receive a ResourceNotFoundException.
@@ -459,14 +539,25 @@ export def "phone-number-contact-flow update-associate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($phone_number_id | is-empty) { error make --unspanned { msg: "path parameter 'PhoneNumberId' must be non-empty" } }
-  let full_url = (build-url $base ({phone_number_id: (encode-path-segment $phone_number_id)} | format pattern "/phone-number/{phone_number_id}/contact-flow"))
+  let full_url = (build-url $base ({phone_number_id: (encode-path-segment $phone_number_id)} | format pattern "/phone-number/{phone_number_id}/contact-flow") $auth.query)
   let req_body = {"InstanceId": $instance_id, "ContactFlowId": $contact_flow_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # This API is in preview release for Amazon Connect and is subject to change. Associates a set of quick connects with a queue.
@@ -499,14 +590,25 @@ export def "queues-associate-quick-connects create" [
   let base = ($base_url | default $BASE_URL)
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'InstanceId' must be non-empty" } }
   if ($queue_id | is-empty) { error make --unspanned { msg: "path parameter 'QueueId' must be non-empty" } }
-  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), queue_id: (encode-path-segment $queue_id)} | format pattern "/queues/{instance_id}/{queue_id}/associate-quick-connects"))
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), queue_id: (encode-path-segment $queue_id)} | format pattern "/queues/{instance_id}/{queue_id}/associate-quick-connects") $auth.query)
   let req_body = {"QuickConnectIds": $quick_connect_ids} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Associates a set of queues with a routing profile.
@@ -540,14 +642,25 @@ export def "routing-profiles-associate-queues create" [
   let base = ($base_url | default $BASE_URL)
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'InstanceId' must be non-empty" } }
   if ($routing_profile_id | is-empty) { error make --unspanned { msg: "path parameter 'RoutingProfileId' must be non-empty" } }
-  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), routing_profile_id: (encode-path-segment $routing_profile_id)} | format pattern "/routing-profiles/{instance_id}/{routing_profile_id}/associate-queues"))
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), routing_profile_id: (encode-path-segment $routing_profile_id)} | format pattern "/routing-profiles/{instance_id}/{routing_profile_id}/associate-queues") $auth.query)
   let req_body = {"QueueConfigs": $queue_configs} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # This API is in preview release for Amazon Connect and is subject to change. Associates a security key to the instance.
@@ -578,14 +691,25 @@ export def "instance-security-key update-associate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'InstanceId' must be non-empty" } }
-  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/instance/{instance_id}/security-key"))
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/instance/{instance_id}/security-key") $auth.query)
   let req_body = {"Key": $key} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Claims an available phone number to your Amazon Connect instance or traffic distribution group. You can call this API only in the same Amazon Web Services Region where the Amazon Connect instance or traffic distribution group was created. For more information about how to use this operation, see Claim a phone number in your country (https://docs.aws.amazon.com/connect/latest/adminguide/claim-phone-number.html) and Claim phone numbers to traffic distribution groups (https://docs.aws.amazon.com/connect/latest/adminguide/claim-phone-numbers-traffic-distribution-groups.html) in the Amazon Connect Administrator Guide. You can call the SearchAvailablePhoneNumbers (https://docs.aws.amazon.com/connect/latest/APIReference/API_SearchAvailablePhoneNumbers.html) API for available phone numbers that you can claim. Call the DescribePhoneNumber (https://docs.aws.amazon.com/connect/latest/APIReference/API_DescribePhoneNumber.html) API to verify the status of a previous ClaimPhoneNumber (https://docs.aws.amazon.com/connect/latest/APIReference/API_ClaimPhoneNumber.html) operation.
@@ -618,14 +742,25 @@ export def "phone-number-claim create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/phone-number/claim")
+  let full_url = (build-url $base "/phone-number/claim" $auth.query)
   let req_body = {"TargetArn": $target_arn, "PhoneNumber": $phone_number, "PhoneNumberDescription": $phone_number_description, "Tags": $tags, "ClientToken": $client_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # This API is in preview release for Amazon Connect and is subject to change. Creates an agent status for the specified Amazon Connect instance.
@@ -660,14 +795,25 @@ export def "agent-status create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'InstanceId' must be non-empty" } }
-  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/agent-status/{instance_id}"))
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/agent-status/{instance_id}") $auth.query)
   let req_body = {"Name": $name, "Description": $description, "State": $state, "DisplayOrder": $display_order, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # This API is in preview release for Amazon Connect and is subject to change. Lists agent statuses.
@@ -702,12 +848,23 @@ export def "agent-status list-statuses" [
   let base = ($base_url | default $BASE_URL)
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'InstanceId' must be non-empty" } }
   let qp = [(serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "AgentStatusTypes" $agent_status_types "multi") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/agent-status/{instance_id}") $qp)
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/agent-status/{instance_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"nextToken": $next_token, "maxResults": $max_results, "AgentStatusTypes": $agent_status_types, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"nextToken": $next_token, "maxResults": $max_results, "AgentStatusTypes": $agent_status_types, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Creates a flow for the specified Amazon Connect instance. You can also create and update flows using the Amazon Connect Flow language (https://docs.aws.amazon.com/connect/latest/APIReference/flow-language.html).
@@ -742,14 +899,25 @@ export def "contact-flows create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'InstanceId' must be non-empty" } }
-  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/contact-flows/{instance_id}"))
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/contact-flows/{instance_id}") $auth.query)
   let req_body = {"Name": $name, "Type": $type, "Description": $description, "Content": $content, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Creates a flow module for the specified Amazon Connect instance.
@@ -784,14 +952,25 @@ export def "contact-flow-modules create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'InstanceId' must be non-empty" } }
-  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/contact-flow-modules/{instance_id}"))
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/contact-flow-modules/{instance_id}") $auth.query)
   let req_body = {"Name": $name, "Description": $description, "Content": $content, "Tags": $tags, "ClientToken": $client_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # This API is in preview release for Amazon Connect and is subject to change. Creates hours of operation.
@@ -827,14 +1006,25 @@ export def "hours-of-operations create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'InstanceId' must be non-empty" } }
-  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/hours-of-operations/{instance_id}"))
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/hours-of-operations/{instance_id}") $auth.query)
   let req_body = {"Name": $name, "Description": $description, "TimeZone": $time_zone, "Config": $config, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # This API is in preview release for Amazon Connect and is subject to change. Initiates an Amazon Connect instance with all the supported channels enabled. It does not attach any storage, such as Amazon Simple Storage Service (Amazon S3) or Amazon Kinesis. It also does not allow for any configurations on features, such as Contact Lens for Amazon Connect. Amazon Connect enforces a limit on the total number of instances that you can create or delete in 30 days. If you exceed this limit, you will get an error message indicating there has been an excessive number of attempts at creating or deleting instances. You must wait 30 days before you can restart creating and deleting instances in your account.
@@ -868,14 +1058,25 @@ export def "instance create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/instance")
+  let full_url = (build-url $base "/instance" $auth.query)
   let req_body = {"ClientToken": $client_token, "IdentityManagementType": $identity_management_type, "InstanceAlias": $instance_alias, "DirectoryId": $directory_id, "InboundCallsEnabled": $inbound_calls_enabled, "OutboundCallsEnabled": $outbound_calls_enabled} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # This API is in preview release for Amazon Connect and is subject to change. Return a list of instances which are in active state, creation-in-progress state, and failed state. Instances that aren't successfully created (they are in a failed state) are returned only for 24 hours after the CreateInstance API was invoked.
@@ -907,12 +1108,23 @@ export def "instance list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/instance" $qp)
+  let full_url = (build-url $base "/instance" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"nextToken": $next_token, "maxResults": $max_results, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"nextToken": $next_token, "maxResults": $max_results, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Creates an Amazon Web Services resource association with an Amazon Connect instance.
@@ -948,14 +1160,25 @@ export def "instance-integration-associations create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'InstanceId' must be non-empty" } }
-  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/instance/{instance_id}/integration-associations"))
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/instance/{instance_id}/integration-associations") $auth.query)
   let req_body = {"IntegrationType": $integration_type, "IntegrationArn": $integration_arn, "SourceApplicationUrl": $source_application_url, "SourceApplicationName": $source_application_name, "SourceType": $source_type, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Provides summary information about the Amazon Web Services resource associations for the specified Amazon Connect instance.
@@ -990,12 +1213,23 @@ export def "instance-integration-associations list" [
   let base = ($base_url | default $BASE_URL)
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'InstanceId' must be non-empty" } }
   let qp = [(serialize-qp "integrationType" $integration_type "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/instance/{instance_id}/integration-associations") $qp)
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/instance/{instance_id}/integration-associations") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"integrationType": $integration_type, "nextToken": $next_token, "maxResults": $max_results, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"integrationType": $integration_type, "nextToken": $next_token, "maxResults": $max_results, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Adds a new participant into an on-going chat contact. For more information, see Customize chat flow experiences by integrating custom participants (https://docs.aws.amazon.com/connect/latest/adminguide/chat-customize-flow.html).
@@ -1028,14 +1262,25 @@ export def "contact-create-participant create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/contact/create-participant")
+  let full_url = (build-url $base "/contact/create-participant" $auth.query)
   let req_body = {"InstanceId": $instance_id, "ContactId": $contact_id, "ClientToken": $client_token, "ParticipantDetails": $participant_details} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # This API is in preview release for Amazon Connect and is subject to change. Creates a new queue for the specified Amazon Connect instance. If the number being used in the input is claimed to a traffic distribution group, and you are calling this API using an instance in the Amazon Web Services Region where the traffic distribution group was created, you can use either a full phone number ARN or UUID value for the OutboundCallerIdNumberId value of the OutboundCallerConfig (https://docs.aws.amazon.com/connect/latest/APIReference/API_OutboundCallerConfig) request body parameter. However, if the number is claimed to a traffic distribution group and you are calling this API using an instance in the alternate Amazon Web Services Region associated with the traffic distribution group, you must provide a full phone number ARN. If a UUID is provided in this scenario, you will receive a ResourceNotFoundException.
@@ -1073,14 +1318,25 @@ export def "queues create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'InstanceId' must be non-empty" } }
-  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/queues/{instance_id}"))
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/queues/{instance_id}") $auth.query)
   let req_body = {"Name": $name, "Description": $description, "OutboundCallerConfig": $outbound_caller_config, "HoursOfOperationId": $hours_of_operation_id, "MaxContacts": $max_contacts, "QuickConnectIds": $quick_connect_ids, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Creates a quick connect for the specified Amazon Connect instance.
@@ -1115,14 +1371,25 @@ export def "quick-connects create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'InstanceId' must be non-empty" } }
-  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/quick-connects/{instance_id}"))
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/quick-connects/{instance_id}") $auth.query)
   let req_body = {"Name": $name, "Description": $description, "QuickConnectConfig": $quick_connect_config, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Provides information about the quick connects for the specified Amazon Connect instance.
@@ -1157,12 +1424,23 @@ export def "quick-connects list" [
   let base = ($base_url | default $BASE_URL)
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'InstanceId' must be non-empty" } }
   let qp = [(serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "QuickConnectTypes" $quick_connect_types "multi") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/quick-connects/{instance_id}") $qp)
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/quick-connects/{instance_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"nextToken": $next_token, "maxResults": $max_results, "QuickConnectTypes": $quick_connect_types, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"nextToken": $next_token, "maxResults": $max_results, "QuickConnectTypes": $quick_connect_types, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Creates a new routing profile.
@@ -1200,14 +1478,25 @@ export def "routing-profiles create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'InstanceId' must be non-empty" } }
-  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/routing-profiles/{instance_id}"))
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/routing-profiles/{instance_id}") $auth.query)
   let req_body = {"Name": $name, "Description": $description, "DefaultOutboundQueueId": $default_outbound_queue_id, "QueueConfigs": $queue_configs, "MediaConcurrencies": $media_concurrencies, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Creates a rule for the specified Amazon Connect instance. Use the Rules Function language (https://docs.aws.amazon.com/connect/latest/APIReference/connect-rules-language.html) to code conditions for the rule.
@@ -1245,14 +1534,25 @@ export def "rules create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'InstanceId' must be non-empty" } }
-  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/rules/{instance_id}"))
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/rules/{instance_id}") $auth.query)
   let req_body = {"Name": $name, "TriggerEventSource": $trigger_event_source, "Function": $function, "Actions": $actions, "PublishStatus": $publish_status, "ClientToken": $client_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # List all rules for the specified Amazon Connect instance.
@@ -1288,12 +1588,23 @@ export def "rules list" [
   let base = ($base_url | default $BASE_URL)
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'InstanceId' must be non-empty" } }
   let qp = [(serialize-qp "publishStatus" $publish_status "scalar") (serialize-qp "eventSourceName" $event_source_name "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/rules/{instance_id}") $qp)
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/rules/{instance_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"publishStatus": $publish_status, "eventSourceName": $event_source_name, "maxResults": $max_results, "nextToken": $next_token, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"publishStatus": $publish_status, "eventSourceName": $event_source_name, "maxResults": $max_results, "nextToken": $next_token, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # This API is in preview release for Amazon Connect and is subject to change. Creates a security profile.
@@ -1329,14 +1640,25 @@ export def "security-profiles create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'InstanceId' must be non-empty" } }
-  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/security-profiles/{instance_id}"))
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/security-profiles/{instance_id}") $auth.query)
   let req_body = {"SecurityProfileName": $security_profile_name, "Description": $description, "Permissions": $permissions, "Tags": $tags, "AllowedAccessControlTags": $allowed_access_control_tags, "TagRestrictedResources": $tag_restricted_resources} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Creates a new task template in the specified Amazon Connect instance.
@@ -1377,14 +1699,25 @@ export def "instance-task-template create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'InstanceId' must be non-empty" } }
-  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/instance/{instance_id}/task/template"))
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/instance/{instance_id}/task/template") $auth.query)
   let req_body = {"Name": $name, "Description": $description, "ContactFlowId": $contact_flow_id, "Constraints": $constraints, "Defaults": $defaults, "Status": $status, "Fields": $fields, "ClientToken": $client_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Lists task templates for the specified Amazon Connect instance.
@@ -1420,12 +1753,23 @@ export def "instance-task-template list" [
   let base = ($base_url | default $BASE_URL)
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'InstanceId' must be non-empty" } }
   let qp = [(serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/instance/{instance_id}/task/template") $qp)
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/instance/{instance_id}/task/template") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"nextToken": $next_token, "maxResults": $max_results, "status": $status, "name": $name, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"nextToken": $next_token, "maxResults": $max_results, "status": $status, "name": $name, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Creates a traffic distribution group given an Amazon Connect instance that has been replicated. For more information about creating traffic distribution groups, see Set up traffic distribution groups (https://docs.aws.amazon.com/connect/latest/adminguide/setup-traffic-distribution-groups.html) in the Amazon Connect Administrator Guide.
@@ -1458,14 +1802,25 @@ export def "traffic-distribution-group create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/traffic-distribution-group")
+  let full_url = (build-url $base "/traffic-distribution-group" $auth.query)
   let req_body = {"Name": $name, "Description": $description, "InstanceId": $instance_id, "ClientToken": $client_token, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Creates a use case for an integration association.
@@ -1499,14 +1854,25 @@ export def "instance-integration-associations-use-cases create" [
   let base = ($base_url | default $BASE_URL)
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'InstanceId' must be non-empty" } }
   if ($integration_association_id | is-empty) { error make --unspanned { msg: "path parameter 'IntegrationAssociationId' must be non-empty" } }
-  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), integration_association_id: (encode-path-segment $integration_association_id)} | format pattern "/instance/{instance_id}/integration-associations/{integration_association_id}/use-cases"))
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), integration_association_id: (encode-path-segment $integration_association_id)} | format pattern "/instance/{instance_id}/integration-associations/{integration_association_id}/use-cases") $auth.query)
   let req_body = {"UseCaseType": $use_case_type, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Lists the use cases for the integration association.
@@ -1542,12 +1908,23 @@ export def "instance-integration-associations-use-cases list" [
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'InstanceId' must be non-empty" } }
   if ($integration_association_id | is-empty) { error make --unspanned { msg: "path parameter 'IntegrationAssociationId' must be non-empty" } }
   let qp = [(serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), integration_association_id: (encode-path-segment $integration_association_id)} | format pattern "/instance/{instance_id}/integration-associations/{integration_association_id}/use-cases") $qp)
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), integration_association_id: (encode-path-segment $integration_association_id)} | format pattern "/instance/{instance_id}/integration-associations/{integration_association_id}/use-cases") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"nextToken": $next_token, "maxResults": $max_results, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"nextToken": $next_token, "maxResults": $max_results, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Creates a user account for the specified Amazon Connect instance. For information about how to create user accounts using the Amazon Connect console, see Add Users (https://docs.aws.amazon.com/connect/latest/adminguide/user-management.html) in the Amazon Connect Administrator Guide.
@@ -1588,14 +1965,25 @@ export def "users create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'InstanceId' must be non-empty" } }
-  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/users/{instance_id}"))
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/users/{instance_id}") $auth.query)
   let req_body = {"Username": $username, "Password": $password, "IdentityInfo": $identity_info, "PhoneConfig": $phone_config, "DirectoryUserId": $directory_user_id, "SecurityProfileIds": $security_profile_ids, "RoutingProfileId": $routing_profile_id, "HierarchyGroupId": $hierarchy_group_id, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Creates a new user hierarchy group.
@@ -1628,14 +2016,25 @@ export def "user-hierarchy-groups create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'InstanceId' must be non-empty" } }
-  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/user-hierarchy-groups/{instance_id}"))
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/user-hierarchy-groups/{instance_id}") $auth.query)
   let req_body = {"Name": $name, "ParentGroupId": $parent_group_id, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Creates a custom vocabulary associated with your Amazon Connect instance. You can set a custom vocabulary to be your default vocabulary for a given language. Contact Lens for Amazon Connect uses the default vocabulary in post-call and real-time contact analysis sessions for that language.
@@ -1670,14 +2069,25 @@ export def "vocabulary create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'InstanceId' must be non-empty" } }
-  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/vocabulary/{instance_id}"))
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/vocabulary/{instance_id}") $auth.query)
   let req_body = {"ClientToken": $client_token, "VocabularyName": $vocabulary_name, "LanguageCode": $language_code, "Content": $content, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes a flow for the specified Amazon Connect instance.
@@ -1708,12 +2118,23 @@ export def "contact-flows delete" [
   let base = ($base_url | default $BASE_URL)
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'InstanceId' must be non-empty" } }
   if ($contact_flow_id | is-empty) { error make --unspanned { msg: "path parameter 'ContactFlowId' must be non-empty" } }
-  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), contact_flow_id: (encode-path-segment $contact_flow_id)} | format pattern "/contact-flows/{instance_id}/{contact_flow_id}"))
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), contact_flow_id: (encode-path-segment $contact_flow_id)} | format pattern "/contact-flows/{instance_id}/{contact_flow_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Describes the specified flow. You can also create and update flows using the Amazon Connect Flow language (https://docs.aws.amazon.com/connect/latest/APIReference/flow-language.html).
@@ -1744,12 +2165,23 @@ export def "contact-flows get" [
   let base = ($base_url | default $BASE_URL)
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'InstanceId' must be non-empty" } }
   if ($contact_flow_id | is-empty) { error make --unspanned { msg: "path parameter 'ContactFlowId' must be non-empty" } }
-  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), contact_flow_id: (encode-path-segment $contact_flow_id)} | format pattern "/contact-flows/{instance_id}/{contact_flow_id}"))
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), contact_flow_id: (encode-path-segment $contact_flow_id)} | format pattern "/contact-flows/{instance_id}/{contact_flow_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes the specified flow module.
@@ -1780,12 +2212,23 @@ export def "contact-flow-modules delete" [
   let base = ($base_url | default $BASE_URL)
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'InstanceId' must be non-empty" } }
   if ($contact_flow_module_id | is-empty) { error make --unspanned { msg: "path parameter 'ContactFlowModuleId' must be non-empty" } }
-  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), contact_flow_module_id: (encode-path-segment $contact_flow_module_id)} | format pattern "/contact-flow-modules/{instance_id}/{contact_flow_module_id}"))
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), contact_flow_module_id: (encode-path-segment $contact_flow_module_id)} | format pattern "/contact-flow-modules/{instance_id}/{contact_flow_module_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Describes the specified flow module.
@@ -1816,12 +2259,23 @@ export def "contact-flow-modules get" [
   let base = ($base_url | default $BASE_URL)
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'InstanceId' must be non-empty" } }
   if ($contact_flow_module_id | is-empty) { error make --unspanned { msg: "path parameter 'ContactFlowModuleId' must be non-empty" } }
-  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), contact_flow_module_id: (encode-path-segment $contact_flow_module_id)} | format pattern "/contact-flow-modules/{instance_id}/{contact_flow_module_id}"))
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), contact_flow_module_id: (encode-path-segment $contact_flow_module_id)} | format pattern "/contact-flow-modules/{instance_id}/{contact_flow_module_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # This API is in preview release for Amazon Connect and is subject to change. Deletes an hours of operation.
@@ -1852,12 +2306,23 @@ export def "hours-of-operations delete" [
   let base = ($base_url | default $BASE_URL)
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'InstanceId' must be non-empty" } }
   if ($hours_of_operation_id | is-empty) { error make --unspanned { msg: "path parameter 'HoursOfOperationId' must be non-empty" } }
-  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), hours_of_operation_id: (encode-path-segment $hours_of_operation_id)} | format pattern "/hours-of-operations/{instance_id}/{hours_of_operation_id}"))
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), hours_of_operation_id: (encode-path-segment $hours_of_operation_id)} | format pattern "/hours-of-operations/{instance_id}/{hours_of_operation_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # This API is in preview release for Amazon Connect and is subject to change. Describes the hours of operation.
@@ -1888,12 +2353,23 @@ export def "hours-of-operations get" [
   let base = ($base_url | default $BASE_URL)
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'InstanceId' must be non-empty" } }
   if ($hours_of_operation_id | is-empty) { error make --unspanned { msg: "path parameter 'HoursOfOperationId' must be non-empty" } }
-  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), hours_of_operation_id: (encode-path-segment $hours_of_operation_id)} | format pattern "/hours-of-operations/{instance_id}/{hours_of_operation_id}"))
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), hours_of_operation_id: (encode-path-segment $hours_of_operation_id)} | format pattern "/hours-of-operations/{instance_id}/{hours_of_operation_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # This API is in preview release for Amazon Connect and is subject to change. Updates the hours of operation.
@@ -1930,14 +2406,25 @@ export def "hours-of-operations update" [
   let base = ($base_url | default $BASE_URL)
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'InstanceId' must be non-empty" } }
   if ($hours_of_operation_id | is-empty) { error make --unspanned { msg: "path parameter 'HoursOfOperationId' must be non-empty" } }
-  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), hours_of_operation_id: (encode-path-segment $hours_of_operation_id)} | format pattern "/hours-of-operations/{instance_id}/{hours_of_operation_id}"))
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), hours_of_operation_id: (encode-path-segment $hours_of_operation_id)} | format pattern "/hours-of-operations/{instance_id}/{hours_of_operation_id}") $auth.query)
   let req_body = {"Name": $name, "Description": $description, "TimeZone": $time_zone, "Config": $config} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # This API is in preview release for Amazon Connect and is subject to change. Deletes the Amazon Connect instance. Amazon Connect enforces a limit on the total number of instances that you can create or delete in 30 days. If you exceed this limit, you will get an error message indicating there has been an excessive number of attempts at creating or deleting instances. You must wait 30 days before you can restart creating and deleting instances in your account.
@@ -1966,12 +2453,23 @@ export def "instance delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'InstanceId' must be non-empty" } }
-  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/instance/{instance_id}"))
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/instance/{instance_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # This API is in preview release for Amazon Connect and is subject to change. Returns the current state of the specified instance identifier. It tracks the instance while it is being created and returns an error status, if applicable. If an instance is not created successfully, the instance status reason field returns details relevant to the reason. The instance in a failed state is returned only for 24 hours after the CreateInstance API was invoked.
@@ -2000,12 +2498,23 @@ export def "instance get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'InstanceId' must be non-empty" } }
-  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/instance/{instance_id}"))
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/instance/{instance_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes an Amazon Web Services resource association from an Amazon Connect instance. The association must not have any use cases associated with it.
@@ -2036,12 +2545,23 @@ export def "instance-integration-associations delete" [
   let base = ($base_url | default $BASE_URL)
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'InstanceId' must be non-empty" } }
   if ($integration_association_id | is-empty) { error make --unspanned { msg: "path parameter 'IntegrationAssociationId' must be non-empty" } }
-  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), integration_association_id: (encode-path-segment $integration_association_id)} | format pattern "/instance/{instance_id}/integration-associations/{integration_association_id}"))
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), integration_association_id: (encode-path-segment $integration_association_id)} | format pattern "/instance/{instance_id}/integration-associations/{integration_association_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes a quick connect.
@@ -2072,12 +2592,23 @@ export def "quick-connects delete" [
   let base = ($base_url | default $BASE_URL)
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'InstanceId' must be non-empty" } }
   if ($quick_connect_id | is-empty) { error make --unspanned { msg: "path parameter 'QuickConnectId' must be non-empty" } }
-  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), quick_connect_id: (encode-path-segment $quick_connect_id)} | format pattern "/quick-connects/{instance_id}/{quick_connect_id}"))
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), quick_connect_id: (encode-path-segment $quick_connect_id)} | format pattern "/quick-connects/{instance_id}/{quick_connect_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Describes the quick connect.
@@ -2108,12 +2639,23 @@ export def "quick-connects get" [
   let base = ($base_url | default $BASE_URL)
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'InstanceId' must be non-empty" } }
   if ($quick_connect_id | is-empty) { error make --unspanned { msg: "path parameter 'QuickConnectId' must be non-empty" } }
-  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), quick_connect_id: (encode-path-segment $quick_connect_id)} | format pattern "/quick-connects/{instance_id}/{quick_connect_id}"))
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), quick_connect_id: (encode-path-segment $quick_connect_id)} | format pattern "/quick-connects/{instance_id}/{quick_connect_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes a rule for the specified Amazon Connect instance.
@@ -2144,12 +2686,23 @@ export def "rules delete" [
   let base = ($base_url | default $BASE_URL)
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'InstanceId' must be non-empty" } }
   if ($rule_id | is-empty) { error make --unspanned { msg: "path parameter 'RuleId' must be non-empty" } }
-  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), rule_id: (encode-path-segment $rule_id)} | format pattern "/rules/{instance_id}/{rule_id}"))
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), rule_id: (encode-path-segment $rule_id)} | format pattern "/rules/{instance_id}/{rule_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Describes a rule for the specified Amazon Connect instance.
@@ -2180,12 +2733,23 @@ export def "rules get" [
   let base = ($base_url | default $BASE_URL)
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'InstanceId' must be non-empty" } }
   if ($rule_id | is-empty) { error make --unspanned { msg: "path parameter 'RuleId' must be non-empty" } }
-  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), rule_id: (encode-path-segment $rule_id)} | format pattern "/rules/{instance_id}/{rule_id}"))
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), rule_id: (encode-path-segment $rule_id)} | format pattern "/rules/{instance_id}/{rule_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates a rule for the specified Amazon Connect instance. Use the Rules Function language (https://docs.aws.amazon.com/connect/latest/APIReference/connect-rules-language.html) to code conditions for the rule.
@@ -2222,14 +2786,25 @@ export def "rules update" [
   let base = ($base_url | default $BASE_URL)
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'InstanceId' must be non-empty" } }
   if ($rule_id | is-empty) { error make --unspanned { msg: "path parameter 'RuleId' must be non-empty" } }
-  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), rule_id: (encode-path-segment $rule_id)} | format pattern "/rules/{instance_id}/{rule_id}"))
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), rule_id: (encode-path-segment $rule_id)} | format pattern "/rules/{instance_id}/{rule_id}") $auth.query)
   let req_body = {"Name": $name, "Function": $function, "Actions": $actions, "PublishStatus": $publish_status} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # This API is in preview release for Amazon Connect and is subject to change. Deletes a security profile.
@@ -2260,12 +2835,23 @@ export def "security-profiles delete" [
   let base = ($base_url | default $BASE_URL)
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'InstanceId' must be non-empty" } }
   if ($security_profile_id | is-empty) { error make --unspanned { msg: "path parameter 'SecurityProfileId' must be non-empty" } }
-  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), security_profile_id: (encode-path-segment $security_profile_id)} | format pattern "/security-profiles/{instance_id}/{security_profile_id}"))
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), security_profile_id: (encode-path-segment $security_profile_id)} | format pattern "/security-profiles/{instance_id}/{security_profile_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # This API is in preview release for Amazon Connect and is subject to change. Gets basic information about the security profle.
@@ -2296,12 +2882,23 @@ export def "security-profiles get" [
   let base = ($base_url | default $BASE_URL)
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'InstanceId' must be non-empty" } }
   if ($security_profile_id | is-empty) { error make --unspanned { msg: "path parameter 'SecurityProfileId' must be non-empty" } }
-  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), security_profile_id: (encode-path-segment $security_profile_id)} | format pattern "/security-profiles/{instance_id}/{security_profile_id}"))
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), security_profile_id: (encode-path-segment $security_profile_id)} | format pattern "/security-profiles/{instance_id}/{security_profile_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # This API is in preview release for Amazon Connect and is subject to change. Updates a security profile.
@@ -2337,14 +2934,25 @@ export def "security-profiles update" [
   let base = ($base_url | default $BASE_URL)
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'InstanceId' must be non-empty" } }
   if ($security_profile_id | is-empty) { error make --unspanned { msg: "path parameter 'SecurityProfileId' must be non-empty" } }
-  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), security_profile_id: (encode-path-segment $security_profile_id)} | format pattern "/security-profiles/{instance_id}/{security_profile_id}"))
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), security_profile_id: (encode-path-segment $security_profile_id)} | format pattern "/security-profiles/{instance_id}/{security_profile_id}") $auth.query)
   let req_body = {"Description": $description, "Permissions": $permissions, "AllowedAccessControlTags": $allowed_access_control_tags, "TagRestrictedResources": $tag_restricted_resources} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes the task template.
@@ -2375,12 +2983,23 @@ export def "instance-task-template delete" [
   let base = ($base_url | default $BASE_URL)
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'InstanceId' must be non-empty" } }
   if ($task_template_id | is-empty) { error make --unspanned { msg: "path parameter 'TaskTemplateId' must be non-empty" } }
-  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), task_template_id: (encode-path-segment $task_template_id)} | format pattern "/instance/{instance_id}/task/template/{task_template_id}"))
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), task_template_id: (encode-path-segment $task_template_id)} | format pattern "/instance/{instance_id}/task/template/{task_template_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Gets details about a specific task template in the specified Amazon Connect instance.
@@ -2413,12 +3032,23 @@ export def "instance-task-template get" [
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'InstanceId' must be non-empty" } }
   if ($task_template_id | is-empty) { error make --unspanned { msg: "path parameter 'TaskTemplateId' must be non-empty" } }
   let qp = [(serialize-qp "snapshotVersion" $snapshot_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), task_template_id: (encode-path-segment $task_template_id)} | format pattern "/instance/{instance_id}/task/template/{task_template_id}") $qp)
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), task_template_id: (encode-path-segment $task_template_id)} | format pattern "/instance/{instance_id}/task/template/{task_template_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"snapshotVersion": $snapshot_version} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"snapshotVersion": $snapshot_version} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates details about a specific task template in the specified Amazon Connect instance. This operation does not support partial updates. Instead it does a full update of template content.
@@ -2460,14 +3090,25 @@ export def "instance-task-template update" [
   let base = ($base_url | default $BASE_URL)
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'InstanceId' must be non-empty" } }
   if ($task_template_id | is-empty) { error make --unspanned { msg: "path parameter 'TaskTemplateId' must be non-empty" } }
-  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), task_template_id: (encode-path-segment $task_template_id)} | format pattern "/instance/{instance_id}/task/template/{task_template_id}"))
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), task_template_id: (encode-path-segment $task_template_id)} | format pattern "/instance/{instance_id}/task/template/{task_template_id}") $auth.query)
   let req_body = {"Name": $name, "Description": $description, "ContactFlowId": $contact_flow_id, "Constraints": $constraints, "Defaults": $defaults, "Status": $status, "Fields": $fields} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes a traffic distribution group. This API can be called only in the Region where the traffic distribution group is created. For more information about deleting traffic distribution groups, see Delete traffic distribution groups (https://docs.aws.amazon.com/connect/latest/adminguide/delete-traffic-distribution-groups.html) in the Amazon Connect Administrator Guide.
@@ -2496,12 +3137,23 @@ export def "traffic-distribution-group delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($traffic_distribution_group_id | is-empty) { error make --unspanned { msg: "path parameter 'TrafficDistributionGroupId' must be non-empty" } }
-  let full_url = (build-url $base ({traffic_distribution_group_id: (encode-path-segment $traffic_distribution_group_id)} | format pattern "/traffic-distribution-group/{traffic_distribution_group_id}"))
+  let full_url = (build-url $base ({traffic_distribution_group_id: (encode-path-segment $traffic_distribution_group_id)} | format pattern "/traffic-distribution-group/{traffic_distribution_group_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Gets details and status of a traffic distribution group.
@@ -2530,12 +3182,23 @@ export def "traffic-distribution-group get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($traffic_distribution_group_id | is-empty) { error make --unspanned { msg: "path parameter 'TrafficDistributionGroupId' must be non-empty" } }
-  let full_url = (build-url $base ({traffic_distribution_group_id: (encode-path-segment $traffic_distribution_group_id)} | format pattern "/traffic-distribution-group/{traffic_distribution_group_id}"))
+  let full_url = (build-url $base ({traffic_distribution_group_id: (encode-path-segment $traffic_distribution_group_id)} | format pattern "/traffic-distribution-group/{traffic_distribution_group_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes a use case from an integration association.
@@ -2568,12 +3231,23 @@ export def "instance-integration-associations-use-cases delete" [
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'InstanceId' must be non-empty" } }
   if ($integration_association_id | is-empty) { error make --unspanned { msg: "path parameter 'IntegrationAssociationId' must be non-empty" } }
   if ($use_case_id | is-empty) { error make --unspanned { msg: "path parameter 'UseCaseId' must be non-empty" } }
-  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), integration_association_id: (encode-path-segment $integration_association_id), use_case_id: (encode-path-segment $use_case_id)} | format pattern "/instance/{instance_id}/integration-associations/{integration_association_id}/use-cases/{use_case_id}"))
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), integration_association_id: (encode-path-segment $integration_association_id), use_case_id: (encode-path-segment $use_case_id)} | format pattern "/instance/{instance_id}/integration-associations/{integration_association_id}/use-cases/{use_case_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes a user account from the specified Amazon Connect instance. For information about what happens to a user's data when their account is deleted, see Delete Users from Your Amazon Connect Instance (https://docs.aws.amazon.com/connect/latest/adminguide/delete-users.html) in the Amazon Connect Administrator Guide.
@@ -2604,12 +3278,23 @@ export def "users delete" [
   let base = ($base_url | default $BASE_URL)
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'InstanceId' must be non-empty" } }
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'UserId' must be non-empty" } }
-  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), user_id: (encode-path-segment $user_id)} | format pattern "/users/{instance_id}/{user_id}"))
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), user_id: (encode-path-segment $user_id)} | format pattern "/users/{instance_id}/{user_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Describes the specified user account. You can find the instance ID in the Amazon Connect console (https://docs.aws.amazon.com/connect/latest/adminguide/find-instance-arn.html) (it’s the final part of the ARN). The console does not display the user IDs. Instead, list the users and note the IDs provided in the output.
@@ -2640,12 +3325,23 @@ export def "users get" [
   let base = ($base_url | default $BASE_URL)
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'InstanceId' must be non-empty" } }
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'UserId' must be non-empty" } }
-  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), user_id: (encode-path-segment $user_id)} | format pattern "/users/{instance_id}/{user_id}"))
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), user_id: (encode-path-segment $user_id)} | format pattern "/users/{instance_id}/{user_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes an existing user hierarchy group. It must not be associated with any agents or have any active child groups.
@@ -2676,12 +3372,23 @@ export def "user-hierarchy-groups delete" [
   let base = ($base_url | default $BASE_URL)
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'InstanceId' must be non-empty" } }
   if ($hierarchy_group_id | is-empty) { error make --unspanned { msg: "path parameter 'HierarchyGroupId' must be non-empty" } }
-  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), hierarchy_group_id: (encode-path-segment $hierarchy_group_id)} | format pattern "/user-hierarchy-groups/{instance_id}/{hierarchy_group_id}"))
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), hierarchy_group_id: (encode-path-segment $hierarchy_group_id)} | format pattern "/user-hierarchy-groups/{instance_id}/{hierarchy_group_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Describes the specified hierarchy group.
@@ -2712,12 +3419,23 @@ export def "user-hierarchy-groups get" [
   let base = ($base_url | default $BASE_URL)
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'InstanceId' must be non-empty" } }
   if ($hierarchy_group_id | is-empty) { error make --unspanned { msg: "path parameter 'HierarchyGroupId' must be non-empty" } }
-  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), hierarchy_group_id: (encode-path-segment $hierarchy_group_id)} | format pattern "/user-hierarchy-groups/{instance_id}/{hierarchy_group_id}"))
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), hierarchy_group_id: (encode-path-segment $hierarchy_group_id)} | format pattern "/user-hierarchy-groups/{instance_id}/{hierarchy_group_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes the vocabulary that has the given identifier.
@@ -2748,12 +3466,23 @@ export def "vocabulary-remove delete" [
   let base = ($base_url | default $BASE_URL)
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'InstanceId' must be non-empty" } }
   if ($vocabulary_id | is-empty) { error make --unspanned { msg: "path parameter 'VocabularyId' must be non-empty" } }
-  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), vocabulary_id: (encode-path-segment $vocabulary_id)} | format pattern "/vocabulary-remove/{instance_id}/{vocabulary_id}"))
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), vocabulary_id: (encode-path-segment $vocabulary_id)} | format pattern "/vocabulary-remove/{instance_id}/{vocabulary_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # This API is in preview release for Amazon Connect and is subject to change. Describes an agent status.
@@ -2784,12 +3513,23 @@ export def "agent-status get" [
   let base = ($base_url | default $BASE_URL)
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'InstanceId' must be non-empty" } }
   if ($agent_status_id | is-empty) { error make --unspanned { msg: "path parameter 'AgentStatusId' must be non-empty" } }
-  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), agent_status_id: (encode-path-segment $agent_status_id)} | format pattern "/agent-status/{instance_id}/{agent_status_id}"))
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), agent_status_id: (encode-path-segment $agent_status_id)} | format pattern "/agent-status/{instance_id}/{agent_status_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # This API is in preview release for Amazon Connect and is subject to change. Updates agent status.
@@ -2826,14 +3566,25 @@ export def "agent-status update" [
   let base = ($base_url | default $BASE_URL)
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'InstanceId' must be non-empty" } }
   if ($agent_status_id | is-empty) { error make --unspanned { msg: "path parameter 'AgentStatusId' must be non-empty" } }
-  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), agent_status_id: (encode-path-segment $agent_status_id)} | format pattern "/agent-status/{instance_id}/{agent_status_id}"))
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), agent_status_id: (encode-path-segment $agent_status_id)} | format pattern "/agent-status/{instance_id}/{agent_status_id}") $auth.query)
   let req_body = {"Name": $name, "Description": $description, "State": $state, "DisplayOrder": $display_order, "ResetOrderNumber": $reset_order_number} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # This API is in preview release for Amazon Connect and is subject to change. Describes the specified contact. Contact information remains available in Amazon Connect for 24 months, and then it is deleted. Only data from November 12, 2021, and later is returned by this API.
@@ -2864,12 +3615,23 @@ export def "contacts get" [
   let base = ($base_url | default $BASE_URL)
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'InstanceId' must be non-empty" } }
   if ($contact_id | is-empty) { error make --unspanned { msg: "path parameter 'ContactId' must be non-empty" } }
-  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), contact_id: (encode-path-segment $contact_id)} | format pattern "/contacts/{instance_id}/{contact_id}"))
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), contact_id: (encode-path-segment $contact_id)} | format pattern "/contacts/{instance_id}/{contact_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # This API is in preview release for Amazon Connect and is subject to change. Adds or updates user-defined contact information associated with the specified contact. At least one field to be updated must be present in the request. You can add or update user-defined contact information for both ongoing and completed contacts.
@@ -2904,14 +3666,25 @@ export def "contacts update" [
   let base = ($base_url | default $BASE_URL)
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'InstanceId' must be non-empty" } }
   if ($contact_id | is-empty) { error make --unspanned { msg: "path parameter 'ContactId' must be non-empty" } }
-  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), contact_id: (encode-path-segment $contact_id)} | format pattern "/contacts/{instance_id}/{contact_id}"))
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), contact_id: (encode-path-segment $contact_id)} | format pattern "/contacts/{instance_id}/{contact_id}") $auth.query)
   let req_body = {"Name": $name, "Description": $description, "References": $references} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # This API is in preview release for Amazon Connect and is subject to change. Describes the specified instance attribute.
@@ -2942,12 +3715,23 @@ export def "instance-attribute get" [
   let base = ($base_url | default $BASE_URL)
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'InstanceId' must be non-empty" } }
   if ($attribute_type | is-empty) { error make --unspanned { msg: "path parameter 'AttributeType' must be non-empty" } }
-  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), attribute_type: (encode-path-segment $attribute_type)} | format pattern "/instance/{instance_id}/attribute/{attribute_type}"))
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), attribute_type: (encode-path-segment $attribute_type)} | format pattern "/instance/{instance_id}/attribute/{attribute_type}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # This API is in preview release for Amazon Connect and is subject to change. Updates the value for the specified attribute type.
@@ -2980,14 +3764,25 @@ export def "instance-attribute update" [
   let base = ($base_url | default $BASE_URL)
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'InstanceId' must be non-empty" } }
   if ($attribute_type | is-empty) { error make --unspanned { msg: "path parameter 'AttributeType' must be non-empty" } }
-  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), attribute_type: (encode-path-segment $attribute_type)} | format pattern "/instance/{instance_id}/attribute/{attribute_type}"))
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), attribute_type: (encode-path-segment $attribute_type)} | format pattern "/instance/{instance_id}/attribute/{attribute_type}") $auth.query)
   let req_body = {"Value": $value} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # This API is in preview release for Amazon Connect and is subject to change. Retrieves the current storage configurations for the specified resource type, association ID, and instance ID.
@@ -3020,12 +3815,23 @@ export def "instance-storage-config get" [
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'InstanceId' must be non-empty" } }
   if ($association_id | is-empty) { error make --unspanned { msg: "path parameter 'AssociationId' must be non-empty" } }
   let qp = [(serialize-qp "resourceType" $resource_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), association_id: (encode-path-segment $association_id)} | format pattern "/instance/{instance_id}/storage-config/{association_id}") $qp)
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), association_id: (encode-path-segment $association_id)} | format pattern "/instance/{instance_id}/storage-config/{association_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"resourceType": $resource_type} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"resourceType": $resource_type} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # This API is in preview release for Amazon Connect and is subject to change. Removes the storage type configurations for the specified resource type and association ID.
@@ -3058,12 +3864,23 @@ export def "instance-storage-config delete-disassociate" [
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'InstanceId' must be non-empty" } }
   if ($association_id | is-empty) { error make --unspanned { msg: "path parameter 'AssociationId' must be non-empty" } }
   let qp = [(serialize-qp "resourceType" $resource_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), association_id: (encode-path-segment $association_id)} | format pattern "/instance/{instance_id}/storage-config/{association_id}") $qp)
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), association_id: (encode-path-segment $association_id)} | format pattern "/instance/{instance_id}/storage-config/{association_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"resourceType": $resource_type} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"resourceType": $resource_type} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # This API is in preview release for Amazon Connect and is subject to change. Updates an existing configuration for a resource type. This API is idempotent.
@@ -3099,14 +3916,25 @@ export def "instance-storage-config update" [
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'InstanceId' must be non-empty" } }
   if ($association_id | is-empty) { error make --unspanned { msg: "path parameter 'AssociationId' must be non-empty" } }
   let qp = [(serialize-qp "resourceType" $resource_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), association_id: (encode-path-segment $association_id)} | format pattern "/instance/{instance_id}/storage-config/{association_id}") $qp)
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), association_id: (encode-path-segment $association_id)} | format pattern "/instance/{instance_id}/storage-config/{association_id}") $qp $auth.query)
   let req_body = {"StorageConfig": $storage_config} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"resourceType": $resource_type} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"resourceType": $resource_type} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Gets details and status of a phone number that’s claimed to your Amazon Connect instance or traffic distribution group. If the number is claimed to a traffic distribution group, and you are calling in the Amazon Web Services Region where the traffic distribution group was created, you can use either a phone number ARN or UUID value for the PhoneNumberId URI request parameter. However, if the number is claimed to a traffic distribution group and you are calling this API in the alternate Amazon Web Services Region associated with the traffic distribution group, you must provide a full phone number ARN. If a UUID is provided in this scenario, you will receive a ResourceNotFoundException.
@@ -3135,12 +3963,23 @@ export def "phone-number get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($phone_number_id | is-empty) { error make --unspanned { msg: "path parameter 'PhoneNumberId' must be non-empty" } }
-  let full_url = (build-url $base ({phone_number_id: (encode-path-segment $phone_number_id)} | format pattern "/phone-number/{phone_number_id}"))
+  let full_url = (build-url $base ({phone_number_id: (encode-path-segment $phone_number_id)} | format pattern "/phone-number/{phone_number_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Releases a phone number previously claimed to an Amazon Connect instance or traffic distribution group. You can call this API only in the Amazon Web Services Region where the number was claimed. To release phone numbers from a traffic distribution group, use the ReleasePhoneNumber API, not the Amazon Connect console. After releasing a phone number, the phone number enters into a cooldown period of 30 days. It cannot be searched for or claimed again until the period has ended. If you accidentally release a phone number, contact Amazon Web Services Support.
@@ -3171,12 +4010,23 @@ export def "phone-number delete-release" [
   let base = ($base_url | default $BASE_URL)
   if ($phone_number_id | is-empty) { error make --unspanned { msg: "path parameter 'PhoneNumberId' must be non-empty" } }
   let qp = [(serialize-qp "clientToken" $client_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({phone_number_id: (encode-path-segment $phone_number_id)} | format pattern "/phone-number/{phone_number_id}") $qp)
+  let full_url = (build-url $base ({phone_number_id: (encode-path-segment $phone_number_id)} | format pattern "/phone-number/{phone_number_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"clientToken": $client_token} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"clientToken": $client_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Updates your claimed phone number from its current Amazon Connect instance or traffic distribution group to another Amazon Connect instance or traffic distribution group in the same Amazon Web Services Region. You can call DescribePhoneNumber (https://docs.aws.amazon.com/connect/latest/APIReference/API_DescribePhoneNumber.html) API to verify the status of a previous UpdatePhoneNumber (https://docs.aws.amazon.com/connect/latest/APIReference/API_UpdatePhoneNumber.html) operation.
@@ -3208,14 +4058,25 @@ export def "phone-number update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($phone_number_id | is-empty) { error make --unspanned { msg: "path parameter 'PhoneNumberId' must be non-empty" } }
-  let full_url = (build-url $base ({phone_number_id: (encode-path-segment $phone_number_id)} | format pattern "/phone-number/{phone_number_id}"))
+  let full_url = (build-url $base ({phone_number_id: (encode-path-segment $phone_number_id)} | format pattern "/phone-number/{phone_number_id}") $auth.query)
   let req_body = {"TargetArn": $target_arn, "ClientToken": $client_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # This API is in preview release for Amazon Connect and is subject to change. Describes the specified queue.
@@ -3246,12 +4107,23 @@ export def "queues get" [
   let base = ($base_url | default $BASE_URL)
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'InstanceId' must be non-empty" } }
   if ($queue_id | is-empty) { error make --unspanned { msg: "path parameter 'QueueId' must be non-empty" } }
-  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), queue_id: (encode-path-segment $queue_id)} | format pattern "/queues/{instance_id}/{queue_id}"))
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), queue_id: (encode-path-segment $queue_id)} | format pattern "/queues/{instance_id}/{queue_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Describes the specified routing profile.
@@ -3282,12 +4154,23 @@ export def "routing-profiles get" [
   let base = ($base_url | default $BASE_URL)
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'InstanceId' must be non-empty" } }
   if ($routing_profile_id | is-empty) { error make --unspanned { msg: "path parameter 'RoutingProfileId' must be non-empty" } }
-  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), routing_profile_id: (encode-path-segment $routing_profile_id)} | format pattern "/routing-profiles/{instance_id}/{routing_profile_id}"))
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), routing_profile_id: (encode-path-segment $routing_profile_id)} | format pattern "/routing-profiles/{instance_id}/{routing_profile_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Describes the hierarchy structure of the specified Amazon Connect instance.
@@ -3316,12 +4199,23 @@ export def "user-hierarchy-structure get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'InstanceId' must be non-empty" } }
-  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/user-hierarchy-structure/{instance_id}"))
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/user-hierarchy-structure/{instance_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates the user hierarchy structure: add, remove, and rename user hierarchy levels.
@@ -3353,14 +4247,25 @@ export def "user-hierarchy-structure update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'InstanceId' must be non-empty" } }
-  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/user-hierarchy-structure/{instance_id}"))
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/user-hierarchy-structure/{instance_id}") $auth.query)
   let req_body = {"HierarchyStructure": $hierarchy_structure} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Describes the specified vocabulary.
@@ -3391,12 +4296,23 @@ export def "vocabulary get" [
   let base = ($base_url | default $BASE_URL)
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'InstanceId' must be non-empty" } }
   if ($vocabulary_id | is-empty) { error make --unspanned { msg: "path parameter 'VocabularyId' must be non-empty" } }
-  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), vocabulary_id: (encode-path-segment $vocabulary_id)} | format pattern "/vocabulary/{instance_id}/{vocabulary_id}"))
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), vocabulary_id: (encode-path-segment $vocabulary_id)} | format pattern "/vocabulary/{instance_id}/{vocabulary_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # This API is in preview release for Amazon Connect and is subject to change. Revokes access to integrated applications from Amazon Connect.
@@ -3427,12 +4343,23 @@ export def "instance-approved-origin delete-disassociate" [
   let base = ($base_url | default $BASE_URL)
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'InstanceId' must be non-empty" } }
   let qp = [(serialize-qp "origin" $origin "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/instance/{instance_id}/approved-origin") $qp)
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/instance/{instance_id}/approved-origin") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"origin": $origin} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"origin": $origin} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # This API is in preview release for Amazon Connect and is subject to change. Remove the Lambda function from the dropdown options available in the relevant flow blocks.
@@ -3463,12 +4390,23 @@ export def "instance-lambda-function delete-disassociate" [
   let base = ($base_url | default $BASE_URL)
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'InstanceId' must be non-empty" } }
   let qp = [(serialize-qp "functionArn" $function_arn "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/instance/{instance_id}/lambda-function") $qp)
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/instance/{instance_id}/lambda-function") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"functionArn": $function_arn} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"functionArn": $function_arn} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # This API is in preview release for Amazon Connect and is subject to change. Revokes authorization from the specified instance to access the specified Amazon Lex bot.
@@ -3500,12 +4438,23 @@ export def "instance-lex-bot delete-disassociate" [
   let base = ($base_url | default $BASE_URL)
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'InstanceId' must be non-empty" } }
   let qp = [(serialize-qp "botName" $bot_name "scalar") (serialize-qp "lexRegion" $lex_region "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/instance/{instance_id}/lex-bot") $qp)
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/instance/{instance_id}/lex-bot") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"botName": $bot_name, "lexRegion": $lex_region} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"botName": $bot_name, "lexRegion": $lex_region} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Removes the flow association from a phone number claimed to your Amazon Connect instance. If the number is claimed to a traffic distribution group, and you are calling this API using an instance in the Amazon Web Services Region where the traffic distribution group was created, you can use either a full phone number ARN or UUID value for the PhoneNumberId URI request parameter. However, if the number is claimed to a traffic distribution group and you are calling this API using an instance in the alternate Amazon Web Services Region associated with the traffic distribution group, you must provide a full phone number ARN. If a UUID is provided in this scenario, you will receive a ResourceNotFoundException.
@@ -3536,12 +4485,23 @@ export def "phone-number-contact-flow delete-disassociate" [
   let base = ($base_url | default $BASE_URL)
   if ($phone_number_id | is-empty) { error make --unspanned { msg: "path parameter 'PhoneNumberId' must be non-empty" } }
   let qp = [(serialize-qp "instanceId" $instance_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({phone_number_id: (encode-path-segment $phone_number_id)} | format pattern "/phone-number/{phone_number_id}/contact-flow") $qp)
+  let full_url = (build-url $base ({phone_number_id: (encode-path-segment $phone_number_id)} | format pattern "/phone-number/{phone_number_id}/contact-flow") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"instanceId": $instance_id} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"instanceId": $instance_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # This API is in preview release for Amazon Connect and is subject to change. Disassociates a set of quick connects from a queue.
@@ -3574,14 +4534,25 @@ export def "queues-disassociate-quick-connects create" [
   let base = ($base_url | default $BASE_URL)
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'InstanceId' must be non-empty" } }
   if ($queue_id | is-empty) { error make --unspanned { msg: "path parameter 'QueueId' must be non-empty" } }
-  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), queue_id: (encode-path-segment $queue_id)} | format pattern "/queues/{instance_id}/{queue_id}/disassociate-quick-connects"))
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), queue_id: (encode-path-segment $queue_id)} | format pattern "/queues/{instance_id}/{queue_id}/disassociate-quick-connects") $auth.query)
   let req_body = {"QuickConnectIds": $quick_connect_ids} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Disassociates a set of queues from a routing profile.
@@ -3615,14 +4586,25 @@ export def "routing-profiles-disassociate-queues create" [
   let base = ($base_url | default $BASE_URL)
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'InstanceId' must be non-empty" } }
   if ($routing_profile_id | is-empty) { error make --unspanned { msg: "path parameter 'RoutingProfileId' must be non-empty" } }
-  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), routing_profile_id: (encode-path-segment $routing_profile_id)} | format pattern "/routing-profiles/{instance_id}/{routing_profile_id}/disassociate-queues"))
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), routing_profile_id: (encode-path-segment $routing_profile_id)} | format pattern "/routing-profiles/{instance_id}/{routing_profile_id}/disassociate-queues") $auth.query)
   let req_body = {"QueueReferences": $queue_references} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # This API is in preview release for Amazon Connect and is subject to change. Deletes the specified security key.
@@ -3653,12 +4635,23 @@ export def "instance-security-key delete-disassociate" [
   let base = ($base_url | default $BASE_URL)
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'InstanceId' must be non-empty" } }
   if ($association_id | is-empty) { error make --unspanned { msg: "path parameter 'AssociationId' must be non-empty" } }
-  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), association_id: (encode-path-segment $association_id)} | format pattern "/instance/{instance_id}/security-key/{association_id}"))
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), association_id: (encode-path-segment $association_id)} | format pattern "/instance/{instance_id}/security-key/{association_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Dismisses contacts from an agent’s CCP and returns the agent to an available state, which allows the agent to receive a new routed contact. Contacts can only be dismissed if they are in a MISSED, ERROR, ENDED, or REJECTED state in the Agent Event Stream (https://docs.aws.amazon.com/connect/latest/adminguide/about-contact-states.html).
@@ -3691,14 +4684,25 @@ export def "users-contact create-dismiss" [
   let base = ($base_url | default $BASE_URL)
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'InstanceId' must be non-empty" } }
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'UserId' must be non-empty" } }
-  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), user_id: (encode-path-segment $user_id)} | format pattern "/users/{instance_id}/{user_id}/contact"))
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), user_id: (encode-path-segment $user_id)} | format pattern "/users/{instance_id}/{user_id}/contact") $auth.query)
   let req_body = {"ContactId": $contact_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieves the contact attributes for the specified contact.
@@ -3729,12 +4733,23 @@ export def "contact-attributes get" [
   let base = ($base_url | default $BASE_URL)
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'InstanceId' must be non-empty" } }
   if ($initial_contact_id | is-empty) { error make --unspanned { msg: "path parameter 'InitialContactId' must be non-empty" } }
-  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), initial_contact_id: (encode-path-segment $initial_contact_id)} | format pattern "/contact/attributes/{instance_id}/{initial_contact_id}"))
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), initial_contact_id: (encode-path-segment $initial_contact_id)} | format pattern "/contact/attributes/{instance_id}/{initial_contact_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the real-time metric data from the specified Amazon Connect instance. For a description of each metric, see Real-time Metrics Definitions (https://docs.aws.amazon.com/connect/latest/adminguide/real-time-metrics-definitions.html) in the Amazon Connect Administrator Guide.
@@ -3776,14 +4791,25 @@ export def "metrics-current get-data" [
   let base = ($base_url | default $BASE_URL)
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'InstanceId' must be non-empty" } }
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/metrics/current/{instance_id}") $qp)
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/metrics/current/{instance_id}") $qp $auth.query)
   let req_body = {"Filters": $filters, "Groupings": $groupings, "CurrentMetrics": $current_metrics, "NextToken": $next_token_body, "MaxResults": $max_results_body, "SortCriteria": $sort_criteria} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"MaxResults": $max_results, "NextToken": $next_token} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"MaxResults": $max_results, "NextToken": $next_token} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the real-time active user data from the specified Amazon Connect instance.
@@ -3820,14 +4846,25 @@ export def "metrics-userdata get-user-data" [
   let base = ($base_url | default $BASE_URL)
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'InstanceId' must be non-empty" } }
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/metrics/userdata/{instance_id}") $qp)
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/metrics/userdata/{instance_id}") $qp $auth.query)
   let req_body = {"Filters": $filters, "NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"MaxResults": $max_results, "NextToken": $next_token} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"MaxResults": $max_results, "NextToken": $next_token} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieves a token for federation. This API doesn't support root users. If you try to invoke GetFederationToken with root credentials, an error message similar to the following one appears: Provided identity: Principal: .... User: .... cannot be used for federation with Amazon Connect
@@ -3856,12 +4893,23 @@ export def "user-federate get-federation-token" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'InstanceId' must be non-empty" } }
-  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/user/federate/{instance_id}"))
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/user/federate/{instance_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets historical metric data from the specified Amazon Connect instance. For a description of each historical metric, see Historical Metrics Definitions (https://docs.aws.amazon.com/connect/latest/adminguide/historical-metrics-definitions.html) in the Amazon Connect Administrator Guide.
@@ -3903,14 +4951,25 @@ export def "metrics-historical get-data" [
   let base = ($base_url | default $BASE_URL)
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'InstanceId' must be non-empty" } }
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/metrics/historical/{instance_id}") $qp)
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/metrics/historical/{instance_id}") $qp $auth.query)
   let req_body = {"StartTime": $start_time, "EndTime": $end_time, "Filters": $filters, "Groupings": $groupings, "HistoricalMetrics": $historical_metrics, "NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"MaxResults": $max_results, "NextToken": $next_token} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"MaxResults": $max_results, "NextToken": $next_token} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Gets metric data from the specified Amazon Connect instance. GetMetricDataV2 offers more features than GetMetricData (https://docs.aws.amazon.com/connect/latest/APIReference/API_GetMetricData.html), the previous version of this API. It has new metrics, offers filtering at a metric level, and offers the ability to filter and group data by channels, queues, routing profiles, agents, and agent hierarchy levels. It can retrieve historical data for the last 14 days, in 24-hour intervals. For a description of the historical metrics that are supported by GetMetricDataV2 and GetMetricData, see Historical metrics definitions (https://docs.aws.amazon.com/connect/latest/adminguide/historical-metrics-definitions.html) in the Amazon Connect Administrator's Guide. This API is not available in the Amazon Web Services GovCloud (US) Regions.
@@ -3951,14 +5010,25 @@ export def "metrics-data get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/metrics/data" $qp)
+  let full_url = (build-url $base "/metrics/data" $qp $auth.query)
   let req_body = {"ResourceArn": $resource_arn, "StartTime": $start_time, "EndTime": $end_time, "Filters": $filters, "Groupings": $groupings, "Metrics": $metrics, "NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"MaxResults": $max_results, "NextToken": $next_token} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"MaxResults": $max_results, "NextToken": $next_token} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieves the current traffic distribution for a given traffic distribution group.
@@ -3987,12 +5057,23 @@ export def "traffic-distribution get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'Id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/traffic-distribution/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/traffic-distribution/{id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates the traffic distribution for a given traffic distribution group. For more information about updating a traffic distribution group, see Update telephony traffic distribution across Amazon Web Services Regions (https://docs.aws.amazon.com/connect/latest/adminguide/update-telephony-traffic-distribution.html) in the Amazon Connect Administrator Guide.
@@ -4024,14 +5105,25 @@ export def "traffic-distribution update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'Id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/traffic-distribution/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/traffic-distribution/{id}") $auth.query)
   let req_body = {"TelephonyConfig": $telephony_config} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # This API is in preview release for Amazon Connect and is subject to change. Returns a paginated list of all approved origins associated with the instance.
@@ -4065,12 +5157,23 @@ export def "instance-approved-origins list" [
   let base = ($base_url | default $BASE_URL)
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'InstanceId' must be non-empty" } }
   let qp = [(serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/instance/{instance_id}/approved-origins") $qp)
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/instance/{instance_id}/approved-origins") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"nextToken": $next_token, "maxResults": $max_results, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"nextToken": $next_token, "maxResults": $max_results, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # This API is in preview release for Amazon Connect and is subject to change. For the specified version of Amazon Lex, returns a paginated list of all the Amazon Lex bots currently associated with the instance. Use this API to returns both Amazon Lex V1 and V2 bots.
@@ -4105,12 +5208,23 @@ export def "instance-bots list" [
   let base = ($base_url | default $BASE_URL)
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'InstanceId' must be non-empty" } }
   let qp = [(serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "lexVersion" $lex_version "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/instance/{instance_id}/bots") $qp)
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/instance/{instance_id}/bots") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"nextToken": $next_token, "maxResults": $max_results, "lexVersion": $lex_version, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"nextToken": $next_token, "maxResults": $max_results, "lexVersion": $lex_version, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Provides information about the flow modules for the specified Amazon Connect instance.
@@ -4145,12 +5259,23 @@ export def "contact-flow-modules-summary list" [
   let base = ($base_url | default $BASE_URL)
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'InstanceId' must be non-empty" } }
   let qp = [(serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/contact-flow-modules-summary/{instance_id}") $qp)
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/contact-flow-modules-summary/{instance_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"nextToken": $next_token, "maxResults": $max_results, "state": $state, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"nextToken": $next_token, "maxResults": $max_results, "state": $state, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Provides information about the flows for the specified Amazon Connect instance. You can also create and update flows using the Amazon Connect Flow language (https://docs.aws.amazon.com/connect/latest/APIReference/flow-language.html). For more information about flows, see Flows (https://docs.aws.amazon.com/connect/latest/adminguide/concepts-contact-flows.html) in the Amazon Connect Administrator Guide.
@@ -4185,12 +5310,23 @@ export def "contact-flows-summary list" [
   let base = ($base_url | default $BASE_URL)
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'InstanceId' must be non-empty" } }
   let qp = [(serialize-qp "contactFlowTypes" $contact_flow_types "multi") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/contact-flows-summary/{instance_id}") $qp)
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/contact-flows-summary/{instance_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"contactFlowTypes": $contact_flow_types, "nextToken": $next_token, "maxResults": $max_results, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"contactFlowTypes": $contact_flow_types, "nextToken": $next_token, "maxResults": $max_results, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # This API is in preview release for Amazon Connect and is subject to change. For the specified referenceTypes, returns a list of references associated with the contact.
@@ -4225,12 +5361,23 @@ export def "contact-references list" [
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'InstanceId' must be non-empty" } }
   if ($contact_id | is-empty) { error make --unspanned { msg: "path parameter 'ContactId' must be non-empty" } }
   let qp = [(serialize-qp "referenceTypes" $reference_types "multi") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), contact_id: (encode-path-segment $contact_id)} | format pattern "/contact/references/{instance_id}/{contact_id}") $qp)
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), contact_id: (encode-path-segment $contact_id)} | format pattern "/contact/references/{instance_id}/{contact_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"referenceTypes": $reference_types, "nextToken": $next_token, "NextToken": $next_token_2} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"referenceTypes": $reference_types, "nextToken": $next_token, "NextToken": $next_token_2} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Lists the default vocabularies for the specified Amazon Connect instance.
@@ -4266,14 +5413,25 @@ export def "default-vocabulary-summary list-vocabularies" [
   let base = ($base_url | default $BASE_URL)
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'InstanceId' must be non-empty" } }
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/default-vocabulary-summary/{instance_id}") $qp)
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/default-vocabulary-summary/{instance_id}") $qp $auth.query)
   let req_body = {"LanguageCode": $language_code, "MaxResults": $max_results_body, "NextToken": $next_token_body} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"MaxResults": $max_results, "NextToken": $next_token} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"MaxResults": $max_results, "NextToken": $next_token} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Provides information about the hours of operation for the specified Amazon Connect instance. For more information about hours of operation, see Set the Hours of Operation for a Queue (https://docs.aws.amazon.com/connect/latest/adminguide/set-hours-operation.html) in the Amazon Connect Administrator Guide.
@@ -4307,12 +5465,23 @@ export def "hours-of-operations-summary list" [
   let base = ($base_url | default $BASE_URL)
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'InstanceId' must be non-empty" } }
   let qp = [(serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/hours-of-operations-summary/{instance_id}") $qp)
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/hours-of-operations-summary/{instance_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"nextToken": $next_token, "maxResults": $max_results, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"nextToken": $next_token, "maxResults": $max_results, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # This API is in preview release for Amazon Connect and is subject to change. Returns a paginated list of all attribute types for the given instance.
@@ -4346,12 +5515,23 @@ export def "instance-attributes list" [
   let base = ($base_url | default $BASE_URL)
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'InstanceId' must be non-empty" } }
   let qp = [(serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/instance/{instance_id}/attributes") $qp)
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/instance/{instance_id}/attributes") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"nextToken": $next_token, "maxResults": $max_results, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"nextToken": $next_token, "maxResults": $max_results, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # This API is in preview release for Amazon Connect and is subject to change. Returns a paginated list of storage configs for the identified instance and resource type.
@@ -4386,12 +5566,23 @@ export def "instance-storage-configs list" [
   let base = ($base_url | default $BASE_URL)
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'InstanceId' must be non-empty" } }
   let qp = [(serialize-qp "resourceType" $resource_type "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/instance/{instance_id}/storage-configs") $qp)
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/instance/{instance_id}/storage-configs") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"resourceType": $resource_type, "nextToken": $next_token, "maxResults": $max_results, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"resourceType": $resource_type, "nextToken": $next_token, "maxResults": $max_results, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # This API is in preview release for Amazon Connect and is subject to change. Returns a paginated list of all Lambda functions that display in the dropdown options in the relevant flow blocks.
@@ -4425,12 +5616,23 @@ export def "instance-lambda-functions list" [
   let base = ($base_url | default $BASE_URL)
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'InstanceId' must be non-empty" } }
   let qp = [(serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/instance/{instance_id}/lambda-functions") $qp)
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/instance/{instance_id}/lambda-functions") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"nextToken": $next_token, "maxResults": $max_results, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"nextToken": $next_token, "maxResults": $max_results, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # This API is in preview release for Amazon Connect and is subject to change. Returns a paginated list of all the Amazon Lex V1 bots currently associated with the instance. To return both Amazon Lex V1 and V2 bots, use the ListBots (https://docs.aws.amazon.com/connect/latest/APIReference/API_ListBots.html) API.
@@ -4464,12 +5666,23 @@ export def "instance-lex-bots list" [
   let base = ($base_url | default $BASE_URL)
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'InstanceId' must be non-empty" } }
   let qp = [(serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/instance/{instance_id}/lex-bots") $qp)
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/instance/{instance_id}/lex-bots") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"nextToken": $next_token, "maxResults": $max_results, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"nextToken": $next_token, "maxResults": $max_results, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Provides information about the phone numbers for the specified Amazon Connect instance. For more information about phone numbers, see Set Up Phone Numbers for Your Contact Center (https://docs.aws.amazon.com/connect/latest/adminguide/contact-center-phone-number.html) in the Amazon Connect Administrator Guide. The phone number Arn value that is returned from each of the items in the PhoneNumberSummaryList (https://docs.aws.amazon.com/connect/latest/APIReference/API_ListPhoneNumbers.html#connect-ListPhoneNumbers-response-PhoneNumberSummaryList) cannot be used to tag phone number resources. It will fail with a ResourceNotFoundException. Instead, use the ListPhoneNumbersV2 (https://docs.aws.amazon.com/connect/latest/APIReference/API_ListPhoneNumbersV2.html) API. It returns the new phone number ARN that can be used to tag phone number resources.
@@ -4505,12 +5718,23 @@ export def "phone-numbers-summary list" [
   let base = ($base_url | default $BASE_URL)
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'InstanceId' must be non-empty" } }
   let qp = [(serialize-qp "phoneNumberTypes" $phone_number_types "multi") (serialize-qp "phoneNumberCountryCodes" $phone_number_country_codes "multi") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/phone-numbers-summary/{instance_id}") $qp)
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/phone-numbers-summary/{instance_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"phoneNumberTypes": $phone_number_types, "phoneNumberCountryCodes": $phone_number_country_codes, "nextToken": $next_token, "maxResults": $max_results, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"phoneNumberTypes": $phone_number_types, "phoneNumberCountryCodes": $phone_number_country_codes, "nextToken": $next_token, "maxResults": $max_results, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Lists phone numbers claimed to your Amazon Connect instance or traffic distribution group. If the provided TargetArn is a traffic distribution group, you can call this API in both Amazon Web Services Regions associated with traffic distribution group. For more information about phone numbers, see Set Up Phone Numbers for Your Contact Center (https://docs.aws.amazon.com/connect/latest/adminguide/contact-center-phone-number.html) in the Amazon Connect Administrator Guide.
@@ -4547,14 +5771,25 @@ export def "phone-number-list list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/phone-number/list" $qp)
+  let full_url = (build-url $base "/phone-number/list" $qp $auth.query)
   let req_body = {"TargetArn": $target_arn, "MaxResults": $max_results_body, "NextToken": $next_token_body, "PhoneNumberCountryCodes": $phone_number_country_codes, "PhoneNumberTypes": $phone_number_types, "PhoneNumberPrefix": $phone_number_prefix} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"MaxResults": $max_results, "NextToken": $next_token} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"MaxResults": $max_results, "NextToken": $next_token} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Provides information about the prompts for the specified Amazon Connect instance.
@@ -4588,12 +5823,23 @@ export def "prompts-summary list" [
   let base = ($base_url | default $BASE_URL)
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'InstanceId' must be non-empty" } }
   let qp = [(serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/prompts-summary/{instance_id}") $qp)
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/prompts-summary/{instance_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"nextToken": $next_token, "maxResults": $max_results, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"nextToken": $next_token, "maxResults": $max_results, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # This API is in preview release for Amazon Connect and is subject to change. Lists the quick connects associated with a queue.
@@ -4629,12 +5875,23 @@ export def "queues-quick-connects list" [
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'InstanceId' must be non-empty" } }
   if ($queue_id | is-empty) { error make --unspanned { msg: "path parameter 'QueueId' must be non-empty" } }
   let qp = [(serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), queue_id: (encode-path-segment $queue_id)} | format pattern "/queues/{instance_id}/{queue_id}/quick-connects") $qp)
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), queue_id: (encode-path-segment $queue_id)} | format pattern "/queues/{instance_id}/{queue_id}/quick-connects") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"nextToken": $next_token, "maxResults": $max_results, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"nextToken": $next_token, "maxResults": $max_results, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Provides information about the queues for the specified Amazon Connect instance. If you do not specify a QueueTypes parameter, both standard and agent queues are returned. This might cause an unexpected truncation of results if you have more than 1000 agents and you limit the number of results of the API call in code. For more information about queues, see Queues: Standard and Agent (https://docs.aws.amazon.com/connect/latest/adminguide/concepts-queues-standard-and-agent.html) in the Amazon Connect Administrator Guide.
@@ -4669,12 +5926,23 @@ export def "queues-summary list" [
   let base = ($base_url | default $BASE_URL)
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'InstanceId' must be non-empty" } }
   let qp = [(serialize-qp "queueTypes" $queue_types "multi") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/queues-summary/{instance_id}") $qp)
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/queues-summary/{instance_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"queueTypes": $queue_types, "nextToken": $next_token, "maxResults": $max_results, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"queueTypes": $queue_types, "nextToken": $next_token, "maxResults": $max_results, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Lists the queues associated with a routing profile.
@@ -4710,12 +5978,23 @@ export def "routing-profiles-queues list" [
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'InstanceId' must be non-empty" } }
   if ($routing_profile_id | is-empty) { error make --unspanned { msg: "path parameter 'RoutingProfileId' must be non-empty" } }
   let qp = [(serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), routing_profile_id: (encode-path-segment $routing_profile_id)} | format pattern "/routing-profiles/{instance_id}/{routing_profile_id}/queues") $qp)
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), routing_profile_id: (encode-path-segment $routing_profile_id)} | format pattern "/routing-profiles/{instance_id}/{routing_profile_id}/queues") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"nextToken": $next_token, "maxResults": $max_results, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"nextToken": $next_token, "maxResults": $max_results, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates the properties associated with a set of queues for a routing profile.
@@ -4749,14 +6028,25 @@ export def "routing-profiles-queues update" [
   let base = ($base_url | default $BASE_URL)
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'InstanceId' must be non-empty" } }
   if ($routing_profile_id | is-empty) { error make --unspanned { msg: "path parameter 'RoutingProfileId' must be non-empty" } }
-  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), routing_profile_id: (encode-path-segment $routing_profile_id)} | format pattern "/routing-profiles/{instance_id}/{routing_profile_id}/queues"))
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), routing_profile_id: (encode-path-segment $routing_profile_id)} | format pattern "/routing-profiles/{instance_id}/{routing_profile_id}/queues") $auth.query)
   let req_body = {"QueueConfigs": $queue_configs} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Provides summary information about the routing profiles for the specified Amazon Connect instance. For more information about routing profiles, see Routing Profiles (https://docs.aws.amazon.com/connect/latest/adminguide/concepts-routing.html) and Create a Routing Profile (https://docs.aws.amazon.com/connect/latest/adminguide/routing-profiles.html) in the Amazon Connect Administrator Guide.
@@ -4790,12 +6080,23 @@ export def "routing-profiles-summary list" [
   let base = ($base_url | default $BASE_URL)
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'InstanceId' must be non-empty" } }
   let qp = [(serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/routing-profiles-summary/{instance_id}") $qp)
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/routing-profiles-summary/{instance_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"nextToken": $next_token, "maxResults": $max_results, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"nextToken": $next_token, "maxResults": $max_results, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # This API is in preview release for Amazon Connect and is subject to change. Returns a paginated list of all security keys associated with the instance.
@@ -4829,12 +6130,23 @@ export def "instance-security-keys list" [
   let base = ($base_url | default $BASE_URL)
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'InstanceId' must be non-empty" } }
   let qp = [(serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/instance/{instance_id}/security-keys") $qp)
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/instance/{instance_id}/security-keys") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"nextToken": $next_token, "maxResults": $max_results, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"nextToken": $next_token, "maxResults": $max_results, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # This API is in preview release for Amazon Connect and is subject to change. Lists the permissions granted to a security profile.
@@ -4870,12 +6182,23 @@ export def "security-profiles-permissions list" [
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'InstanceId' must be non-empty" } }
   if ($security_profile_id | is-empty) { error make --unspanned { msg: "path parameter 'SecurityProfileId' must be non-empty" } }
   let qp = [(serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), security_profile_id: (encode-path-segment $security_profile_id)} | format pattern "/security-profiles-permissions/{instance_id}/{security_profile_id}") $qp)
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), security_profile_id: (encode-path-segment $security_profile_id)} | format pattern "/security-profiles-permissions/{instance_id}/{security_profile_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"nextToken": $next_token, "maxResults": $max_results, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"nextToken": $next_token, "maxResults": $max_results, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Provides summary information about the security profiles for the specified Amazon Connect instance. For more information about security profiles, see Security Profiles (https://docs.aws.amazon.com/connect/latest/adminguide/connect-security-profiles.html) in the Amazon Connect Administrator Guide.
@@ -4909,12 +6232,23 @@ export def "security-profiles-summary list" [
   let base = ($base_url | default $BASE_URL)
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'InstanceId' must be non-empty" } }
   let qp = [(serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/security-profiles-summary/{instance_id}") $qp)
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/security-profiles-summary/{instance_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"nextToken": $next_token, "maxResults": $max_results, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"nextToken": $next_token, "maxResults": $max_results, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Lists the tags for the specified resource. For sample policies that use tags, see Amazon Connect Identity-Based Policy Examples (https://docs.aws.amazon.com/connect/latest/adminguide/security_iam_id-based-policy-examples.html) in the Amazon Connect Administrator Guide.
@@ -4943,12 +6277,23 @@ export def "tags list-for-resource" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn | is-empty) { error make --unspanned { msg: "path parameter 'resourceArn' must be non-empty" } }
-  let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn)} | format pattern "/tags/{resource_arn}"))
+  let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn)} | format pattern "/tags/{resource_arn}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Adds the specified tags to the specified resource. Some of the supported resource types are agents, routing profiles, queues, quick connects, contact flows, agent statuses, hours of operation, phone numbers, security profiles, and task templates. For a complete list, see Tagging resources in Amazon Connect (https://docs.aws.amazon.com/connect/latest/adminguide/tagging.html). For sample policies that use tags, see Amazon Connect Identity-Based Policy Examples (https://docs.aws.amazon.com/connect/latest/adminguide/security_iam_id-based-policy-examples.html) in the Amazon Connect Administrator Guide.
@@ -4979,14 +6324,25 @@ export def "tags tag-resource" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn | is-empty) { error make --unspanned { msg: "path parameter 'resourceArn' must be non-empty" } }
-  let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn)} | format pattern "/tags/{resource_arn}"))
+  let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn)} | format pattern "/tags/{resource_arn}") $auth.query)
   let req_body = {"tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Lists traffic distribution groups.
@@ -5019,12 +6375,23 @@ export def "traffic-distribution-groups list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "instanceId" $instance_id "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/traffic-distribution-groups" $qp)
+  let full_url = (build-url $base "/traffic-distribution-groups" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"maxResults": $max_results, "nextToken": $next_token, "instanceId": $instance_id, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"maxResults": $max_results, "nextToken": $next_token, "instanceId": $instance_id, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Provides summary information about the hierarchy groups for the specified Amazon Connect instance. For more information about agent hierarchies, see Set Up Agent Hierarchies (https://docs.aws.amazon.com/connect/latest/adminguide/agent-hierarchy.html) in the Amazon Connect Administrator Guide.
@@ -5058,12 +6425,23 @@ export def "user-hierarchy-groups-summary list" [
   let base = ($base_url | default $BASE_URL)
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'InstanceId' must be non-empty" } }
   let qp = [(serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/user-hierarchy-groups-summary/{instance_id}") $qp)
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/user-hierarchy-groups-summary/{instance_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"nextToken": $next_token, "maxResults": $max_results, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"nextToken": $next_token, "maxResults": $max_results, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Provides summary information about the users for the specified Amazon Connect instance.
@@ -5097,12 +6475,23 @@ export def "users-summary list" [
   let base = ($base_url | default $BASE_URL)
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'InstanceId' must be non-empty" } }
   let qp = [(serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/users-summary/{instance_id}") $qp)
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/users-summary/{instance_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"nextToken": $next_token, "maxResults": $max_results, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"nextToken": $next_token, "maxResults": $max_results, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Initiates silent monitoring of a contact. The Contact Control Panel (CCP) of the user specified by userId will be set to silent monitoring mode on the contact.
@@ -5135,14 +6524,25 @@ export def "contact-monitor create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/contact/monitor")
+  let full_url = (build-url $base "/contact/monitor" $auth.query)
   let req_body = {"InstanceId": $instance_id, "ContactId": $contact_id, "UserId": $user_id, "AllowedMonitorCapabilities": $allowed_monitor_capabilities, "ClientToken": $client_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Changes the current status of a user or agent in Amazon Connect. If the agent is currently handling a contact, this sets the agent's next status. For more information, see Agent status (https://docs.aws.amazon.com/connect/latest/adminguide/metrics-agent-status.html) and Set your next status (https://docs.aws.amazon.com/connect/latest/adminguide/set-next-status.html) in the Amazon Connect Administrator Guide.
@@ -5175,14 +6575,25 @@ export def "users-status update" [
   let base = ($base_url | default $BASE_URL)
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'InstanceId' must be non-empty" } }
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'UserId' must be non-empty" } }
-  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), user_id: (encode-path-segment $user_id)} | format pattern "/users/{instance_id}/{user_id}/status"))
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), user_id: (encode-path-segment $user_id)} | format pattern "/users/{instance_id}/{user_id}/status") $auth.query)
   let req_body = {"AgentStatusId": $agent_status_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Replicates an Amazon Connect instance in the specified Amazon Web Services Region. For more information about replicating an Amazon Connect instance, see Create a replica of your existing Amazon Connect instance (https://docs.aws.amazon.com/connect/latest/adminguide/create-replica-connect-instance.html) in the Amazon Connect Administrator Guide.
@@ -5215,14 +6626,25 @@ export def "instance-replicate create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'InstanceId' must be non-empty" } }
-  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/instance/{instance_id}/replicate"))
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/instance/{instance_id}/replicate") $auth.query)
   let req_body = {"ReplicaRegion": $replica_region, "ClientToken": $client_token, "ReplicaAlias": $replica_alias} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # When a contact is being recorded, and the recording has been suspended using SuspendContactRecording, this API resumes recording the call. Only voice recordings are supported at this time.
@@ -5253,14 +6675,25 @@ export def "contact-resume-recording create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/contact/resume-recording")
+  let full_url = (build-url $base "/contact/resume-recording" $auth.query)
   let req_body = {"InstanceId": $instance_id, "ContactId": $contact_id, "InitialContactId": $initial_contact_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Searches for available phone numbers that you can claim to your Amazon Connect instance or traffic distribution group. If the provided TargetArn is a traffic distribution group, you can call this API in both Amazon Web Services Regions associated with the traffic distribution group.
@@ -5297,14 +6730,25 @@ export def "phone-number-search-available list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/phone-number/search-available" $qp)
+  let full_url = (build-url $base "/phone-number/search-available" $qp $auth.query)
   let req_body = {"TargetArn": $target_arn, "PhoneNumberCountryCode": $phone_number_country_code, "PhoneNumberType": $phone_number_type, "PhoneNumberPrefix": $phone_number_prefix, "MaxResults": $max_results_body, "NextToken": $next_token_body} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"MaxResults": $max_results, "NextToken": $next_token} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"MaxResults": $max_results, "NextToken": $next_token} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # This API is in preview release for Amazon Connect and is subject to change. Searches queues in an Amazon Connect instance, with optional filtering.
@@ -5342,14 +6786,25 @@ export def "search-queues list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/search-queues" $qp)
+  let full_url = (build-url $base "/search-queues" $qp $auth.query)
   let req_body = {"InstanceId": $instance_id, "NextToken": $next_token_body, "MaxResults": $max_results_body, "SearchFilter": $search_filter, "SearchCriteria": $search_criteria} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"MaxResults": $max_results, "NextToken": $next_token} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"MaxResults": $max_results, "NextToken": $next_token} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # This API is in preview release for Amazon Connect and is subject to change. Searches routing profiles in an Amazon Connect instance, with optional filtering.
@@ -5387,14 +6842,25 @@ export def "search-routing-profiles list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/search-routing-profiles" $qp)
+  let full_url = (build-url $base "/search-routing-profiles" $qp $auth.query)
   let req_body = {"InstanceId": $instance_id, "NextToken": $next_token_body, "MaxResults": $max_results_body, "SearchFilter": $search_filter, "SearchCriteria": $search_criteria} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"MaxResults": $max_results, "NextToken": $next_token} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"MaxResults": $max_results, "NextToken": $next_token} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # This API is in preview release for Amazon Connect and is subject to change. Searches security profiles in an Amazon Connect instance, with optional filtering.
@@ -5432,14 +6898,25 @@ export def "search-security-profiles list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/search-security-profiles" $qp)
+  let full_url = (build-url $base "/search-security-profiles" $qp $auth.query)
   let req_body = {"InstanceId": $instance_id, "NextToken": $next_token_body, "MaxResults": $max_results_body, "SearchCriteria": $search_criteria, "SearchFilter": $search_filter} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"MaxResults": $max_results, "NextToken": $next_token} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"MaxResults": $max_results, "NextToken": $next_token} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Searches users in an Amazon Connect instance, with optional filtering. AfterContactWorkTimeLimit is returned in milliseconds.
@@ -5477,14 +6954,25 @@ export def "search-users list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/search-users" $qp)
+  let full_url = (build-url $base "/search-users" $qp $auth.query)
   let req_body = {"InstanceId": $instance_id, "NextToken": $next_token_body, "MaxResults": $max_results_body, "SearchFilter": $search_filter, "SearchCriteria": $search_criteria} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"MaxResults": $max_results, "NextToken": $next_token} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"MaxResults": $max_results, "NextToken": $next_token} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Searches for vocabularies within a specific Amazon Connect instance using State, NameStartsWith, and LanguageCode.
@@ -5522,14 +7010,25 @@ export def "vocabulary-summary list-vocabularies" [
   let base = ($base_url | default $BASE_URL)
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'InstanceId' must be non-empty" } }
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/vocabulary-summary/{instance_id}") $qp)
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/vocabulary-summary/{instance_id}") $qp $auth.query)
   let req_body = {"MaxResults": $max_results_body, "NextToken": $next_token_body, "State": $state, "NameStartsWith": $name_starts_with, "LanguageCode": $language_code} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"MaxResults": $max_results, "NextToken": $next_token} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"MaxResults": $max_results, "NextToken": $next_token} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Initiates a flow to start a new chat for the customer. Response of this API provides a token required to obtain credentials from the CreateParticipantConnection (https://docs.aws.amazon.com/connect-participant/latest/APIReference/API_CreateParticipantConnection.html) API in the Amazon Connect Participant Service. When a new chat contact is successfully created, clients must subscribe to the participant’s connection for the created chat within 5 minutes. This is achieved by invoking CreateParticipantConnection (https://docs.aws.amazon.com/connect-participant/latest/APIReference/API_CreateParticipantConnection.html) with WEBSOCKET and CONNECTION_CREDENTIALS. A 429 error occurs in the following situations: API rate limit is exceeded. API TPS throttling returns a TooManyRequests exception. The quota for concurrent active chats (https://docs.aws.amazon.com/connect/latest/adminguide/amazon-connect-service-limits.html) is exceeded. Active chat throttling returns a LimitExceededException. If you use the ChatDurationInMinutes parameter and receive a 400 error, your account may not support the ability to configure custom chat durations. For more information, contact Amazon Web Services Support. For more information about chat, see Chat (https://docs.aws.amazon.com/connect/latest/adminguide/chat.html) in the Amazon Connect Administrator Guide.
@@ -5570,14 +7069,25 @@ export def "contact-chat start" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/contact/chat")
+  let full_url = (build-url $base "/contact/chat" $auth.query)
   let req_body = {"InstanceId": $instance_id, "ContactFlowId": $contact_flow_id, "Attributes": $attributes, "ParticipantDetails": $participant_details, "InitialMessage": $initial_message, "ClientToken": $client_token, "ChatDurationInMinutes": $chat_duration_in_minutes, "SupportedMessagingContentTypes": $supported_messaging_content_types, "PersistentChat": $persistent_chat, "RelatedContactId": $related_contact_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Starts recording the contact: If the API is called before the agent joins the call, recording starts when the agent joins the call. If the API is called after the agent joins the call, recording starts at the time of the API call. StartContactRecording is a one-time action. For example, if you use StopContactRecording to stop recording an ongoing call, you can't use StartContactRecording to restart it. For scenarios where the recording has started and you want to suspend and resume it, such as when collecting sensitive information (for example, a credit card number), use SuspendContactRecording and ResumeContactRecording. You can use this API to override the recording behavior configured in the Set recording behavior (https://docs.aws.amazon.com/connect/latest/adminguide/set-recording-behavior.html) block. Only voice recordings are supported at this time.
@@ -5610,14 +7120,25 @@ export def "contact-start-recording start" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/contact/start-recording")
+  let full_url = (build-url $base "/contact/start-recording" $auth.query)
   let req_body = {"InstanceId": $instance_id, "ContactId": $contact_id, "InitialContactId": $initial_contact_id, "VoiceRecordingConfiguration": $voice_recording_configuration} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Initiates real-time message streaming for a new chat contact. For more information about message streaming, see Enable real-time chat message streaming (https://docs.aws.amazon.com/connect/latest/adminguide/chat-message-streaming.html) in the Amazon Connect Administrator Guide.
@@ -5650,14 +7171,25 @@ export def "contact-start-streaming start" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/contact/start-streaming")
+  let full_url = (build-url $base "/contact/start-streaming" $auth.query)
   let req_body = {"InstanceId": $instance_id, "ContactId": $contact_id, "ChatStreamingConfiguration": $chat_streaming_configuration, "ClientToken": $client_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Places an outbound call to a contact, and then initiates the flow. It performs the actions in the flow that's specified (in ContactFlowId). Agents do not initiate the outbound API, which means that they do not dial the contact. If the flow places an outbound call to a contact, and then puts the contact in queue, the call is then routed to the agent, like any other inbound case. There is a 60-second dialing timeout for this operation. If the call is not connected after 60 seconds, it fails. UK numbers with a 447 prefix are not allowed by default. Before you can dial these UK mobile numbers, you must submit a service quota increase request. For more information, see Amazon Connect Service Quotas (https://docs.aws.amazon.com/connect/latest/adminguide/amazon-connect-service-limits.html) in the Amazon Connect Administrator Guide. Campaign calls are not allowed by default. Before you can make a call with TrafficType = CAMPAIGN, you must submit a service quota increase request to the quota Amazon Connect campaigns (https://docs.aws.amazon.com/connect/latest/adminguide/amazon-connect-service-limits.html#outbound-communications-quotas).
@@ -5696,14 +7228,25 @@ export def "contact-outbound-voice start" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/contact/outbound-voice")
+  let full_url = (build-url $base "/contact/outbound-voice" $auth.query)
   let req_body = {"DestinationPhoneNumber": $destination_phone_number, "ContactFlowId": $contact_flow_id, "InstanceId": $instance_id, "ClientToken": $client_token, "SourcePhoneNumber": $source_phone_number, "QueueId": $queue_id, "Attributes": $attributes, "AnswerMachineDetectionConfig": $answer_machine_detection_config, "CampaignId": $campaign_id, "TrafficType": $traffic_type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Initiates a flow to start a new task.
@@ -5743,14 +7286,25 @@ export def "contact-task start" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/contact/task")
+  let full_url = (build-url $base "/contact/task" $auth.query)
   let req_body = {"InstanceId": $instance_id, "PreviousContactId": $previous_contact_id, "ContactFlowId": $contact_flow_id, "Attributes": $attributes, "Name": $name, "References": $references, "Description": $description, "ClientToken": $client_token, "ScheduledTime": $scheduled_time, "TaskTemplateId": $task_template_id, "QuickConnectId": $quick_connect_id, "RelatedContactId": $related_contact_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Ends the specified contact. This call does not work for the following initiation methods: DISCONNECT TRANSFER QUEUE_TRANSFER
@@ -5780,14 +7334,25 @@ export def "contact-stop stop" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/contact/stop")
+  let full_url = (build-url $base "/contact/stop" $auth.query)
   let req_body = {"ContactId": $contact_id, "InstanceId": $instance_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Stops recording a call when a contact is being recorded. StopContactRecording is a one-time action. If you use StopContactRecording to stop recording an ongoing call, you can't use StartContactRecording to restart it. For scenarios where the recording has started and you want to suspend it for sensitive information (for example, to collect a credit card number), and then restart it, use SuspendContactRecording and ResumeContactRecording. Only voice recordings are supported at this time.
@@ -5818,14 +7383,25 @@ export def "contact-stop-recording stop" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/contact/stop-recording")
+  let full_url = (build-url $base "/contact/stop-recording" $auth.query)
   let req_body = {"InstanceId": $instance_id, "ContactId": $contact_id, "InitialContactId": $initial_contact_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Ends message streaming on a specified contact. To restart message streaming on that contact, call the StartContactStreaming (https://docs.aws.amazon.com/connect/latest/APIReference/API_StartContactStreaming.html) API.
@@ -5856,14 +7432,25 @@ export def "contact-stop-streaming stop" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/contact/stop-streaming")
+  let full_url = (build-url $base "/contact/stop-streaming" $auth.query)
   let req_body = {"InstanceId": $instance_id, "ContactId": $contact_id, "StreamingId": $streaming_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # When a contact is being recorded, this API suspends recording the call. For example, you might suspend the call recording while collecting sensitive information, such as a credit card number. Then use ResumeContactRecording to restart recording. The period of time that the recording is suspended is filled with silence in the final recording. Only voice recordings are supported at this time.
@@ -5894,14 +7481,25 @@ export def "contact-suspend-recording create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/contact/suspend-recording")
+  let full_url = (build-url $base "/contact/suspend-recording" $auth.query)
   let req_body = {"InstanceId": $instance_id, "ContactId": $contact_id, "InitialContactId": $initial_contact_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Transfers contacts from one agent or queue to another agent or queue at any point after a contact is created. You can transfer a contact to another queue by providing the flow which orchestrates the contact to the destination queue. This gives you more control over contact handling and helps you adhere to the service level agreement (SLA) guaranteed to your customers. Note the following requirements: Transfer is supported for only TASK contacts. Do not use both QueueId and UserId in the same call. The following flow types are supported: Inbound flow, Transfer to agent flow, and Transfer to queue flow. The TransferContact API can be called only on active contacts. A contact cannot be transferred more than 11 times.
@@ -5935,14 +7533,25 @@ export def "contact-transfer create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/contact/transfer")
+  let full_url = (build-url $base "/contact/transfer" $auth.query)
   let req_body = {"InstanceId": $instance_id, "ContactId": $contact_id, "QueueId": $queue_id, "UserId": $user_id, "ContactFlowId": $contact_flow_id, "ClientToken": $client_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Removes the specified tags from the specified resource.
@@ -5973,12 +7582,23 @@ export def "tags untag-resource" [
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn | is-empty) { error make --unspanned { msg: "path parameter 'resourceArn' must be non-empty" } }
   let qp = [(serialize-qp "tagKeys" $tag_keys "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn)} | format pattern "/tags/{resource_arn}") $qp)
+  let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn)} | format pattern "/tags/{resource_arn}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"tagKeys": $tag_keys} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"tagKeys": $tag_keys} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Creates or updates user-defined contact attributes associated with the specified contact. You can create or update user-defined attributes for both ongoing and completed contacts. For example, while the call is active, you can update the customer's name or the reason the customer called. You can add notes about steps that the agent took during the call that display to the next agent that takes the call. You can also update attributes for a contact using data from your CRM application and save the data with the contact in Amazon Connect. You could also flag calls for additional analysis, such as legal review or to identify abusive callers. Contact attributes are available in Amazon Connect for 24 months, and are then deleted. For information about contact record retention and the maximum size of the contact record attributes section, see Feature specifications (https://docs.aws.amazon.com/connect/latest/adminguide/amazon-connect-service-limits.html#feature-limits) in the Amazon Connect Administrator Guide.
@@ -6009,14 +7629,25 @@ export def "contact-attributes update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/contact/attributes")
+  let full_url = (build-url $base "/contact/attributes" $auth.query)
   let req_body = {"InitialContactId": $initial_contact_id, "InstanceId": $instance_id, "Attributes": $attributes} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Updates the specified flow. You can also create and update flows using the Amazon Connect Flow language (https://docs.aws.amazon.com/connect/latest/APIReference/flow-language.html).
@@ -6049,14 +7680,25 @@ export def "contact-flows-content update" [
   let base = ($base_url | default $BASE_URL)
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'InstanceId' must be non-empty" } }
   if ($contact_flow_id | is-empty) { error make --unspanned { msg: "path parameter 'ContactFlowId' must be non-empty" } }
-  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), contact_flow_id: (encode-path-segment $contact_flow_id)} | format pattern "/contact-flows/{instance_id}/{contact_flow_id}/content"))
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), contact_flow_id: (encode-path-segment $contact_flow_id)} | format pattern "/contact-flows/{instance_id}/{contact_flow_id}/content") $auth.query)
   let req_body = {"Content": $content} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Updates metadata about specified flow.
@@ -6091,14 +7733,25 @@ export def "contact-flows-metadata update" [
   let base = ($base_url | default $BASE_URL)
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'InstanceId' must be non-empty" } }
   if ($contact_flow_id | is-empty) { error make --unspanned { msg: "path parameter 'ContactFlowId' must be non-empty" } }
-  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), contact_flow_id: (encode-path-segment $contact_flow_id)} | format pattern "/contact-flows/{instance_id}/{contact_flow_id}/metadata"))
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), contact_flow_id: (encode-path-segment $contact_flow_id)} | format pattern "/contact-flows/{instance_id}/{contact_flow_id}/metadata") $auth.query)
   let req_body = {"Name": $name, "Description": $description, "ContactFlowState": $contact_flow_state} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Updates specified flow module for the specified Amazon Connect instance.
@@ -6131,14 +7784,25 @@ export def "contact-flow-modules-content update" [
   let base = ($base_url | default $BASE_URL)
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'InstanceId' must be non-empty" } }
   if ($contact_flow_module_id | is-empty) { error make --unspanned { msg: "path parameter 'ContactFlowModuleId' must be non-empty" } }
-  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), contact_flow_module_id: (encode-path-segment $contact_flow_module_id)} | format pattern "/contact-flow-modules/{instance_id}/{contact_flow_module_id}/content"))
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), contact_flow_module_id: (encode-path-segment $contact_flow_module_id)} | format pattern "/contact-flow-modules/{instance_id}/{contact_flow_module_id}/content") $auth.query)
   let req_body = {"Content": $content} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Updates metadata about specified flow module.
@@ -6173,14 +7837,25 @@ export def "contact-flow-modules-metadata update" [
   let base = ($base_url | default $BASE_URL)
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'InstanceId' must be non-empty" } }
   if ($contact_flow_module_id | is-empty) { error make --unspanned { msg: "path parameter 'ContactFlowModuleId' must be non-empty" } }
-  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), contact_flow_module_id: (encode-path-segment $contact_flow_module_id)} | format pattern "/contact-flow-modules/{instance_id}/{contact_flow_module_id}/metadata"))
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), contact_flow_module_id: (encode-path-segment $contact_flow_module_id)} | format pattern "/contact-flow-modules/{instance_id}/{contact_flow_module_id}/metadata") $auth.query)
   let req_body = {"Name": $name, "Description": $description, "State": $state} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # The name of the flow. You can also create and update flows using the Amazon Connect Flow language (https://docs.aws.amazon.com/connect/latest/APIReference/flow-language.html).
@@ -6214,14 +7889,25 @@ export def "contact-flows-name update" [
   let base = ($base_url | default $BASE_URL)
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'InstanceId' must be non-empty" } }
   if ($contact_flow_id | is-empty) { error make --unspanned { msg: "path parameter 'ContactFlowId' must be non-empty" } }
-  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), contact_flow_id: (encode-path-segment $contact_flow_id)} | format pattern "/contact-flows/{instance_id}/{contact_flow_id}/name"))
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), contact_flow_id: (encode-path-segment $contact_flow_id)} | format pattern "/contact-flows/{instance_id}/{contact_flow_id}/name") $auth.query)
   let req_body = {"Name": $name, "Description": $description} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Updates the scheduled time of a task contact that is already scheduled.
@@ -6252,14 +7938,25 @@ export def "contact-schedule update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/contact/schedule")
+  let full_url = (build-url $base "/contact/schedule" $auth.query)
   let req_body = {"InstanceId": $instance_id, "ContactId": $contact_id, "ScheduledTime": $scheduled_time} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Updates timeouts for when human chat participants are to be considered idle, and when agents are automatically disconnected from a chat due to idleness. You can set four timers: Customer idle timeout Customer auto-disconnect timeout Agent idle timeout Agent auto-disconnect timeout For more information about how chat timeouts work, see Set up chat timeouts for human participants (https://docs.aws.amazon.com/connect/latest/adminguide/setup-chat-timeouts.html).
@@ -6293,14 +7990,25 @@ export def "contact-participant-role-config update" [
   let base = ($base_url | default $BASE_URL)
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'InstanceId' must be non-empty" } }
   if ($contact_id | is-empty) { error make --unspanned { msg: "path parameter 'ContactId' must be non-empty" } }
-  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), contact_id: (encode-path-segment $contact_id)} | format pattern "/contact/participant-role-config/{instance_id}/{contact_id}"))
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), contact_id: (encode-path-segment $contact_id)} | format pattern "/contact/participant-role-config/{instance_id}/{contact_id}") $auth.query)
   let req_body = {"ChannelConfiguration": $channel_configuration} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # This API is in preview release for Amazon Connect and is subject to change. Updates the hours of operation for the specified queue.
@@ -6333,14 +8041,25 @@ export def "queues-hours-of-operation update" [
   let base = ($base_url | default $BASE_URL)
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'InstanceId' must be non-empty" } }
   if ($queue_id | is-empty) { error make --unspanned { msg: "path parameter 'QueueId' must be non-empty" } }
-  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), queue_id: (encode-path-segment $queue_id)} | format pattern "/queues/{instance_id}/{queue_id}/hours-of-operation"))
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), queue_id: (encode-path-segment $queue_id)} | format pattern "/queues/{instance_id}/{queue_id}/hours-of-operation") $auth.query)
   let req_body = {"HoursOfOperationId": $hours_of_operation_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # This API is in preview release for Amazon Connect and is subject to change. Updates the maximum number of contacts allowed in a queue before it is considered full.
@@ -6373,14 +8092,25 @@ export def "queues-max-contacts update" [
   let base = ($base_url | default $BASE_URL)
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'InstanceId' must be non-empty" } }
   if ($queue_id | is-empty) { error make --unspanned { msg: "path parameter 'QueueId' must be non-empty" } }
-  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), queue_id: (encode-path-segment $queue_id)} | format pattern "/queues/{instance_id}/{queue_id}/max-contacts"))
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), queue_id: (encode-path-segment $queue_id)} | format pattern "/queues/{instance_id}/{queue_id}/max-contacts") $auth.query)
   let req_body = {"MaxContacts": $max_contacts} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # This API is in preview release for Amazon Connect and is subject to change. Updates the name and description of a queue. At least Name or Description must be provided.
@@ -6414,14 +8144,25 @@ export def "queues-name update" [
   let base = ($base_url | default $BASE_URL)
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'InstanceId' must be non-empty" } }
   if ($queue_id | is-empty) { error make --unspanned { msg: "path parameter 'QueueId' must be non-empty" } }
-  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), queue_id: (encode-path-segment $queue_id)} | format pattern "/queues/{instance_id}/{queue_id}/name"))
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), queue_id: (encode-path-segment $queue_id)} | format pattern "/queues/{instance_id}/{queue_id}/name") $auth.query)
   let req_body = {"Name": $name, "Description": $description} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # This API is in preview release for Amazon Connect and is subject to change. Updates the outbound caller ID name, number, and outbound whisper flow for a specified queue. If the number being used in the input is claimed to a traffic distribution group, and you are calling this API using an instance in the Amazon Web Services Region where the traffic distribution group was created, you can use either a full phone number ARN or UUID value for the OutboundCallerIdNumberId value of the OutboundCallerConfig (https://docs.aws.amazon.com/connect/latest/APIReference/API_OutboundCallerConfig) request body parameter. However, if the number is claimed to a traffic distribution group and you are calling this API using an instance in the alternate Amazon Web Services Region associated with the traffic distribution group, you must provide a full phone number ARN. If a UUID is provided in this scenario, you will receive a ResourceNotFoundException.
@@ -6455,14 +8196,25 @@ export def "queues-outbound-caller-config update" [
   let base = ($base_url | default $BASE_URL)
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'InstanceId' must be non-empty" } }
   if ($queue_id | is-empty) { error make --unspanned { msg: "path parameter 'QueueId' must be non-empty" } }
-  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), queue_id: (encode-path-segment $queue_id)} | format pattern "/queues/{instance_id}/{queue_id}/outbound-caller-config"))
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), queue_id: (encode-path-segment $queue_id)} | format pattern "/queues/{instance_id}/{queue_id}/outbound-caller-config") $auth.query)
   let req_body = {"OutboundCallerConfig": $outbound_caller_config} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # This API is in preview release for Amazon Connect and is subject to change. Updates the status of the queue.
@@ -6495,14 +8247,25 @@ export def "queues-status update" [
   let base = ($base_url | default $BASE_URL)
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'InstanceId' must be non-empty" } }
   if ($queue_id | is-empty) { error make --unspanned { msg: "path parameter 'QueueId' must be non-empty" } }
-  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), queue_id: (encode-path-segment $queue_id)} | format pattern "/queues/{instance_id}/{queue_id}/status"))
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), queue_id: (encode-path-segment $queue_id)} | format pattern "/queues/{instance_id}/{queue_id}/status") $auth.query)
   let req_body = {"Status": $status} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Updates the configuration settings for the specified quick connect.
@@ -6536,14 +8299,25 @@ export def "quick-connects-config update" [
   let base = ($base_url | default $BASE_URL)
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'InstanceId' must be non-empty" } }
   if ($quick_connect_id | is-empty) { error make --unspanned { msg: "path parameter 'QuickConnectId' must be non-empty" } }
-  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), quick_connect_id: (encode-path-segment $quick_connect_id)} | format pattern "/quick-connects/{instance_id}/{quick_connect_id}/config"))
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), quick_connect_id: (encode-path-segment $quick_connect_id)} | format pattern "/quick-connects/{instance_id}/{quick_connect_id}/config") $auth.query)
   let req_body = {"QuickConnectConfig": $quick_connect_config} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Updates the name and description of a quick connect. The request accepts the following data in JSON format. At least Name or Description must be provided.
@@ -6577,14 +8351,25 @@ export def "quick-connects-name update" [
   let base = ($base_url | default $BASE_URL)
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'InstanceId' must be non-empty" } }
   if ($quick_connect_id | is-empty) { error make --unspanned { msg: "path parameter 'QuickConnectId' must be non-empty" } }
-  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), quick_connect_id: (encode-path-segment $quick_connect_id)} | format pattern "/quick-connects/{instance_id}/{quick_connect_id}/name"))
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), quick_connect_id: (encode-path-segment $quick_connect_id)} | format pattern "/quick-connects/{instance_id}/{quick_connect_id}/name") $auth.query)
   let req_body = {"Name": $name, "Description": $description} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Updates the channels that agents can handle in the Contact Control Panel (CCP) for a routing profile.
@@ -6618,14 +8403,25 @@ export def "routing-profiles-concurrency update" [
   let base = ($base_url | default $BASE_URL)
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'InstanceId' must be non-empty" } }
   if ($routing_profile_id | is-empty) { error make --unspanned { msg: "path parameter 'RoutingProfileId' must be non-empty" } }
-  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), routing_profile_id: (encode-path-segment $routing_profile_id)} | format pattern "/routing-profiles/{instance_id}/{routing_profile_id}/concurrency"))
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), routing_profile_id: (encode-path-segment $routing_profile_id)} | format pattern "/routing-profiles/{instance_id}/{routing_profile_id}/concurrency") $auth.query)
   let req_body = {"MediaConcurrencies": $media_concurrencies} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Updates the default outbound queue of a routing profile.
@@ -6658,14 +8454,25 @@ export def "routing-profiles-default-outbound-queue update" [
   let base = ($base_url | default $BASE_URL)
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'InstanceId' must be non-empty" } }
   if ($routing_profile_id | is-empty) { error make --unspanned { msg: "path parameter 'RoutingProfileId' must be non-empty" } }
-  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), routing_profile_id: (encode-path-segment $routing_profile_id)} | format pattern "/routing-profiles/{instance_id}/{routing_profile_id}/default-outbound-queue"))
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), routing_profile_id: (encode-path-segment $routing_profile_id)} | format pattern "/routing-profiles/{instance_id}/{routing_profile_id}/default-outbound-queue") $auth.query)
   let req_body = {"DefaultOutboundQueueId": $default_outbound_queue_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Updates the name and description of a routing profile. The request accepts the following data in JSON format. At least Name or Description must be provided.
@@ -6699,14 +8506,25 @@ export def "routing-profiles-name update" [
   let base = ($base_url | default $BASE_URL)
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'InstanceId' must be non-empty" } }
   if ($routing_profile_id | is-empty) { error make --unspanned { msg: "path parameter 'RoutingProfileId' must be non-empty" } }
-  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), routing_profile_id: (encode-path-segment $routing_profile_id)} | format pattern "/routing-profiles/{instance_id}/{routing_profile_id}/name"))
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), routing_profile_id: (encode-path-segment $routing_profile_id)} | format pattern "/routing-profiles/{instance_id}/{routing_profile_id}/name") $auth.query)
   let req_body = {"Name": $name, "Description": $description} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Assigns the specified hierarchy group to the specified user.
@@ -6739,14 +8557,25 @@ export def "users-hierarchy update" [
   let base = ($base_url | default $BASE_URL)
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'InstanceId' must be non-empty" } }
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'UserId' must be non-empty" } }
-  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), user_id: (encode-path-segment $user_id)} | format pattern "/users/{instance_id}/{user_id}/hierarchy"))
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), user_id: (encode-path-segment $user_id)} | format pattern "/users/{instance_id}/{user_id}/hierarchy") $auth.query)
   let req_body = {"HierarchyGroupId": $hierarchy_group_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Updates the name of the user hierarchy group.
@@ -6779,14 +8608,25 @@ export def "user-hierarchy-groups-name update" [
   let base = ($base_url | default $BASE_URL)
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'InstanceId' must be non-empty" } }
   if ($hierarchy_group_id | is-empty) { error make --unspanned { msg: "path parameter 'HierarchyGroupId' must be non-empty" } }
-  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), hierarchy_group_id: (encode-path-segment $hierarchy_group_id)} | format pattern "/user-hierarchy-groups/{instance_id}/{hierarchy_group_id}/name"))
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), hierarchy_group_id: (encode-path-segment $hierarchy_group_id)} | format pattern "/user-hierarchy-groups/{instance_id}/{hierarchy_group_id}/name") $auth.query)
   let req_body = {"Name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Updates the identity information for the specified user. We strongly recommend limiting who has the ability to invoke UpdateUserIdentityInfo. Someone with that ability can change the login credentials of other users by changing their email address. This poses a security risk to your organization. They can change the email address of a user to the attacker's email address, and then reset the password through email. For more information, see Best Practices for Security Profiles (https://docs.aws.amazon.com/connect/latest/adminguide/security-profile-best-practices.html) in the Amazon Connect Administrator Guide.
@@ -6820,14 +8660,25 @@ export def "users-identity-info update" [
   let base = ($base_url | default $BASE_URL)
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'InstanceId' must be non-empty" } }
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'UserId' must be non-empty" } }
-  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), user_id: (encode-path-segment $user_id)} | format pattern "/users/{instance_id}/{user_id}/identity-info"))
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), user_id: (encode-path-segment $user_id)} | format pattern "/users/{instance_id}/{user_id}/identity-info") $auth.query)
   let req_body = {"IdentityInfo": $identity_info} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Updates the phone configuration settings for the specified user.
@@ -6861,14 +8712,25 @@ export def "users-phone-config update" [
   let base = ($base_url | default $BASE_URL)
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'InstanceId' must be non-empty" } }
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'UserId' must be non-empty" } }
-  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), user_id: (encode-path-segment $user_id)} | format pattern "/users/{instance_id}/{user_id}/phone-config"))
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), user_id: (encode-path-segment $user_id)} | format pattern "/users/{instance_id}/{user_id}/phone-config") $auth.query)
   let req_body = {"PhoneConfig": $phone_config} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Assigns the specified routing profile to the specified user.
@@ -6901,14 +8763,25 @@ export def "users-routing-profile update" [
   let base = ($base_url | default $BASE_URL)
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'InstanceId' must be non-empty" } }
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'UserId' must be non-empty" } }
-  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), user_id: (encode-path-segment $user_id)} | format pattern "/users/{instance_id}/{user_id}/routing-profile"))
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), user_id: (encode-path-segment $user_id)} | format pattern "/users/{instance_id}/{user_id}/routing-profile") $auth.query)
   let req_body = {"RoutingProfileId": $routing_profile_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Assigns the specified security profiles to the specified user.
@@ -6941,12 +8814,23 @@ export def "users-security-profiles update" [
   let base = ($base_url | default $BASE_URL)
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'InstanceId' must be non-empty" } }
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'UserId' must be non-empty" } }
-  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), user_id: (encode-path-segment $user_id)} | format pattern "/users/{instance_id}/{user_id}/security-profiles"))
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), user_id: (encode-path-segment $user_id)} | format pattern "/users/{instance_id}/{user_id}/security-profiles") $auth.query)
   let req_body = {"SecurityProfileIds": $security_profile_ids} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }

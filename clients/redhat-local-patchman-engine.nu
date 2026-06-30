@@ -8,7 +8,7 @@ const BASE_URL = "http://redhat.local"
 # `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
 # where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o PATCHMAN_ENGINE_API_TOKEN | default "" }
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o PATCHMAN_ENGINE_API_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
@@ -41,14 +41,11 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
-# Trick: `url encode --all` over-encodes, then we decode the four unreserved
-# punctuation chars back. Pre-existing %XX sequences in the input survive
-# because `url encode --all` first turns their % into %25.
 def encode-path-segment [v: any]: nothing -> string {
   $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
-# Serialize an array-typed path parameter (issue 49.A). OpenAPI 3 `style: simple`
+# Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
 # (the default for path params) and Swagger 2 `collectionFormat: csv` both join
 # the elements with a literal comma WITHIN the single path segment, each element
 # RFC-3986-encoded individually (so a comma inside an element stays %2C). Without
@@ -59,51 +56,51 @@ def encode-path-array [v: any]: nothing -> string {
   if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
 }
 
-# Build URL from base, path, and optional query string
-def build-url [base: string, path: string, query?: string]: nothing -> string {
+# Build the request URL from base, path, and any number of pre-encoded query
+# fragments (param serializer output and/or the auth query). Each fragment is an
+# `&`-joinable `key=value` string already percent-encoded by its producer; empty
+# fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
+# delimiters are hand-spliced — and any query already on the base URL is merged in.
+def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
   let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
-  let result = ($parsed | upsert path $full_path)
-  if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
+  let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
+  $parsed | upsert path $full_path | upsert query $query | url join
 }
 
-# Build the dry-run record returned by --dry-run. Shape:
-#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
-#    auth: {scheme, location}}
-# `meta` carries logical-form data (the query record by spec name, the pre-serialization
-# body) that do-request itself cannot reconstruct from its wire-format args.
-def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
-  let m = ($meta | default {})
-  {
-    dry_run: true
-    method: $method
-    url: $url
-    query: ($m | get -o query | default {})
-    headers: $auth.headers
-    body: ($m | get -o body)
-    content_type: $content_type
-    timeout: $timeout
-    auth: {scheme: $auth.scheme, location: $auth.location}
-  }
+# Success policy: did this response succeed? Single source of truth, consulted by
+# handle-response and the HEAD header-unwrap. Empty ok_codes means the spec listed
+# none, so fall back to < 400. Otherwise: any 2xx, plus documented success codes.
+def status-ok [status: int, ok_codes: list<int>]: nothing -> bool {
+  if ($ok_codes | is-empty) { $status < 400 } else { ($status >= 200 and $status < 300) or ($status in $ok_codes) }
 }
 
-# Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
-  let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
-  let timeout = ($max_time | default 30min)
-  let ct = ($content_type | default "application/json")
-  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
-  let resp = match $method {
-    "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
-  }
-  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
-  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
+# Unwrap a `--full` HTTP response into the user-facing value. Response arrives
+# via pipeline; ok_codes gates the error throw (see status-ok).
+def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: record -> any {
+  let resp = $in
+  if $allow_errors { return $resp }
+  if not (status-ok $resp.status $ok_codes) { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } }
+  if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
+  if $resp.status == 204 { return null }
+  $resp.body
+}
+
+# GET — bodyless, honours --raw
+def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+}
+
+# POST — body + content-type
+def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# DELETE — body via --data
+def send-delete [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http delete --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url } else { http delete --headers $req.headers --content-type $req.content_type --data $body --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url }
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 def base-url-completer [] { ["http://redhat.local" "http://localhost"] }
@@ -172,10 +169,21 @@ export def "patch-advisories list" [
   let auth = (build-auth $token ($auth_scheme | default "x-rh-identity"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "filter[id]" $filter_id "scalar") (serialize-qp "filter[description]" $filter_description "scalar") (serialize-qp "filter[public_date]" $filter_public_date "scalar") (serialize-qp "filter[synopsis]" $filter_synopsis "scalar") (serialize-qp "filter[advisory_type]" $filter_advisory_type "scalar") (serialize-qp "filter[severity]" $filter_severity "scalar") (serialize-qp "filter[applicable_systems]" $filter_applicable_systems "scalar") (serialize-qp "tags" $tags "multi") (serialize-qp "filter[system_profile][sap_system]" $filter_system_profile_sap_system "scalar") (serialize-qp "filter[system_profile][sap_sids][in]" $filter_system_profile_sap_sids_in "multi")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/patch/v1/advisories" $qp)
+  let full_url = (build-url $base "/api/patch/v1/advisories" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"limit": $limit, "offset": $offset, "sort": $qp_sort, "search": $search, "filter[id]": $filter_id, "filter[description]": $filter_description, "filter[public_date]": $filter_public_date, "filter[synopsis]": $filter_synopsis, "filter[advisory_type]": $filter_advisory_type, "filter[severity]": $filter_severity, "filter[applicable_systems]": $filter_applicable_systems, "tags": $tags, "filter[system_profile][sap_system]": $filter_system_profile_sap_system, "filter[system_profile][sap_sids][in]": $filter_system_profile_sap_sids_in} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"limit": $limit, "offset": $offset, "sort": $qp_sort, "search": $search, "filter[id]": $filter_id, "filter[description]": $filter_description, "filter[public_date]": $filter_public_date, "filter[synopsis]": $filter_synopsis, "filter[advisory_type]": $filter_advisory_type, "filter[severity]": $filter_severity, "filter[applicable_systems]": $filter_applicable_systems, "tags": $tags, "filter[system_profile][sap_system]": $filter_system_profile_sap_system, "filter[system_profile][sap_sids][in]": $filter_system_profile_sap_sids_in} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Show me details an advisory by given advisory name
@@ -197,10 +205,21 @@ export def "patch-advisories get-detail" [
   let auth = (build-auth $token ($auth_scheme | default "x-rh-identity"))
   let base = ($base_url | default $BASE_URL)
   if ($advisory_id | is-empty) { error make --unspanned { msg: "path parameter 'advisory_id' must be non-empty" } }
-  let full_url = (build-url $base ({advisory_id: (encode-path-segment $advisory_id)} | format pattern "/api/patch/v1/advisories/{advisory_id}"))
+  let full_url = (build-url $base ({advisory_id: (encode-path-segment $advisory_id)} | format pattern "/api/patch/v1/advisories/{advisory_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Show me systems on which the given advisory is applicable
@@ -244,10 +263,21 @@ export def "patch-advisories-systems list" [
   let base = ($base_url | default $BASE_URL)
   if ($advisory_id | is-empty) { error make --unspanned { msg: "path parameter 'advisory_id' must be non-empty" } }
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "filter[id]" $filter_id "scalar") (serialize-qp "filter[insights_id]" $filter_insights_id "scalar") (serialize-qp "filter[display_name]" $filter_display_name "scalar") (serialize-qp "filter[last_evaluation]" $filter_last_evaluation "scalar") (serialize-qp "filter[last_upload]" $filter_last_upload "scalar") (serialize-qp "filter[rhsa_count]" $filter_rhsa_count "scalar") (serialize-qp "filter[rhba_count]" $filter_rhba_count "scalar") (serialize-qp "filter[rhea_count]" $filter_rhea_count "scalar") (serialize-qp "filter[other_count]" $filter_other_count "scalar") (serialize-qp "filter[stale]" $filter_stale "scalar") (serialize-qp "filter[stale_timestamp]" $filter_stale_timestamp "scalar") (serialize-qp "filter[stale_warning_timestamp]" $filter_stale_warning_timestamp "scalar") (serialize-qp "filter[culled_timestamp]" $filter_culled_timestamp "scalar") (serialize-qp "filter[created]" $filter_created "scalar") (serialize-qp "tags" $tags "multi") (serialize-qp "filter[system_profile][sap_system]" $filter_system_profile_sap_system "scalar") (serialize-qp "filter[system_profile][sap_sids][in]" $filter_system_profile_sap_sids_in "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({advisory_id: (encode-path-segment $advisory_id)} | format pattern "/api/patch/v1/advisories/{advisory_id}/systems") $qp)
+  let full_url = (build-url $base ({advisory_id: (encode-path-segment $advisory_id)} | format pattern "/api/patch/v1/advisories/{advisory_id}/systems") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"limit": $limit, "offset": $offset, "sort": $qp_sort, "search": $search, "filter[id]": $filter_id, "filter[insights_id]": $filter_insights_id, "filter[display_name]": $filter_display_name, "filter[last_evaluation]": $filter_last_evaluation, "filter[last_upload]": $filter_last_upload, "filter[rhsa_count]": $filter_rhsa_count, "filter[rhba_count]": $filter_rhba_count, "filter[rhea_count]": $filter_rhea_count, "filter[other_count]": $filter_other_count, "filter[stale]": $filter_stale, "filter[stale_timestamp]": $filter_stale_timestamp, "filter[stale_warning_timestamp]": $filter_stale_warning_timestamp, "filter[culled_timestamp]": $filter_culled_timestamp, "filter[created]": $filter_created, "tags": $tags, "filter[system_profile][sap_system]": $filter_system_profile_sap_system, "filter[system_profile][sap_sids][in]": $filter_system_profile_sap_sids_in} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"limit": $limit, "offset": $offset, "sort": $qp_sort, "search": $search, "filter[id]": $filter_id, "filter[insights_id]": $filter_insights_id, "filter[display_name]": $filter_display_name, "filter[last_evaluation]": $filter_last_evaluation, "filter[last_upload]": $filter_last_upload, "filter[rhsa_count]": $filter_rhsa_count, "filter[rhba_count]": $filter_rhba_count, "filter[rhea_count]": $filter_rhea_count, "filter[other_count]": $filter_other_count, "filter[stale]": $filter_stale, "filter[stale_timestamp]": $filter_stale_timestamp, "filter[stale_warning_timestamp]": $filter_stale_warning_timestamp, "filter[culled_timestamp]": $filter_culled_timestamp, "filter[created]": $filter_created, "tags": $tags, "filter[system_profile][sap_system]": $filter_system_profile_sap_system, "filter[system_profile][sap_sids][in]": $filter_system_profile_sap_sids_in} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Export applicable advisories for all my systems
@@ -277,10 +307,21 @@ export def "patch-export-advisories export" [
   let auth = (build-auth $token ($auth_scheme | default "x-rh-identity"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "filter[id]" $filter_id "scalar") (serialize-qp "filter[description]" $filter_description "scalar") (serialize-qp "filter[public_date]" $filter_public_date "scalar") (serialize-qp "filter[synopsis]" $filter_synopsis "scalar") (serialize-qp "filter[advisory_type]" $filter_advisory_type "scalar") (serialize-qp "filter[severity]" $filter_severity "scalar") (serialize-qp "filter[applicable_systems]" $filter_applicable_systems "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/patch/v1/export/advisories" $qp)
+  let full_url = (build-url $base "/api/patch/v1/export/advisories" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"search": $search, "filter[id]": $filter_id, "filter[description]": $filter_description, "filter[public_date]": $filter_public_date, "filter[synopsis]": $filter_synopsis, "filter[advisory_type]": $filter_advisory_type, "filter[severity]": $filter_severity, "filter[applicable_systems]": $filter_applicable_systems} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"search": $search, "filter[id]": $filter_id, "filter[description]": $filter_description, "filter[public_date]": $filter_public_date, "filter[synopsis]": $filter_synopsis, "filter[advisory_type]": $filter_advisory_type, "filter[severity]": $filter_severity, "filter[applicable_systems]": $filter_applicable_systems} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Export systems for my account
@@ -319,10 +360,21 @@ export def "patch-export-advisories-systems export" [
   let base = ($base_url | default $BASE_URL)
   if ($advisory_id | is-empty) { error make --unspanned { msg: "path parameter 'advisory_id' must be non-empty" } }
   let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "filter[id]" $filter_id "scalar") (serialize-qp "filter[display_name]" $filter_display_name "scalar") (serialize-qp "filter[last_evaluation]" $filter_last_evaluation "scalar") (serialize-qp "filter[last_upload]" $filter_last_upload "scalar") (serialize-qp "filter[rhsa_count]" $filter_rhsa_count "scalar") (serialize-qp "filter[rhba_count]" $filter_rhba_count "scalar") (serialize-qp "filter[rhea_count]" $filter_rhea_count "scalar") (serialize-qp "filter[other_count]" $filter_other_count "scalar") (serialize-qp "filter[stale]" $filter_stale "scalar") (serialize-qp "filter[packages_installed]" $filter_packages_installed "scalar") (serialize-qp "filter[packages_updatable]" $filter_packages_updatable "scalar") (serialize-qp "filter[system_profile][sap_system]" $filter_system_profile_sap_system "scalar") (serialize-qp "filter[system_profile][sap_sids][in]" $filter_system_profile_sap_sids_in "multi") (serialize-qp "tags" $tags "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({advisory_id: (encode-path-segment $advisory_id)} | format pattern "/api/patch/v1/export/advisories/{advisory_id}/systems") $qp)
+  let full_url = (build-url $base ({advisory_id: (encode-path-segment $advisory_id)} | format pattern "/api/patch/v1/export/advisories/{advisory_id}/systems") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"search": $search, "filter[id]": $filter_id, "filter[display_name]": $filter_display_name, "filter[last_evaluation]": $filter_last_evaluation, "filter[last_upload]": $filter_last_upload, "filter[rhsa_count]": $filter_rhsa_count, "filter[rhba_count]": $filter_rhba_count, "filter[rhea_count]": $filter_rhea_count, "filter[other_count]": $filter_other_count, "filter[stale]": $filter_stale, "filter[packages_installed]": $filter_packages_installed, "filter[packages_updatable]": $filter_packages_updatable, "filter[system_profile][sap_system]": $filter_system_profile_sap_system, "filter[system_profile][sap_sids][in]": $filter_system_profile_sap_sids_in, "tags": $tags} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"search": $search, "filter[id]": $filter_id, "filter[display_name]": $filter_display_name, "filter[last_evaluation]": $filter_last_evaluation, "filter[last_upload]": $filter_last_upload, "filter[rhsa_count]": $filter_rhsa_count, "filter[rhba_count]": $filter_rhba_count, "filter[rhea_count]": $filter_rhea_count, "filter[other_count]": $filter_other_count, "filter[stale]": $filter_stale, "filter[packages_installed]": $filter_packages_installed, "filter[packages_updatable]": $filter_packages_updatable, "filter[system_profile][sap_system]": $filter_system_profile_sap_system, "filter[system_profile][sap_sids][in]": $filter_system_profile_sap_sids_in, "tags": $tags} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Show me all installed packages across my systems
@@ -350,10 +402,21 @@ export def "patch-export-packages export" [
   let auth = (build-auth $token ($auth_scheme | default "x-rh-identity"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "sort" $qp_sort "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "filter[name]" $filter_name "scalar") (serialize-qp "filter[systems_installed]" $filter_systems_installed "scalar") (serialize-qp "filter[systems_updatable]" $filter_systems_updatable "scalar") (serialize-qp "filter[summary]" $filter_summary "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/patch/v1/export/packages" $qp)
+  let full_url = (build-url $base "/api/patch/v1/export/packages" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"sort": $qp_sort, "search": $search, "filter[name]": $filter_name, "filter[systems_installed]": $filter_systems_installed, "filter[systems_updatable]": $filter_systems_updatable, "filter[summary]": $filter_summary} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"sort": $qp_sort, "search": $search, "filter[name]": $filter_name, "filter[systems_installed]": $filter_systems_installed, "filter[systems_updatable]": $filter_systems_updatable, "filter[summary]": $filter_summary} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Show me all my systems which have a package installed
@@ -379,10 +442,21 @@ export def "patch-export-packages-systems export" [
   let base = ($base_url | default $BASE_URL)
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'package_name' must be non-empty" } }
   let qp = [(serialize-qp "filter[system_profile][sap_system]" $filter_system_profile_sap_system "scalar") (serialize-qp "filter[system_profile][sap_sids][in]" $filter_system_profile_sap_sids_in "multi") (serialize-qp "tags" $tags "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({package_name: (encode-path-segment $package_name)} | format pattern "/api/patch/v1/export/packages/{package_name}/systems") $qp)
+  let full_url = (build-url $base ({package_name: (encode-path-segment $package_name)} | format pattern "/api/patch/v1/export/packages/{package_name}/systems") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter[system_profile][sap_system]": $filter_system_profile_sap_system, "filter[system_profile][sap_sids][in]": $filter_system_profile_sap_sids_in, "tags": $tags} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"filter[system_profile][sap_system]": $filter_system_profile_sap_system, "filter[system_profile][sap_sids][in]": $filter_system_profile_sap_sids_in, "tags": $tags} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Export systems for my account
@@ -419,10 +493,21 @@ export def "patch-export-systems export" [
   let auth = (build-auth $token ($auth_scheme | default "x-rh-identity"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "filter[id]" $filter_id "scalar") (serialize-qp "filter[display_name]" $filter_display_name "scalar") (serialize-qp "filter[last_evaluation]" $filter_last_evaluation "scalar") (serialize-qp "filter[last_upload]" $filter_last_upload "scalar") (serialize-qp "filter[rhsa_count]" $filter_rhsa_count "scalar") (serialize-qp "filter[rhba_count]" $filter_rhba_count "scalar") (serialize-qp "filter[rhea_count]" $filter_rhea_count "scalar") (serialize-qp "filter[other_count]" $filter_other_count "scalar") (serialize-qp "filter[stale]" $filter_stale "scalar") (serialize-qp "filter[packages_installed]" $filter_packages_installed "scalar") (serialize-qp "filter[packages_updatable]" $filter_packages_updatable "scalar") (serialize-qp "filter[system_profile][sap_system]" $filter_system_profile_sap_system "scalar") (serialize-qp "filter[system_profile][sap_sids][in]" $filter_system_profile_sap_sids_in "multi") (serialize-qp "tags" $tags "multi")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/patch/v1/export/systems" $qp)
+  let full_url = (build-url $base "/api/patch/v1/export/systems" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"search": $search, "filter[id]": $filter_id, "filter[display_name]": $filter_display_name, "filter[last_evaluation]": $filter_last_evaluation, "filter[last_upload]": $filter_last_upload, "filter[rhsa_count]": $filter_rhsa_count, "filter[rhba_count]": $filter_rhba_count, "filter[rhea_count]": $filter_rhea_count, "filter[other_count]": $filter_other_count, "filter[stale]": $filter_stale, "filter[packages_installed]": $filter_packages_installed, "filter[packages_updatable]": $filter_packages_updatable, "filter[system_profile][sap_system]": $filter_system_profile_sap_system, "filter[system_profile][sap_sids][in]": $filter_system_profile_sap_sids_in, "tags": $tags} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"search": $search, "filter[id]": $filter_id, "filter[display_name]": $filter_display_name, "filter[last_evaluation]": $filter_last_evaluation, "filter[last_upload]": $filter_last_upload, "filter[rhsa_count]": $filter_rhsa_count, "filter[rhba_count]": $filter_rhba_count, "filter[rhea_count]": $filter_rhea_count, "filter[other_count]": $filter_other_count, "filter[stale]": $filter_stale, "filter[packages_installed]": $filter_packages_installed, "filter[packages_updatable]": $filter_packages_updatable, "filter[system_profile][sap_system]": $filter_system_profile_sap_system, "filter[system_profile][sap_sids][in]": $filter_system_profile_sap_sids_in, "tags": $tags} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Export applicable advisories for all my systems
@@ -453,10 +538,21 @@ export def "patch-export-systems-advisories export" [
   let base = ($base_url | default $BASE_URL)
   if ($inventory_id | is-empty) { error make --unspanned { msg: "path parameter 'inventory_id' must be non-empty" } }
   let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "filter[id]" $filter_id "scalar") (serialize-qp "filter[description]" $filter_description "scalar") (serialize-qp "filter[public_date]" $filter_public_date "scalar") (serialize-qp "filter[synopsis]" $filter_synopsis "scalar") (serialize-qp "filter[advisory_type]" $filter_advisory_type "scalar") (serialize-qp "filter[severity]" $filter_severity "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({inventory_id: (encode-path-segment $inventory_id)} | format pattern "/api/patch/v1/export/systems/{inventory_id}/advisories") $qp)
+  let full_url = (build-url $base ({inventory_id: (encode-path-segment $inventory_id)} | format pattern "/api/patch/v1/export/systems/{inventory_id}/advisories") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"search": $search, "filter[id]": $filter_id, "filter[description]": $filter_description, "filter[public_date]": $filter_public_date, "filter[synopsis]": $filter_synopsis, "filter[advisory_type]": $filter_advisory_type, "filter[severity]": $filter_severity} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"search": $search, "filter[id]": $filter_id, "filter[description]": $filter_description, "filter[public_date]": $filter_public_date, "filter[synopsis]": $filter_synopsis, "filter[advisory_type]": $filter_advisory_type, "filter[severity]": $filter_severity} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Show me details about a system packages by given inventory id
@@ -485,10 +581,21 @@ export def "patch-export-systems-packages export" [
   let base = ($base_url | default $BASE_URL)
   if ($inventory_id | is-empty) { error make --unspanned { msg: "path parameter 'inventory_id' must be non-empty" } }
   let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "filter[name]" $filter_name "scalar") (serialize-qp "filter[description]" $filter_description "scalar") (serialize-qp "filter[evra]" $filter_evra "scalar") (serialize-qp "filter[summary]" $filter_summary "scalar") (serialize-qp "filter[updatable]" $filter_updatable "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({inventory_id: (encode-path-segment $inventory_id)} | format pattern "/api/patch/v1/export/systems/{inventory_id}/packages") $qp)
+  let full_url = (build-url $base ({inventory_id: (encode-path-segment $inventory_id)} | format pattern "/api/patch/v1/export/systems/{inventory_id}/packages") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"search": $search, "filter[name]": $filter_name, "filter[description]": $filter_description, "filter[evra]": $filter_evra, "filter[summary]": $filter_summary, "filter[updatable]": $filter_updatable} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"search": $search, "filter[name]": $filter_name, "filter[description]": $filter_description, "filter[evra]": $filter_evra, "filter[summary]": $filter_summary, "filter[updatable]": $filter_updatable} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Show me all installed packages across my systems
@@ -520,10 +627,21 @@ export def "patch-packages list" [
   let auth = (build-auth $token ($auth_scheme | default "x-rh-identity"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "filter[name]" $filter_name "scalar") (serialize-qp "filter[systems_installed]" $filter_systems_installed "scalar") (serialize-qp "filter[systems_updatable]" $filter_systems_updatable "scalar") (serialize-qp "filter[summary]" $filter_summary "scalar") (serialize-qp "tags" $tags "multi") (serialize-qp "filter[system_profile][sap_system]" $filter_system_profile_sap_system "scalar") (serialize-qp "filter[system_profile][sap_sids][in]" $filter_system_profile_sap_sids_in "multi")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/patch/v1/packages/" $qp)
+  let full_url = (build-url $base "/api/patch/v1/packages/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"limit": $limit, "offset": $offset, "sort": $qp_sort, "search": $search, "filter[name]": $filter_name, "filter[systems_installed]": $filter_systems_installed, "filter[systems_updatable]": $filter_systems_updatable, "filter[summary]": $filter_summary, "tags": $tags, "filter[system_profile][sap_system]": $filter_system_profile_sap_system, "filter[system_profile][sap_sids][in]": $filter_system_profile_sap_sids_in} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"limit": $limit, "offset": $offset, "sort": $qp_sort, "search": $search, "filter[name]": $filter_name, "filter[systems_installed]": $filter_systems_installed, "filter[systems_updatable]": $filter_systems_updatable, "filter[summary]": $filter_summary, "tags": $tags, "filter[system_profile][sap_system]": $filter_system_profile_sap_system, "filter[system_profile][sap_sids][in]": $filter_system_profile_sap_sids_in} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Show me metadata of selected package
@@ -545,10 +663,21 @@ export def "patch-packages get-latest" [
   let auth = (build-auth $token ($auth_scheme | default "x-rh-identity"))
   let base = ($base_url | default $BASE_URL)
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'package_name' must be non-empty" } }
-  let full_url = (build-url $base ({package_name: (encode-path-segment $package_name)} | format pattern "/api/patch/v1/packages/{package_name}"))
+  let full_url = (build-url $base ({package_name: (encode-path-segment $package_name)} | format pattern "/api/patch/v1/packages/{package_name}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Show me all my systems which have a package installed
@@ -576,10 +705,21 @@ export def "patch-packages-systems get" [
   let base = ($base_url | default $BASE_URL)
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'package_name' must be non-empty" } }
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "tags" $tags "multi") (serialize-qp "filter[system_profile][sap_system]" $filter_system_profile_sap_system "scalar") (serialize-qp "filter[system_profile][sap_sids][in]" $filter_system_profile_sap_sids_in "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({package_name: (encode-path-segment $package_name)} | format pattern "/api/patch/v1/packages/{package_name}/systems") $qp)
+  let full_url = (build-url $base ({package_name: (encode-path-segment $package_name)} | format pattern "/api/patch/v1/packages/{package_name}/systems") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"limit": $limit, "offset": $offset, "tags": $tags, "filter[system_profile][sap_system]": $filter_system_profile_sap_system, "filter[system_profile][sap_sids][in]": $filter_system_profile_sap_sids_in} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"limit": $limit, "offset": $offset, "tags": $tags, "filter[system_profile][sap_system]": $filter_system_profile_sap_system, "filter[system_profile][sap_sids][in]": $filter_system_profile_sap_sids_in} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Show me all package versions installed on some system
@@ -604,10 +744,21 @@ export def "patch-packages-versions get" [
   let base = ($base_url | default $BASE_URL)
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'package_name' must be non-empty" } }
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({package_name: (encode-path-segment $package_name)} | format pattern "/api/patch/v1/packages/{package_name}/versions") $qp)
+  let full_url = (build-url $base ({package_name: (encode-path-segment $package_name)} | format pattern "/api/patch/v1/packages/{package_name}/versions") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"limit": $limit, "offset": $offset} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"limit": $limit, "offset": $offset} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Show me all my systems
@@ -651,10 +802,21 @@ export def "patch-systems list" [
   let auth = (build-auth $token ($auth_scheme | default "x-rh-identity"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "filter[insights_id]" $filter_insights_id "scalar") (serialize-qp "filter[id]" $filter_id "scalar") (serialize-qp "filter[display_name]" $filter_display_name "scalar") (serialize-qp "filter[last_evaluation]" $filter_last_evaluation "scalar") (serialize-qp "filter[last_upload]" $filter_last_upload "scalar") (serialize-qp "filter[rhsa_count]" $filter_rhsa_count "scalar") (serialize-qp "filter[rhba_count]" $filter_rhba_count "scalar") (serialize-qp "filter[rhea_count]" $filter_rhea_count "scalar") (serialize-qp "filter[other_count]" $filter_other_count "scalar") (serialize-qp "filter[stale]" $filter_stale "scalar") (serialize-qp "filter[packages_installed]" $filter_packages_installed "scalar") (serialize-qp "filter[packages_updatable]" $filter_packages_updatable "scalar") (serialize-qp "filter[stale_timestamp]" $filter_stale_timestamp "scalar") (serialize-qp "filter[stale_warning_timestamp]" $filter_stale_warning_timestamp "scalar") (serialize-qp "filter[culled_timestamp]" $filter_culled_timestamp "scalar") (serialize-qp "filter[created]" $filter_created "scalar") (serialize-qp "tags" $tags "multi") (serialize-qp "filter[system_profile][sap_system]" $filter_system_profile_sap_system "scalar") (serialize-qp "filter[system_profile][sap_sids][in]" $filter_system_profile_sap_sids_in "multi")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/patch/v1/systems" $qp)
+  let full_url = (build-url $base "/api/patch/v1/systems" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"limit": $limit, "offset": $offset, "sort": $qp_sort, "search": $search, "filter[insights_id]": $filter_insights_id, "filter[id]": $filter_id, "filter[display_name]": $filter_display_name, "filter[last_evaluation]": $filter_last_evaluation, "filter[last_upload]": $filter_last_upload, "filter[rhsa_count]": $filter_rhsa_count, "filter[rhba_count]": $filter_rhba_count, "filter[rhea_count]": $filter_rhea_count, "filter[other_count]": $filter_other_count, "filter[stale]": $filter_stale, "filter[packages_installed]": $filter_packages_installed, "filter[packages_updatable]": $filter_packages_updatable, "filter[stale_timestamp]": $filter_stale_timestamp, "filter[stale_warning_timestamp]": $filter_stale_warning_timestamp, "filter[culled_timestamp]": $filter_culled_timestamp, "filter[created]": $filter_created, "tags": $tags, "filter[system_profile][sap_system]": $filter_system_profile_sap_system, "filter[system_profile][sap_sids][in]": $filter_system_profile_sap_sids_in} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"limit": $limit, "offset": $offset, "sort": $qp_sort, "search": $search, "filter[insights_id]": $filter_insights_id, "filter[id]": $filter_id, "filter[display_name]": $filter_display_name, "filter[last_evaluation]": $filter_last_evaluation, "filter[last_upload]": $filter_last_upload, "filter[rhsa_count]": $filter_rhsa_count, "filter[rhba_count]": $filter_rhba_count, "filter[rhea_count]": $filter_rhea_count, "filter[other_count]": $filter_other_count, "filter[stale]": $filter_stale, "filter[packages_installed]": $filter_packages_installed, "filter[packages_updatable]": $filter_packages_updatable, "filter[stale_timestamp]": $filter_stale_timestamp, "filter[stale_warning_timestamp]": $filter_stale_warning_timestamp, "filter[culled_timestamp]": $filter_culled_timestamp, "filter[created]": $filter_created, "tags": $tags, "filter[system_profile][sap_system]": $filter_system_profile_sap_system, "filter[system_profile][sap_sids][in]": $filter_system_profile_sap_sids_in} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Delete system by inventory id
@@ -676,10 +838,21 @@ export def "patch-systems delete" [
   let auth = (build-auth $token ($auth_scheme | default "x-rh-identity"))
   let base = ($base_url | default $BASE_URL)
   if ($inventory_id | is-empty) { error make --unspanned { msg: "path parameter 'inventory_id' must be non-empty" } }
-  let full_url = (build-url $base ({inventory_id: (encode-path-segment $inventory_id)} | format pattern "/api/patch/v1/systems/{inventory_id}"))
+  let full_url = (build-url $base ({inventory_id: (encode-path-segment $inventory_id)} | format pattern "/api/patch/v1/systems/{inventory_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Show me details about a system by given inventory id
@@ -701,10 +874,21 @@ export def "patch-systems get-detail" [
   let auth = (build-auth $token ($auth_scheme | default "x-rh-identity"))
   let base = ($base_url | default $BASE_URL)
   if ($inventory_id | is-empty) { error make --unspanned { msg: "path parameter 'inventory_id' must be non-empty" } }
-  let full_url = (build-url $base ({inventory_id: (encode-path-segment $inventory_id)} | format pattern "/api/patch/v1/systems/{inventory_id}"))
+  let full_url = (build-url $base ({inventory_id: (encode-path-segment $inventory_id)} | format pattern "/api/patch/v1/systems/{inventory_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Show me advisories for a system by given inventory id
@@ -737,10 +921,21 @@ export def "patch-systems-advisories list" [
   let base = ($base_url | default $BASE_URL)
   if ($inventory_id | is-empty) { error make --unspanned { msg: "path parameter 'inventory_id' must be non-empty" } }
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "filter[id]" $filter_id "scalar") (serialize-qp "filter[description]" $filter_description "scalar") (serialize-qp "filter[public_date]" $filter_public_date "scalar") (serialize-qp "filter[synopsis]" $filter_synopsis "scalar") (serialize-qp "filter[advisory_type]" $filter_advisory_type "scalar") (serialize-qp "filter[severity]" $filter_severity "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({inventory_id: (encode-path-segment $inventory_id)} | format pattern "/api/patch/v1/systems/{inventory_id}/advisories") $qp)
+  let full_url = (build-url $base ({inventory_id: (encode-path-segment $inventory_id)} | format pattern "/api/patch/v1/systems/{inventory_id}/advisories") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"limit": $limit, "offset": $offset, "sort": $qp_sort, "search": $search, "filter[id]": $filter_id, "filter[description]": $filter_description, "filter[public_date]": $filter_public_date, "filter[synopsis]": $filter_synopsis, "filter[advisory_type]": $filter_advisory_type, "filter[severity]": $filter_severity} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"limit": $limit, "offset": $offset, "sort": $qp_sort, "search": $search, "filter[id]": $filter_id, "filter[description]": $filter_description, "filter[public_date]": $filter_public_date, "filter[synopsis]": $filter_synopsis, "filter[advisory_type]": $filter_advisory_type, "filter[severity]": $filter_severity} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Show me details about a system packages by given inventory id
@@ -771,10 +966,21 @@ export def "patch-systems-packages get" [
   let base = ($base_url | default $BASE_URL)
   if ($inventory_id | is-empty) { error make --unspanned { msg: "path parameter 'inventory_id' must be non-empty" } }
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "filter[name]" $filter_name "scalar") (serialize-qp "filter[description]" $filter_description "scalar") (serialize-qp "filter[evra]" $filter_evra "scalar") (serialize-qp "filter[summary]" $filter_summary "scalar") (serialize-qp "filter[updatable]" $filter_updatable "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({inventory_id: (encode-path-segment $inventory_id)} | format pattern "/api/patch/v1/systems/{inventory_id}/packages") $qp)
+  let full_url = (build-url $base ({inventory_id: (encode-path-segment $inventory_id)} | format pattern "/api/patch/v1/systems/{inventory_id}/packages") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"limit": $limit, "offset": $offset, "search": $search, "filter[name]": $filter_name, "filter[description]": $filter_description, "filter[evra]": $filter_evra, "filter[summary]": $filter_summary, "filter[updatable]": $filter_updatable} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"limit": $limit, "offset": $offset, "search": $search, "filter[name]": $filter_name, "filter[description]": $filter_description, "filter[evra]": $filter_evra, "filter[summary]": $filter_summary, "filter[updatable]": $filter_updatable} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # View advisory-system pairs for selected systems and advisories
@@ -797,12 +1003,23 @@ export def "patch-views-advisories-systems create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-rh-identity"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/patch/v1/views/advisories/systems")
+  let full_url = (build-url $base "/api/patch/v1/views/advisories/systems" $auth.query)
   let req_body = {"advisories": $advisories, "systems": $systems} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # View system-advisory pairs for selected systems and advisories
@@ -825,10 +1042,21 @@ export def "patch-views-systems-advisories create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-rh-identity"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/patch/v1/views/systems/advisories")
+  let full_url = (build-url $base "/api/patch/v1/views/systems/advisories" $auth.query)
   let req_body = {"advisories": $advisories, "systems": $systems} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }

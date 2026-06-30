@@ -8,7 +8,7 @@ const BASE_URL = "https://api.twitter.com"
 # `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
 # where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o TWITTER_API_V2_TOKEN | default "" }
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o TWITTER_API_V2_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
@@ -42,14 +42,11 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
-# Trick: `url encode --all` over-encodes, then we decode the four unreserved
-# punctuation chars back. Pre-existing %XX sequences in the input survive
-# because `url encode --all` first turns their % into %25.
 def encode-path-segment [v: any]: nothing -> string {
   $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
-# Serialize an array-typed path parameter (issue 49.A). OpenAPI 3 `style: simple`
+# Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
 # (the default for path params) and Swagger 2 `collectionFormat: csv` both join
 # the elements with a literal comma WITHIN the single path segment, each element
 # RFC-3986-encoded individually (so a comma inside an element stays %2C). Without
@@ -60,51 +57,57 @@ def encode-path-array [v: any]: nothing -> string {
   if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
 }
 
-# Build URL from base, path, and optional query string
-def build-url [base: string, path: string, query?: string]: nothing -> string {
+# Build the request URL from base, path, and any number of pre-encoded query
+# fragments (param serializer output and/or the auth query). Each fragment is an
+# `&`-joinable `key=value` string already percent-encoded by its producer; empty
+# fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
+# delimiters are hand-spliced — and any query already on the base URL is merged in.
+def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
   let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
-  let result = ($parsed | upsert path $full_path)
-  if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
+  let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
+  $parsed | upsert path $full_path | upsert query $query | url join
 }
 
-# Build the dry-run record returned by --dry-run. Shape:
-#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
-#    auth: {scheme, location}}
-# `meta` carries logical-form data (the query record by spec name, the pre-serialization
-# body) that do-request itself cannot reconstruct from its wire-format args.
-def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
-  let m = ($meta | default {})
-  {
-    dry_run: true
-    method: $method
-    url: $url
-    query: ($m | get -o query | default {})
-    headers: $auth.headers
-    body: ($m | get -o body)
-    content_type: $content_type
-    timeout: $timeout
-    auth: {scheme: $auth.scheme, location: $auth.location}
-  }
+# Success policy: did this response succeed? Single source of truth, consulted by
+# handle-response and the HEAD header-unwrap. Empty ok_codes means the spec listed
+# none, so fall back to < 400. Otherwise: any 2xx, plus documented success codes.
+def status-ok [status: int, ok_codes: list<int>]: nothing -> bool {
+  if ($ok_codes | is-empty) { $status < 400 } else { ($status >= 200 and $status < 300) or ($status in $ok_codes) }
 }
 
-# Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
-  let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
-  let timeout = ($max_time | default 30min)
-  let ct = ($content_type | default "application/json")
-  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
-  let resp = match $method {
-    "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
-  }
-  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
-  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
+# Unwrap a `--full` HTTP response into the user-facing value. Response arrives
+# via pipeline; ok_codes gates the error throw (see status-ok).
+def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: record -> any {
+  let resp = $in
+  if $allow_errors { return $resp }
+  if not (status-ok $resp.status $ok_codes) { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } }
+  if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
+  if $resp.status == 204 { return null }
+  $resp.body
+}
+
+# GET — bodyless, honours --raw
+def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+}
+
+# POST — body + content-type
+def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# PUT — body + content-type
+def send-put [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http put --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http put --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# DELETE — body via --data
+def send-delete [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http delete --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url } else { http delete --headers $req.headers --content-type $req.content_type --data $body --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url }
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 def base-url-completer [] { ["https://api.twitter.com"] }
@@ -166,10 +169,21 @@ export def "2-compliance-jobs list-batch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "compliance_job.fields" $compliance_job_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base "/2/compliance/jobs" $qp)
+  let full_url = (build-url $base "/2/compliance/jobs" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"type": $type, "status": $status, "compliance_job.fields": $compliance_job_fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"type": $type, "status": $status, "compliance_job.fields": $compliance_job_fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create compliance job
@@ -195,12 +209,23 @@ export def "2-compliance-jobs create-batch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/2/compliance/jobs")
+  let full_url = (build-url $base "/2/compliance/jobs" $auth.query)
   let req_body = {"name": $name, "resumable": $resumable, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get Compliance Job
@@ -226,10 +251,21 @@ export def "2-compliance-jobs get-batch" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "compliance_job.fields" $compliance_job_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/2/compliance/jobs/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/2/compliance/jobs/{id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"compliance_job.fields": $compliance_job_fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"compliance_job.fields": $compliance_job_fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a new DM Conversation
@@ -254,12 +290,23 @@ export def "2-dm-conversations create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/2/dm_conversations")
+  let full_url = (build-url $base "/2/dm_conversations" $auth.query)
   let req_body = {"conversation_type": $conversation_type, "message": $message, "participant_ids": $participant_ids} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Get DM Events for a DM Conversation
@@ -291,10 +338,21 @@ export def "2-dm-conversations-with-dm-events get" [
   let base = ($base_url | default $BASE_URL)
   if ($participant_id | is-empty) { error make --unspanned { msg: "path parameter 'participant_id' must be non-empty" } }
   let qp = [(serialize-qp "max_results" $max_results "scalar") (serialize-qp "pagination_token" $pagination_token "scalar") (serialize-qp "event_types" $event_types "csv") (serialize-qp "dm_event.fields" $dm_event_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "media.fields" $media_fields "csv") (serialize-qp "user.fields" $user_fields "csv") (serialize-qp "tweet.fields" $tweet_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base ({participant_id: (encode-path-segment $participant_id)} | format pattern "/2/dm_conversations/with/{participant_id}/dm_events") $qp)
+  let full_url = (build-url $base ({participant_id: (encode-path-segment $participant_id)} | format pattern "/2/dm_conversations/with/{participant_id}/dm_events") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"max_results": $max_results, "pagination_token": $pagination_token, "event_types": $event_types, "dm_event.fields": $dm_event_fields, "expansions": $expansions, "media.fields": $media_fields, "user.fields": $user_fields, "tweet.fields": $tweet_fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"max_results": $max_results, "pagination_token": $pagination_token, "event_types": $event_types, "dm_event.fields": $dm_event_fields, "expansions": $expansions, "media.fields": $media_fields, "user.fields": $user_fields, "tweet.fields": $tweet_fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Send a new message to a user
@@ -321,12 +379,23 @@ export def "2-dm-conversations-with-messages create-user-event" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($participant_id | is-empty) { error make --unspanned { msg: "path parameter 'participant_id' must be non-empty" } }
-  let full_url = (build-url $base ({participant_id: (encode-path-segment $participant_id)} | format pattern "/2/dm_conversations/with/{participant_id}/messages"))
+  let full_url = (build-url $base ({participant_id: (encode-path-segment $participant_id)} | format pattern "/2/dm_conversations/with/{participant_id}/messages") $auth.query)
   let req_body = {"attachments": $attachments, "text": $text} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Send a new message to a DM Conversation
@@ -353,12 +422,23 @@ export def "2-dm-conversations-messages create-by-event" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($dm_conversation_id | is-empty) { error make --unspanned { msg: "path parameter 'dm_conversation_id' must be non-empty" } }
-  let full_url = (build-url $base ({dm_conversation_id: (encode-path-segment $dm_conversation_id)} | format pattern "/2/dm_conversations/{dm_conversation_id}/messages"))
+  let full_url = (build-url $base ({dm_conversation_id: (encode-path-segment $dm_conversation_id)} | format pattern "/2/dm_conversations/{dm_conversation_id}/messages") $auth.query)
   let req_body = {"attachments": $attachments, "text": $text} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Get DM Events for a DM Conversation
@@ -390,10 +470,21 @@ export def "2-dm-conversations-dm-events get" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "max_results" $max_results "scalar") (serialize-qp "pagination_token" $pagination_token "scalar") (serialize-qp "event_types" $event_types "csv") (serialize-qp "dm_event.fields" $dm_event_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "media.fields" $media_fields "csv") (serialize-qp "user.fields" $user_fields "csv") (serialize-qp "tweet.fields" $tweet_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/2/dm_conversations/{id}/dm_events") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/2/dm_conversations/{id}/dm_events") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"max_results": $max_results, "pagination_token": $pagination_token, "event_types": $event_types, "dm_event.fields": $dm_event_fields, "expansions": $expansions, "media.fields": $media_fields, "user.fields": $user_fields, "tweet.fields": $tweet_fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"max_results": $max_results, "pagination_token": $pagination_token, "event_types": $event_types, "dm_event.fields": $dm_event_fields, "expansions": $expansions, "media.fields": $media_fields, "user.fields": $user_fields, "tweet.fields": $tweet_fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get recent DM Events
@@ -423,10 +514,21 @@ export def "2-dm-events get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "max_results" $max_results "scalar") (serialize-qp "pagination_token" $pagination_token "scalar") (serialize-qp "event_types" $event_types "csv") (serialize-qp "dm_event.fields" $dm_event_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "media.fields" $media_fields "csv") (serialize-qp "user.fields" $user_fields "csv") (serialize-qp "tweet.fields" $tweet_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base "/2/dm_events" $qp)
+  let full_url = (build-url $base "/2/dm_events" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"max_results": $max_results, "pagination_token": $pagination_token, "event_types": $event_types, "dm_event.fields": $dm_event_fields, "expansions": $expansions, "media.fields": $media_fields, "user.fields": $user_fields, "tweet.fields": $tweet_fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"max_results": $max_results, "pagination_token": $pagination_token, "event_types": $event_types, "dm_event.fields": $dm_event_fields, "expansions": $expansions, "media.fields": $media_fields, "user.fields": $user_fields, "tweet.fields": $tweet_fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create List
@@ -452,12 +554,23 @@ export def "2-lists create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/2/lists")
+  let full_url = (build-url $base "/2/lists" $auth.query)
   let req_body = {"description": $description, "name": $name, "private": $private} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Delete List
@@ -481,10 +594,21 @@ export def "2-lists delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/2/lists/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/2/lists/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # List lookup by List ID.
@@ -512,10 +636,21 @@ export def "2-lists get" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "list.fields" $list_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "user.fields" $user_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/2/lists/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/2/lists/{id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"list.fields": $list_fields, "expansions": $expansions, "user.fields": $user_fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"list.fields": $list_fields, "expansions": $expansions, "user.fields": $user_fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update List.
@@ -543,12 +678,23 @@ export def "2-lists update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/2/lists/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/2/lists/{id}") $auth.query)
   let req_body = {"description": $description, "name": $name, "private": $private} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Returns User objects that follow a List by the provided List ID
@@ -578,10 +724,21 @@ export def "2-lists-followers get" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "max_results" $max_results "scalar") (serialize-qp "pagination_token" $pagination_token "scalar") (serialize-qp "user.fields" $user_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "tweet.fields" $tweet_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/2/lists/{id}/followers") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/2/lists/{id}/followers") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"max_results": $max_results, "pagination_token": $pagination_token, "user.fields": $user_fields, "expansions": $expansions, "tweet.fields": $tweet_fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"max_results": $max_results, "pagination_token": $pagination_token, "user.fields": $user_fields, "expansions": $expansions, "tweet.fields": $tweet_fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns User objects that are members of a List by the provided List ID.
@@ -611,10 +768,21 @@ export def "2-lists-members get" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "max_results" $max_results "scalar") (serialize-qp "pagination_token" $pagination_token "scalar") (serialize-qp "user.fields" $user_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "tweet.fields" $tweet_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/2/lists/{id}/members") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/2/lists/{id}/members") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"max_results": $max_results, "pagination_token": $pagination_token, "user.fields": $user_fields, "expansions": $expansions, "tweet.fields": $tweet_fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"max_results": $max_results, "pagination_token": $pagination_token, "user.fields": $user_fields, "expansions": $expansions, "tweet.fields": $tweet_fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Add a List member
@@ -640,12 +808,23 @@ export def "2-lists-members create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/2/lists/{id}/members"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/2/lists/{id}/members") $auth.query)
   let req_body = {"user_id": $user_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Remove a List member
@@ -671,10 +850,21 @@ export def "2-lists-members delete" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), user_id: (encode-path-segment $user_id)} | format pattern "/2/lists/{id}/members/{user_id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), user_id: (encode-path-segment $user_id)} | format pattern "/2/lists/{id}/members/{user_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # List Tweets timeline by List ID.
@@ -707,10 +897,21 @@ export def "2-lists-tweets get" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "max_results" $max_results "scalar") (serialize-qp "pagination_token" $pagination_token "scalar") (serialize-qp "tweet.fields" $tweet_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "media.fields" $media_fields "csv") (serialize-qp "poll.fields" $poll_fields "csv") (serialize-qp "user.fields" $user_fields "csv") (serialize-qp "place.fields" $place_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/2/lists/{id}/tweets") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/2/lists/{id}/tweets") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"max_results": $max_results, "pagination_token": $pagination_token, "tweet.fields": $tweet_fields, "expansions": $expansions, "media.fields": $media_fields, "poll.fields": $poll_fields, "user.fields": $user_fields, "place.fields": $place_fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"max_results": $max_results, "pagination_token": $pagination_token, "tweet.fields": $tweet_fields, "expansions": $expansions, "media.fields": $media_fields, "poll.fields": $poll_fields, "user.fields": $user_fields, "place.fields": $place_fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the OpenAPI Specification document.
@@ -730,10 +931,21 @@ export def "2-openapi-json get-open-spec" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/2/openapi.json")
+  let full_url = (build-url $base "/2/openapi.json" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Space lookup up Space IDs
@@ -761,10 +973,21 @@ export def "2-spaces list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ids" $ids "multi") (serialize-qp "space.fields" $space_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "user.fields" $user_fields "csv") (serialize-qp "topic.fields" $topic_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base "/2/spaces" $qp)
+  let full_url = (build-url $base "/2/spaces" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"ids": $ids, "space.fields": $space_fields, "expansions": $expansions, "user.fields": $user_fields, "topic.fields": $topic_fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"ids": $ids, "space.fields": $space_fields, "expansions": $expansions, "user.fields": $user_fields, "topic.fields": $topic_fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Space lookup by their creators
@@ -792,10 +1015,21 @@ export def "2-spaces-by-creator-ids find" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "user_ids" $user_ids "multi") (serialize-qp "space.fields" $space_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "user.fields" $user_fields "csv") (serialize-qp "topic.fields" $topic_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base "/2/spaces/by/creator_ids" $qp)
+  let full_url = (build-url $base "/2/spaces/by/creator_ids" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"user_ids": $user_ids, "space.fields": $space_fields, "expansions": $expansions, "user.fields": $user_fields, "topic.fields": $topic_fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"user_ids": $user_ids, "space.fields": $space_fields, "expansions": $expansions, "user.fields": $user_fields, "topic.fields": $topic_fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Search for Spaces
@@ -825,10 +1059,21 @@ export def "2-spaces-search list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "max_results" $max_results "scalar") (serialize-qp "space.fields" $space_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "user.fields" $user_fields "csv") (serialize-qp "topic.fields" $topic_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base "/2/spaces/search" $qp)
+  let full_url = (build-url $base "/2/spaces/search" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"query": $query, "state": $state, "max_results": $max_results, "space.fields": $space_fields, "expansions": $expansions, "user.fields": $user_fields, "topic.fields": $topic_fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"query": $query, "state": $state, "max_results": $max_results, "space.fields": $space_fields, "expansions": $expansions, "user.fields": $user_fields, "topic.fields": $topic_fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Space lookup by Space ID
@@ -857,10 +1102,21 @@ export def "2-spaces find" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "space.fields" $space_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "user.fields" $user_fields "csv") (serialize-qp "topic.fields" $topic_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/2/spaces/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/2/spaces/{id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"space.fields": $space_fields, "expansions": $expansions, "user.fields": $user_fields, "topic.fields": $topic_fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"space.fields": $space_fields, "expansions": $expansions, "user.fields": $user_fields, "topic.fields": $topic_fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve the list of Users who purchased a ticket to the given space
@@ -890,10 +1146,21 @@ export def "2-spaces-buyers get" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "pagination_token" $pagination_token "scalar") (serialize-qp "max_results" $max_results "scalar") (serialize-qp "user.fields" $user_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "tweet.fields" $tweet_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/2/spaces/{id}/buyers") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/2/spaces/{id}/buyers") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"pagination_token": $pagination_token, "max_results": $max_results, "user.fields": $user_fields, "expansions": $expansions, "tweet.fields": $tweet_fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"pagination_token": $pagination_token, "max_results": $max_results, "user.fields": $user_fields, "expansions": $expansions, "tweet.fields": $tweet_fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve Tweets from a Space.
@@ -925,10 +1192,21 @@ export def "2-spaces-tweets get" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "max_results" $max_results "scalar") (serialize-qp "tweet.fields" $tweet_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "media.fields" $media_fields "csv") (serialize-qp "poll.fields" $poll_fields "csv") (serialize-qp "user.fields" $user_fields "csv") (serialize-qp "place.fields" $place_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/2/spaces/{id}/tweets") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/2/spaces/{id}/tweets") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"max_results": $max_results, "tweet.fields": $tweet_fields, "expansions": $expansions, "media.fields": $media_fields, "poll.fields": $poll_fields, "user.fields": $user_fields, "place.fields": $place_fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"max_results": $max_results, "tweet.fields": $tweet_fields, "expansions": $expansions, "media.fields": $media_fields, "poll.fields": $poll_fields, "user.fields": $user_fields, "place.fields": $place_fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Tweet lookup by Tweet IDs
@@ -958,10 +1236,21 @@ export def "2-tweets list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ids" $ids "csv") (serialize-qp "tweet.fields" $tweet_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "media.fields" $media_fields "csv") (serialize-qp "poll.fields" $poll_fields "csv") (serialize-qp "user.fields" $user_fields "csv") (serialize-qp "place.fields" $place_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base "/2/tweets" $qp)
+  let full_url = (build-url $base "/2/tweets" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"ids": $ids, "tweet.fields": $tweet_fields, "expansions": $expansions, "media.fields": $media_fields, "poll.fields": $poll_fields, "user.fields": $user_fields, "place.fields": $place_fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"ids": $ids, "tweet.fields": $tweet_fields, "expansions": $expansions, "media.fields": $media_fields, "poll.fields": $poll_fields, "user.fields": $user_fields, "place.fields": $place_fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Creation of a Tweet
@@ -999,12 +1288,23 @@ export def "2-tweets create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/2/tweets")
+  let full_url = (build-url $base "/2/tweets" $auth.query)
   let req_body = {"card_uri": $card_uri, "direct_message_deep_link": $direct_message_deep_link, "for_super_followers_only": $for_super_followers_only, "geo": $geo, "media": $media, "nullcast": $nullcast, "poll": $poll, "quote_tweet_id": $quote_tweet_id, "reply": $reply, "reply_settings": $reply_settings, "text": $text} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Tweets Compliance stream
@@ -1030,10 +1330,21 @@ export def "2-tweets-compliance-stream get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "backfill_minutes" $backfill_minutes "scalar") (serialize-qp "partition" $partition "scalar") (serialize-qp "start_time" $start_time "scalar") (serialize-qp "end_time" $end_time "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/2/tweets/compliance/stream" $qp)
+  let full_url = (build-url $base "/2/tweets/compliance/stream" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"backfill_minutes": $backfill_minutes, "partition": $partition, "start_time": $start_time, "end_time": $end_time} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"backfill_minutes": $backfill_minutes, "partition": $partition, "start_time": $start_time, "end_time": $end_time} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Full archive search counts
@@ -1065,10 +1376,21 @@ export def "2-tweets-counts-all archive-full-list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "start_time" $start_time "scalar") (serialize-qp "end_time" $end_time "scalar") (serialize-qp "since_id" $since_id "scalar") (serialize-qp "until_id" $until_id "scalar") (serialize-qp "next_token" $next_token "scalar") (serialize-qp "pagination_token" $pagination_token "scalar") (serialize-qp "granularity" $granularity "scalar") (serialize-qp "search_count.fields" $search_count_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base "/2/tweets/counts/all" $qp)
+  let full_url = (build-url $base "/2/tweets/counts/all" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"query": $query, "start_time": $start_time, "end_time": $end_time, "since_id": $since_id, "until_id": $until_id, "next_token": $next_token, "pagination_token": $pagination_token, "granularity": $granularity, "search_count.fields": $search_count_fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"query": $query, "start_time": $start_time, "end_time": $end_time, "since_id": $since_id, "until_id": $until_id, "next_token": $next_token, "pagination_token": $pagination_token, "granularity": $granularity, "search_count.fields": $search_count_fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Recent search counts
@@ -1100,10 +1422,21 @@ export def "2-tweets-counts-recent list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "start_time" $start_time "scalar") (serialize-qp "end_time" $end_time "scalar") (serialize-qp "since_id" $since_id "scalar") (serialize-qp "until_id" $until_id "scalar") (serialize-qp "next_token" $next_token "scalar") (serialize-qp "pagination_token" $pagination_token "scalar") (serialize-qp "granularity" $granularity "scalar") (serialize-qp "search_count.fields" $search_count_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base "/2/tweets/counts/recent" $qp)
+  let full_url = (build-url $base "/2/tweets/counts/recent" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"query": $query, "start_time": $start_time, "end_time": $end_time, "since_id": $since_id, "until_id": $until_id, "next_token": $next_token, "pagination_token": $pagination_token, "granularity": $granularity, "search_count.fields": $search_count_fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"query": $query, "start_time": $start_time, "end_time": $end_time, "since_id": $since_id, "until_id": $until_id, "next_token": $next_token, "pagination_token": $pagination_token, "granularity": $granularity, "search_count.fields": $search_count_fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Firehose stream
@@ -1135,10 +1468,21 @@ export def "2-tweets-firehose-stream get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "backfill_minutes" $backfill_minutes "scalar") (serialize-qp "partition" $partition "scalar") (serialize-qp "start_time" $start_time "scalar") (serialize-qp "end_time" $end_time "scalar") (serialize-qp "tweet.fields" $tweet_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "media.fields" $media_fields "csv") (serialize-qp "poll.fields" $poll_fields "csv") (serialize-qp "user.fields" $user_fields "csv") (serialize-qp "place.fields" $place_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base "/2/tweets/firehose/stream" $qp)
+  let full_url = (build-url $base "/2/tweets/firehose/stream" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"backfill_minutes": $backfill_minutes, "partition": $partition, "start_time": $start_time, "end_time": $end_time, "tweet.fields": $tweet_fields, "expansions": $expansions, "media.fields": $media_fields, "poll.fields": $poll_fields, "user.fields": $user_fields, "place.fields": $place_fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"backfill_minutes": $backfill_minutes, "partition": $partition, "start_time": $start_time, "end_time": $end_time, "tweet.fields": $tweet_fields, "expansions": $expansions, "media.fields": $media_fields, "poll.fields": $poll_fields, "user.fields": $user_fields, "place.fields": $place_fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Tweets Label stream
@@ -1163,10 +1507,21 @@ export def "2-tweets-label-stream get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "backfill_minutes" $backfill_minutes "scalar") (serialize-qp "start_time" $start_time "scalar") (serialize-qp "end_time" $end_time "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/2/tweets/label/stream" $qp)
+  let full_url = (build-url $base "/2/tweets/label/stream" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"backfill_minutes": $backfill_minutes, "start_time": $start_time, "end_time": $end_time} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"backfill_minutes": $backfill_minutes, "start_time": $start_time, "end_time": $end_time} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Sample stream
@@ -1196,10 +1551,21 @@ export def "2-tweets-sample-stream get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "backfill_minutes" $backfill_minutes "scalar") (serialize-qp "tweet.fields" $tweet_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "media.fields" $media_fields "csv") (serialize-qp "poll.fields" $poll_fields "csv") (serialize-qp "user.fields" $user_fields "csv") (serialize-qp "place.fields" $place_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base "/2/tweets/sample/stream" $qp)
+  let full_url = (build-url $base "/2/tweets/sample/stream" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"backfill_minutes": $backfill_minutes, "tweet.fields": $tweet_fields, "expansions": $expansions, "media.fields": $media_fields, "poll.fields": $poll_fields, "user.fields": $user_fields, "place.fields": $place_fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"backfill_minutes": $backfill_minutes, "tweet.fields": $tweet_fields, "expansions": $expansions, "media.fields": $media_fields, "poll.fields": $poll_fields, "user.fields": $user_fields, "place.fields": $place_fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Sample 10% stream
@@ -1231,10 +1597,21 @@ export def "2-tweets-sample10-stream get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "backfill_minutes" $backfill_minutes "scalar") (serialize-qp "partition" $partition "scalar") (serialize-qp "start_time" $start_time "scalar") (serialize-qp "end_time" $end_time "scalar") (serialize-qp "tweet.fields" $tweet_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "media.fields" $media_fields "csv") (serialize-qp "poll.fields" $poll_fields "csv") (serialize-qp "user.fields" $user_fields "csv") (serialize-qp "place.fields" $place_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base "/2/tweets/sample10/stream" $qp)
+  let full_url = (build-url $base "/2/tweets/sample10/stream" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"backfill_minutes": $backfill_minutes, "partition": $partition, "start_time": $start_time, "end_time": $end_time, "tweet.fields": $tweet_fields, "expansions": $expansions, "media.fields": $media_fields, "poll.fields": $poll_fields, "user.fields": $user_fields, "place.fields": $place_fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"backfill_minutes": $backfill_minutes, "partition": $partition, "start_time": $start_time, "end_time": $end_time, "tweet.fields": $tweet_fields, "expansions": $expansions, "media.fields": $media_fields, "poll.fields": $poll_fields, "user.fields": $user_fields, "place.fields": $place_fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Full-archive search
@@ -1272,10 +1649,21 @@ export def "2-tweets-search-all list-fullarchive" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "start_time" $start_time "scalar") (serialize-qp "end_time" $end_time "scalar") (serialize-qp "since_id" $since_id "scalar") (serialize-qp "until_id" $until_id "scalar") (serialize-qp "max_results" $max_results "scalar") (serialize-qp "next_token" $next_token "scalar") (serialize-qp "pagination_token" $pagination_token "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "tweet.fields" $tweet_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "media.fields" $media_fields "csv") (serialize-qp "poll.fields" $poll_fields "csv") (serialize-qp "user.fields" $user_fields "csv") (serialize-qp "place.fields" $place_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base "/2/tweets/search/all" $qp)
+  let full_url = (build-url $base "/2/tweets/search/all" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"query": $query, "start_time": $start_time, "end_time": $end_time, "since_id": $since_id, "until_id": $until_id, "max_results": $max_results, "next_token": $next_token, "pagination_token": $pagination_token, "sort_order": $sort_order, "tweet.fields": $tweet_fields, "expansions": $expansions, "media.fields": $media_fields, "poll.fields": $poll_fields, "user.fields": $user_fields, "place.fields": $place_fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"query": $query, "start_time": $start_time, "end_time": $end_time, "since_id": $since_id, "until_id": $until_id, "max_results": $max_results, "next_token": $next_token, "pagination_token": $pagination_token, "sort_order": $sort_order, "tweet.fields": $tweet_fields, "expansions": $expansions, "media.fields": $media_fields, "poll.fields": $poll_fields, "user.fields": $user_fields, "place.fields": $place_fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Recent search
@@ -1313,10 +1701,21 @@ export def "2-tweets-search-recent list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "start_time" $start_time "scalar") (serialize-qp "end_time" $end_time "scalar") (serialize-qp "since_id" $since_id "scalar") (serialize-qp "until_id" $until_id "scalar") (serialize-qp "max_results" $max_results "scalar") (serialize-qp "next_token" $next_token "scalar") (serialize-qp "pagination_token" $pagination_token "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "tweet.fields" $tweet_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "media.fields" $media_fields "csv") (serialize-qp "poll.fields" $poll_fields "csv") (serialize-qp "user.fields" $user_fields "csv") (serialize-qp "place.fields" $place_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base "/2/tweets/search/recent" $qp)
+  let full_url = (build-url $base "/2/tweets/search/recent" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"query": $query, "start_time": $start_time, "end_time": $end_time, "since_id": $since_id, "until_id": $until_id, "max_results": $max_results, "next_token": $next_token, "pagination_token": $pagination_token, "sort_order": $sort_order, "tweet.fields": $tweet_fields, "expansions": $expansions, "media.fields": $media_fields, "poll.fields": $poll_fields, "user.fields": $user_fields, "place.fields": $place_fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"query": $query, "start_time": $start_time, "end_time": $end_time, "since_id": $since_id, "until_id": $until_id, "max_results": $max_results, "next_token": $next_token, "pagination_token": $pagination_token, "sort_order": $sort_order, "tweet.fields": $tweet_fields, "expansions": $expansions, "media.fields": $media_fields, "poll.fields": $poll_fields, "user.fields": $user_fields, "place.fields": $place_fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Filtered stream
@@ -1348,10 +1747,21 @@ export def "2-tweets-search-stream list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "backfill_minutes" $backfill_minutes "scalar") (serialize-qp "start_time" $start_time "scalar") (serialize-qp "end_time" $end_time "scalar") (serialize-qp "tweet.fields" $tweet_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "media.fields" $media_fields "csv") (serialize-qp "poll.fields" $poll_fields "csv") (serialize-qp "user.fields" $user_fields "csv") (serialize-qp "place.fields" $place_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base "/2/tweets/search/stream" $qp)
+  let full_url = (build-url $base "/2/tweets/search/stream" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"backfill_minutes": $backfill_minutes, "start_time": $start_time, "end_time": $end_time, "tweet.fields": $tweet_fields, "expansions": $expansions, "media.fields": $media_fields, "poll.fields": $poll_fields, "user.fields": $user_fields, "place.fields": $place_fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"backfill_minutes": $backfill_minutes, "start_time": $start_time, "end_time": $end_time, "tweet.fields": $tweet_fields, "expansions": $expansions, "media.fields": $media_fields, "poll.fields": $poll_fields, "user.fields": $user_fields, "place.fields": $place_fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Rules lookup
@@ -1377,10 +1787,21 @@ export def "2-tweets-search-stream-rules get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ids" $ids "multi") (serialize-qp "max_results" $max_results "scalar") (serialize-qp "pagination_token" $pagination_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/2/tweets/search/stream/rules" $qp)
+  let full_url = (build-url $base "/2/tweets/search/stream/rules" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"ids": $ids, "max_results": $max_results, "pagination_token": $pagination_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"ids": $ids, "max_results": $max_results, "pagination_token": $pagination_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Add/Delete rules
@@ -1409,12 +1830,23 @@ export def "2-tweets-search-stream-rules create-or-delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "dry_run" $qp_dry_run "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/2/tweets/search/stream/rules" $qp)
+  let full_url = (build-url $base "/2/tweets/search/stream/rules" $qp $auth.query)
   let req_body = {"add": $add, "delete": $delete} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"dry_run": $qp_dry_run} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"dry_run": $qp_dry_run} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Tweet delete by Tweet ID
@@ -1438,10 +1870,21 @@ export def "2-tweets delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/2/tweets/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/2/tweets/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Tweet lookup by Tweet ID
@@ -1472,10 +1915,21 @@ export def "2-tweets find" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "tweet.fields" $tweet_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "media.fields" $media_fields "csv") (serialize-qp "poll.fields" $poll_fields "csv") (serialize-qp "user.fields" $user_fields "csv") (serialize-qp "place.fields" $place_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/2/tweets/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/2/tweets/{id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"tweet.fields": $tweet_fields, "expansions": $expansions, "media.fields": $media_fields, "poll.fields": $poll_fields, "user.fields": $user_fields, "place.fields": $place_fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"tweet.fields": $tweet_fields, "expansions": $expansions, "media.fields": $media_fields, "poll.fields": $poll_fields, "user.fields": $user_fields, "place.fields": $place_fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns User objects that have liked the provided Tweet ID
@@ -1505,10 +1959,21 @@ export def "2-tweets-liking-users get" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "max_results" $max_results "scalar") (serialize-qp "pagination_token" $pagination_token "scalar") (serialize-qp "user.fields" $user_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "tweet.fields" $tweet_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/2/tweets/{id}/liking_users") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/2/tweets/{id}/liking_users") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"max_results": $max_results, "pagination_token": $pagination_token, "user.fields": $user_fields, "expansions": $expansions, "tweet.fields": $tweet_fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"max_results": $max_results, "pagination_token": $pagination_token, "user.fields": $user_fields, "expansions": $expansions, "tweet.fields": $tweet_fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve Tweets that quote a Tweet.
@@ -1542,10 +2007,21 @@ export def "2-tweets-quote-tweets find-that" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "max_results" $max_results "scalar") (serialize-qp "pagination_token" $pagination_token "scalar") (serialize-qp "exclude" $exclude "csv") (serialize-qp "tweet.fields" $tweet_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "media.fields" $media_fields "csv") (serialize-qp "poll.fields" $poll_fields "csv") (serialize-qp "user.fields" $user_fields "csv") (serialize-qp "place.fields" $place_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/2/tweets/{id}/quote_tweets") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/2/tweets/{id}/quote_tweets") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"max_results": $max_results, "pagination_token": $pagination_token, "exclude": $exclude, "tweet.fields": $tweet_fields, "expansions": $expansions, "media.fields": $media_fields, "poll.fields": $poll_fields, "user.fields": $user_fields, "place.fields": $place_fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"max_results": $max_results, "pagination_token": $pagination_token, "exclude": $exclude, "tweet.fields": $tweet_fields, "expansions": $expansions, "media.fields": $media_fields, "poll.fields": $poll_fields, "user.fields": $user_fields, "place.fields": $place_fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns User objects that have retweeted the provided Tweet ID
@@ -1575,10 +2051,21 @@ export def "2-tweets-retweeted-by get-retweeting-users" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "max_results" $max_results "scalar") (serialize-qp "pagination_token" $pagination_token "scalar") (serialize-qp "user.fields" $user_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "tweet.fields" $tweet_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/2/tweets/{id}/retweeted_by") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/2/tweets/{id}/retweeted_by") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"max_results": $max_results, "pagination_token": $pagination_token, "user.fields": $user_fields, "expansions": $expansions, "tweet.fields": $tweet_fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"max_results": $max_results, "pagination_token": $pagination_token, "user.fields": $user_fields, "expansions": $expansions, "tweet.fields": $tweet_fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Hide replies
@@ -1604,12 +2091,23 @@ export def "2-tweets-hidden update-hide-reply" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tweet_id | is-empty) { error make --unspanned { msg: "path parameter 'tweet_id' must be non-empty" } }
-  let full_url = (build-url $base ({tweet_id: (encode-path-segment $tweet_id)} | format pattern "/2/tweets/{tweet_id}/hidden"))
+  let full_url = (build-url $base ({tweet_id: (encode-path-segment $tweet_id)} | format pattern "/2/tweets/{tweet_id}/hidden") $auth.query)
   let req_body = {"hidden": $hidden} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # User lookup by IDs
@@ -1636,10 +2134,21 @@ export def "2-users list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ids" $ids "csv") (serialize-qp "user.fields" $user_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "tweet.fields" $tweet_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base "/2/users" $qp)
+  let full_url = (build-url $base "/2/users" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"ids": $ids, "user.fields": $user_fields, "expansions": $expansions, "tweet.fields": $tweet_fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"ids": $ids, "user.fields": $user_fields, "expansions": $expansions, "tweet.fields": $tweet_fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # User lookup by usernames
@@ -1666,10 +2175,21 @@ export def "2-users-by find-username" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "usernames" $usernames "csv") (serialize-qp "user.fields" $user_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "tweet.fields" $tweet_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base "/2/users/by" $qp)
+  let full_url = (build-url $base "/2/users/by" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"usernames": $usernames, "user.fields": $user_fields, "expansions": $expansions, "tweet.fields": $tweet_fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"usernames": $usernames, "user.fields": $user_fields, "expansions": $expansions, "tweet.fields": $tweet_fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # User lookup by username
@@ -1697,10 +2217,21 @@ export def "2-users-by-username find" [
   let base = ($base_url | default $BASE_URL)
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   let qp = [(serialize-qp "user.fields" $user_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "tweet.fields" $tweet_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/2/users/by/username/{username}") $qp)
+  let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/2/users/by/username/{username}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"user.fields": $user_fields, "expansions": $expansions, "tweet.fields": $tweet_fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"user.fields": $user_fields, "expansions": $expansions, "tweet.fields": $tweet_fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Users Compliance stream
@@ -1726,10 +2257,21 @@ export def "2-users-compliance-stream get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "backfill_minutes" $backfill_minutes "scalar") (serialize-qp "partition" $partition "scalar") (serialize-qp "start_time" $start_time "scalar") (serialize-qp "end_time" $end_time "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/2/users/compliance/stream" $qp)
+  let full_url = (build-url $base "/2/users/compliance/stream" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"backfill_minutes": $backfill_minutes, "partition": $partition, "start_time": $start_time, "end_time": $end_time} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"backfill_minutes": $backfill_minutes, "partition": $partition, "start_time": $start_time, "end_time": $end_time} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # User lookup me
@@ -1755,10 +2297,21 @@ export def "2-users-me find-my" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "user.fields" $user_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "tweet.fields" $tweet_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base "/2/users/me" $qp)
+  let full_url = (build-url $base "/2/users/me" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"user.fields": $user_fields, "expansions": $expansions, "tweet.fields": $tweet_fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"user.fields": $user_fields, "expansions": $expansions, "tweet.fields": $tweet_fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # User lookup by ID
@@ -1786,10 +2339,21 @@ export def "2-users find" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "user.fields" $user_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "tweet.fields" $tweet_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/2/users/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/2/users/{id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"user.fields": $user_fields, "expansions": $expansions, "tweet.fields": $tweet_fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"user.fields": $user_fields, "expansions": $expansions, "tweet.fields": $tweet_fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns User objects that are blocked by provided User ID
@@ -1819,10 +2383,21 @@ export def "2-users-blocking get" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "max_results" $max_results "scalar") (serialize-qp "pagination_token" $pagination_token "scalar") (serialize-qp "user.fields" $user_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "tweet.fields" $tweet_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/2/users/{id}/blocking") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/2/users/{id}/blocking") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"max_results": $max_results, "pagination_token": $pagination_token, "user.fields": $user_fields, "expansions": $expansions, "tweet.fields": $tweet_fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"max_results": $max_results, "pagination_token": $pagination_token, "user.fields": $user_fields, "expansions": $expansions, "tweet.fields": $tweet_fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Block User by User ID
@@ -1848,12 +2423,23 @@ export def "2-users-blocking create-block" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/2/users/{id}/blocking"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/2/users/{id}/blocking") $auth.query)
   let req_body = {"target_user_id": $target_user_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Bookmarks by User
@@ -1886,10 +2472,21 @@ export def "2-users-bookmarks get" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "max_results" $max_results "scalar") (serialize-qp "pagination_token" $pagination_token "scalar") (serialize-qp "tweet.fields" $tweet_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "media.fields" $media_fields "csv") (serialize-qp "poll.fields" $poll_fields "csv") (serialize-qp "user.fields" $user_fields "csv") (serialize-qp "place.fields" $place_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/2/users/{id}/bookmarks") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/2/users/{id}/bookmarks") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"max_results": $max_results, "pagination_token": $pagination_token, "tweet.fields": $tweet_fields, "expansions": $expansions, "media.fields": $media_fields, "poll.fields": $poll_fields, "user.fields": $user_fields, "place.fields": $place_fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"max_results": $max_results, "pagination_token": $pagination_token, "tweet.fields": $tweet_fields, "expansions": $expansions, "media.fields": $media_fields, "poll.fields": $poll_fields, "user.fields": $user_fields, "place.fields": $place_fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Add Tweet to Bookmarks
@@ -1915,12 +2512,23 @@ export def "2-users-bookmarks create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/2/users/{id}/bookmarks"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/2/users/{id}/bookmarks") $auth.query)
   let req_body = {"tweet_id": $tweet_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Remove a bookmarked Tweet
@@ -1946,10 +2554,21 @@ export def "2-users-bookmarks delete" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($tweet_id | is-empty) { error make --unspanned { msg: "path parameter 'tweet_id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), tweet_id: (encode-path-segment $tweet_id)} | format pattern "/2/users/{id}/bookmarks/{tweet_id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), tweet_id: (encode-path-segment $tweet_id)} | format pattern "/2/users/{id}/bookmarks/{tweet_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Get User's Followed Lists
@@ -1979,10 +2598,21 @@ export def "2-users-followed-lists get" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "max_results" $max_results "scalar") (serialize-qp "pagination_token" $pagination_token "scalar") (serialize-qp "list.fields" $list_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "user.fields" $user_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/2/users/{id}/followed_lists") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/2/users/{id}/followed_lists") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"max_results": $max_results, "pagination_token": $pagination_token, "list.fields": $list_fields, "expansions": $expansions, "user.fields": $user_fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"max_results": $max_results, "pagination_token": $pagination_token, "list.fields": $list_fields, "expansions": $expansions, "user.fields": $user_fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Follow a List
@@ -2008,12 +2638,23 @@ export def "2-users-followed-lists list-follow" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/2/users/{id}/followed_lists"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/2/users/{id}/followed_lists") $auth.query)
   let req_body = {"list_id": $list_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Unfollow a List
@@ -2039,10 +2680,21 @@ export def "2-users-followed-lists list-unfollow" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($list_id | is-empty) { error make --unspanned { msg: "path parameter 'list_id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), list_id: (encode-path-segment $list_id)} | format pattern "/2/users/{id}/followed_lists/{list_id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), list_id: (encode-path-segment $list_id)} | format pattern "/2/users/{id}/followed_lists/{list_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Followers by User ID
@@ -2072,10 +2724,21 @@ export def "2-users-followers get" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "max_results" $max_results "scalar") (serialize-qp "pagination_token" $pagination_token "scalar") (serialize-qp "user.fields" $user_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "tweet.fields" $tweet_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/2/users/{id}/followers") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/2/users/{id}/followers") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"max_results": $max_results, "pagination_token": $pagination_token, "user.fields": $user_fields, "expansions": $expansions, "tweet.fields": $tweet_fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"max_results": $max_results, "pagination_token": $pagination_token, "user.fields": $user_fields, "expansions": $expansions, "tweet.fields": $tweet_fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Following by User ID
@@ -2105,10 +2768,21 @@ export def "2-users-following get" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "max_results" $max_results "scalar") (serialize-qp "pagination_token" $pagination_token "scalar") (serialize-qp "user.fields" $user_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "tweet.fields" $tweet_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/2/users/{id}/following") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/2/users/{id}/following") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"max_results": $max_results, "pagination_token": $pagination_token, "user.fields": $user_fields, "expansions": $expansions, "tweet.fields": $tweet_fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"max_results": $max_results, "pagination_token": $pagination_token, "user.fields": $user_fields, "expansions": $expansions, "tweet.fields": $tweet_fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Follow User
@@ -2134,12 +2808,23 @@ export def "2-users-following create-follow" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/2/users/{id}/following"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/2/users/{id}/following") $auth.query)
   let req_body = {"target_user_id": $target_user_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Returns Tweet objects liked by the provided User ID
@@ -2172,10 +2857,21 @@ export def "2-users-liked-tweets get" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "max_results" $max_results "scalar") (serialize-qp "pagination_token" $pagination_token "scalar") (serialize-qp "tweet.fields" $tweet_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "media.fields" $media_fields "csv") (serialize-qp "poll.fields" $poll_fields "csv") (serialize-qp "user.fields" $user_fields "csv") (serialize-qp "place.fields" $place_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/2/users/{id}/liked_tweets") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/2/users/{id}/liked_tweets") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"max_results": $max_results, "pagination_token": $pagination_token, "tweet.fields": $tweet_fields, "expansions": $expansions, "media.fields": $media_fields, "poll.fields": $poll_fields, "user.fields": $user_fields, "place.fields": $place_fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"max_results": $max_results, "pagination_token": $pagination_token, "tweet.fields": $tweet_fields, "expansions": $expansions, "media.fields": $media_fields, "poll.fields": $poll_fields, "user.fields": $user_fields, "place.fields": $place_fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Causes the User (in the path) to like the specified Tweet
@@ -2201,12 +2897,23 @@ export def "2-users-likes create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/2/users/{id}/likes"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/2/users/{id}/likes") $auth.query)
   let req_body = {"tweet_id": $tweet_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Causes the User (in the path) to unlike the specified Tweet
@@ -2232,10 +2939,21 @@ export def "2-users-likes delete-unlike" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($tweet_id | is-empty) { error make --unspanned { msg: "path parameter 'tweet_id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), tweet_id: (encode-path-segment $tweet_id)} | format pattern "/2/users/{id}/likes/{tweet_id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), tweet_id: (encode-path-segment $tweet_id)} | format pattern "/2/users/{id}/likes/{tweet_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Get a User's List Memberships
@@ -2265,10 +2983,21 @@ export def "2-users-list-memberships get" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "max_results" $max_results "scalar") (serialize-qp "pagination_token" $pagination_token "scalar") (serialize-qp "list.fields" $list_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "user.fields" $user_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/2/users/{id}/list_memberships") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/2/users/{id}/list_memberships") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"max_results": $max_results, "pagination_token": $pagination_token, "list.fields": $list_fields, "expansions": $expansions, "user.fields": $user_fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"max_results": $max_results, "pagination_token": $pagination_token, "list.fields": $list_fields, "expansions": $expansions, "user.fields": $user_fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # User mention timeline by User ID
@@ -2305,10 +3034,21 @@ export def "2-users-mentions get" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "since_id" $since_id "scalar") (serialize-qp "until_id" $until_id "scalar") (serialize-qp "max_results" $max_results "scalar") (serialize-qp "pagination_token" $pagination_token "scalar") (serialize-qp "start_time" $start_time "scalar") (serialize-qp "end_time" $end_time "scalar") (serialize-qp "tweet.fields" $tweet_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "media.fields" $media_fields "csv") (serialize-qp "poll.fields" $poll_fields "csv") (serialize-qp "user.fields" $user_fields "csv") (serialize-qp "place.fields" $place_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/2/users/{id}/mentions") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/2/users/{id}/mentions") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"since_id": $since_id, "until_id": $until_id, "max_results": $max_results, "pagination_token": $pagination_token, "start_time": $start_time, "end_time": $end_time, "tweet.fields": $tweet_fields, "expansions": $expansions, "media.fields": $media_fields, "poll.fields": $poll_fields, "user.fields": $user_fields, "place.fields": $place_fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"since_id": $since_id, "until_id": $until_id, "max_results": $max_results, "pagination_token": $pagination_token, "start_time": $start_time, "end_time": $end_time, "tweet.fields": $tweet_fields, "expansions": $expansions, "media.fields": $media_fields, "poll.fields": $poll_fields, "user.fields": $user_fields, "place.fields": $place_fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns User objects that are muted by the provided User ID
@@ -2338,10 +3078,21 @@ export def "2-users-muting get" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "max_results" $max_results "scalar") (serialize-qp "pagination_token" $pagination_token "scalar") (serialize-qp "user.fields" $user_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "tweet.fields" $tweet_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/2/users/{id}/muting") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/2/users/{id}/muting") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"max_results": $max_results, "pagination_token": $pagination_token, "user.fields": $user_fields, "expansions": $expansions, "tweet.fields": $tweet_fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"max_results": $max_results, "pagination_token": $pagination_token, "user.fields": $user_fields, "expansions": $expansions, "tweet.fields": $tweet_fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Mute User by User ID.
@@ -2367,12 +3118,23 @@ export def "2-users-muting create-mute" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/2/users/{id}/muting"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/2/users/{id}/muting") $auth.query)
   let req_body = {"target_user_id": $target_user_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get a User's Owned Lists.
@@ -2402,10 +3164,21 @@ export def "2-users-owned-lists list" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "max_results" $max_results "scalar") (serialize-qp "pagination_token" $pagination_token "scalar") (serialize-qp "list.fields" $list_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "user.fields" $user_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/2/users/{id}/owned_lists") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/2/users/{id}/owned_lists") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"max_results": $max_results, "pagination_token": $pagination_token, "list.fields": $list_fields, "expansions": $expansions, "user.fields": $user_fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"max_results": $max_results, "pagination_token": $pagination_token, "list.fields": $list_fields, "expansions": $expansions, "user.fields": $user_fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get a User's Pinned Lists
@@ -2433,10 +3206,21 @@ export def "2-users-pinned-lists list" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "list.fields" $list_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "user.fields" $user_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/2/users/{id}/pinned_lists") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/2/users/{id}/pinned_lists") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"list.fields": $list_fields, "expansions": $expansions, "user.fields": $user_fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"list.fields": $list_fields, "expansions": $expansions, "user.fields": $user_fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Pin a List
@@ -2462,12 +3246,23 @@ export def "2-users-pinned-lists list-pin" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/2/users/{id}/pinned_lists"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/2/users/{id}/pinned_lists") $auth.query)
   let req_body = {"list_id": $list_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Unpin a List
@@ -2493,10 +3288,21 @@ export def "2-users-pinned-lists list-unpin" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($list_id | is-empty) { error make --unspanned { msg: "path parameter 'list_id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), list_id: (encode-path-segment $list_id)} | format pattern "/2/users/{id}/pinned_lists/{list_id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), list_id: (encode-path-segment $list_id)} | format pattern "/2/users/{id}/pinned_lists/{list_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Causes the User (in the path) to retweet the specified Tweet.
@@ -2522,12 +3328,23 @@ export def "2-users-retweets create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/2/users/{id}/retweets"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/2/users/{id}/retweets") $auth.query)
   let req_body = {"tweet_id": $tweet_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Causes the User (in the path) to unretweet the specified Tweet
@@ -2553,10 +3370,21 @@ export def "2-users-retweets delete-unretweets" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($source_tweet_id | is-empty) { error make --unspanned { msg: "path parameter 'source_tweet_id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), source_tweet_id: (encode-path-segment $source_tweet_id)} | format pattern "/2/users/{id}/retweets/{source_tweet_id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), source_tweet_id: (encode-path-segment $source_tweet_id)} | format pattern "/2/users/{id}/retweets/{source_tweet_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # User home timeline by User ID
@@ -2594,10 +3422,21 @@ export def "2-users-timelines-reverse-chronological get" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "since_id" $since_id "scalar") (serialize-qp "until_id" $until_id "scalar") (serialize-qp "max_results" $max_results "scalar") (serialize-qp "pagination_token" $pagination_token "scalar") (serialize-qp "exclude" $exclude "csv") (serialize-qp "start_time" $start_time "scalar") (serialize-qp "end_time" $end_time "scalar") (serialize-qp "tweet.fields" $tweet_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "media.fields" $media_fields "csv") (serialize-qp "poll.fields" $poll_fields "csv") (serialize-qp "user.fields" $user_fields "csv") (serialize-qp "place.fields" $place_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/2/users/{id}/timelines/reverse_chronological") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/2/users/{id}/timelines/reverse_chronological") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"since_id": $since_id, "until_id": $until_id, "max_results": $max_results, "pagination_token": $pagination_token, "exclude": $exclude, "start_time": $start_time, "end_time": $end_time, "tweet.fields": $tweet_fields, "expansions": $expansions, "media.fields": $media_fields, "poll.fields": $poll_fields, "user.fields": $user_fields, "place.fields": $place_fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"since_id": $since_id, "until_id": $until_id, "max_results": $max_results, "pagination_token": $pagination_token, "exclude": $exclude, "start_time": $start_time, "end_time": $end_time, "tweet.fields": $tweet_fields, "expansions": $expansions, "media.fields": $media_fields, "poll.fields": $poll_fields, "user.fields": $user_fields, "place.fields": $place_fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # User Tweets timeline by User ID
@@ -2635,10 +3474,21 @@ export def "2-users-tweets get" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "since_id" $since_id "scalar") (serialize-qp "until_id" $until_id "scalar") (serialize-qp "max_results" $max_results "scalar") (serialize-qp "pagination_token" $pagination_token "scalar") (serialize-qp "exclude" $exclude "csv") (serialize-qp "start_time" $start_time "scalar") (serialize-qp "end_time" $end_time "scalar") (serialize-qp "tweet.fields" $tweet_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "media.fields" $media_fields "csv") (serialize-qp "poll.fields" $poll_fields "csv") (serialize-qp "user.fields" $user_fields "csv") (serialize-qp "place.fields" $place_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/2/users/{id}/tweets") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/2/users/{id}/tweets") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"since_id": $since_id, "until_id": $until_id, "max_results": $max_results, "pagination_token": $pagination_token, "exclude": $exclude, "start_time": $start_time, "end_time": $end_time, "tweet.fields": $tweet_fields, "expansions": $expansions, "media.fields": $media_fields, "poll.fields": $poll_fields, "user.fields": $user_fields, "place.fields": $place_fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"since_id": $since_id, "until_id": $until_id, "max_results": $max_results, "pagination_token": $pagination_token, "exclude": $exclude, "start_time": $start_time, "end_time": $end_time, "tweet.fields": $tweet_fields, "expansions": $expansions, "media.fields": $media_fields, "poll.fields": $poll_fields, "user.fields": $user_fields, "place.fields": $place_fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Unblock User by User ID
@@ -2664,10 +3514,21 @@ export def "2-users-blocking delete-unblock" [
   let base = ($base_url | default $BASE_URL)
   if ($source_user_id | is-empty) { error make --unspanned { msg: "path parameter 'source_user_id' must be non-empty" } }
   if ($target_user_id | is-empty) { error make --unspanned { msg: "path parameter 'target_user_id' must be non-empty" } }
-  let full_url = (build-url $base ({source_user_id: (encode-path-segment $source_user_id), target_user_id: (encode-path-segment $target_user_id)} | format pattern "/2/users/{source_user_id}/blocking/{target_user_id}"))
+  let full_url = (build-url $base ({source_user_id: (encode-path-segment $source_user_id), target_user_id: (encode-path-segment $target_user_id)} | format pattern "/2/users/{source_user_id}/blocking/{target_user_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Unfollow User
@@ -2693,10 +3554,21 @@ export def "2-users-following delete-unfollow" [
   let base = ($base_url | default $BASE_URL)
   if ($source_user_id | is-empty) { error make --unspanned { msg: "path parameter 'source_user_id' must be non-empty" } }
   if ($target_user_id | is-empty) { error make --unspanned { msg: "path parameter 'target_user_id' must be non-empty" } }
-  let full_url = (build-url $base ({source_user_id: (encode-path-segment $source_user_id), target_user_id: (encode-path-segment $target_user_id)} | format pattern "/2/users/{source_user_id}/following/{target_user_id}"))
+  let full_url = (build-url $base ({source_user_id: (encode-path-segment $source_user_id), target_user_id: (encode-path-segment $target_user_id)} | format pattern "/2/users/{source_user_id}/following/{target_user_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Unmute User by User ID
@@ -2722,8 +3594,19 @@ export def "2-users-muting delete-unmute" [
   let base = ($base_url | default $BASE_URL)
   if ($source_user_id | is-empty) { error make --unspanned { msg: "path parameter 'source_user_id' must be non-empty" } }
   if ($target_user_id | is-empty) { error make --unspanned { msg: "path parameter 'target_user_id' must be non-empty" } }
-  let full_url = (build-url $base ({source_user_id: (encode-path-segment $source_user_id), target_user_id: (encode-path-segment $target_user_id)} | format pattern "/2/users/{source_user_id}/muting/{target_user_id}"))
+  let full_url = (build-url $base ({source_user_id: (encode-path-segment $source_user_id), target_user_id: (encode-path-segment $target_user_id)} | format pattern "/2/users/{source_user_id}/muting/{target_user_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }

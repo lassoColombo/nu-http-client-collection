@@ -8,7 +8,7 @@ const BASE_URL = "https://servicebroker.googleapis.com"
 # `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
 # where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o SERVICE_BROKER_TOKEN | default "" }
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o SERVICE_BROKER_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
@@ -51,14 +51,11 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
-# Trick: `url encode --all` over-encodes, then we decode the four unreserved
-# punctuation chars back. Pre-existing %XX sequences in the input survive
-# because `url encode --all` first turns their % into %25.
 def encode-path-segment [v: any]: nothing -> string {
   $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
-# Serialize an array-typed path parameter (issue 49.A). OpenAPI 3 `style: simple`
+# Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
 # (the default for path params) and Swagger 2 `collectionFormat: csv` both join
 # the elements with a literal comma WITHIN the single path segment, each element
 # RFC-3986-encoded individually (so a comma inside an element stays %2C). Without
@@ -69,51 +66,63 @@ def encode-path-array [v: any]: nothing -> string {
   if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
 }
 
-# Build URL from base, path, and optional query string
-def build-url [base: string, path: string, query?: string]: nothing -> string {
+# Build the request URL from base, path, and any number of pre-encoded query
+# fragments (param serializer output and/or the auth query). Each fragment is an
+# `&`-joinable `key=value` string already percent-encoded by its producer; empty
+# fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
+# delimiters are hand-spliced — and any query already on the base URL is merged in.
+def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
   let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
-  let result = ($parsed | upsert path $full_path)
-  if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
+  let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
+  $parsed | upsert path $full_path | upsert query $query | url join
 }
 
-# Build the dry-run record returned by --dry-run. Shape:
-#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
-#    auth: {scheme, location}}
-# `meta` carries logical-form data (the query record by spec name, the pre-serialization
-# body) that do-request itself cannot reconstruct from its wire-format args.
-def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
-  let m = ($meta | default {})
-  {
-    dry_run: true
-    method: $method
-    url: $url
-    query: ($m | get -o query | default {})
-    headers: $auth.headers
-    body: ($m | get -o body)
-    content_type: $content_type
-    timeout: $timeout
-    auth: {scheme: $auth.scheme, location: $auth.location}
-  }
+# Success policy: did this response succeed? Single source of truth, consulted by
+# handle-response and the HEAD header-unwrap. Empty ok_codes means the spec listed
+# none, so fall back to < 400. Otherwise: any 2xx, plus documented success codes.
+def status-ok [status: int, ok_codes: list<int>]: nothing -> bool {
+  if ($ok_codes | is-empty) { $status < 400 } else { ($status >= 200 and $status < 300) or ($status in $ok_codes) }
 }
 
-# Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
-  let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
-  let timeout = ($max_time | default 30min)
-  let ct = ($content_type | default "application/json")
-  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
-  let resp = match $method {
-    "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
-  }
-  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
-  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
+# Unwrap a `--full` HTTP response into the user-facing value. Response arrives
+# via pipeline; ok_codes gates the error throw (see status-ok).
+def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: record -> any {
+  let resp = $in
+  if $allow_errors { return $resp }
+  if not (status-ok $resp.status $ok_codes) { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } }
+  if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
+  if $resp.status == 204 { return null }
+  $resp.body
+}
+
+# GET — bodyless, honours --raw
+def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+}
+
+# POST — body + content-type
+def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# PUT — body + content-type
+def send-put [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http put --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http put --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# PATCH — body + content-type
+def send-patch [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http patch --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http patch --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# DELETE — body via --data
+def send-delete [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http delete --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url } else { http delete --headers $req.headers --content-type $req.content_type --data $body --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url }
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 def base-url-completer [] { ["https://servicebroker.googleapis.com"] }
@@ -180,10 +189,21 @@ export def "v1beta1 delete" [
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "acceptsIncomplete" $accepts_incomplete "scalar") (serialize-qp "planId" $plan_id "scalar") (serialize-qp "serviceId" $service_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1beta1/{name}") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1beta1/{name}") $qp $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"fields": $fields, "uploadType": $upload_type, "callback": $callback, "oauth_token": $oauth_token, "$.xgafv": $xgafv, "alt": $alt, "access_token": $access_token, "key": $key, "upload_protocol": $upload_protocol, "quotaUser": $quota_user, "prettyPrint": $pretty_print, "acceptsIncomplete": $accepts_incomplete, "planId": $plan_id, "serviceId": $service_id} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"fields": $fields, "uploadType": $upload_type, "callback": $callback, "oauth_token": $oauth_token, "$.xgafv": $xgafv, "alt": $alt, "access_token": $access_token, "key": $key, "upload_protocol": $upload_protocol, "quotaUser": $quota_user, "prettyPrint": $pretty_print, "acceptsIncomplete": $accepts_incomplete, "planId": $plan_id, "serviceId": $service_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # GetBinding returns the binding information.
@@ -219,10 +239,21 @@ export def "v1beta1 get" [
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "planId" $plan_id "scalar") (serialize-qp "serviceId" $service_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1beta1/{name}") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1beta1/{name}") $qp $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"fields": $fields, "uploadType": $upload_type, "callback": $callback, "oauth_token": $oauth_token, "$.xgafv": $xgafv, "alt": $alt, "access_token": $access_token, "key": $key, "upload_protocol": $upload_protocol, "quotaUser": $quota_user, "prettyPrint": $pretty_print, "planId": $plan_id, "serviceId": $service_id} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"fields": $fields, "uploadType": $upload_type, "callback": $callback, "oauth_token": $oauth_token, "$.xgafv": $xgafv, "alt": $alt, "access_token": $access_token, "key": $key, "upload_protocol": $upload_protocol, "quotaUser": $quota_user, "prettyPrint": $pretty_print, "planId": $plan_id, "serviceId": $service_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates an existing service instance. See CreateServiceInstance for possible response codes.
@@ -270,12 +301,23 @@ export def "v1beta1 update" [
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "acceptsIncomplete" $accepts_incomplete "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1beta1/{name}") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1beta1/{name}") $qp $auth.query)
   let req_body = {"context": $context, "createTime": $create_time, "deploymentName": $deployment_name, "description": $description, "instance_id": $instance_id, "organization_guid": $organization_guid, "parameters": $parameters, "plan_id": $plan_id, "previous_values": $previous_values, "resourceName": $resource_name, "service_id": $service_id, "space_guid": $space_guid} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"fields": $fields, "uploadType": $upload_type, "callback": $callback, "oauth_token": $oauth_token, "$.xgafv": $xgafv, "alt": $alt, "access_token": $access_token, "key": $key, "upload_protocol": $upload_protocol, "quotaUser": $quota_user, "prettyPrint": $pretty_print, "acceptsIncomplete": $accepts_incomplete} | compact), body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: ({"fields": $fields, "uploadType": $upload_type, "callback": $callback, "oauth_token": $oauth_token, "$.xgafv": $xgafv, "alt": $alt, "access_token": $access_token, "key": $key, "upload_protocol": $upload_protocol, "quotaUser": $quota_user, "prettyPrint": $pretty_print, "acceptsIncomplete": $accepts_incomplete} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the state of the last operation for the binding. Only last (or current) operation can be polled.
@@ -312,10 +354,21 @@ export def "v1beta1-last-operation get" [
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "operation" $operation "scalar") (serialize-qp "planId" $plan_id "scalar") (serialize-qp "serviceId" $service_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1beta1/{name}/last_operation") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1beta1/{name}/last_operation") $qp $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"fields": $fields, "uploadType": $upload_type, "callback": $callback, "oauth_token": $oauth_token, "$.xgafv": $xgafv, "alt": $alt, "access_token": $access_token, "key": $key, "upload_protocol": $upload_protocol, "quotaUser": $quota_user, "prettyPrint": $pretty_print, "operation": $operation, "planId": $plan_id, "serviceId": $service_id} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"fields": $fields, "uploadType": $upload_type, "callback": $callback, "oauth_token": $oauth_token, "$.xgafv": $xgafv, "alt": $alt, "access_token": $access_token, "key": $key, "upload_protocol": $upload_protocol, "quotaUser": $quota_user, "prettyPrint": $pretty_print, "operation": $operation, "planId": $plan_id, "serviceId": $service_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Lists all the bindings in the instance.
@@ -351,10 +404,21 @@ export def "v1beta1-bindings list" [
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1beta1/{parent}/bindings") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1beta1/{parent}/bindings") $qp $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"fields": $fields, "uploadType": $upload_type, "callback": $callback, "oauth_token": $oauth_token, "$.xgafv": $xgafv, "alt": $alt, "access_token": $access_token, "key": $key, "upload_protocol": $upload_protocol, "quotaUser": $quota_user, "prettyPrint": $pretty_print, "pageSize": $page_size, "pageToken": $page_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"fields": $fields, "uploadType": $upload_type, "callback": $callback, "oauth_token": $oauth_token, "$.xgafv": $xgafv, "alt": $alt, "access_token": $access_token, "key": $key, "upload_protocol": $upload_protocol, "quotaUser": $quota_user, "prettyPrint": $pretty_print, "pageSize": $page_size, "pageToken": $page_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # ListBrokers lists brokers.
@@ -390,10 +454,21 @@ export def "v1beta1-brokers list" [
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1beta1/{parent}/brokers") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1beta1/{parent}/brokers") $qp $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"fields": $fields, "uploadType": $upload_type, "callback": $callback, "oauth_token": $oauth_token, "$.xgafv": $xgafv, "alt": $alt, "access_token": $access_token, "key": $key, "upload_protocol": $upload_protocol, "quotaUser": $quota_user, "prettyPrint": $pretty_print, "pageSize": $page_size, "pageToken": $page_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"fields": $fields, "uploadType": $upload_type, "callback": $callback, "oauth_token": $oauth_token, "$.xgafv": $xgafv, "alt": $alt, "access_token": $access_token, "key": $key, "upload_protocol": $upload_protocol, "quotaUser": $quota_user, "prettyPrint": $pretty_print, "pageSize": $page_size, "pageToken": $page_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # CreateBroker creates a Broker.
@@ -432,12 +507,23 @@ export def "v1beta1-brokers create" [
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1beta1/{parent}/brokers") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1beta1/{parent}/brokers") $qp $auth.query)
   let req_body = {"createTime": $create_time, "name": $name, "title": $title, "url": $url} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"fields": $fields, "uploadType": $upload_type, "callback": $callback, "oauth_token": $oauth_token, "$.xgafv": $xgafv, "alt": $alt, "access_token": $access_token, "key": $key, "upload_protocol": $upload_protocol, "quotaUser": $quota_user, "prettyPrint": $pretty_print} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"fields": $fields, "uploadType": $upload_type, "callback": $callback, "oauth_token": $oauth_token, "$.xgafv": $xgafv, "alt": $alt, "access_token": $access_token, "key": $key, "upload_protocol": $upload_protocol, "quotaUser": $quota_user, "prettyPrint": $pretty_print} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Lists all the instances in the brokers This API is an extension and not part of the OSB spec. Hence the path is a standard Google API URL.
@@ -473,10 +559,21 @@ export def "v1beta1-instances list" [
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1beta1/{parent}/instances") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1beta1/{parent}/instances") $qp $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"fields": $fields, "uploadType": $upload_type, "callback": $callback, "oauth_token": $oauth_token, "$.xgafv": $xgafv, "alt": $alt, "access_token": $access_token, "key": $key, "upload_protocol": $upload_protocol, "quotaUser": $quota_user, "prettyPrint": $pretty_print, "pageSize": $page_size, "pageToken": $page_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"fields": $fields, "uploadType": $upload_type, "callback": $callback, "oauth_token": $oauth_token, "$.xgafv": $xgafv, "alt": $alt, "access_token": $access_token, "key": $key, "upload_protocol": $upload_protocol, "quotaUser": $quota_user, "prettyPrint": $pretty_print, "pageSize": $page_size, "pageToken": $page_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # CreateBinding generates a service binding to an existing service instance. See ProviServiceInstance for async operation details.
@@ -522,12 +619,23 @@ export def "v1beta1-service-bindings create" [
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
   if ($binding_id | is-empty) { error make --unspanned { msg: "path parameter 'binding_id' must be non-empty" } }
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "acceptsIncomplete" $accepts_incomplete "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: (encode-path-segment $parent), binding_id: (encode-path-segment $binding_id)} | format pattern "/v1beta1/{parent}/service_bindings/{binding_id}") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent), binding_id: (encode-path-segment $binding_id)} | format pattern "/v1beta1/{parent}/service_bindings/{binding_id}") $qp $auth.query)
   let req_body = {"bind_resource": $bind_resource, "binding_id": $body_binding_id, "createTime": $create_time, "deploymentName": $deployment_name, "parameters": $parameters, "plan_id": $plan_id, "resourceName": $resource_name, "service_id": $service_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"fields": $fields, "uploadType": $upload_type, "callback": $callback, "oauth_token": $oauth_token, "$.xgafv": $xgafv, "alt": $alt, "access_token": $access_token, "key": $key, "upload_protocol": $upload_protocol, "quotaUser": $quota_user, "prettyPrint": $pretty_print, "acceptsIncomplete": $accepts_incomplete} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"fields": $fields, "uploadType": $upload_type, "callback": $callback, "oauth_token": $oauth_token, "$.xgafv": $xgafv, "alt": $alt, "access_token": $access_token, "key": $key, "upload_protocol": $upload_protocol, "quotaUser": $quota_user, "prettyPrint": $pretty_print, "acceptsIncomplete": $accepts_incomplete} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Lists all the Services registered with this broker for consumption for given service registry broker, which contains an set of services. Note, that Service producer API is separate from Broker API.
@@ -563,10 +671,21 @@ export def "v1beta1-catalog list" [
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1beta1/{parent}/v2/catalog") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1beta1/{parent}/v2/catalog") $qp $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"fields": $fields, "uploadType": $upload_type, "callback": $callback, "oauth_token": $oauth_token, "$.xgafv": $xgafv, "alt": $alt, "access_token": $access_token, "key": $key, "upload_protocol": $upload_protocol, "quotaUser": $quota_user, "prettyPrint": $pretty_print, "pageSize": $page_size, "pageToken": $page_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"fields": $fields, "uploadType": $upload_type, "callback": $callback, "oauth_token": $oauth_token, "$.xgafv": $xgafv, "alt": $alt, "access_token": $access_token, "key": $key, "upload_protocol": $upload_protocol, "quotaUser": $quota_user, "prettyPrint": $pretty_print, "pageSize": $page_size, "pageToken": $page_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Provisions a service instance. If `request.accepts_incomplete` is false and Broker cannot execute request synchronously HTTP 422 error will be returned along with FAILED_PRECONDITION status. If `request.accepts_incomplete` is true and the Broker decides to execute resource asynchronously then HTTP 202 response code will be returned and a valid polling operation in the response will be included. If Broker executes the request synchronously and it succeeds HTTP 201 response will be furnished. If identical instance exists, then HTTP 200 response will be returned. If an instance with identical ID but mismatching parameters exists, then HTTP 409 status code will be returned.
@@ -616,12 +735,23 @@ export def "v1beta1-service-instances create" [
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'instance_id' must be non-empty" } }
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "acceptsIncomplete" $accepts_incomplete "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: (encode-path-segment $parent), instance_id: (encode-path-segment $instance_id)} | format pattern "/v1beta1/{parent}/v2/service_instances/{instance_id}") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent), instance_id: (encode-path-segment $instance_id)} | format pattern "/v1beta1/{parent}/v2/service_instances/{instance_id}") $qp $auth.query)
   let req_body = {"context": $context, "createTime": $create_time, "deploymentName": $deployment_name, "description": $description, "instance_id": $body_instance_id, "organization_guid": $organization_guid, "parameters": $parameters, "plan_id": $plan_id, "previous_values": $previous_values, "resourceName": $resource_name, "service_id": $service_id, "space_guid": $space_guid} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"fields": $fields, "uploadType": $upload_type, "callback": $callback, "oauth_token": $oauth_token, "$.xgafv": $xgafv, "alt": $alt, "access_token": $access_token, "key": $key, "upload_protocol": $upload_protocol, "quotaUser": $quota_user, "prettyPrint": $pretty_print, "acceptsIncomplete": $accepts_incomplete} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"fields": $fields, "uploadType": $upload_type, "callback": $callback, "oauth_token": $oauth_token, "$.xgafv": $xgafv, "alt": $alt, "access_token": $access_token, "key": $key, "upload_protocol": $upload_protocol, "quotaUser": $quota_user, "prettyPrint": $pretty_print, "acceptsIncomplete": $accepts_incomplete} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the access control policy for a resource. Returns an empty policy if the resource exists and does not have a policy set.
@@ -656,10 +786,21 @@ export def "v1beta1 get-iam-policy" [
   let base = ($base_url | default $BASE_URL)
   if ($resource | is-empty) { error make --unspanned { msg: "path parameter 'resource' must be non-empty" } }
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "options.requestedPolicyVersion" $options_requested_policy_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource: (encode-path-segment $resource)} | format pattern "/v1beta1/{resource}:getIamPolicy") $qp)
+  let full_url = (build-url $base ({resource: (encode-path-segment $resource)} | format pattern "/v1beta1/{resource}:getIamPolicy") $qp $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"fields": $fields, "uploadType": $upload_type, "callback": $callback, "oauth_token": $oauth_token, "$.xgafv": $xgafv, "alt": $alt, "access_token": $access_token, "key": $key, "upload_protocol": $upload_protocol, "quotaUser": $quota_user, "prettyPrint": $pretty_print, "options.requestedPolicyVersion": $options_requested_policy_version} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"fields": $fields, "uploadType": $upload_type, "callback": $callback, "oauth_token": $oauth_token, "$.xgafv": $xgafv, "alt": $alt, "access_token": $access_token, "key": $key, "upload_protocol": $upload_protocol, "quotaUser": $quota_user, "prettyPrint": $pretty_print, "options.requestedPolicyVersion": $options_requested_policy_version} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Sets the access control policy on the specified resource. Replaces any existing policy. Can return Public Errors: NOT_FOUND, INVALID_ARGUMENT and PERMISSION_DENIED
@@ -696,12 +837,23 @@ export def "v1beta1 update-iam-policy" [
   let base = ($base_url | default $BASE_URL)
   if ($resource | is-empty) { error make --unspanned { msg: "path parameter 'resource' must be non-empty" } }
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource: (encode-path-segment $resource)} | format pattern "/v1beta1/{resource}:setIamPolicy") $qp)
+  let full_url = (build-url $base ({resource: (encode-path-segment $resource)} | format pattern "/v1beta1/{resource}:setIamPolicy") $qp $auth.query)
   let req_body = {"policy": $policy} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"fields": $fields, "uploadType": $upload_type, "callback": $callback, "oauth_token": $oauth_token, "$.xgafv": $xgafv, "alt": $alt, "access_token": $access_token, "key": $key, "upload_protocol": $upload_protocol, "quotaUser": $quota_user, "prettyPrint": $pretty_print} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"fields": $fields, "uploadType": $upload_type, "callback": $callback, "oauth_token": $oauth_token, "$.xgafv": $xgafv, "alt": $alt, "access_token": $access_token, "key": $key, "upload_protocol": $upload_protocol, "quotaUser": $quota_user, "prettyPrint": $pretty_print} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Returns permissions that a caller has on the specified resource. If the resource does not exist, this will return an empty set of permissions, not a NOT_FOUND error. Note: This operation is designed to be used for building permission-aware UIs and command-line tools, not for authorization checking. This operation may "fail open" without warning.
@@ -737,10 +889,21 @@ export def "v1beta1 test-iam-permissions" [
   let base = ($base_url | default $BASE_URL)
   if ($resource | is-empty) { error make --unspanned { msg: "path parameter 'resource' must be non-empty" } }
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource: (encode-path-segment $resource)} | format pattern "/v1beta1/{resource}:testIamPermissions") $qp)
+  let full_url = (build-url $base ({resource: (encode-path-segment $resource)} | format pattern "/v1beta1/{resource}:testIamPermissions") $qp $auth.query)
   let req_body = {"permissions": $permissions} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"fields": $fields, "uploadType": $upload_type, "callback": $callback, "oauth_token": $oauth_token, "$.xgafv": $xgafv, "alt": $alt, "access_token": $access_token, "key": $key, "upload_protocol": $upload_protocol, "quotaUser": $quota_user, "prettyPrint": $pretty_print} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"fields": $fields, "uploadType": $upload_type, "callback": $callback, "oauth_token": $oauth_token, "$.xgafv": $xgafv, "alt": $alt, "access_token": $access_token, "key": $key, "upload_protocol": $upload_protocol, "quotaUser": $quota_user, "prettyPrint": $pretty_print} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }

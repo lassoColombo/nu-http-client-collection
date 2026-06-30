@@ -8,7 +8,7 @@ const BASE_URL = "https://graph.windows.net"
 # `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
 # where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o GRAPHRBACMANAGEMENTCLIENT_TOKEN | default "" }
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o GRAPHRBACMANAGEMENTCLIENT_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
@@ -41,14 +41,11 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
-# Trick: `url encode --all` over-encodes, then we decode the four unreserved
-# punctuation chars back. Pre-existing %XX sequences in the input survive
-# because `url encode --all` first turns their % into %25.
 def encode-path-segment [v: any]: nothing -> string {
   $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
-# Serialize an array-typed path parameter (issue 49.A). OpenAPI 3 `style: simple`
+# Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
 # (the default for path params) and Swagger 2 `collectionFormat: csv` both join
 # the elements with a literal comma WITHIN the single path segment, each element
 # RFC-3986-encoded individually (so a comma inside an element stays %2C). Without
@@ -59,51 +56,57 @@ def encode-path-array [v: any]: nothing -> string {
   if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
 }
 
-# Build URL from base, path, and optional query string
-def build-url [base: string, path: string, query?: string]: nothing -> string {
+# Build the request URL from base, path, and any number of pre-encoded query
+# fragments (param serializer output and/or the auth query). Each fragment is an
+# `&`-joinable `key=value` string already percent-encoded by its producer; empty
+# fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
+# delimiters are hand-spliced — and any query already on the base URL is merged in.
+def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
   let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
-  let result = ($parsed | upsert path $full_path)
-  if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
+  let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
+  $parsed | upsert path $full_path | upsert query $query | url join
 }
 
-# Build the dry-run record returned by --dry-run. Shape:
-#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
-#    auth: {scheme, location}}
-# `meta` carries logical-form data (the query record by spec name, the pre-serialization
-# body) that do-request itself cannot reconstruct from its wire-format args.
-def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
-  let m = ($meta | default {})
-  {
-    dry_run: true
-    method: $method
-    url: $url
-    query: ($m | get -o query | default {})
-    headers: $auth.headers
-    body: ($m | get -o body)
-    content_type: $content_type
-    timeout: $timeout
-    auth: {scheme: $auth.scheme, location: $auth.location}
-  }
+# Success policy: did this response succeed? Single source of truth, consulted by
+# handle-response and the HEAD header-unwrap. Empty ok_codes means the spec listed
+# none, so fall back to < 400. Otherwise: any 2xx, plus documented success codes.
+def status-ok [status: int, ok_codes: list<int>]: nothing -> bool {
+  if ($ok_codes | is-empty) { $status < 400 } else { ($status >= 200 and $status < 300) or ($status in $ok_codes) }
 }
 
-# Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
-  let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
-  let timeout = ($max_time | default 30min)
-  let ct = ($content_type | default "application/json")
-  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
-  let resp = match $method {
-    "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
-  }
-  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
-  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
+# Unwrap a `--full` HTTP response into the user-facing value. Response arrives
+# via pipeline; ok_codes gates the error throw (see status-ok).
+def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: record -> any {
+  let resp = $in
+  if $allow_errors { return $resp }
+  if not (status-ok $resp.status $ok_codes) { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } }
+  if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
+  if $resp.status == 204 { return null }
+  $resp.body
+}
+
+# GET — bodyless, honours --raw
+def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+}
+
+# POST — body + content-type
+def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# PATCH — body + content-type
+def send-patch [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http patch --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http patch --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# DELETE — body via --data
+def send-delete [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http delete --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url } else { http delete --headers $req.headers --content-type $req.content_type --data $body --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url }
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 def base-url-completer [] { ["https://graph.windows.net"] }
@@ -163,10 +166,21 @@ export def "applications list" [
   let base = ($base_url | default $BASE_URL)
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id)} | format pattern "/{tenant_id}/applications") $qp)
+  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id)} | format pattern "/{tenant_id}/applications") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$filter": $filter, "api-version": $api_version} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"$filter": $filter, "api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a new application.
@@ -231,12 +245,23 @@ export def "applications create" [
   let base = ($base_url | default $BASE_URL)
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id)} | format pattern "/{tenant_id}/applications") $qp)
+  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id)} | format pattern "/{tenant_id}/applications") $qp $auth.query)
   let req_body = {"displayName": $display_name, "identifierUris": $identifier_uris, "allowGuestsSignIn": $allow_guests_sign_in, "allowPassthroughUsers": $allow_passthrough_users, "appLogoUrl": $app_logo_url, "appPermissions": $app_permissions, "appRoles": $app_roles, "availableToOtherTenants": $available_to_other_tenants, "errorUrl": $error_url, "groupMembershipClaims": $group_membership_claims, "homepage": $homepage, "informationalUrls": $informational_urls, "isDeviceOnlyAuthSupported": $is_device_only_auth_supported, "keyCredentials": $key_credentials, "knownClientApplications": $known_client_applications, "logoutUrl": $logout_url, "oauth2AllowImplicitFlow": $oauth2_allow_implicit_flow, "oauth2AllowUrlPathMatching": $oauth2_allow_url_path_matching, "oauth2Permissions": $oauth2_permissions, "oauth2RequirePostResponse": $oauth2_require_post_response, "optionalClaims": $optional_claims, "orgRestrictions": $org_restrictions, "passwordCredentials": $password_credentials, "preAuthorizedApplications": $pre_authorized_applications, "publicClient": $public_client, "publisherDomain": $publisher_domain, "replyUrls": $reply_urls, "requiredResourceAccess": $required_resource_access, "samlMetadataUrl": $saml_metadata_url, "signInAudience": $sign_in_audience, "wwwHomepage": $www_homepage} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"api-version": $api_version} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Delete an application.
@@ -263,10 +288,21 @@ export def "applications delete" [
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
   if ($application_object_id | is-empty) { error make --unspanned { msg: "path parameter 'applicationObjectId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), application_object_id: (encode-path-segment $application_object_id)} | format pattern "/{tenant_id}/applications/{application_object_id}") $qp)
+  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), application_object_id: (encode-path-segment $application_object_id)} | format pattern "/{tenant_id}/applications/{application_object_id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Get an application by object ID.
@@ -293,10 +329,21 @@ export def "applications get" [
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
   if ($application_object_id | is-empty) { error make --unspanned { msg: "path parameter 'applicationObjectId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), application_object_id: (encode-path-segment $application_object_id)} | format pattern "/{tenant_id}/applications/{application_object_id}") $qp)
+  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), application_object_id: (encode-path-segment $application_object_id)} | format pattern "/{tenant_id}/applications/{application_object_id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update an existing application.
@@ -363,12 +410,23 @@ export def "applications update" [
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
   if ($application_object_id | is-empty) { error make --unspanned { msg: "path parameter 'applicationObjectId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), application_object_id: (encode-path-segment $application_object_id)} | format pattern "/{tenant_id}/applications/{application_object_id}") $qp)
+  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), application_object_id: (encode-path-segment $application_object_id)} | format pattern "/{tenant_id}/applications/{application_object_id}") $qp $auth.query)
   let req_body = {"displayName": $display_name, "identifierUris": $identifier_uris, "allowGuestsSignIn": $allow_guests_sign_in, "allowPassthroughUsers": $allow_passthrough_users, "appLogoUrl": $app_logo_url, "appPermissions": $app_permissions, "appRoles": $app_roles, "availableToOtherTenants": $available_to_other_tenants, "errorUrl": $error_url, "groupMembershipClaims": $group_membership_claims, "homepage": $homepage, "informationalUrls": $informational_urls, "isDeviceOnlyAuthSupported": $is_device_only_auth_supported, "keyCredentials": $key_credentials, "knownClientApplications": $known_client_applications, "logoutUrl": $logout_url, "oauth2AllowImplicitFlow": $oauth2_allow_implicit_flow, "oauth2AllowUrlPathMatching": $oauth2_allow_url_path_matching, "oauth2Permissions": $oauth2_permissions, "oauth2RequirePostResponse": $oauth2_require_post_response, "optionalClaims": $optional_claims, "orgRestrictions": $org_restrictions, "passwordCredentials": $password_credentials, "preAuthorizedApplications": $pre_authorized_applications, "publicClient": $public_client, "publisherDomain": $publisher_domain, "replyUrls": $reply_urls, "requiredResourceAccess": $required_resource_access, "samlMetadataUrl": $saml_metadata_url, "signInAudience": $sign_in_audience, "wwwHomepage": $www_homepage} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"api-version": $api_version} | compact), body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: ({"api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Add an owner to an application.
@@ -397,12 +455,23 @@ export def "applications-links-owners create" [
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
   if ($application_object_id | is-empty) { error make --unspanned { msg: "path parameter 'applicationObjectId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), application_object_id: (encode-path-segment $application_object_id)} | format pattern "/{tenant_id}/applications/{application_object_id}/$links/owners") $qp)
+  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), application_object_id: (encode-path-segment $application_object_id)} | format pattern "/{tenant_id}/applications/{application_object_id}/$links/owners") $qp $auth.query)
   let req_body = {"url": $url} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"api-version": $api_version} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Remove a member from owners.
@@ -431,10 +500,21 @@ export def "applications-links-owners delete" [
   if ($application_object_id | is-empty) { error make --unspanned { msg: "path parameter 'applicationObjectId' must be non-empty" } }
   if ($owner_object_id | is-empty) { error make --unspanned { msg: "path parameter 'ownerObjectId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), application_object_id: (encode-path-segment $application_object_id), owner_object_id: (encode-path-segment $owner_object_id)} | format pattern "/{tenant_id}/applications/{application_object_id}/$links/owners/{owner_object_id}") $qp)
+  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), application_object_id: (encode-path-segment $application_object_id), owner_object_id: (encode-path-segment $owner_object_id)} | format pattern "/{tenant_id}/applications/{application_object_id}/$links/owners/{owner_object_id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Get the keyCredentials associated with an application.
@@ -461,10 +541,21 @@ export def "applications-key-credentials list" [
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
   if ($application_object_id | is-empty) { error make --unspanned { msg: "path parameter 'applicationObjectId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), application_object_id: (encode-path-segment $application_object_id)} | format pattern "/{tenant_id}/applications/{application_object_id}/keyCredentials") $qp)
+  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), application_object_id: (encode-path-segment $application_object_id)} | format pattern "/{tenant_id}/applications/{application_object_id}/keyCredentials") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update the keyCredentials associated with an application.
@@ -494,12 +585,23 @@ export def "applications-key-credentials update" [
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
   if ($application_object_id | is-empty) { error make --unspanned { msg: "path parameter 'applicationObjectId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), application_object_id: (encode-path-segment $application_object_id)} | format pattern "/{tenant_id}/applications/{application_object_id}/keyCredentials") $qp)
+  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), application_object_id: (encode-path-segment $application_object_id)} | format pattern "/{tenant_id}/applications/{application_object_id}/keyCredentials") $qp $auth.query)
   let req_body = {"value": $value} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"api-version": $api_version} | compact), body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: ({"api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Directory objects that are owners of the application.
@@ -526,10 +628,21 @@ export def "applications-owners list" [
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
   if ($application_object_id | is-empty) { error make --unspanned { msg: "path parameter 'applicationObjectId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), application_object_id: (encode-path-segment $application_object_id)} | format pattern "/{tenant_id}/applications/{application_object_id}/owners") $qp)
+  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), application_object_id: (encode-path-segment $application_object_id)} | format pattern "/{tenant_id}/applications/{application_object_id}/owners") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get the passwordCredentials associated with an application.
@@ -556,10 +669,21 @@ export def "applications-password-credentials list" [
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
   if ($application_object_id | is-empty) { error make --unspanned { msg: "path parameter 'applicationObjectId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), application_object_id: (encode-path-segment $application_object_id)} | format pattern "/{tenant_id}/applications/{application_object_id}/passwordCredentials") $qp)
+  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), application_object_id: (encode-path-segment $application_object_id)} | format pattern "/{tenant_id}/applications/{application_object_id}/passwordCredentials") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update passwordCredentials associated with an application.
@@ -589,12 +713,23 @@ export def "applications-password-credentials update" [
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
   if ($application_object_id | is-empty) { error make --unspanned { msg: "path parameter 'applicationObjectId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), application_object_id: (encode-path-segment $application_object_id)} | format pattern "/{tenant_id}/applications/{application_object_id}/passwordCredentials") $qp)
+  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), application_object_id: (encode-path-segment $application_object_id)} | format pattern "/{tenant_id}/applications/{application_object_id}/passwordCredentials") $qp $auth.query)
   let req_body = {"value": $value} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"api-version": $api_version} | compact), body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: ({"api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Gets a list of deleted applications in the directory.
@@ -620,10 +755,21 @@ export def "deleted-applications list" [
   let base = ($base_url | default $BASE_URL)
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id)} | format pattern "/{tenant_id}/deletedApplications") $qp)
+  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id)} | format pattern "/{tenant_id}/deletedApplications") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$filter": $filter, "api-version": $api_version} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"$filter": $filter, "api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Hard-delete an application.
@@ -650,10 +796,21 @@ export def "deleted-applications delete-hard" [
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
   if ($application_object_id | is-empty) { error make --unspanned { msg: "path parameter 'applicationObjectId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), application_object_id: (encode-path-segment $application_object_id)} | format pattern "/{tenant_id}/deletedApplications/{application_object_id}") $qp)
+  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), application_object_id: (encode-path-segment $application_object_id)} | format pattern "/{tenant_id}/deletedApplications/{application_object_id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Restores the deleted application in the directory.
@@ -680,10 +837,21 @@ export def "deleted-applications-restore create" [
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
   if ($object_id | is-empty) { error make --unspanned { msg: "path parameter 'objectId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), object_id: (encode-path-segment $object_id)} | format pattern "/{tenant_id}/deletedApplications/{object_id}/restore") $qp)
+  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), object_id: (encode-path-segment $object_id)} | format pattern "/{tenant_id}/deletedApplications/{object_id}/restore") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Gets a list of domains for the current tenant.
@@ -709,10 +877,21 @@ export def "domains list" [
   let base = ($base_url | default $BASE_URL)
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id)} | format pattern "/{tenant_id}/domains") $qp)
+  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id)} | format pattern "/{tenant_id}/domains") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$filter": $filter, "api-version": $api_version} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"$filter": $filter, "api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets a specific domain in the current tenant.
@@ -739,10 +918,21 @@ export def "domains get" [
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'domainName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), domain_name: (encode-path-segment $domain_name)} | format pattern "/{tenant_id}/domains/{domain_name}") $qp)
+  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), domain_name: (encode-path-segment $domain_name)} | format pattern "/{tenant_id}/domains/{domain_name}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the directory objects specified in a list of object IDs. You can also specify which resource collections (users, groups, etc.) should be searched by specifying the optional types parameter.
@@ -771,12 +961,23 @@ export def "get-objects-by-object-ids get" [
   let base = ($base_url | default $BASE_URL)
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id)} | format pattern "/{tenant_id}/getObjectsByObjectIds") $qp)
+  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id)} | format pattern "/{tenant_id}/getObjectsByObjectIds") $qp $auth.query)
   let req_body = {"includeDirectoryObjectReferences": $include_directory_object_references, "objectIds": $object_ids, "types": $types} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"api-version": $api_version} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Gets list of groups for the current tenant.
@@ -802,10 +1003,21 @@ export def "groups list" [
   let base = ($base_url | default $BASE_URL)
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id)} | format pattern "/{tenant_id}/groups") $qp)
+  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id)} | format pattern "/{tenant_id}/groups") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$filter": $filter, "api-version": $api_version} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"$filter": $filter, "api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a group in the directory.
@@ -835,12 +1047,23 @@ export def "groups create" [
   let base = ($base_url | default $BASE_URL)
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id)} | format pattern "/{tenant_id}/groups") $qp)
+  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id)} | format pattern "/{tenant_id}/groups") $qp $auth.query)
   let req_body = {"displayName": $display_name, "mailEnabled": $mail_enabled, "mailNickname": $mail_nickname, "securityEnabled": $security_enabled} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"api-version": $api_version} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Add a member to a group.
@@ -869,12 +1092,23 @@ export def "groups-links-members create" [
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
   if ($group_object_id | is-empty) { error make --unspanned { msg: "path parameter 'groupObjectId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), group_object_id: (encode-path-segment $group_object_id)} | format pattern "/{tenant_id}/groups/{group_object_id}/$links/members") $qp)
+  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), group_object_id: (encode-path-segment $group_object_id)} | format pattern "/{tenant_id}/groups/{group_object_id}/$links/members") $qp $auth.query)
   let req_body = {"url": $url} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"api-version": $api_version} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Remove a member from a group.
@@ -903,10 +1137,21 @@ export def "groups-links-members delete" [
   if ($group_object_id | is-empty) { error make --unspanned { msg: "path parameter 'groupObjectId' must be non-empty" } }
   if ($member_object_id | is-empty) { error make --unspanned { msg: "path parameter 'memberObjectId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), group_object_id: (encode-path-segment $group_object_id), member_object_id: (encode-path-segment $member_object_id)} | format pattern "/{tenant_id}/groups/{group_object_id}/$links/members/{member_object_id}") $qp)
+  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), group_object_id: (encode-path-segment $group_object_id), member_object_id: (encode-path-segment $member_object_id)} | format pattern "/{tenant_id}/groups/{group_object_id}/$links/members/{member_object_id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Delete a group from the directory.
@@ -933,10 +1178,21 @@ export def "groups delete" [
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
   if ($object_id | is-empty) { error make --unspanned { msg: "path parameter 'objectId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), object_id: (encode-path-segment $object_id)} | format pattern "/{tenant_id}/groups/{object_id}") $qp)
+  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), object_id: (encode-path-segment $object_id)} | format pattern "/{tenant_id}/groups/{object_id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Gets group information from the directory.
@@ -963,10 +1219,21 @@ export def "groups get" [
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
   if ($object_id | is-empty) { error make --unspanned { msg: "path parameter 'objectId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), object_id: (encode-path-segment $object_id)} | format pattern "/{tenant_id}/groups/{object_id}") $qp)
+  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), object_id: (encode-path-segment $object_id)} | format pattern "/{tenant_id}/groups/{object_id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Add an owner to a group.
@@ -995,12 +1262,23 @@ export def "groups-links-owners create" [
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
   if ($object_id | is-empty) { error make --unspanned { msg: "path parameter 'objectId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), object_id: (encode-path-segment $object_id)} | format pattern "/{tenant_id}/groups/{object_id}/$links/owners") $qp)
+  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), object_id: (encode-path-segment $object_id)} | format pattern "/{tenant_id}/groups/{object_id}/$links/owners") $qp $auth.query)
   let req_body = {"url": $url} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"api-version": $api_version} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Remove a member from owners.
@@ -1029,10 +1307,21 @@ export def "groups-links-owners delete" [
   if ($object_id | is-empty) { error make --unspanned { msg: "path parameter 'objectId' must be non-empty" } }
   if ($owner_object_id | is-empty) { error make --unspanned { msg: "path parameter 'ownerObjectId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), object_id: (encode-path-segment $object_id), owner_object_id: (encode-path-segment $owner_object_id)} | format pattern "/{tenant_id}/groups/{object_id}/$links/owners/{owner_object_id}") $qp)
+  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), object_id: (encode-path-segment $object_id), owner_object_id: (encode-path-segment $owner_object_id)} | format pattern "/{tenant_id}/groups/{object_id}/$links/owners/{owner_object_id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Gets a collection of object IDs of groups of which the specified group is a member.
@@ -1061,12 +1350,23 @@ export def "groups-get-member-groups get" [
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
   if ($object_id | is-empty) { error make --unspanned { msg: "path parameter 'objectId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), object_id: (encode-path-segment $object_id)} | format pattern "/{tenant_id}/groups/{object_id}/getMemberGroups") $qp)
+  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), object_id: (encode-path-segment $object_id)} | format pattern "/{tenant_id}/groups/{object_id}/getMemberGroups") $qp $auth.query)
   let req_body = {"securityEnabledOnly": $security_enabled_only} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"api-version": $api_version} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the members of a group.
@@ -1093,10 +1393,21 @@ export def "groups-members get" [
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
   if ($object_id | is-empty) { error make --unspanned { msg: "path parameter 'objectId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), object_id: (encode-path-segment $object_id)} | format pattern "/{tenant_id}/groups/{object_id}/members") $qp)
+  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), object_id: (encode-path-segment $object_id)} | format pattern "/{tenant_id}/groups/{object_id}/members") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Directory objects that are owners of the group.
@@ -1123,10 +1434,21 @@ export def "groups-owners list" [
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
   if ($object_id | is-empty) { error make --unspanned { msg: "path parameter 'objectId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), object_id: (encode-path-segment $object_id)} | format pattern "/{tenant_id}/groups/{object_id}/owners") $qp)
+  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), object_id: (encode-path-segment $object_id)} | format pattern "/{tenant_id}/groups/{object_id}/owners") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Checks whether the specified user, group, contact, or service principal is a direct or transitive member of the specified group.
@@ -1154,12 +1476,23 @@ export def "is-member-of create-groups" [
   let base = ($base_url | default $BASE_URL)
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id)} | format pattern "/{tenant_id}/isMemberOf") $qp)
+  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id)} | format pattern "/{tenant_id}/isMemberOf") $qp $auth.query)
   let req_body = {"groupId": $group_id, "memberId": $member_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"api-version": $api_version} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the details for the currently logged-in user.
@@ -1184,10 +1517,21 @@ export def "me get-signed-in-user" [
   let base = ($base_url | default $BASE_URL)
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id)} | format pattern "/{tenant_id}/me") $qp)
+  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id)} | format pattern "/{tenant_id}/me") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get the list of directory objects that are owned by the user.
@@ -1212,10 +1556,21 @@ export def "me-owned-objects list-signed-in-user" [
   let base = ($base_url | default $BASE_URL)
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id)} | format pattern "/{tenant_id}/me/ownedObjects") $qp)
+  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id)} | format pattern "/{tenant_id}/me/ownedObjects") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Queries OAuth2 permissions grants for the relevant SP ObjectId of an app.
@@ -1240,10 +1595,21 @@ export def "oauth2-permission-grants list-o-auth2" [
   let base = ($base_url | default $BASE_URL)
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id)} | format pattern "/{tenant_id}/oauth2PermissionGrants") $qp)
+  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id)} | format pattern "/{tenant_id}/oauth2PermissionGrants") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$filter": $filter, "api-version": $api_version} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"$filter": $filter, "api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Grants OAuth2 permissions for the relevant resource Ids of an app.
@@ -1277,12 +1643,23 @@ export def "oauth2-permission-grants create-o-auth2" [
   let base = ($base_url | default $BASE_URL)
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id)} | format pattern "/{tenant_id}/oauth2PermissionGrants") $qp)
+  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id)} | format pattern "/{tenant_id}/oauth2PermissionGrants") $qp $auth.query)
   let req_body = {"clientId": $client_id, "consentType": $consent_type, "expiryTime": $expiry_time, "objectId": $object_id, "odata.type": $odata_type, "principalId": $principal_id, "resourceId": $resource_id, "scope": $scope, "startTime": $start_time} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"api-version": $api_version} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Delete a OAuth2 permission grant for the relevant resource Ids of an app.
@@ -1309,10 +1686,21 @@ export def "oauth2-permission-grants delete-o-auth2" [
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
   if ($object_id | is-empty) { error make --unspanned { msg: "path parameter 'objectId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), object_id: (encode-path-segment $object_id)} | format pattern "/{tenant_id}/oauth2PermissionGrants/{object_id}") $qp)
+  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), object_id: (encode-path-segment $object_id)} | format pattern "/{tenant_id}/oauth2PermissionGrants/{object_id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Gets a list of service principals from the current tenant.
@@ -1338,10 +1726,21 @@ export def "service-principals list" [
   let base = ($base_url | default $BASE_URL)
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id)} | format pattern "/{tenant_id}/servicePrincipals") $qp)
+  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id)} | format pattern "/{tenant_id}/servicePrincipals") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$filter": $filter, "api-version": $api_version} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"$filter": $filter, "api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Creates a service principal in the directory.
@@ -1376,12 +1775,23 @@ export def "service-principals create" [
   let base = ($base_url | default $BASE_URL)
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id)} | format pattern "/{tenant_id}/servicePrincipals") $qp)
+  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id)} | format pattern "/{tenant_id}/servicePrincipals") $qp $auth.query)
   let req_body = {"appId": $app_id, "accountEnabled": $account_enabled, "appRoleAssignmentRequired": $app_role_assignment_required, "keyCredentials": $key_credentials, "passwordCredentials": $password_credentials, "servicePrincipalType": $service_principal_type, "tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"api-version": $api_version} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Deletes a service principal from the directory.
@@ -1408,10 +1818,21 @@ export def "service-principals delete" [
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
   if ($object_id | is-empty) { error make --unspanned { msg: "path parameter 'objectId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), object_id: (encode-path-segment $object_id)} | format pattern "/{tenant_id}/servicePrincipals/{object_id}") $qp)
+  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), object_id: (encode-path-segment $object_id)} | format pattern "/{tenant_id}/servicePrincipals/{object_id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Gets service principal information from the directory. Query by objectId or pass a filter to query by appId
@@ -1438,10 +1859,21 @@ export def "service-principals get" [
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
   if ($object_id | is-empty) { error make --unspanned { msg: "path parameter 'objectId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), object_id: (encode-path-segment $object_id)} | format pattern "/{tenant_id}/servicePrincipals/{object_id}") $qp)
+  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), object_id: (encode-path-segment $object_id)} | format pattern "/{tenant_id}/servicePrincipals/{object_id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates a service principal in the directory.
@@ -1477,12 +1909,23 @@ export def "service-principals update" [
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
   if ($object_id | is-empty) { error make --unspanned { msg: "path parameter 'objectId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), object_id: (encode-path-segment $object_id)} | format pattern "/{tenant_id}/servicePrincipals/{object_id}") $qp)
+  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), object_id: (encode-path-segment $object_id)} | format pattern "/{tenant_id}/servicePrincipals/{object_id}") $qp $auth.query)
   let req_body = {"accountEnabled": $account_enabled, "appRoleAssignmentRequired": $app_role_assignment_required, "keyCredentials": $key_credentials, "passwordCredentials": $password_credentials, "servicePrincipalType": $service_principal_type, "tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"api-version": $api_version} | compact), body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: ({"api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Add an owner to a service principal.
@@ -1511,12 +1954,23 @@ export def "service-principals-links-owners create" [
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
   if ($object_id | is-empty) { error make --unspanned { msg: "path parameter 'objectId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), object_id: (encode-path-segment $object_id)} | format pattern "/{tenant_id}/servicePrincipals/{object_id}/$links/owners") $qp)
+  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), object_id: (encode-path-segment $object_id)} | format pattern "/{tenant_id}/servicePrincipals/{object_id}/$links/owners") $qp $auth.query)
   let req_body = {"url": $url} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"api-version": $api_version} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Remove a member from owners.
@@ -1545,10 +1999,21 @@ export def "service-principals-links-owners delete" [
   if ($object_id | is-empty) { error make --unspanned { msg: "path parameter 'objectId' must be non-empty" } }
   if ($owner_object_id | is-empty) { error make --unspanned { msg: "path parameter 'ownerObjectId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), object_id: (encode-path-segment $object_id), owner_object_id: (encode-path-segment $owner_object_id)} | format pattern "/{tenant_id}/servicePrincipals/{object_id}/$links/owners/{owner_object_id}") $qp)
+  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), object_id: (encode-path-segment $object_id), owner_object_id: (encode-path-segment $owner_object_id)} | format pattern "/{tenant_id}/servicePrincipals/{object_id}/$links/owners/{owner_object_id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Principals (users, groups, and service principals) that are assigned to this service principal.
@@ -1575,10 +2040,21 @@ export def "service-principals-app-role-assigned-to list" [
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
   if ($object_id | is-empty) { error make --unspanned { msg: "path parameter 'objectId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), object_id: (encode-path-segment $object_id)} | format pattern "/{tenant_id}/servicePrincipals/{object_id}/appRoleAssignedTo") $qp)
+  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), object_id: (encode-path-segment $object_id)} | format pattern "/{tenant_id}/servicePrincipals/{object_id}/appRoleAssignedTo") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Applications that the service principal is assigned to.
@@ -1605,10 +2081,21 @@ export def "service-principals-app-role-assignments list" [
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
   if ($object_id | is-empty) { error make --unspanned { msg: "path parameter 'objectId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), object_id: (encode-path-segment $object_id)} | format pattern "/{tenant_id}/servicePrincipals/{object_id}/appRoleAssignments") $qp)
+  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), object_id: (encode-path-segment $object_id)} | format pattern "/{tenant_id}/servicePrincipals/{object_id}/appRoleAssignments") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get the keyCredentials associated with the specified service principal.
@@ -1635,10 +2122,21 @@ export def "service-principals-key-credentials list" [
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
   if ($object_id | is-empty) { error make --unspanned { msg: "path parameter 'objectId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), object_id: (encode-path-segment $object_id)} | format pattern "/{tenant_id}/servicePrincipals/{object_id}/keyCredentials") $qp)
+  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), object_id: (encode-path-segment $object_id)} | format pattern "/{tenant_id}/servicePrincipals/{object_id}/keyCredentials") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update the keyCredentials associated with a service principal.
@@ -1668,12 +2166,23 @@ export def "service-principals-key-credentials update" [
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
   if ($object_id | is-empty) { error make --unspanned { msg: "path parameter 'objectId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), object_id: (encode-path-segment $object_id)} | format pattern "/{tenant_id}/servicePrincipals/{object_id}/keyCredentials") $qp)
+  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), object_id: (encode-path-segment $object_id)} | format pattern "/{tenant_id}/servicePrincipals/{object_id}/keyCredentials") $qp $auth.query)
   let req_body = {"value": $value} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"api-version": $api_version} | compact), body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: ({"api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Directory objects that are owners of this service principal.
@@ -1700,10 +2209,21 @@ export def "service-principals-owners list" [
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
   if ($object_id | is-empty) { error make --unspanned { msg: "path parameter 'objectId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), object_id: (encode-path-segment $object_id)} | format pattern "/{tenant_id}/servicePrincipals/{object_id}/owners") $qp)
+  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), object_id: (encode-path-segment $object_id)} | format pattern "/{tenant_id}/servicePrincipals/{object_id}/owners") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the passwordCredentials associated with a service principal.
@@ -1730,10 +2250,21 @@ export def "service-principals-password-credentials list" [
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
   if ($object_id | is-empty) { error make --unspanned { msg: "path parameter 'objectId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), object_id: (encode-path-segment $object_id)} | format pattern "/{tenant_id}/servicePrincipals/{object_id}/passwordCredentials") $qp)
+  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), object_id: (encode-path-segment $object_id)} | format pattern "/{tenant_id}/servicePrincipals/{object_id}/passwordCredentials") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates the passwordCredentials associated with a service principal.
@@ -1763,12 +2294,23 @@ export def "service-principals-password-credentials update" [
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
   if ($object_id | is-empty) { error make --unspanned { msg: "path parameter 'objectId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), object_id: (encode-path-segment $object_id)} | format pattern "/{tenant_id}/servicePrincipals/{object_id}/passwordCredentials") $qp)
+  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), object_id: (encode-path-segment $object_id)} | format pattern "/{tenant_id}/servicePrincipals/{object_id}/passwordCredentials") $qp $auth.query)
   let req_body = {"value": $value} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"api-version": $api_version} | compact), body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: ({"api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Gets an object id for a given application id from the current tenant.
@@ -1795,10 +2337,21 @@ export def "service-principals-by-app-id-object-id get-applications" [
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
   if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'applicationID' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), application_id: (encode-path-segment $application_id)} | format pattern "/{tenant_id}/servicePrincipalsByAppId/{application_id}/objectId") $qp)
+  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), application_id: (encode-path-segment $application_id)} | format pattern "/{tenant_id}/servicePrincipalsByAppId/{application_id}/objectId") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets list of users for the current tenant.
@@ -1826,10 +2379,21 @@ export def "users list" [
   let base = ($base_url | default $BASE_URL)
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "$expand" $expand "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id)} | format pattern "/{tenant_id}/users") $qp)
+  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id)} | format pattern "/{tenant_id}/users") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$filter": $filter, "$expand": $expand, "$top": $top, "api-version": $api_version} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"$filter": $filter, "$expand": $expand, "$top": $top, "api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a new user.
@@ -1867,12 +2431,23 @@ export def "users create" [
   let base = ($base_url | default $BASE_URL)
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id)} | format pattern "/{tenant_id}/users") $qp)
+  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id)} | format pattern "/{tenant_id}/users") $qp $auth.query)
   let req_body = {"accountEnabled": $account_enabled, "displayName": $display_name, "mail": $mail, "mailNickname": $mail_nickname, "passwordProfile": $password_profile, "userPrincipalName": $user_principal_name, "givenName": $given_name, "immutableId": $immutable_id, "surname": $surname, "usageLocation": $usage_location, "userType": $user_type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"api-version": $api_version} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Gets a collection that contains the object IDs of the groups of which the user is a member.
@@ -1901,12 +2476,23 @@ export def "users-get-member-groups get" [
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
   if ($object_id | is-empty) { error make --unspanned { msg: "path parameter 'objectId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), object_id: (encode-path-segment $object_id)} | format pattern "/{tenant_id}/users/{object_id}/getMemberGroups") $qp)
+  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), object_id: (encode-path-segment $object_id)} | format pattern "/{tenant_id}/users/{object_id}/getMemberGroups") $qp $auth.query)
   let req_body = {"securityEnabledOnly": $security_enabled_only} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"api-version": $api_version} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Delete a user.
@@ -1933,10 +2519,21 @@ export def "users delete" [
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
   if ($upn_or_object_id | is-empty) { error make --unspanned { msg: "path parameter 'upnOrObjectId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), upn_or_object_id: (encode-path-segment $upn_or_object_id)} | format pattern "/{tenant_id}/users/{upn_or_object_id}") $qp)
+  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), upn_or_object_id: (encode-path-segment $upn_or_object_id)} | format pattern "/{tenant_id}/users/{upn_or_object_id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Gets user information from the directory.
@@ -1963,10 +2560,21 @@ export def "users get" [
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
   if ($upn_or_object_id | is-empty) { error make --unspanned { msg: "path parameter 'upnOrObjectId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), upn_or_object_id: (encode-path-segment $upn_or_object_id)} | format pattern "/{tenant_id}/users/{upn_or_object_id}") $qp)
+  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), upn_or_object_id: (encode-path-segment $upn_or_object_id)} | format pattern "/{tenant_id}/users/{upn_or_object_id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates a user.
@@ -2006,10 +2614,21 @@ export def "users update" [
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
   if ($upn_or_object_id | is-empty) { error make --unspanned { msg: "path parameter 'upnOrObjectId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), upn_or_object_id: (encode-path-segment $upn_or_object_id)} | format pattern "/{tenant_id}/users/{upn_or_object_id}") $qp)
+  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), upn_or_object_id: (encode-path-segment $upn_or_object_id)} | format pattern "/{tenant_id}/users/{upn_or_object_id}") $qp $auth.query)
   let req_body = {"accountEnabled": $account_enabled, "displayName": $display_name, "mail": $mail, "mailNickname": $mail_nickname, "passwordProfile": $password_profile, "userPrincipalName": $user_principal_name, "givenName": $given_name, "immutableId": $immutable_id, "surname": $surname, "usageLocation": $usage_location, "userType": $user_type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"api-version": $api_version} | compact), body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: ({"api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [204]
 }

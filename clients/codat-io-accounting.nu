@@ -8,7 +8,7 @@ const BASE_URL = "https://api.codat.io"
 # `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
 # where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o ACCOUNTING_API_TOKEN | default "" }
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o ACCOUNTING_API_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
@@ -41,14 +41,11 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
-# Trick: `url encode --all` over-encodes, then we decode the four unreserved
-# punctuation chars back. Pre-existing %XX sequences in the input survive
-# because `url encode --all` first turns their % into %25.
 def encode-path-segment [v: any]: nothing -> string {
   $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
-# Serialize an array-typed path parameter (issue 49.A). OpenAPI 3 `style: simple`
+# Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
 # (the default for path params) and Swagger 2 `collectionFormat: csv` both join
 # the elements with a literal comma WITHIN the single path segment, each element
 # RFC-3986-encoded individually (so a comma inside an element stays %2C). Without
@@ -59,60 +56,66 @@ def encode-path-array [v: any]: nothing -> string {
   if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
 }
 
-# Build URL from base, path, and optional query string
-def build-url [base: string, path: string, query?: string]: nothing -> string {
+# Build the request URL from base, path, and any number of pre-encoded query
+# fragments (param serializer output and/or the auth query). Each fragment is an
+# `&`-joinable `key=value` string already percent-encoded by its producer; empty
+# fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
+# delimiters are hand-spliced — and any query already on the base URL is merged in.
+def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
   let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
-  let result = ($parsed | upsert path $full_path)
-  if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
+  let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
+  $parsed | upsert path $full_path | upsert query $query | url join
 }
 
-# Build the dry-run record returned by --dry-run. Shape:
-#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
-#    auth: {scheme, location}}
-# `meta` carries logical-form data (the query record by spec name, the pre-serialization
-# body) that do-request itself cannot reconstruct from its wire-format args.
-def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
-  let m = ($meta | default {})
-  {
-    dry_run: true
-    method: $method
-    url: $url
-    query: ($m | get -o query | default {})
-    headers: $auth.headers
-    body: ($m | get -o body)
-    content_type: $content_type
-    timeout: $timeout
-    auth: {scheme: $auth.scheme, location: $auth.location}
-  }
+# Success policy: did this response succeed? Single source of truth, consulted by
+# handle-response and the HEAD header-unwrap. Empty ok_codes means the spec listed
+# none, so fall back to < 400. Otherwise: any 2xx, plus documented success codes.
+def status-ok [status: int, ok_codes: list<int>]: nothing -> bool {
+  if ($ok_codes | is-empty) { $status < 400 } else { ($status >= 200 and $status < 300) or ($status in $ok_codes) }
 }
 
-# Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
-  let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
-  let timeout = ($max_time | default 30min)
-  let ct = ($content_type | default "application/json")
-  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
-  let resp = match $method {
-    "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
-  }
-  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
-  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
+# Unwrap a `--full` HTTP response into the user-facing value. Response arrives
+# via pipeline; ok_codes gates the error throw (see status-ok).
+def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: record -> any {
+  let resp = $in
+  if $allow_errors { return $resp }
+  if not (status-ok $resp.status $ok_codes) { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } }
+  if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
+  if $resp.status == 204 { return null }
+  $resp.body
+}
+
+# GET — bodyless, honours --raw
+def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+}
+
+# POST — body + content-type
+def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# PUT — body + content-type
+def send-put [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http put --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http put --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# DELETE — body via --data
+def send-delete [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http delete --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url } else { http delete --headers $req.headers --content-type $req.content_type --data $body --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url }
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # Build a `multipart/form-data` envelope per RFC 7578. `file_fields` lists
 # the field names whose value should be read from disk as bytes; every
 # other field is sent as a text part (records/lists JSON-stringified).
-# Returns {content_type, body} ready to pass to `do-request`.
+# Returns {content_type, body}.
 # When `$dry_run` is true, file fields are NOT read from disk — they emit
 # an empty-bytes placeholder so callers can inspect the request shape
-# without the file existing on disk (issue 11.B).
+# without the file existing on disk.
 def build-multipart-body [parts: record, file_fields: list<string>, dry_run: bool = false]: nothing -> record {
   let boundary = $"----nu-(random chars --length 24)"
   let crlf = "\r\n"
@@ -196,10 +199,21 @@ export def "companies-connections-data-account-transactions list" [
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
   if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "orderBy" $order_by "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/data/accountTransactions") $qp)
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/data/accountTransactions") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "pageSize": $page_size, "query": $query, "orderBy": $order_by} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"page": $page, "pageSize": $page_size, "query": $query, "orderBy": $order_by} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get account transaction
@@ -225,10 +239,21 @@ export def "companies-connections-data-account-transactions get" [
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
   if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
   if ($account_transaction_id | is-empty) { error make --unspanned { msg: "path parameter 'accountTransactionId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id), account_transaction_id: (encode-path-segment $account_transaction_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/data/accountTransactions/{account_transaction_id}"))
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id), account_transaction_id: (encode-path-segment $account_transaction_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/data/accountTransactions/{account_transaction_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List bank accounts
@@ -257,10 +282,21 @@ export def "companies-connections-data-bank-accounts list" [
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
   if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "orderBy" $order_by "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/data/bankAccounts") $qp)
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/data/bankAccounts") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "pageSize": $page_size, "query": $query, "orderBy": $order_by} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"page": $page, "pageSize": $page_size, "query": $query, "orderBy": $order_by} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get bank account
@@ -288,10 +324,21 @@ export def "companies-connections-data-bank-accounts get" [
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
   if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id), account_id: (encode-path-segment $account_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/data/bankAccounts/{account_id}"))
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id), account_id: (encode-path-segment $account_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/data/bankAccounts/{account_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List bank transactions for bank account
@@ -322,10 +369,21 @@ export def "companies-connections-data-bank-accounts-bank-transactions list" [
   if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "orderBy" $order_by "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id), account_id: (encode-path-segment $account_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/data/bankAccounts/{account_id}/bankTransactions") $qp)
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id), account_id: (encode-path-segment $account_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/data/bankAccounts/{account_id}/bankTransactions") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "pageSize": $page_size, "query": $query, "orderBy": $order_by} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"page": $page, "pageSize": $page_size, "query": $query, "orderBy": $order_by} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List bill attachments
@@ -351,10 +409,21 @@ export def "companies-connections-data-bills-attachments list" [
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
   if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
   if ($bill_id | is-empty) { error make --unspanned { msg: "path parameter 'billId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id), bill_id: (encode-path-segment $bill_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/data/bills/{bill_id}/attachments"))
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id), bill_id: (encode-path-segment $bill_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/data/bills/{bill_id}/attachments") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get bill attachment
@@ -382,10 +451,21 @@ export def "companies-connections-data-bills-attachments get" [
   if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
   if ($bill_id | is-empty) { error make --unspanned { msg: "path parameter 'billId' must be non-empty" } }
   if ($attachment_id | is-empty) { error make --unspanned { msg: "path parameter 'attachmentId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id), bill_id: (encode-path-segment $bill_id), attachment_id: (encode-path-segment $attachment_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/data/bills/{bill_id}/attachments/{attachment_id}"))
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id), bill_id: (encode-path-segment $bill_id), attachment_id: (encode-path-segment $attachment_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/data/bills/{bill_id}/attachments/{attachment_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Download bill attachment
@@ -413,10 +493,21 @@ export def "companies-connections-data-bills-attachments-download download" [
   if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
   if ($bill_id | is-empty) { error make --unspanned { msg: "path parameter 'billId' must be non-empty" } }
   if ($attachment_id | is-empty) { error make --unspanned { msg: "path parameter 'attachmentId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id), bill_id: (encode-path-segment $bill_id), attachment_id: (encode-path-segment $attachment_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/data/bills/{bill_id}/attachments/{attachment_id}/download"))
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id), bill_id: (encode-path-segment $bill_id), attachment_id: (encode-path-segment $attachment_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/data/bills/{bill_id}/attachments/{attachment_id}/download") $auth.query)
   let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List customer attachments
@@ -442,10 +533,21 @@ export def "companies-connections-data-customers-attachments list" [
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
   if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
   if ($customer_id | is-empty) { error make --unspanned { msg: "path parameter 'customerId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id), customer_id: (encode-path-segment $customer_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/data/customers/{customer_id}/attachments"))
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id), customer_id: (encode-path-segment $customer_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/data/customers/{customer_id}/attachments") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get customer attachment
@@ -473,10 +575,21 @@ export def "companies-connections-data-customers-attachments get" [
   if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
   if ($customer_id | is-empty) { error make --unspanned { msg: "path parameter 'customerId' must be non-empty" } }
   if ($attachment_id | is-empty) { error make --unspanned { msg: "path parameter 'attachmentId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id), customer_id: (encode-path-segment $customer_id), attachment_id: (encode-path-segment $attachment_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/data/customers/{customer_id}/attachments/{attachment_id}"))
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id), customer_id: (encode-path-segment $customer_id), attachment_id: (encode-path-segment $attachment_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/data/customers/{customer_id}/attachments/{attachment_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Download customer attachment
@@ -504,10 +617,21 @@ export def "companies-connections-data-customers-attachments-download download" 
   if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
   if ($customer_id | is-empty) { error make --unspanned { msg: "path parameter 'customerId' must be non-empty" } }
   if ($attachment_id | is-empty) { error make --unspanned { msg: "path parameter 'attachmentId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id), customer_id: (encode-path-segment $customer_id), attachment_id: (encode-path-segment $attachment_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/data/customers/{customer_id}/attachments/{attachment_id}/download"))
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id), customer_id: (encode-path-segment $customer_id), attachment_id: (encode-path-segment $attachment_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/data/customers/{customer_id}/attachments/{attachment_id}/download") $auth.query)
   let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List direct costs
@@ -536,10 +660,21 @@ export def "companies-connections-data-direct-costs list" [
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
   if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "orderBy" $order_by "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/data/directCosts") $qp)
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/data/directCosts") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "pageSize": $page_size, "query": $query, "orderBy": $order_by} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"page": $page, "pageSize": $page_size, "query": $query, "orderBy": $order_by} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get direct cost
@@ -567,10 +702,21 @@ export def "companies-connections-data-direct-costs get" [
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
   if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
   if ($direct_cost_id | is-empty) { error make --unspanned { msg: "path parameter 'directCostId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id), direct_cost_id: (encode-path-segment $direct_cost_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/data/directCosts/{direct_cost_id}"))
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id), direct_cost_id: (encode-path-segment $direct_cost_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/data/directCosts/{direct_cost_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List direct cost attachments
@@ -596,10 +742,21 @@ export def "companies-connections-data-direct-costs-attachments list" [
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
   if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
   if ($direct_cost_id | is-empty) { error make --unspanned { msg: "path parameter 'directCostId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id), direct_cost_id: (encode-path-segment $direct_cost_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/data/directCosts/{direct_cost_id}/attachments"))
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id), direct_cost_id: (encode-path-segment $direct_cost_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/data/directCosts/{direct_cost_id}/attachments") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get direct cost attachment
@@ -627,10 +784,21 @@ export def "companies-connections-data-direct-costs-attachments get" [
   if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
   if ($direct_cost_id | is-empty) { error make --unspanned { msg: "path parameter 'directCostId' must be non-empty" } }
   if ($attachment_id | is-empty) { error make --unspanned { msg: "path parameter 'attachmentId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id), direct_cost_id: (encode-path-segment $direct_cost_id), attachment_id: (encode-path-segment $attachment_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/data/directCosts/{direct_cost_id}/attachments/{attachment_id}"))
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id), direct_cost_id: (encode-path-segment $direct_cost_id), attachment_id: (encode-path-segment $attachment_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/data/directCosts/{direct_cost_id}/attachments/{attachment_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Download direct cost attachment
@@ -658,10 +826,21 @@ export def "companies-connections-data-direct-costs-attachments-download downloa
   if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
   if ($direct_cost_id | is-empty) { error make --unspanned { msg: "path parameter 'directCostId' must be non-empty" } }
   if ($attachment_id | is-empty) { error make --unspanned { msg: "path parameter 'attachmentId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id), direct_cost_id: (encode-path-segment $direct_cost_id), attachment_id: (encode-path-segment $attachment_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/data/directCosts/{direct_cost_id}/attachments/{attachment_id}/download"))
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id), direct_cost_id: (encode-path-segment $direct_cost_id), attachment_id: (encode-path-segment $attachment_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/data/directCosts/{direct_cost_id}/attachments/{attachment_id}/download") $auth.query)
   let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get direct incomes
@@ -690,10 +869,21 @@ export def "companies-connections-data-direct-incomes list" [
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
   if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "orderBy" $order_by "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/data/directIncomes") $qp)
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/data/directIncomes") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "pageSize": $page_size, "query": $query, "orderBy": $order_by} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"page": $page, "pageSize": $page_size, "query": $query, "orderBy": $order_by} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get direct income
@@ -721,10 +911,21 @@ export def "companies-connections-data-direct-incomes get" [
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
   if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
   if ($direct_income_id | is-empty) { error make --unspanned { msg: "path parameter 'directIncomeId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id), direct_income_id: (encode-path-segment $direct_income_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/data/directIncomes/{direct_income_id}"))
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id), direct_income_id: (encode-path-segment $direct_income_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/data/directIncomes/{direct_income_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List direct income attachments
@@ -750,10 +951,21 @@ export def "companies-connections-data-direct-incomes-attachments list" [
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
   if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
   if ($direct_income_id | is-empty) { error make --unspanned { msg: "path parameter 'directIncomeId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id), direct_income_id: (encode-path-segment $direct_income_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/data/directIncomes/{direct_income_id}/attachments"))
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id), direct_income_id: (encode-path-segment $direct_income_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/data/directIncomes/{direct_income_id}/attachments") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get direct income attachment
@@ -783,10 +995,21 @@ export def "companies-connections-data-direct-incomes-attachments get" [
   if ($direct_income_id | is-empty) { error make --unspanned { msg: "path parameter 'directIncomeId' must be non-empty" } }
   if ($attachment_id | is-empty) { error make --unspanned { msg: "path parameter 'attachmentId' must be non-empty" } }
   let qp = [(serialize-qp "timeoutInMinutes" $timeout_in_minutes "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id), direct_income_id: (encode-path-segment $direct_income_id), attachment_id: (encode-path-segment $attachment_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/data/directIncomes/{direct_income_id}/attachments/{attachment_id}") $qp)
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id), direct_income_id: (encode-path-segment $direct_income_id), attachment_id: (encode-path-segment $attachment_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/data/directIncomes/{direct_income_id}/attachments/{attachment_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"timeoutInMinutes": $timeout_in_minutes} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"timeoutInMinutes": $timeout_in_minutes} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Download direct income attachment
@@ -814,10 +1037,21 @@ export def "companies-connections-data-direct-incomes-attachments-download downl
   if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
   if ($direct_income_id | is-empty) { error make --unspanned { msg: "path parameter 'directIncomeId' must be non-empty" } }
   if ($attachment_id | is-empty) { error make --unspanned { msg: "path parameter 'attachmentId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id), direct_income_id: (encode-path-segment $direct_income_id), attachment_id: (encode-path-segment $attachment_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/data/directIncomes/{direct_income_id}/attachments/{attachment_id}/download"))
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id), direct_income_id: (encode-path-segment $direct_income_id), attachment_id: (encode-path-segment $attachment_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/data/directIncomes/{direct_income_id}/attachments/{attachment_id}/download") $auth.query)
   let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get invoice attachments
@@ -843,10 +1077,21 @@ export def "companies-connections-data-invoices-attachments list" [
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
   if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
   if ($invoice_id | is-empty) { error make --unspanned { msg: "path parameter 'invoiceId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id), invoice_id: (encode-path-segment $invoice_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/data/invoices/{invoice_id}/attachments"))
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id), invoice_id: (encode-path-segment $invoice_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/data/invoices/{invoice_id}/attachments") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get invoice attachment
@@ -874,10 +1119,21 @@ export def "companies-connections-data-invoices-attachments get" [
   if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
   if ($invoice_id | is-empty) { error make --unspanned { msg: "path parameter 'invoiceId' must be non-empty" } }
   if ($attachment_id | is-empty) { error make --unspanned { msg: "path parameter 'attachmentId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id), invoice_id: (encode-path-segment $invoice_id), attachment_id: (encode-path-segment $attachment_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/data/invoices/{invoice_id}/attachments/{attachment_id}"))
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id), invoice_id: (encode-path-segment $invoice_id), attachment_id: (encode-path-segment $attachment_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/data/invoices/{invoice_id}/attachments/{attachment_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Download invoice attachment
@@ -905,10 +1161,21 @@ export def "companies-connections-data-invoices-attachments-download download" [
   if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
   if ($invoice_id | is-empty) { error make --unspanned { msg: "path parameter 'invoiceId' must be non-empty" } }
   if ($attachment_id | is-empty) { error make --unspanned { msg: "path parameter 'attachmentId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id), invoice_id: (encode-path-segment $invoice_id), attachment_id: (encode-path-segment $attachment_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/data/invoices/{invoice_id}/attachments/{attachment_id}/download"))
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id), invoice_id: (encode-path-segment $invoice_id), attachment_id: (encode-path-segment $attachment_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/data/invoices/{invoice_id}/attachments/{attachment_id}/download") $auth.query)
   let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List supplier attachments
@@ -934,10 +1201,21 @@ export def "companies-connections-data-suppliers-attachments list" [
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
   if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
   if ($supplier_id | is-empty) { error make --unspanned { msg: "path parameter 'supplierId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id), supplier_id: (encode-path-segment $supplier_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/data/suppliers/{supplier_id}/attachments"))
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id), supplier_id: (encode-path-segment $supplier_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/data/suppliers/{supplier_id}/attachments") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get supplier attachment
@@ -965,10 +1243,21 @@ export def "companies-connections-data-suppliers-attachments get" [
   if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
   if ($supplier_id | is-empty) { error make --unspanned { msg: "path parameter 'supplierId' must be non-empty" } }
   if ($attachment_id | is-empty) { error make --unspanned { msg: "path parameter 'attachmentId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id), supplier_id: (encode-path-segment $supplier_id), attachment_id: (encode-path-segment $attachment_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/data/suppliers/{supplier_id}/attachments/{attachment_id}"))
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id), supplier_id: (encode-path-segment $supplier_id), attachment_id: (encode-path-segment $attachment_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/data/suppliers/{supplier_id}/attachments/{attachment_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Download supplier attachment
@@ -996,10 +1285,21 @@ export def "companies-connections-data-suppliers-attachments-download download" 
   if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
   if ($supplier_id | is-empty) { error make --unspanned { msg: "path parameter 'supplierId' must be non-empty" } }
   if ($attachment_id | is-empty) { error make --unspanned { msg: "path parameter 'attachmentId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id), supplier_id: (encode-path-segment $supplier_id), attachment_id: (encode-path-segment $attachment_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/data/suppliers/{supplier_id}/attachments/{attachment_id}/download"))
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id), supplier_id: (encode-path-segment $supplier_id), attachment_id: (encode-path-segment $attachment_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/data/suppliers/{supplier_id}/attachments/{attachment_id}/download") $auth.query)
   let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List transfers
@@ -1028,10 +1328,21 @@ export def "companies-connections-data-transfers list" [
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
   if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "orderBy" $order_by "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/data/transfers") $qp)
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/data/transfers") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "pageSize": $page_size, "query": $query, "orderBy": $order_by} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"page": $page, "pageSize": $page_size, "query": $query, "orderBy": $order_by} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get transfer
@@ -1059,10 +1370,21 @@ export def "companies-connections-data-transfers get" [
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
   if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
   if ($transfer_id | is-empty) { error make --unspanned { msg: "path parameter 'transferId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id), transfer_id: (encode-path-segment $transfer_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/data/transfers/{transfer_id}"))
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id), transfer_id: (encode-path-segment $transfer_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/data/transfers/{transfer_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get create/update bank account model
@@ -1086,10 +1408,21 @@ export def "companies-connections-options-bank-accounts get-create-update-model"
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
   if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/options/bankAccounts"))
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/options/bankAccounts") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List push options for bank account bank transactions
@@ -1115,10 +1448,21 @@ export def "companies-connections-options-bank-accounts-bank-transactions get-cr
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
   if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id), account_id: (encode-path-segment $account_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/options/bankAccounts/{account_id}/bankTransactions"))
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id), account_id: (encode-path-segment $account_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/options/bankAccounts/{account_id}/bankTransactions") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get create/update bill credit note model
@@ -1142,10 +1486,21 @@ export def "companies-connections-options-bill-credit-notes get-create-update-mo
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
   if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/options/billCreditNotes"))
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/options/billCreditNotes") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get create bill payment model
@@ -1169,10 +1524,21 @@ export def "companies-connections-options-bill-payments get-create-model" [
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
   if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/options/billPayments"))
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/options/billPayments") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get create/update bill model
@@ -1196,10 +1562,21 @@ export def "companies-connections-options-bills get-create-update-model" [
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
   if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/options/bills"))
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/options/bills") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get create account model
@@ -1223,10 +1600,21 @@ export def "companies-connections-options-chart-of-accounts get-create-model" [
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
   if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/options/chartOfAccounts"))
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/options/chartOfAccounts") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get create/update credit note model
@@ -1250,10 +1638,21 @@ export def "companies-connections-options-credit-notes get-create-update-model" 
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
   if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/options/creditNotes"))
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/options/creditNotes") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get create/update customer model
@@ -1277,10 +1676,21 @@ export def "companies-connections-options-customers get-create-update-model" [
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
   if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/options/customers"))
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/options/customers") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get create direct cost model
@@ -1304,10 +1714,21 @@ export def "companies-connections-options-direct-costs get-create-model" [
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
   if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/options/directCosts"))
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/options/directCosts") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get create direct income model
@@ -1331,10 +1752,21 @@ export def "companies-connections-options-direct-incomes get-create-model" [
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
   if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/options/directIncomes"))
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/options/directIncomes") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get create/update invoice model
@@ -1358,10 +1790,21 @@ export def "companies-connections-options-invoices get-create-update-model" [
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
   if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/options/invoices"))
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/options/invoices") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get create item model
@@ -1385,10 +1828,21 @@ export def "companies-connections-options-items get-create-model" [
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
   if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/options/items"))
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/options/items") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get create journal entry model
@@ -1412,10 +1866,21 @@ export def "companies-connections-options-journal-entries get-create-model" [
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
   if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/options/journalEntries"))
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/options/journalEntries") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get create journal model
@@ -1439,10 +1904,21 @@ export def "companies-connections-options-journals get-create-model" [
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
   if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/options/journals"))
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/options/journals") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get create payment model
@@ -1466,10 +1942,21 @@ export def "companies-connections-options-payments get-create-model" [
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
   if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/options/payments"))
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/options/payments") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get create/update purchase order model
@@ -1493,10 +1980,21 @@ export def "companies-connections-options-purchase-orders get-create-update-mode
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
   if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/options/purchaseOrders"))
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/options/purchaseOrders") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get create/update supplier model
@@ -1520,10 +2018,21 @@ export def "companies-connections-options-suppliers get-create-update-model" [
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
   if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/options/suppliers"))
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/options/suppliers") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get create transfer model
@@ -1547,10 +2056,21 @@ export def "companies-connections-options-transfers get-create-model" [
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
   if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/options/transfers"))
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/options/transfers") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create account
@@ -1592,12 +2112,23 @@ export def "companies-connections-push-accounts create" [
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
   if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
   let qp = [(serialize-qp "timeoutInMinutes" $timeout_in_minutes "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/push/accounts") $qp)
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/push/accounts") $qp $auth.query)
   let req_body = {"currency": $currency, "currentBalance": $current_balance, "description": $description, "fullyQualifiedCategory": $fully_qualified_category, "fullyQualifiedName": $fully_qualified_name, "id": $id, "isBankAccount": $is_bank_account, "metadata": $metadata, "name": $name, "nominalCode": $nominal_code, "status": $status, "type": $type, "validDatatypeLinks": $valid_datatype_links} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"timeoutInMinutes": $timeout_in_minutes} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"timeoutInMinutes": $timeout_in_minutes} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Create bank account
@@ -1639,12 +2170,23 @@ export def "companies-connections-push-bank-accounts create" [
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
   if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
   let qp = [(serialize-qp "allowSyncOnPushComplete" $allow_sync_on_push_complete "scalar") (serialize-qp "timeoutInMinutes" $timeout_in_minutes "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/push/bankAccounts") $qp)
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/push/bankAccounts") $qp $auth.query)
   let req_body = {"accountName": $account_name, "accountNumber": $account_number, "accountType": $account_type, "availableBalance": $available_balance, "balance": $balance, "currency": $currency, "iBan": $i_ban, "id": $id, "institution": $institution, "metadata": $metadata, "nominalCode": $nominal_code, "overdraftLimit": $overdraft_limit, "sortCode": $sort_code} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"allowSyncOnPushComplete": $allow_sync_on_push_complete, "timeoutInMinutes": $timeout_in_minutes} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"allowSyncOnPushComplete": $allow_sync_on_push_complete, "timeoutInMinutes": $timeout_in_minutes} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Create bank transactions
@@ -1677,12 +2219,23 @@ export def "companies-connections-push-bank-accounts-bank-transactions create" [
   if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let qp = [(serialize-qp "allowSyncOnPushComplete" $allow_sync_on_push_complete "scalar") (serialize-qp "timeoutInMinutes" $timeout_in_minutes "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id), account_id: (encode-path-segment $account_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/push/bankAccounts/{account_id}/bankTransactions") $qp)
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id), account_id: (encode-path-segment $account_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/push/bankAccounts/{account_id}/bankTransactions") $qp $auth.query)
   let req_body = {"accountId": $body_account_id, "transactions": $transactions} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"allowSyncOnPushComplete": $allow_sync_on_push_complete, "timeoutInMinutes": $timeout_in_minutes} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"allowSyncOnPushComplete": $allow_sync_on_push_complete, "timeoutInMinutes": $timeout_in_minutes} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Update bank account
@@ -1726,12 +2279,23 @@ export def "companies-connections-push-bank-accounts update" [
   if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
   if ($bank_account_id | is-empty) { error make --unspanned { msg: "path parameter 'bankAccountId' must be non-empty" } }
   let qp = [(serialize-qp "timeoutInMinutes" $timeout_in_minutes "scalar") (serialize-qp "forceUpdate" $force_update "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id), bank_account_id: (encode-path-segment $bank_account_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/push/bankAccounts/{bank_account_id}") $qp)
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id), bank_account_id: (encode-path-segment $bank_account_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/push/bankAccounts/{bank_account_id}") $qp $auth.query)
   let req_body = {"accountName": $account_name, "accountNumber": $account_number, "accountType": $account_type, "availableBalance": $available_balance, "balance": $balance, "currency": $currency, "iBan": $i_ban, "id": $id, "institution": $institution, "metadata": $metadata, "nominalCode": $nominal_code, "overdraftLimit": $overdraft_limit, "sortCode": $sort_code} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"timeoutInMinutes": $timeout_in_minutes, "forceUpdate": $force_update} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"timeoutInMinutes": $timeout_in_minutes, "forceUpdate": $force_update} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Create bill credit note
@@ -1784,12 +2348,23 @@ export def "companies-connections-push-bill-credit-notes create" [
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
   if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
   let qp = [(serialize-qp "timeoutInMinutes" $timeout_in_minutes "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/push/billCreditNotes") $qp)
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/push/billCreditNotes") $qp $auth.query)
   let req_body = {"allocatedOnDate": $allocated_on_date, "billCreditNoteNumber": $bill_credit_note_number, "currency": $currency, "currencyRate": $currency_rate, "discountPercentage": $discount_percentage, "id": $id, "issueDate": $issue_date, "lineItems": $line_items, "metadata": $metadata, "note": $note, "paymentAllocations": $payment_allocations, "remainingCredit": $remaining_credit, "status": $status, "subTotal": $sub_total, "supplementalData": $supplemental_data, "supplierRef": $supplier_ref, "totalAmount": $total_amount, "totalDiscount": $total_discount, "totalTaxAmount": $total_tax_amount, "withholdingTax": $withholding_tax} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"timeoutInMinutes": $timeout_in_minutes} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"timeoutInMinutes": $timeout_in_minutes} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Update bill credit note
@@ -1845,12 +2420,23 @@ export def "companies-connections-push-bill-credit-notes update" [
   if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
   if ($bill_credit_note_id | is-empty) { error make --unspanned { msg: "path parameter 'billCreditNoteId' must be non-empty" } }
   let qp = [(serialize-qp "timeoutInMinutes" $timeout_in_minutes "scalar") (serialize-qp "forceUpdate" $force_update "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id), bill_credit_note_id: (encode-path-segment $bill_credit_note_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/push/billCreditNotes/{bill_credit_note_id}") $qp)
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id), bill_credit_note_id: (encode-path-segment $bill_credit_note_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/push/billCreditNotes/{bill_credit_note_id}") $qp $auth.query)
   let req_body = {"allocatedOnDate": $allocated_on_date, "billCreditNoteNumber": $bill_credit_note_number, "currency": $currency, "currencyRate": $currency_rate, "discountPercentage": $discount_percentage, "id": $id, "issueDate": $issue_date, "lineItems": $line_items, "metadata": $metadata, "note": $note, "paymentAllocations": $payment_allocations, "remainingCredit": $remaining_credit, "status": $status, "subTotal": $sub_total, "supplementalData": $supplemental_data, "supplierRef": $supplier_ref, "totalAmount": $total_amount, "totalDiscount": $total_discount, "totalTaxAmount": $total_tax_amount, "withholdingTax": $withholding_tax} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"timeoutInMinutes": $timeout_in_minutes, "forceUpdate": $force_update} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"timeoutInMinutes": $timeout_in_minutes, "forceUpdate": $force_update} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Create bill payments
@@ -1896,12 +2482,23 @@ export def "companies-connections-push-bill-payments create" [
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
   if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
   let qp = [(serialize-qp "timeoutInMinutes" $timeout_in_minutes "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/push/billPayments") $qp)
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/push/billPayments") $qp $auth.query)
   let req_body = {"accountRef": $account_ref, "currency": $currency, "currencyRate": $currency_rate, "date": $date, "id": $id, "lines": $lines, "metadata": $metadata, "note": $note, "paymentMethodRef": $payment_method_ref, "reference": $reference, "supplementalData": $supplemental_data, "supplierRef": $supplier_ref, "totalAmount": $total_amount} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"timeoutInMinutes": $timeout_in_minutes} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"timeoutInMinutes": $timeout_in_minutes} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Delete bill payment
@@ -1927,10 +2524,21 @@ export def "companies-connections-push-bill-payments delete" [
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
   if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
   if ($bill_payment_id | is-empty) { error make --unspanned { msg: "path parameter 'billPaymentId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id), bill_payment_id: (encode-path-segment $bill_payment_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/push/billPayments/{bill_payment_id}"))
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id), bill_payment_id: (encode-path-segment $bill_payment_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/push/billPayments/{bill_payment_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Create bill
@@ -1983,12 +2591,23 @@ export def "companies-connections-push-bills create" [
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
   if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
   let qp = [(serialize-qp "timeoutInMinutes" $timeout_in_minutes "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/push/bills") $qp)
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/push/bills") $qp $auth.query)
   let req_body = {"amountDue": $amount_due, "currency": $currency, "currencyRate": $currency_rate, "dueDate": $due_date, "id": $id, "issueDate": $issue_date, "lineItems": $line_items, "metadata": $metadata, "note": $note, "paymentAllocations": $payment_allocations, "purchaseOrderRefs": $purchase_order_refs, "reference": $reference, "status": $status, "subTotal": $sub_total, "supplementalData": $supplemental_data, "supplierRef": $supplier_ref, "taxAmount": $tax_amount, "totalAmount": $total_amount, "withholdingTax": $withholding_tax} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"timeoutInMinutes": $timeout_in_minutes} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"timeoutInMinutes": $timeout_in_minutes} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Delete bill
@@ -2014,10 +2633,21 @@ export def "companies-connections-push-bills delete" [
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
   if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
   if ($bill_id | is-empty) { error make --unspanned { msg: "path parameter 'billId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id), bill_id: (encode-path-segment $bill_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/push/bills/{bill_id}"))
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id), bill_id: (encode-path-segment $bill_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/push/bills/{bill_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Update bill
@@ -2073,12 +2703,23 @@ export def "companies-connections-push-bills update" [
   if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
   if ($bill_id | is-empty) { error make --unspanned { msg: "path parameter 'billId' must be non-empty" } }
   let qp = [(serialize-qp "timeoutInMinutes" $timeout_in_minutes "scalar") (serialize-qp "forceUpdate" $force_update "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id), bill_id: (encode-path-segment $bill_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/push/bills/{bill_id}") $qp)
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id), bill_id: (encode-path-segment $bill_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/push/bills/{bill_id}") $qp $auth.query)
   let req_body = {"amountDue": $amount_due, "currency": $currency, "currencyRate": $currency_rate, "dueDate": $due_date, "id": $id, "issueDate": $issue_date, "lineItems": $line_items, "metadata": $metadata, "note": $note, "paymentAllocations": $payment_allocations, "purchaseOrderRefs": $purchase_order_refs, "reference": $reference, "status": $status, "subTotal": $sub_total, "supplementalData": $supplemental_data, "supplierRef": $supplier_ref, "taxAmount": $tax_amount, "totalAmount": $total_amount, "withholdingTax": $withholding_tax} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"timeoutInMinutes": $timeout_in_minutes, "forceUpdate": $force_update} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"timeoutInMinutes": $timeout_in_minutes, "forceUpdate": $force_update} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Upload bill attachments
@@ -2106,14 +2747,25 @@ export def "companies-connections-push-bills-attachments upload" [
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
   if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
   if ($bill_id | is-empty) { error make --unspanned { msg: "path parameter 'billId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id), bill_id: (encode-path-segment $bill_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/push/bills/{bill_id}/attachments"))
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id), bill_id: (encode-path-segment $bill_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/push/bills/{bill_id}/attachments") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body [] $dry_run)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: $mp.content_type
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $mp.body $insecure $raw $allow_errors $full [200]
 }
 
 # Create credit note
@@ -2168,12 +2820,23 @@ export def "companies-connections-push-credit-notes create" [
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
   if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
   let qp = [(serialize-qp "timeoutInMinutes" $timeout_in_minutes "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/push/creditNotes") $qp)
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/push/creditNotes") $qp $auth.query)
   let req_body = {"additionalTaxAmount": $additional_tax_amount, "additionalTaxPercentage": $additional_tax_percentage, "allocatedOnDate": $allocated_on_date, "creditNoteNumber": $credit_note_number, "currency": $currency, "currencyRate": $currency_rate, "customerRef": $customer_ref, "discountPercentage": $discount_percentage, "id": $id, "issueDate": $issue_date, "lineItems": $line_items, "metadata": $metadata, "note": $note, "paymentAllocations": $payment_allocations, "remainingCredit": $remaining_credit, "status": $status, "subTotal": $sub_total, "supplementalData": $supplemental_data, "totalAmount": $total_amount, "totalDiscount": $total_discount, "totalTaxAmount": $total_tax_amount, "withholdingTax": $withholding_tax} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"timeoutInMinutes": $timeout_in_minutes} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"timeoutInMinutes": $timeout_in_minutes} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Update creditNote
@@ -2231,12 +2894,23 @@ export def "companies-connections-push-credit-notes update" [
   if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
   if ($credit_note_id | is-empty) { error make --unspanned { msg: "path parameter 'creditNoteId' must be non-empty" } }
   let qp = [(serialize-qp "timeoutInMinutes" $timeout_in_minutes "scalar") (serialize-qp "forceUpdate" $force_update "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id), credit_note_id: (encode-path-segment $credit_note_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/push/creditNotes/{credit_note_id}") $qp)
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id), credit_note_id: (encode-path-segment $credit_note_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/push/creditNotes/{credit_note_id}") $qp $auth.query)
   let req_body = {"additionalTaxAmount": $additional_tax_amount, "additionalTaxPercentage": $additional_tax_percentage, "allocatedOnDate": $allocated_on_date, "creditNoteNumber": $credit_note_number, "currency": $currency, "currencyRate": $currency_rate, "customerRef": $customer_ref, "discountPercentage": $discount_percentage, "id": $id, "issueDate": $issue_date, "lineItems": $line_items, "metadata": $metadata, "note": $note, "paymentAllocations": $payment_allocations, "remainingCredit": $remaining_credit, "status": $status, "subTotal": $sub_total, "supplementalData": $supplemental_data, "totalAmount": $total_amount, "totalDiscount": $total_discount, "totalTaxAmount": $total_tax_amount, "withholdingTax": $withholding_tax} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"timeoutInMinutes": $timeout_in_minutes, "forceUpdate": $force_update} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"timeoutInMinutes": $timeout_in_minutes, "forceUpdate": $force_update} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Create customer
@@ -2280,12 +2954,23 @@ export def "companies-connections-push-customers create" [
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
   if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
   let qp = [(serialize-qp "timeoutInMinutes" $timeout_in_minutes "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/push/customers") $qp)
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/push/customers") $qp $auth.query)
   let req_body = {"addresses": $addresses, "contactName": $contact_name, "contacts": $contacts, "customerName": $customer_name, "defaultCurrency": $default_currency, "emailAddress": $email_address, "id": $id, "metadata": $metadata, "phone": $phone, "registrationNumber": $registration_number, "status": $status, "supplementalData": $supplemental_data, "taxNumber": $tax_number} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"timeoutInMinutes": $timeout_in_minutes} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"timeoutInMinutes": $timeout_in_minutes} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Update customer
@@ -2332,12 +3017,23 @@ export def "companies-connections-push-customers update" [
   if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
   if ($customer_id | is-empty) { error make --unspanned { msg: "path parameter 'customerId' must be non-empty" } }
   let qp = [(serialize-qp "timeoutInMinutes" $timeout_in_minutes "scalar") (serialize-qp "forceUpdate" $force_update "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id), customer_id: (encode-path-segment $customer_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/push/customers/{customer_id}") $qp)
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id), customer_id: (encode-path-segment $customer_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/push/customers/{customer_id}") $qp $auth.query)
   let req_body = {"addresses": $addresses, "contactName": $contact_name, "contacts": $contacts, "customerName": $customer_name, "defaultCurrency": $default_currency, "emailAddress": $email_address, "id": $id, "metadata": $metadata, "phone": $phone, "registrationNumber": $registration_number, "status": $status, "supplementalData": $supplemental_data, "taxNumber": $tax_number} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"timeoutInMinutes": $timeout_in_minutes, "forceUpdate": $force_update} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"timeoutInMinutes": $timeout_in_minutes, "forceUpdate": $force_update} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Create direct cost
@@ -2383,12 +3079,23 @@ export def "companies-connections-push-direct-costs create" [
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
   if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
   let qp = [(serialize-qp "timeoutInMinutes" $timeout_in_minutes "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/push/directCosts") $qp)
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/push/directCosts") $qp $auth.query)
   let req_body = {"contactRef": $contact_ref, "currency": $currency, "currencyRate": $currency_rate, "id": $id, "issueDate": $issue_date, "lineItems": $line_items, "metadata": $metadata, "note": $note, "paymentAllocations": $payment_allocations, "reference": $reference, "subTotal": $sub_total, "supplementalData": $supplemental_data, "taxAmount": $tax_amount, "totalAmount": $total_amount} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"timeoutInMinutes": $timeout_in_minutes} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"timeoutInMinutes": $timeout_in_minutes} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Upload direct cost attachment
@@ -2416,14 +3123,25 @@ export def "companies-connections-push-direct-costs-attachment upload" [
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
   if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
   if ($direct_cost_id | is-empty) { error make --unspanned { msg: "path parameter 'directCostId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id), direct_cost_id: (encode-path-segment $direct_cost_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/push/directCosts/{direct_cost_id}/attachment"))
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id), direct_cost_id: (encode-path-segment $direct_cost_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/push/directCosts/{direct_cost_id}/attachment") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body [] $dry_run)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: $mp.content_type
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $mp.body $insecure $raw $allow_errors $full [200]
 }
 
 # Create direct income
@@ -2469,12 +3187,23 @@ export def "companies-connections-push-direct-incomes create" [
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
   if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
   let qp = [(serialize-qp "timeoutInMinutes" $timeout_in_minutes "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/push/directIncomes") $qp)
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/push/directIncomes") $qp $auth.query)
   let req_body = {"contactRef": $contact_ref, "currency": $currency, "currencyRate": $currency_rate, "id": $id, "issueDate": $issue_date, "lineItems": $line_items, "metadata": $metadata, "note": $note, "paymentAllocations": $payment_allocations, "reference": $reference, "subTotal": $sub_total, "supplementalData": $supplemental_data, "taxAmount": $tax_amount, "totalAmount": $total_amount} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"timeoutInMinutes": $timeout_in_minutes} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"timeoutInMinutes": $timeout_in_minutes} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Create direct income attachment
@@ -2502,14 +3231,25 @@ export def "companies-connections-push-direct-incomes-attachment upload" [
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
   if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
   if ($direct_income_id | is-empty) { error make --unspanned { msg: "path parameter 'directIncomeId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id), direct_income_id: (encode-path-segment $direct_income_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/push/directIncomes/{direct_income_id}/attachment"))
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id), direct_income_id: (encode-path-segment $direct_income_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/push/directIncomes/{direct_income_id}/attachment") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body [] $dry_run)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: $mp.content_type
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $mp.body $insecure $raw $allow_errors $full [200]
 }
 
 # Create invoice
@@ -2566,12 +3306,23 @@ export def "companies-connections-push-invoices create" [
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
   if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
   let qp = [(serialize-qp "timeoutInMinutes" $timeout_in_minutes "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/push/invoices") $qp)
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/push/invoices") $qp $auth.query)
   let req_body = {"additionalTaxAmount": $additional_tax_amount, "additionalTaxPercentage": $additional_tax_percentage, "amountDue": $amount_due, "currency": $currency, "currencyRate": $currency_rate, "customerRef": $customer_ref, "discountPercentage": $discount_percentage, "dueDate": $due_date, "id": $id, "invoiceNumber": $invoice_number, "issueDate": $issue_date, "lineItems": $line_items, "metadata": $metadata, "note": $note, "paidOnDate": $paid_on_date, "paymentAllocations": $payment_allocations, "salesOrderRefs": $sales_order_refs, "status": $status, "subTotal": $sub_total, "supplementalData": $supplemental_data, "totalAmount": $total_amount, "totalDiscount": $total_discount, "totalTaxAmount": $total_tax_amount, "withholdingTax": $withholding_tax} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"timeoutInMinutes": $timeout_in_minutes} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"timeoutInMinutes": $timeout_in_minutes} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Delete invoice
@@ -2597,10 +3348,21 @@ export def "companies-connections-push-invoices delete" [
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
   if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
   if ($invoice_id | is-empty) { error make --unspanned { msg: "path parameter 'invoiceId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id), invoice_id: (encode-path-segment $invoice_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/push/invoices/{invoice_id}"))
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id), invoice_id: (encode-path-segment $invoice_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/push/invoices/{invoice_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Update invoice
@@ -2660,12 +3422,23 @@ export def "companies-connections-push-invoices update" [
   if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
   if ($invoice_id | is-empty) { error make --unspanned { msg: "path parameter 'invoiceId' must be non-empty" } }
   let qp = [(serialize-qp "timeoutInMinutes" $timeout_in_minutes "scalar") (serialize-qp "forceUpdate" $force_update "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id), invoice_id: (encode-path-segment $invoice_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/push/invoices/{invoice_id}") $qp)
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id), invoice_id: (encode-path-segment $invoice_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/push/invoices/{invoice_id}") $qp $auth.query)
   let req_body = {"additionalTaxAmount": $additional_tax_amount, "additionalTaxPercentage": $additional_tax_percentage, "amountDue": $amount_due, "currency": $currency, "currencyRate": $currency_rate, "customerRef": $customer_ref, "discountPercentage": $discount_percentage, "dueDate": $due_date, "id": $id, "invoiceNumber": $invoice_number, "issueDate": $issue_date, "lineItems": $line_items, "metadata": $metadata, "note": $note, "paidOnDate": $paid_on_date, "paymentAllocations": $payment_allocations, "salesOrderRefs": $sales_order_refs, "status": $status, "subTotal": $sub_total, "supplementalData": $supplemental_data, "totalAmount": $total_amount, "totalDiscount": $total_discount, "totalTaxAmount": $total_tax_amount, "withholdingTax": $withholding_tax} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"timeoutInMinutes": $timeout_in_minutes, "forceUpdate": $force_update} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"timeoutInMinutes": $timeout_in_minutes, "forceUpdate": $force_update} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Push invoice attachment
@@ -2693,14 +3466,25 @@ export def "companies-connections-push-invoices-attachment upload" [
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
   if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
   if ($invoice_id | is-empty) { error make --unspanned { msg: "path parameter 'invoiceId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id), invoice_id: (encode-path-segment $invoice_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/push/invoices/{invoice_id}/attachment"))
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id), invoice_id: (encode-path-segment $invoice_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/push/invoices/{invoice_id}/attachment") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body [] $dry_run)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: $mp.content_type
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $mp.body $insecure $raw $allow_errors $full [200]
 }
 
 # Create item
@@ -2740,12 +3524,23 @@ export def "companies-connections-push-items create" [
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
   if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
   let qp = [(serialize-qp "timeoutInMinutes" $timeout_in_minutes "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/push/items") $qp)
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/push/items") $qp $auth.query)
   let req_body = {"billItem": $bill_item, "code": $code, "id": $id, "invoiceItem": $invoice_item, "isBillItem": $is_bill_item, "isInvoiceItem": $is_invoice_item, "itemStatus": $item_status, "metadata": $metadata, "name": $name, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"timeoutInMinutes": $timeout_in_minutes} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"timeoutInMinutes": $timeout_in_minutes} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Create journal entry
@@ -2787,12 +3582,23 @@ export def "companies-connections-push-journal-entries create-entry" [
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
   if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
   let qp = [(serialize-qp "timeoutInMinutes" $timeout_in_minutes "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/push/journalEntries") $qp)
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/push/journalEntries") $qp $auth.query)
   let req_body = {"createdOn": $created_on, "description": $description, "id": $id, "journalLines": $journal_lines, "journalRef": $journal_ref, "metadata": $metadata, "postedOn": $posted_on, "recordRef": $record_ref, "supplementalData": $supplemental_data, "updatedOn": $updated_on} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"timeoutInMinutes": $timeout_in_minutes} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"timeoutInMinutes": $timeout_in_minutes} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Delete journal entry
@@ -2818,10 +3624,21 @@ export def "companies-connections-push-journal-entries delete-entry" [
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
   if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
   if ($journal_entry_id | is-empty) { error make --unspanned { msg: "path parameter 'journalEntryId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id), journal_entry_id: (encode-path-segment $journal_entry_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/push/journalEntries/{journal_entry_id}"))
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id), journal_entry_id: (encode-path-segment $journal_entry_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/push/journalEntries/{journal_entry_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Create journal
@@ -2858,12 +3675,23 @@ export def "companies-connections-push-journals push" [
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
   if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
   let qp = [(serialize-qp "timeoutInMinutes" $timeout_in_minutes "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/push/journals") $qp)
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/push/journals") $qp $auth.query)
   let req_body = {"createdOn": $created_on, "hasChildren": $has_children, "id": $id, "journalCode": $journal_code, "metadata": $metadata, "name": $name, "parentId": $parent_id, "status": $status, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"timeoutInMinutes": $timeout_in_minutes} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"timeoutInMinutes": $timeout_in_minutes} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Create payment
@@ -2909,12 +3737,23 @@ export def "companies-connections-push-payments create" [
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
   if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
   let qp = [(serialize-qp "timeoutInMinutes" $timeout_in_minutes "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/push/payments") $qp)
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/push/payments") $qp $auth.query)
   let req_body = {"accountRef": $account_ref, "currency": $currency, "currencyRate": $currency_rate, "customerRef": $customer_ref, "date": $date, "id": $id, "lines": $lines, "metadata": $metadata, "note": $note, "paymentMethodRef": $payment_method_ref, "reference": $reference, "supplementalData": $supplemental_data, "totalAmount": $total_amount} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"timeoutInMinutes": $timeout_in_minutes} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"timeoutInMinutes": $timeout_in_minutes} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Create purchase order
@@ -2963,12 +3802,23 @@ export def "companies-connections-push-purchase-orders create" [
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
   if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
   let qp = [(serialize-qp "timeoutInMinutes" $timeout_in_minutes "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/push/purchaseOrders") $qp)
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/push/purchaseOrders") $qp $auth.query)
   let req_body = {"currency": $currency, "currencyRate": $currency_rate, "deliveryDate": $delivery_date, "expectedDeliveryDate": $expected_delivery_date, "id": $id, "issueDate": $issue_date, "lineItems": $line_items, "metadata": $metadata, "note": $note, "paymentDueDate": $payment_due_date, "purchaseOrderNumber": $purchase_order_number, "shipTo": $ship_to, "status": $status, "subTotal": $sub_total, "supplierRef": $supplier_ref, "totalAmount": $total_amount, "totalDiscount": $total_discount, "totalTaxAmount": $total_tax_amount} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"timeoutInMinutes": $timeout_in_minutes} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"timeoutInMinutes": $timeout_in_minutes} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Update purchase order
@@ -3020,12 +3870,23 @@ export def "companies-connections-push-purchase-orders update" [
   if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
   if ($purchase_order_id | is-empty) { error make --unspanned { msg: "path parameter 'purchaseOrderId' must be non-empty" } }
   let qp = [(serialize-qp "timeoutInMinutes" $timeout_in_minutes "scalar") (serialize-qp "forceUpdate" $force_update "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id), purchase_order_id: (encode-path-segment $purchase_order_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/push/purchaseOrders/{purchase_order_id}") $qp)
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id), purchase_order_id: (encode-path-segment $purchase_order_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/push/purchaseOrders/{purchase_order_id}") $qp $auth.query)
   let req_body = {"currency": $currency, "currencyRate": $currency_rate, "deliveryDate": $delivery_date, "expectedDeliveryDate": $expected_delivery_date, "id": $id, "issueDate": $issue_date, "lineItems": $line_items, "metadata": $metadata, "note": $note, "paymentDueDate": $payment_due_date, "purchaseOrderNumber": $purchase_order_number, "shipTo": $ship_to, "status": $status, "subTotal": $sub_total, "supplierRef": $supplier_ref, "totalAmount": $total_amount, "totalDiscount": $total_discount, "totalTaxAmount": $total_tax_amount} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"timeoutInMinutes": $timeout_in_minutes, "forceUpdate": $force_update} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"timeoutInMinutes": $timeout_in_minutes, "forceUpdate": $force_update} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Create suppliers
@@ -3067,12 +3928,23 @@ export def "companies-connections-push-suppliers create" [
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
   if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
   let qp = [(serialize-qp "timeoutInMinutes" $timeout_in_minutes "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/push/suppliers") $qp)
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/push/suppliers") $qp $auth.query)
   let req_body = {"addresses": $addresses, "contactName": $contact_name, "defaultCurrency": $default_currency, "emailAddress": $email_address, "id": $id, "metadata": $metadata, "phone": $phone, "registrationNumber": $registration_number, "status": $status, "supplementalData": $supplemental_data, "supplierName": $supplier_name, "taxNumber": $tax_number} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"timeoutInMinutes": $timeout_in_minutes} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"timeoutInMinutes": $timeout_in_minutes} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Update supplier
@@ -3117,12 +3989,23 @@ export def "companies-connections-push-suppliers update" [
   if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
   if ($supplier_id | is-empty) { error make --unspanned { msg: "path parameter 'supplierId' must be non-empty" } }
   let qp = [(serialize-qp "timeoutInMinutes" $timeout_in_minutes "scalar") (serialize-qp "forceUpdate" $force_update "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id), supplier_id: (encode-path-segment $supplier_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/push/suppliers/{supplier_id}") $qp)
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id), supplier_id: (encode-path-segment $supplier_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/push/suppliers/{supplier_id}") $qp $auth.query)
   let req_body = {"addresses": $addresses, "contactName": $contact_name, "defaultCurrency": $default_currency, "emailAddress": $email_address, "id": $id, "metadata": $metadata, "phone": $phone, "registrationNumber": $registration_number, "status": $status, "supplementalData": $supplemental_data, "supplierName": $supplier_name, "taxNumber": $tax_number} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"timeoutInMinutes": $timeout_in_minutes, "forceUpdate": $force_update} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"timeoutInMinutes": $timeout_in_minutes, "forceUpdate": $force_update} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Create transfer
@@ -3163,12 +4046,23 @@ export def "companies-connections-push-transfers create" [
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
   if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/push/transfers"))
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/push/transfers") $auth.query)
   let req_body = {"contactRef": $contact_ref, "date": $date, "depositedRecordRefs": $deposited_record_refs, "description": $description, "from": $body_from, "id": $id, "metadata": $metadata, "supplementalData": $supplemental_data, "to": $body_to, "trackingCategoryRefs": $tracking_category_refs} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # List accounts
@@ -3195,10 +4089,21 @@ export def "companies-data-accounts list" [
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "orderBy" $order_by "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id)} | format pattern "/companies/{company_id}/data/accounts") $qp)
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id)} | format pattern "/companies/{company_id}/data/accounts") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "pageSize": $page_size, "query": $query, "orderBy": $order_by} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"page": $page, "pageSize": $page_size, "query": $query, "orderBy": $order_by} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get account
@@ -3224,10 +4129,21 @@ export def "companies-data-accounts get" [
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), account_id: (encode-path-segment $account_id)} | format pattern "/companies/{company_id}/data/accounts/{account_id}"))
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), account_id: (encode-path-segment $account_id)} | format pattern "/companies/{company_id}/data/accounts/{account_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get bank account
@@ -3255,10 +4171,21 @@ export def "companies-data-bank-accounts get-list" [
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), account_id: (encode-path-segment $account_id)} | format pattern "/companies/{company_id}/data/bankAccounts/{account_id}") $qp)
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), account_id: (encode-path-segment $account_id)} | format pattern "/companies/{company_id}/data/bankAccounts/{account_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"query": $query} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"query": $query} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List all bank transactions
@@ -3287,10 +4214,21 @@ export def "companies-data-bank-accounts-transactions list" [
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "orderBy" $order_by "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), account_id: (encode-path-segment $account_id)} | format pattern "/companies/{company_id}/data/bankAccounts/{account_id}/transactions") $qp)
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), account_id: (encode-path-segment $account_id)} | format pattern "/companies/{company_id}/data/bankAccounts/{account_id}/transactions") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "pageSize": $page_size, "query": $query, "orderBy": $order_by} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"page": $page, "pageSize": $page_size, "query": $query, "orderBy": $order_by} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List bill credit notes
@@ -3317,10 +4255,21 @@ export def "companies-data-bill-credit-notes list" [
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "orderBy" $order_by "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id)} | format pattern "/companies/{company_id}/data/billCreditNotes") $qp)
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id)} | format pattern "/companies/{company_id}/data/billCreditNotes") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "pageSize": $page_size, "query": $query, "orderBy": $order_by} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"page": $page, "pageSize": $page_size, "query": $query, "orderBy": $order_by} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get bill credit note
@@ -3346,10 +4295,21 @@ export def "companies-data-bill-credit-notes get" [
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
   if ($bill_credit_note_id | is-empty) { error make --unspanned { msg: "path parameter 'billCreditNoteId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), bill_credit_note_id: (encode-path-segment $bill_credit_note_id)} | format pattern "/companies/{company_id}/data/billCreditNotes/{bill_credit_note_id}"))
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), bill_credit_note_id: (encode-path-segment $bill_credit_note_id)} | format pattern "/companies/{company_id}/data/billCreditNotes/{bill_credit_note_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List bill payments
@@ -3376,10 +4336,21 @@ export def "companies-data-bill-payments list" [
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "orderBy" $order_by "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id)} | format pattern "/companies/{company_id}/data/billPayments") $qp)
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id)} | format pattern "/companies/{company_id}/data/billPayments") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "pageSize": $page_size, "query": $query, "orderBy": $order_by} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"page": $page, "pageSize": $page_size, "query": $query, "orderBy": $order_by} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get bill payment
@@ -3405,10 +4376,21 @@ export def "companies-data-bill-payments get" [
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
   if ($bill_payment_id | is-empty) { error make --unspanned { msg: "path parameter 'billPaymentId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), bill_payment_id: (encode-path-segment $bill_payment_id)} | format pattern "/companies/{company_id}/data/billPayments/{bill_payment_id}"))
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), bill_payment_id: (encode-path-segment $bill_payment_id)} | format pattern "/companies/{company_id}/data/billPayments/{bill_payment_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List bills
@@ -3435,10 +4417,21 @@ export def "companies-data-bills list" [
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "orderBy" $order_by "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id)} | format pattern "/companies/{company_id}/data/bills") $qp)
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id)} | format pattern "/companies/{company_id}/data/bills") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "pageSize": $page_size, "query": $query, "orderBy": $order_by} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"page": $page, "pageSize": $page_size, "query": $query, "orderBy": $order_by} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get bill
@@ -3462,10 +4455,21 @@ export def "companies-data-bills get" [
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
   if ($bill_id | is-empty) { error make --unspanned { msg: "path parameter 'billId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), bill_id: (encode-path-segment $bill_id)} | format pattern "/companies/{company_id}/data/bills/{bill_id}"))
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), bill_id: (encode-path-segment $bill_id)} | format pattern "/companies/{company_id}/data/bills/{bill_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List credit notes
@@ -3492,10 +4496,21 @@ export def "companies-data-credit-notes list" [
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "orderBy" $order_by "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id)} | format pattern "/companies/{company_id}/data/creditNotes") $qp)
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id)} | format pattern "/companies/{company_id}/data/creditNotes") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "pageSize": $page_size, "query": $query, "orderBy": $order_by} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"page": $page, "pageSize": $page_size, "query": $query, "orderBy": $order_by} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get credit note
@@ -3521,10 +4536,21 @@ export def "companies-data-credit-notes get" [
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
   if ($credit_note_id | is-empty) { error make --unspanned { msg: "path parameter 'creditNoteId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), credit_note_id: (encode-path-segment $credit_note_id)} | format pattern "/companies/{company_id}/data/creditNotes/{credit_note_id}"))
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), credit_note_id: (encode-path-segment $credit_note_id)} | format pattern "/companies/{company_id}/data/creditNotes/{credit_note_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List customers
@@ -3551,10 +4577,21 @@ export def "companies-data-customers list" [
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "orderBy" $order_by "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id)} | format pattern "/companies/{company_id}/data/customers") $qp)
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id)} | format pattern "/companies/{company_id}/data/customers") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "pageSize": $page_size, "query": $query, "orderBy": $order_by} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"page": $page, "pageSize": $page_size, "query": $query, "orderBy": $order_by} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get customer
@@ -3580,10 +4617,21 @@ export def "companies-data-customers get" [
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
   if ($customer_id | is-empty) { error make --unspanned { msg: "path parameter 'customerId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), customer_id: (encode-path-segment $customer_id)} | format pattern "/companies/{company_id}/data/customers/{customer_id}"))
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), customer_id: (encode-path-segment $customer_id)} | format pattern "/companies/{company_id}/data/customers/{customer_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get balance sheet
@@ -3609,10 +4657,21 @@ export def "companies-data-financials-balance-sheet get" [
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
   let qp = [(serialize-qp "periodLength" $period_length "scalar") (serialize-qp "periodsToCompare" $periods_to_compare "scalar") (serialize-qp "startMonth" $start_month "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id)} | format pattern "/companies/{company_id}/data/financials/balanceSheet") $qp)
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id)} | format pattern "/companies/{company_id}/data/financials/balanceSheet") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"periodLength": $period_length, "periodsToCompare": $periods_to_compare, "startMonth": $start_month} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"periodLength": $period_length, "periodsToCompare": $periods_to_compare, "startMonth": $start_month} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get cash flow statement
@@ -3638,10 +4697,21 @@ export def "companies-data-financials-cash-flow-statement get" [
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
   let qp = [(serialize-qp "periodLength" $period_length "scalar") (serialize-qp "periodsToCompare" $periods_to_compare "scalar") (serialize-qp "startMonth" $start_month "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id)} | format pattern "/companies/{company_id}/data/financials/cashFlowStatement") $qp)
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id)} | format pattern "/companies/{company_id}/data/financials/cashFlowStatement") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"periodLength": $period_length, "periodsToCompare": $periods_to_compare, "startMonth": $start_month} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"periodLength": $period_length, "periodsToCompare": $periods_to_compare, "startMonth": $start_month} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get profit and loss
@@ -3667,10 +4737,21 @@ export def "companies-data-financials-profit-and-loss get" [
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
   let qp = [(serialize-qp "periodLength" $period_length "scalar") (serialize-qp "periodsToCompare" $periods_to_compare "scalar") (serialize-qp "startMonth" $start_month "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id)} | format pattern "/companies/{company_id}/data/financials/profitAndLoss") $qp)
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id)} | format pattern "/companies/{company_id}/data/financials/profitAndLoss") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"periodLength": $period_length, "periodsToCompare": $periods_to_compare, "startMonth": $start_month} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"periodLength": $period_length, "periodsToCompare": $periods_to_compare, "startMonth": $start_month} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get company info
@@ -3692,10 +4773,21 @@ export def "companies-data-info get-company" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id)} | format pattern "/companies/{company_id}/data/info"))
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id)} | format pattern "/companies/{company_id}/data/info") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Refresh company info
@@ -3717,10 +4809,21 @@ export def "companies-data-info create-sync" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id)} | format pattern "/companies/{company_id}/data/info"))
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id)} | format pattern "/companies/{company_id}/data/info") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # List invoices
@@ -3747,10 +4850,21 @@ export def "companies-data-invoices list" [
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "orderBy" $order_by "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id)} | format pattern "/companies/{company_id}/data/invoices") $qp)
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id)} | format pattern "/companies/{company_id}/data/invoices") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "pageSize": $page_size, "query": $query, "orderBy": $order_by} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"page": $page, "pageSize": $page_size, "query": $query, "orderBy": $order_by} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get invoice
@@ -3776,10 +4890,21 @@ export def "companies-data-invoices get" [
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
   if ($invoice_id | is-empty) { error make --unspanned { msg: "path parameter 'invoiceId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), invoice_id: (encode-path-segment $invoice_id)} | format pattern "/companies/{company_id}/data/invoices/{invoice_id}"))
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), invoice_id: (encode-path-segment $invoice_id)} | format pattern "/companies/{company_id}/data/invoices/{invoice_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get invoice as PDF
@@ -3803,10 +4928,21 @@ export def "companies-data-invoices-pdf download" [
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
   if ($invoice_id | is-empty) { error make --unspanned { msg: "path parameter 'invoiceId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), invoice_id: (encode-path-segment $invoice_id)} | format pattern "/companies/{company_id}/data/invoices/{invoice_id}/pdf"))
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), invoice_id: (encode-path-segment $invoice_id)} | format pattern "/companies/{company_id}/data/invoices/{invoice_id}/pdf") $auth.query)
   let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List items
@@ -3833,10 +4969,21 @@ export def "companies-data-items list" [
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "orderBy" $order_by "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id)} | format pattern "/companies/{company_id}/data/items") $qp)
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id)} | format pattern "/companies/{company_id}/data/items") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "pageSize": $page_size, "query": $query, "orderBy": $order_by} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"page": $page, "pageSize": $page_size, "query": $query, "orderBy": $order_by} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get item
@@ -3862,10 +5009,21 @@ export def "companies-data-items get" [
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), item_id: (encode-path-segment $item_id)} | format pattern "/companies/{company_id}/data/items/{item_id}"))
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), item_id: (encode-path-segment $item_id)} | format pattern "/companies/{company_id}/data/items/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List journal entries
@@ -3892,10 +5050,21 @@ export def "companies-data-journal-entries list" [
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "orderBy" $order_by "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id)} | format pattern "/companies/{company_id}/data/journalEntries") $qp)
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id)} | format pattern "/companies/{company_id}/data/journalEntries") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "pageSize": $page_size, "query": $query, "orderBy": $order_by} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"page": $page, "pageSize": $page_size, "query": $query, "orderBy": $order_by} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get journal entry
@@ -3921,10 +5090,21 @@ export def "companies-data-journal-entries get-entry" [
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
   if ($journal_entry_id | is-empty) { error make --unspanned { msg: "path parameter 'journalEntryId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), journal_entry_id: (encode-path-segment $journal_entry_id)} | format pattern "/companies/{company_id}/data/journalEntries/{journal_entry_id}"))
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), journal_entry_id: (encode-path-segment $journal_entry_id)} | format pattern "/companies/{company_id}/data/journalEntries/{journal_entry_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List journals
@@ -3951,10 +5131,21 @@ export def "companies-data-journals list" [
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "orderBy" $order_by "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id)} | format pattern "/companies/{company_id}/data/journals") $qp)
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id)} | format pattern "/companies/{company_id}/data/journals") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "pageSize": $page_size, "query": $query, "orderBy": $order_by} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"page": $page, "pageSize": $page_size, "query": $query, "orderBy": $order_by} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get journal
@@ -3980,10 +5171,21 @@ export def "companies-data-journals get" [
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
   if ($journal_id | is-empty) { error make --unspanned { msg: "path parameter 'journalId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), journal_id: (encode-path-segment $journal_id)} | format pattern "/companies/{company_id}/data/journals/{journal_id}"))
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), journal_id: (encode-path-segment $journal_id)} | format pattern "/companies/{company_id}/data/journals/{journal_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List all payment methods
@@ -4012,10 +5214,21 @@ export def "companies-data-payment-methods list" [
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "orderBy" $order_by "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id)} | format pattern "/companies/{company_id}/data/paymentMethods") $qp)
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id)} | format pattern "/companies/{company_id}/data/paymentMethods") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "pageSize": $page_size, "query": $query, "orderBy": $order_by} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"page": $page, "pageSize": $page_size, "query": $query, "orderBy": $order_by} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get payment method
@@ -4041,10 +5254,21 @@ export def "companies-data-payment-methods get" [
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
   if ($payment_method_id | is-empty) { error make --unspanned { msg: "path parameter 'paymentMethodId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), payment_method_id: (encode-path-segment $payment_method_id)} | format pattern "/companies/{company_id}/data/paymentMethods/{payment_method_id}"))
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), payment_method_id: (encode-path-segment $payment_method_id)} | format pattern "/companies/{company_id}/data/paymentMethods/{payment_method_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List payments
@@ -4071,10 +5295,21 @@ export def "companies-data-payments list" [
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "orderBy" $order_by "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id)} | format pattern "/companies/{company_id}/data/payments") $qp)
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id)} | format pattern "/companies/{company_id}/data/payments") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "pageSize": $page_size, "query": $query, "orderBy": $order_by} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"page": $page, "pageSize": $page_size, "query": $query, "orderBy": $order_by} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get payment
@@ -4100,10 +5335,21 @@ export def "companies-data-payments get" [
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
   if ($payment_id | is-empty) { error make --unspanned { msg: "path parameter 'paymentId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), payment_id: (encode-path-segment $payment_id)} | format pattern "/companies/{company_id}/data/payments/{payment_id}"))
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), payment_id: (encode-path-segment $payment_id)} | format pattern "/companies/{company_id}/data/payments/{payment_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List purchase orders
@@ -4130,10 +5376,21 @@ export def "companies-data-purchase-orders list" [
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "orderBy" $order_by "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id)} | format pattern "/companies/{company_id}/data/purchaseOrders") $qp)
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id)} | format pattern "/companies/{company_id}/data/purchaseOrders") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "pageSize": $page_size, "query": $query, "orderBy": $order_by} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"page": $page, "pageSize": $page_size, "query": $query, "orderBy": $order_by} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get purchase order
@@ -4159,10 +5416,21 @@ export def "companies-data-purchase-orders get" [
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
   if ($purchase_order_id | is-empty) { error make --unspanned { msg: "path parameter 'purchaseOrderId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), purchase_order_id: (encode-path-segment $purchase_order_id)} | format pattern "/companies/{company_id}/data/purchaseOrders/{purchase_order_id}"))
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), purchase_order_id: (encode-path-segment $purchase_order_id)} | format pattern "/companies/{company_id}/data/purchaseOrders/{purchase_order_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List sales orders
@@ -4189,10 +5457,21 @@ export def "companies-data-sales-orders list" [
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "orderBy" $order_by "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id)} | format pattern "/companies/{company_id}/data/salesOrders") $qp)
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id)} | format pattern "/companies/{company_id}/data/salesOrders") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "pageSize": $page_size, "query": $query, "orderBy": $order_by} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"page": $page, "pageSize": $page_size, "query": $query, "orderBy": $order_by} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get sales order
@@ -4218,10 +5497,21 @@ export def "companies-data-sales-orders get" [
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
   if ($sales_order_id | is-empty) { error make --unspanned { msg: "path parameter 'salesOrderId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), sales_order_id: (encode-path-segment $sales_order_id)} | format pattern "/companies/{company_id}/data/salesOrders/{sales_order_id}"))
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), sales_order_id: (encode-path-segment $sales_order_id)} | format pattern "/companies/{company_id}/data/salesOrders/{sales_order_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List suppliers
@@ -4248,10 +5538,21 @@ export def "companies-data-suppliers list" [
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "orderBy" $order_by "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id)} | format pattern "/companies/{company_id}/data/suppliers") $qp)
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id)} | format pattern "/companies/{company_id}/data/suppliers") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "pageSize": $page_size, "query": $query, "orderBy": $order_by} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"page": $page, "pageSize": $page_size, "query": $query, "orderBy": $order_by} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get supplier
@@ -4277,10 +5578,21 @@ export def "companies-data-suppliers get" [
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
   if ($supplier_id | is-empty) { error make --unspanned { msg: "path parameter 'supplierId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), supplier_id: (encode-path-segment $supplier_id)} | format pattern "/companies/{company_id}/data/suppliers/{supplier_id}"))
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), supplier_id: (encode-path-segment $supplier_id)} | format pattern "/companies/{company_id}/data/suppliers/{supplier_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List all tax rates
@@ -4307,10 +5619,21 @@ export def "companies-data-tax-rates list" [
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "orderBy" $order_by "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id)} | format pattern "/companies/{company_id}/data/taxRates") $qp)
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id)} | format pattern "/companies/{company_id}/data/taxRates") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "pageSize": $page_size, "query": $query, "orderBy": $order_by} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"page": $page, "pageSize": $page_size, "query": $query, "orderBy": $order_by} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get tax rate
@@ -4336,10 +5659,21 @@ export def "companies-data-tax-rates get" [
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
   if ($tax_rate_id | is-empty) { error make --unspanned { msg: "path parameter 'taxRateId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), tax_rate_id: (encode-path-segment $tax_rate_id)} | format pattern "/companies/{company_id}/data/taxRates/{tax_rate_id}"))
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), tax_rate_id: (encode-path-segment $tax_rate_id)} | format pattern "/companies/{company_id}/data/taxRates/{tax_rate_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List tracking categories
@@ -4366,10 +5700,21 @@ export def "companies-data-tracking-categories list" [
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "orderBy" $order_by "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id)} | format pattern "/companies/{company_id}/data/trackingCategories") $qp)
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id)} | format pattern "/companies/{company_id}/data/trackingCategories") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "pageSize": $page_size, "query": $query, "orderBy": $order_by} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"page": $page, "pageSize": $page_size, "query": $query, "orderBy": $order_by} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get tracking categories
@@ -4395,10 +5740,21 @@ export def "companies-data-tracking-categories get-category" [
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
   if ($tracking_category_id | is-empty) { error make --unspanned { msg: "path parameter 'trackingCategoryId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), tracking_category_id: (encode-path-segment $tracking_category_id)} | format pattern "/companies/{company_id}/data/trackingCategories/{tracking_category_id}"))
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), tracking_category_id: (encode-path-segment $tracking_category_id)} | format pattern "/companies/{company_id}/data/trackingCategories/{tracking_category_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Aged creditors report
@@ -4424,10 +5780,21 @@ export def "companies-reports-aged-creditor get" [
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
   let qp = [(serialize-qp "reportDate" $report_date "scalar") (serialize-qp "numberOfPeriods" $number_of_periods "scalar") (serialize-qp "periodLengthDays" $period_length_days "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id)} | format pattern "/companies/{company_id}/reports/agedCreditor") $qp)
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id)} | format pattern "/companies/{company_id}/reports/agedCreditor") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"reportDate": $report_date, "numberOfPeriods": $number_of_periods, "periodLengthDays": $period_length_days} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"reportDate": $report_date, "numberOfPeriods": $number_of_periods, "periodLengthDays": $period_length_days} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Aged creditors report available
@@ -4449,10 +5816,21 @@ export def "companies-reports-aged-creditor-available get-is" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id)} | format pattern "/companies/{company_id}/reports/agedCreditor/available"))
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id)} | format pattern "/companies/{company_id}/reports/agedCreditor/available") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Aged debtors report
@@ -4478,10 +5856,21 @@ export def "companies-reports-aged-debtor get" [
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
   let qp = [(serialize-qp "reportDate" $report_date "scalar") (serialize-qp "numberOfPeriods" $number_of_periods "scalar") (serialize-qp "periodLengthDays" $period_length_days "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id)} | format pattern "/companies/{company_id}/reports/agedDebtor") $qp)
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id)} | format pattern "/companies/{company_id}/reports/agedDebtor") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"reportDate": $report_date, "numberOfPeriods": $number_of_periods, "periodLengthDays": $period_length_days} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"reportDate": $report_date, "numberOfPeriods": $number_of_periods, "periodLengthDays": $period_length_days} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Aged debtors report available
@@ -4503,8 +5892,19 @@ export def "companies-reports-aged-debtor-available get-is" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id)} | format pattern "/companies/{company_id}/reports/agedDebtor/available"))
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id)} | format pattern "/companies/{company_id}/reports/agedDebtor/available") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }

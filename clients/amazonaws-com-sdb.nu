@@ -8,7 +8,7 @@ const BASE_URL = "http://sdb.amazonaws.com"
 # `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
 # where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o AMAZON_SIMPLEDB_TOKEN | default "" }
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o AMAZON_SIMPLEDB_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
@@ -41,14 +41,11 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
-# Trick: `url encode --all` over-encodes, then we decode the four unreserved
-# punctuation chars back. Pre-existing %XX sequences in the input survive
-# because `url encode --all` first turns their % into %25.
 def encode-path-segment [v: any]: nothing -> string {
   $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
-# Serialize an array-typed path parameter (issue 49.A). OpenAPI 3 `style: simple`
+# Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
 # (the default for path params) and Swagger 2 `collectionFormat: csv` both join
 # the elements with a literal comma WITHIN the single path segment, each element
 # RFC-3986-encoded individually (so a comma inside an element stays %2C). Without
@@ -59,51 +56,45 @@ def encode-path-array [v: any]: nothing -> string {
   if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
 }
 
-# Build URL from base, path, and optional query string
-def build-url [base: string, path: string, query?: string]: nothing -> string {
+# Build the request URL from base, path, and any number of pre-encoded query
+# fragments (param serializer output and/or the auth query). Each fragment is an
+# `&`-joinable `key=value` string already percent-encoded by its producer; empty
+# fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
+# delimiters are hand-spliced — and any query already on the base URL is merged in.
+def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
   let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
-  let result = ($parsed | upsert path $full_path)
-  if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
+  let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
+  $parsed | upsert path $full_path | upsert query $query | url join
 }
 
-# Build the dry-run record returned by --dry-run. Shape:
-#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
-#    auth: {scheme, location}}
-# `meta` carries logical-form data (the query record by spec name, the pre-serialization
-# body) that do-request itself cannot reconstruct from its wire-format args.
-def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
-  let m = ($meta | default {})
-  {
-    dry_run: true
-    method: $method
-    url: $url
-    query: ($m | get -o query | default {})
-    headers: $auth.headers
-    body: ($m | get -o body)
-    content_type: $content_type
-    timeout: $timeout
-    auth: {scheme: $auth.scheme, location: $auth.location}
-  }
+# Success policy: did this response succeed? Single source of truth, consulted by
+# handle-response and the HEAD header-unwrap. Empty ok_codes means the spec listed
+# none, so fall back to < 400. Otherwise: any 2xx, plus documented success codes.
+def status-ok [status: int, ok_codes: list<int>]: nothing -> bool {
+  if ($ok_codes | is-empty) { $status < 400 } else { ($status >= 200 and $status < 300) or ($status in $ok_codes) }
 }
 
-# Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
-  let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
-  let timeout = ($max_time | default 30min)
-  let ct = ($content_type | default "application/json")
-  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
-  let resp = match $method {
-    "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
-  }
-  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
-  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
+# Unwrap a `--full` HTTP response into the user-facing value. Response arrives
+# via pipeline; ok_codes gates the error throw (see status-ok).
+def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: record -> any {
+  let resp = $in
+  if $allow_errors { return $resp }
+  if not (status-ok $resp.status $ok_codes) { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } }
+  if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
+  if $resp.status == 204 { return null }
+  $resp.body
+}
+
+# GET — bodyless, honours --raw
+def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+}
+
+# POST — body + content-type
+def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 def base-url-completer [] { ["http://sdb.amazonaws.com" "https://sdb.amazonaws.com" "http://sdb.us-east-2.amazonaws.com" "http://sdb.us-west-1.amazonaws.com" "http://sdb.us-west-2.amazonaws.com" "http://sdb.us-gov-west-1.amazonaws.com" "http://sdb.us-gov-east-1.amazonaws.com" "http://sdb.ca-central-1.amazonaws.com" "http://sdb.eu-north-1.amazonaws.com" "http://sdb.eu-west-1.amazonaws.com" "http://sdb.eu-west-2.amazonaws.com" "http://sdb.eu-west-3.amazonaws.com" "http://sdb.eu-central-1.amazonaws.com" "http://sdb.eu-south-1.amazonaws.com" "http://sdb.af-south-1.amazonaws.com" "http://sdb.ap-northeast-1.amazonaws.com" "http://sdb.ap-northeast-2.amazonaws.com" "http://sdb.ap-northeast-3.amazonaws.com" "http://sdb.ap-southeast-1.amazonaws.com" "http://sdb.ap-southeast-2.amazonaws.com" "http://sdb.ap-east-1.amazonaws.com" "http://sdb.ap-south-1.amazonaws.com" "http://sdb.sa-east-1.amazonaws.com" "http://sdb.me-south-1.amazonaws.com" "https://sdb.us-east-2.amazonaws.com" "https://sdb.us-west-1.amazonaws.com" "https://sdb.us-west-2.amazonaws.com" "https://sdb.us-gov-west-1.amazonaws.com" "https://sdb.us-gov-east-1.amazonaws.com" "https://sdb.ca-central-1.amazonaws.com" "https://sdb.eu-north-1.amazonaws.com" "https://sdb.eu-west-1.amazonaws.com" "https://sdb.eu-west-2.amazonaws.com" "https://sdb.eu-west-3.amazonaws.com" "https://sdb.eu-central-1.amazonaws.com" "https://sdb.eu-south-1.amazonaws.com" "https://sdb.af-south-1.amazonaws.com" "https://sdb.ap-northeast-1.amazonaws.com" "https://sdb.ap-northeast-2.amazonaws.com" "https://sdb.ap-northeast-3.amazonaws.com" "https://sdb.ap-southeast-1.amazonaws.com" "https://sdb.ap-southeast-2.amazonaws.com" "https://sdb.ap-east-1.amazonaws.com" "https://sdb.ap-south-1.amazonaws.com" "https://sdb.sa-east-1.amazonaws.com" "https://sdb.me-south-1.amazonaws.com" "http://sdb.cn-north-1.amazonaws.com.cn" "http://sdb.cn-northwest-1.amazonaws.com.cn" "https://sdb.cn-north-1.amazonaws.com.cn" "https://sdb.cn-northwest-1.amazonaws.com.cn"] }
@@ -174,10 +165,21 @@ export def "api get-batch-delete-attributes" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Version" $version "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "DomainName" $domain_name "scalar") (serialize-qp "Items" $items "multi") (serialize-qp "Action" $action_2 "scalar") (serialize-qp "Version" $version_2 "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/" $qp)
+  let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"AWSAccessKeyId": $aws_access_key_id, "Action": $action, "SignatureMethod": $signature_method, "SignatureVersion": $signature_version, "Timestamp": $timestamp, "Version": $version, "Signature": $signature, "DomainName": $domain_name, "Items": $items, "Action": $action_2, "Version": $version_2} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"AWSAccessKeyId": $aws_access_key_id, "Action": $action, "SignatureMethod": $signature_method, "SignatureVersion": $signature_version, "Timestamp": $timestamp, "Version": $version, "Signature": $signature, "DomainName": $domain_name, "Items": $items, "Action": $action_2, "Version": $version_2} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Performs multiple DeleteAttributes operations in a single call, which reduces round trips and latencies. This enables Amazon SimpleDB to optimize requests, which generally yields better throughput. If you specify BatchDeleteAttributes without attributes or values, all the attributes for the item are deleted. BatchDeleteAttributes is an idempotent operation; running it multiple times on the same item or attribute doesn't result in an error. The BatchDeleteAttributes operation succeeds or fails in its entirety. There are no partial deletes. You can execute multiple BatchDeleteAttributes operations and other operations in parallel. However, large numbers of concurrent BatchDeleteAttributes calls can result in Service Unavailable (503) responses. This operation is vulnerable to exceeding the maximum URL size when making a REST request using the HTTP GET method. This operation does not support conditions using Expected.X.Name, Expected.X.Value, or Expected.X.Exists. The following limitations are enforced for this operation: 1 MB request size 25 item limit per BatchDeleteAttributes operation
@@ -209,12 +211,23 @@ export def "api create-batch-delete-attributes" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Version" $version "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "Action" $action_2 "scalar") (serialize-qp "Version" $version_2 "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/" $qp)
+  let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "text/xml" $req_body {query: ({"AWSAccessKeyId": $aws_access_key_id, "Action": $action, "SignatureMethod": $signature_method, "SignatureVersion": $signature_version, "Timestamp": $timestamp, "Version": $version, "Signature": $signature, "Action": $action_2, "Version": $version_2} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"AWSAccessKeyId": $aws_access_key_id, "Action": $action, "SignatureMethod": $signature_method, "SignatureVersion": $signature_version, "Timestamp": $timestamp, "Version": $version, "Signature": $signature, "Action": $action_2, "Version": $version_2} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "text/xml"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # The BatchPutAttributes operation creates or replaces attributes within one or more items. By using this operation, the client can perform multiple PutAttribute operation with a single call. This helps yield savings in round trips and latencies, enabling Amazon SimpleDB to optimize requests and generally produce better throughput. The client may specify the item name with the Item.X.ItemName parameter. The client may specify new attributes using a combination of the Item.X.Attribute.Y.Name and Item.X.Attribute.Y.Value parameters. The client may specify the first attribute for the first item using the parameters Item.0.Attribute.0.Name and Item.0.Attribute.0.Value, and for the second attribute for the first item by the parameters Item.0.Attribute.1.Name and Item.0.Attribute.1.Value, and so on. Attributes are uniquely identified within an item by their name/value combination. For example, a single item can have the attributes { "first_name", "first_value" } and { "first_name", "second_value" }. However, it cannot have two attribute instances where both the Item.X.Attribute.Y.Name and Item.X.Attribute.Y.Value are the same. Optionally, the requester can supply the Replace parameter for each individual value. Setting this value to true will cause the new attribute values to replace the existing attribute values. For example, if an item I has the attributes { 'a', '1' }, { 'b', '2'} and { 'b', '3' } and the requester does a BatchPutAttributes of {'I', 'b', '4' } with the Replace parameter set to true, the final attributes of the item will be { 'a', '1' } and { 'b', '4' }, replacing the previous values of the 'b' attribute with the new value. You cannot specify an empty string as an item or as an attribute name. The BatchPutAttributes operation succeeds or fails in its entirety. There are no partial puts. This operation is vulnerable to exceeding the maximum URL size when making a REST request using the HTTP GET method. This operation does not support conditions using Expected.X.Name, Expected.X.Value, or Expected.X.Exists. You can execute multiple BatchPutAttributes operations and other operations in parallel. However, large numbers of concurrent BatchPutAttributes calls can result in Service Unavailable (503) responses. The following limitations are enforced for this operation: 256 attribute name-value pairs per item 1 MB request size 1 billion attributes per domain 10 GB of total user data storage per domain 25 item limit per BatchPutAttributes operation
@@ -246,10 +259,21 @@ export def "api get-batch-update-attributes" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Version" $version "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "DomainName" $domain_name "scalar") (serialize-qp "Items" $items "multi") (serialize-qp "Action" $action_2 "scalar") (serialize-qp "Version" $version_2 "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/" $qp)
+  let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"AWSAccessKeyId": $aws_access_key_id, "Action": $action, "SignatureMethod": $signature_method, "SignatureVersion": $signature_version, "Timestamp": $timestamp, "Version": $version, "Signature": $signature, "DomainName": $domain_name, "Items": $items, "Action": $action_2, "Version": $version_2} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"AWSAccessKeyId": $aws_access_key_id, "Action": $action, "SignatureMethod": $signature_method, "SignatureVersion": $signature_version, "Timestamp": $timestamp, "Version": $version, "Signature": $signature, "DomainName": $domain_name, "Items": $items, "Action": $action_2, "Version": $version_2} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # The BatchPutAttributes operation creates or replaces attributes within one or more items. By using this operation, the client can perform multiple PutAttribute operation with a single call. This helps yield savings in round trips and latencies, enabling Amazon SimpleDB to optimize requests and generally produce better throughput. The client may specify the item name with the Item.X.ItemName parameter. The client may specify new attributes using a combination of the Item.X.Attribute.Y.Name and Item.X.Attribute.Y.Value parameters. The client may specify the first attribute for the first item using the parameters Item.0.Attribute.0.Name and Item.0.Attribute.0.Value, and for the second attribute for the first item by the parameters Item.0.Attribute.1.Name and Item.0.Attribute.1.Value, and so on. Attributes are uniquely identified within an item by their name/value combination. For example, a single item can have the attributes { "first_name", "first_value" } and { "first_name", "second_value" }. However, it cannot have two attribute instances where both the Item.X.Attribute.Y.Name and Item.X.Attribute.Y.Value are the same. Optionally, the requester can supply the Replace parameter for each individual value. Setting this value to true will cause the new attribute values to replace the existing attribute values. For example, if an item I has the attributes { 'a', '1' }, { 'b', '2'} and { 'b', '3' } and the requester does a BatchPutAttributes of {'I', 'b', '4' } with the Replace parameter set to true, the final attributes of the item will be { 'a', '1' } and { 'b', '4' }, replacing the previous values of the 'b' attribute with the new value. You cannot specify an empty string as an item or as an attribute name. The BatchPutAttributes operation succeeds or fails in its entirety. There are no partial puts. This operation is vulnerable to exceeding the maximum URL size when making a REST request using the HTTP GET method. This operation does not support conditions using Expected.X.Name, Expected.X.Value, or Expected.X.Exists. You can execute multiple BatchPutAttributes operations and other operations in parallel. However, large numbers of concurrent BatchPutAttributes calls can result in Service Unavailable (503) responses. The following limitations are enforced for this operation: 256 attribute name-value pairs per item 1 MB request size 1 billion attributes per domain 10 GB of total user data storage per domain 25 item limit per BatchPutAttributes operation
@@ -281,12 +305,23 @@ export def "api create-batch-update-attributes" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Version" $version "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "Action" $action_2 "scalar") (serialize-qp "Version" $version_2 "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/" $qp)
+  let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "text/xml" $req_body {query: ({"AWSAccessKeyId": $aws_access_key_id, "Action": $action, "SignatureMethod": $signature_method, "SignatureVersion": $signature_version, "Timestamp": $timestamp, "Version": $version, "Signature": $signature, "Action": $action_2, "Version": $version_2} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"AWSAccessKeyId": $aws_access_key_id, "Action": $action, "SignatureMethod": $signature_method, "SignatureVersion": $signature_version, "Timestamp": $timestamp, "Version": $version, "Signature": $signature, "Action": $action_2, "Version": $version_2} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "text/xml"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # The CreateDomain operation creates a new domain. The domain name should be unique among the domains associated with the Access Key ID provided in the request. The CreateDomain operation may take 10 or more seconds to complete. CreateDomain is an idempotent operation; running it multiple times using the same domain name will not result in an error response. The client can create up to 100 domains per account. If the client requires additional domains, go to http://aws.amazon.com/contact-us/simpledb-limit-request/ (http://aws.amazon.com/contact-us/simpledb-limit-request/).
@@ -317,10 +352,21 @@ export def "api get-create-domain" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Version" $version "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "DomainName" $domain_name "scalar") (serialize-qp "Action" $action_2 "scalar") (serialize-qp "Version" $version_2 "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/" $qp)
+  let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"AWSAccessKeyId": $aws_access_key_id, "Action": $action, "SignatureMethod": $signature_method, "SignatureVersion": $signature_version, "Timestamp": $timestamp, "Version": $version, "Signature": $signature, "DomainName": $domain_name, "Action": $action_2, "Version": $version_2} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"AWSAccessKeyId": $aws_access_key_id, "Action": $action, "SignatureMethod": $signature_method, "SignatureVersion": $signature_version, "Timestamp": $timestamp, "Version": $version, "Signature": $signature, "DomainName": $domain_name, "Action": $action_2, "Version": $version_2} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # The CreateDomain operation creates a new domain. The domain name should be unique among the domains associated with the Access Key ID provided in the request. The CreateDomain operation may take 10 or more seconds to complete. CreateDomain is an idempotent operation; running it multiple times using the same domain name will not result in an error response. The client can create up to 100 domains per account. If the client requires additional domains, go to http://aws.amazon.com/contact-us/simpledb-limit-request/ (http://aws.amazon.com/contact-us/simpledb-limit-request/).
@@ -352,12 +398,23 @@ export def "api create-domain" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Version" $version "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "Action" $action_2 "scalar") (serialize-qp "Version" $version_2 "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/" $qp)
+  let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "text/xml" $req_body {query: ({"AWSAccessKeyId": $aws_access_key_id, "Action": $action, "SignatureMethod": $signature_method, "SignatureVersion": $signature_version, "Timestamp": $timestamp, "Version": $version, "Signature": $signature, "Action": $action_2, "Version": $version_2} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"AWSAccessKeyId": $aws_access_key_id, "Action": $action, "SignatureMethod": $signature_method, "SignatureVersion": $signature_version, "Timestamp": $timestamp, "Version": $version, "Signature": $signature, "Action": $action_2, "Version": $version_2} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "text/xml"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes one or more attributes associated with an item. If all attributes of the item are deleted, the item is deleted. If DeleteAttributes is called without being passed any attributes or values specified, all the attributes for the item are deleted. DeleteAttributes is an idempotent operation; running it multiple times on the same item or attribute does not result in an error response. Because Amazon SimpleDB makes multiple copies of item data and uses an eventual consistency update model, performing a GetAttributes or Select operation (read) immediately after a DeleteAttributes or PutAttributes operation (write) might not return updated item data.
@@ -391,10 +448,21 @@ export def "api get-delete-attributes" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Version" $version "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "DomainName" $domain_name "scalar") (serialize-qp "ItemName" $item_name "scalar") (serialize-qp "Attributes" $attributes "multi") (serialize-qp "Expected" $expected "multi") (serialize-qp "Action" $action_2 "scalar") (serialize-qp "Version" $version_2 "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/" $qp)
+  let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"AWSAccessKeyId": $aws_access_key_id, "Action": $action, "SignatureMethod": $signature_method, "SignatureVersion": $signature_version, "Timestamp": $timestamp, "Version": $version, "Signature": $signature, "DomainName": $domain_name, "ItemName": $item_name, "Attributes": $attributes, "Expected": $expected, "Action": $action_2, "Version": $version_2} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"AWSAccessKeyId": $aws_access_key_id, "Action": $action, "SignatureMethod": $signature_method, "SignatureVersion": $signature_version, "Timestamp": $timestamp, "Version": $version, "Signature": $signature, "DomainName": $domain_name, "ItemName": $item_name, "Attributes": $attributes, "Expected": $expected, "Action": $action_2, "Version": $version_2} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes one or more attributes associated with an item. If all attributes of the item are deleted, the item is deleted. If DeleteAttributes is called without being passed any attributes or values specified, all the attributes for the item are deleted. DeleteAttributes is an idempotent operation; running it multiple times on the same item or attribute does not result in an error response. Because Amazon SimpleDB makes multiple copies of item data and uses an eventual consistency update model, performing a GetAttributes or Select operation (read) immediately after a DeleteAttributes or PutAttributes operation (write) might not return updated item data.
@@ -426,12 +494,23 @@ export def "api create-delete-attributes" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Version" $version "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "Action" $action_2 "scalar") (serialize-qp "Version" $version_2 "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/" $qp)
+  let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "text/xml" $req_body {query: ({"AWSAccessKeyId": $aws_access_key_id, "Action": $action, "SignatureMethod": $signature_method, "SignatureVersion": $signature_version, "Timestamp": $timestamp, "Version": $version, "Signature": $signature, "Action": $action_2, "Version": $version_2} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"AWSAccessKeyId": $aws_access_key_id, "Action": $action, "SignatureMethod": $signature_method, "SignatureVersion": $signature_version, "Timestamp": $timestamp, "Version": $version, "Signature": $signature, "Action": $action_2, "Version": $version_2} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "text/xml"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # The DeleteDomain operation deletes a domain. Any items (and their attributes) in the domain are deleted as well. The DeleteDomain operation might take 10 or more seconds to complete. Running DeleteDomain on a domain that does not exist or running the function multiple times using the same domain name will not result in an error response.
@@ -462,10 +541,21 @@ export def "api get-delete-domain" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Version" $version "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "DomainName" $domain_name "scalar") (serialize-qp "Action" $action_2 "scalar") (serialize-qp "Version" $version_2 "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/" $qp)
+  let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"AWSAccessKeyId": $aws_access_key_id, "Action": $action, "SignatureMethod": $signature_method, "SignatureVersion": $signature_version, "Timestamp": $timestamp, "Version": $version, "Signature": $signature, "DomainName": $domain_name, "Action": $action_2, "Version": $version_2} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"AWSAccessKeyId": $aws_access_key_id, "Action": $action, "SignatureMethod": $signature_method, "SignatureVersion": $signature_version, "Timestamp": $timestamp, "Version": $version, "Signature": $signature, "DomainName": $domain_name, "Action": $action_2, "Version": $version_2} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # The DeleteDomain operation deletes a domain. Any items (and their attributes) in the domain are deleted as well. The DeleteDomain operation might take 10 or more seconds to complete. Running DeleteDomain on a domain that does not exist or running the function multiple times using the same domain name will not result in an error response.
@@ -497,12 +587,23 @@ export def "api create-delete-domain" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Version" $version "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "Action" $action_2 "scalar") (serialize-qp "Version" $version_2 "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/" $qp)
+  let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "text/xml" $req_body {query: ({"AWSAccessKeyId": $aws_access_key_id, "Action": $action, "SignatureMethod": $signature_method, "SignatureVersion": $signature_version, "Timestamp": $timestamp, "Version": $version, "Signature": $signature, "Action": $action_2, "Version": $version_2} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"AWSAccessKeyId": $aws_access_key_id, "Action": $action, "SignatureMethod": $signature_method, "SignatureVersion": $signature_version, "Timestamp": $timestamp, "Version": $version, "Signature": $signature, "Action": $action_2, "Version": $version_2} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "text/xml"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Returns information about the domain, including when the domain was created, the number of items and attributes in the domain, and the size of the attribute names and values.
@@ -533,10 +634,21 @@ export def "api get-domain-metadata" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Version" $version "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "DomainName" $domain_name "scalar") (serialize-qp "Action" $action_2 "scalar") (serialize-qp "Version" $version_2 "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/" $qp)
+  let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"AWSAccessKeyId": $aws_access_key_id, "Action": $action, "SignatureMethod": $signature_method, "SignatureVersion": $signature_version, "Timestamp": $timestamp, "Version": $version, "Signature": $signature, "DomainName": $domain_name, "Action": $action_2, "Version": $version_2} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"AWSAccessKeyId": $aws_access_key_id, "Action": $action, "SignatureMethod": $signature_method, "SignatureVersion": $signature_version, "Timestamp": $timestamp, "Version": $version, "Signature": $signature, "DomainName": $domain_name, "Action": $action_2, "Version": $version_2} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns information about the domain, including when the domain was created, the number of items and attributes in the domain, and the size of the attribute names and values.
@@ -568,12 +680,23 @@ export def "api create-domain-metadata" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Version" $version "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "Action" $action_2 "scalar") (serialize-qp "Version" $version_2 "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/" $qp)
+  let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "text/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "text/xml" $req_body {query: ({"AWSAccessKeyId": $aws_access_key_id, "Action": $action, "SignatureMethod": $signature_method, "SignatureVersion": $signature_version, "Timestamp": $timestamp, "Version": $version, "Signature": $signature, "Action": $action_2, "Version": $version_2} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"AWSAccessKeyId": $aws_access_key_id, "Action": $action, "SignatureMethod": $signature_method, "SignatureVersion": $signature_version, "Timestamp": $timestamp, "Version": $version, "Signature": $signature, "Action": $action_2, "Version": $version_2} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "text/xml"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Returns all of the attributes associated with the specified item. Optionally, the attributes returned can be limited to one or more attributes by specifying an attribute name parameter. If the item does not exist on the replica that was accessed for this operation, an empty set is returned. The system does not return an error as it cannot guarantee the item does not exist on other replicas. If GetAttributes is called without being passed any attribute names, all the attributes for the item are returned.
@@ -607,10 +730,21 @@ export def "api get-attributes" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Version" $version "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "DomainName" $domain_name "scalar") (serialize-qp "ItemName" $item_name "scalar") (serialize-qp "AttributeNames" $attribute_names "multi") (serialize-qp "ConsistentRead" $consistent_read "scalar") (serialize-qp "Action" $action_2 "scalar") (serialize-qp "Version" $version_2 "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/" $qp)
+  let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"AWSAccessKeyId": $aws_access_key_id, "Action": $action, "SignatureMethod": $signature_method, "SignatureVersion": $signature_version, "Timestamp": $timestamp, "Version": $version, "Signature": $signature, "DomainName": $domain_name, "ItemName": $item_name, "AttributeNames": $attribute_names, "ConsistentRead": $consistent_read, "Action": $action_2, "Version": $version_2} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"AWSAccessKeyId": $aws_access_key_id, "Action": $action, "SignatureMethod": $signature_method, "SignatureVersion": $signature_version, "Timestamp": $timestamp, "Version": $version, "Signature": $signature, "DomainName": $domain_name, "ItemName": $item_name, "AttributeNames": $attribute_names, "ConsistentRead": $consistent_read, "Action": $action_2, "Version": $version_2} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns all of the attributes associated with the specified item. Optionally, the attributes returned can be limited to one or more attributes by specifying an attribute name parameter. If the item does not exist on the replica that was accessed for this operation, an empty set is returned. The system does not return an error as it cannot guarantee the item does not exist on other replicas. If GetAttributes is called without being passed any attribute names, all the attributes for the item are returned.
@@ -642,12 +776,23 @@ export def "api create-get-attributes" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Version" $version "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "Action" $action_2 "scalar") (serialize-qp "Version" $version_2 "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/" $qp)
+  let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "text/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "text/xml" $req_body {query: ({"AWSAccessKeyId": $aws_access_key_id, "Action": $action, "SignatureMethod": $signature_method, "SignatureVersion": $signature_version, "Timestamp": $timestamp, "Version": $version, "Signature": $signature, "Action": $action_2, "Version": $version_2} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"AWSAccessKeyId": $aws_access_key_id, "Action": $action, "SignatureMethod": $signature_method, "SignatureVersion": $signature_version, "Timestamp": $timestamp, "Version": $version, "Signature": $signature, "Action": $action_2, "Version": $version_2} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "text/xml"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # The ListDomains operation lists all domains associated with the Access Key ID. It returns domain names up to the limit set by MaxNumberOfDomains (#MaxNumberOfDomains). A NextToken (#NextToken) is returned if there are more than MaxNumberOfDomains domains. Calling ListDomains successive times with the NextToken provided by the operation returns up to MaxNumberOfDomains more domain names with each successive operation call.
@@ -679,10 +824,21 @@ export def "api get-list-domains" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Version" $version "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "MaxNumberOfDomains" $max_number_of_domains "scalar") (serialize-qp "NextToken" $next_token "scalar") (serialize-qp "Action" $action_2 "scalar") (serialize-qp "Version" $version_2 "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/" $qp)
+  let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"AWSAccessKeyId": $aws_access_key_id, "Action": $action, "SignatureMethod": $signature_method, "SignatureVersion": $signature_version, "Timestamp": $timestamp, "Version": $version, "Signature": $signature, "MaxNumberOfDomains": $max_number_of_domains, "NextToken": $next_token, "Action": $action_2, "Version": $version_2} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"AWSAccessKeyId": $aws_access_key_id, "Action": $action, "SignatureMethod": $signature_method, "SignatureVersion": $signature_version, "Timestamp": $timestamp, "Version": $version, "Signature": $signature, "MaxNumberOfDomains": $max_number_of_domains, "NextToken": $next_token, "Action": $action_2, "Version": $version_2} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # The ListDomains operation lists all domains associated with the Access Key ID. It returns domain names up to the limit set by MaxNumberOfDomains (#MaxNumberOfDomains). A NextToken (#NextToken) is returned if there are more than MaxNumberOfDomains domains. Calling ListDomains successive times with the NextToken provided by the operation returns up to MaxNumberOfDomains more domain names with each successive operation call.
@@ -716,12 +872,23 @@ export def "api create-list-domains" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Version" $version "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "MaxNumberOfDomains" $max_number_of_domains "scalar") (serialize-qp "NextToken" $next_token "scalar") (serialize-qp "Action" $action_2 "scalar") (serialize-qp "Version" $version_2 "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/" $qp)
+  let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "text/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "text/xml" $req_body {query: ({"AWSAccessKeyId": $aws_access_key_id, "Action": $action, "SignatureMethod": $signature_method, "SignatureVersion": $signature_version, "Timestamp": $timestamp, "Version": $version, "Signature": $signature, "MaxNumberOfDomains": $max_number_of_domains, "NextToken": $next_token, "Action": $action_2, "Version": $version_2} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"AWSAccessKeyId": $aws_access_key_id, "Action": $action, "SignatureMethod": $signature_method, "SignatureVersion": $signature_version, "Timestamp": $timestamp, "Version": $version, "Signature": $signature, "MaxNumberOfDomains": $max_number_of_domains, "NextToken": $next_token, "Action": $action_2, "Version": $version_2} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "text/xml"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # The PutAttributes operation creates or replaces attributes in an item. The client may specify new attributes using a combination of the Attribute.X.Name and Attribute.X.Value parameters. The client specifies the first attribute by the parameters Attribute.0.Name and Attribute.0.Value, the second attribute by the parameters Attribute.1.Name and Attribute.1.Value, and so on. Attributes are uniquely identified in an item by their name/value combination. For example, a single item can have the attributes { "first_name", "first_value" } and { "first_name", second_value" }. However, it cannot have two attribute instances where both the Attribute.X.Name and Attribute.X.Value are the same. Optionally, the requestor can supply the Replace parameter for each individual attribute. Setting this value to true causes the new attribute value to replace the existing attribute value(s). For example, if an item has the attributes { 'a', '1' }, { 'b', '2'} and { 'b', '3' } and the requestor calls PutAttributes using the attributes { 'b', '4' } with the Replace parameter set to true, the final attributes of the item are changed to { 'a', '1' } and { 'b', '4' }, which replaces the previous values of the 'b' attribute with the new value. Using PutAttributes to replace attribute values that do not exist will not result in an error response. You cannot specify an empty string as an attribute name. Because Amazon SimpleDB makes multiple copies of client data and uses an eventual consistency update model, an immediate GetAttributes or Select operation (read) immediately after a PutAttributes or DeleteAttributes operation (write) might not return the updated data. The following limitations are enforced for this operation: 256 total attribute name-value pairs per item One billion attributes per domain 10 GB of total user data storage per domain
@@ -755,10 +922,21 @@ export def "api get-update-attributes" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Version" $version "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "DomainName" $domain_name "scalar") (serialize-qp "ItemName" $item_name "scalar") (serialize-qp "Attributes" $attributes "multi") (serialize-qp "Expected" $expected "multi") (serialize-qp "Action" $action_2 "scalar") (serialize-qp "Version" $version_2 "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/" $qp)
+  let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"AWSAccessKeyId": $aws_access_key_id, "Action": $action, "SignatureMethod": $signature_method, "SignatureVersion": $signature_version, "Timestamp": $timestamp, "Version": $version, "Signature": $signature, "DomainName": $domain_name, "ItemName": $item_name, "Attributes": $attributes, "Expected": $expected, "Action": $action_2, "Version": $version_2} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"AWSAccessKeyId": $aws_access_key_id, "Action": $action, "SignatureMethod": $signature_method, "SignatureVersion": $signature_version, "Timestamp": $timestamp, "Version": $version, "Signature": $signature, "DomainName": $domain_name, "ItemName": $item_name, "Attributes": $attributes, "Expected": $expected, "Action": $action_2, "Version": $version_2} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # The PutAttributes operation creates or replaces attributes in an item. The client may specify new attributes using a combination of the Attribute.X.Name and Attribute.X.Value parameters. The client specifies the first attribute by the parameters Attribute.0.Name and Attribute.0.Value, the second attribute by the parameters Attribute.1.Name and Attribute.1.Value, and so on. Attributes are uniquely identified in an item by their name/value combination. For example, a single item can have the attributes { "first_name", "first_value" } and { "first_name", second_value" }. However, it cannot have two attribute instances where both the Attribute.X.Name and Attribute.X.Value are the same. Optionally, the requestor can supply the Replace parameter for each individual attribute. Setting this value to true causes the new attribute value to replace the existing attribute value(s). For example, if an item has the attributes { 'a', '1' }, { 'b', '2'} and { 'b', '3' } and the requestor calls PutAttributes using the attributes { 'b', '4' } with the Replace parameter set to true, the final attributes of the item are changed to { 'a', '1' } and { 'b', '4' }, which replaces the previous values of the 'b' attribute with the new value. Using PutAttributes to replace attribute values that do not exist will not result in an error response. You cannot specify an empty string as an attribute name. Because Amazon SimpleDB makes multiple copies of client data and uses an eventual consistency update model, an immediate GetAttributes or Select operation (read) immediately after a PutAttributes or DeleteAttributes operation (write) might not return the updated data. The following limitations are enforced for this operation: 256 total attribute name-value pairs per item One billion attributes per domain 10 GB of total user data storage per domain
@@ -790,12 +968,23 @@ export def "api create-update-attributes" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Version" $version "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "Action" $action_2 "scalar") (serialize-qp "Version" $version_2 "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/" $qp)
+  let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "text/xml" $req_body {query: ({"AWSAccessKeyId": $aws_access_key_id, "Action": $action, "SignatureMethod": $signature_method, "SignatureVersion": $signature_version, "Timestamp": $timestamp, "Version": $version, "Signature": $signature, "Action": $action_2, "Version": $version_2} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"AWSAccessKeyId": $aws_access_key_id, "Action": $action, "SignatureMethod": $signature_method, "SignatureVersion": $signature_version, "Timestamp": $timestamp, "Version": $version, "Signature": $signature, "Action": $action_2, "Version": $version_2} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "text/xml"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # The Select operation returns a set of attributes for ItemNames that match the select expression. Select is similar to the standard SQL SELECT statement. The total size of the response cannot exceed 1 MB in total size. Amazon SimpleDB automatically adjusts the number of items returned per page to enforce this limit. For example, if the client asks to retrieve 2500 items, but each individual item is 10 kB in size, the system returns 100 items and an appropriate NextToken so the client can access the next page of results. For information on how to construct select expressions, see Using Select to Create Amazon SimpleDB Queries in the Developer Guide.
@@ -828,10 +1017,21 @@ export def "api get-select" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Version" $version "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "SelectExpression" $select_expression "scalar") (serialize-qp "NextToken" $next_token "scalar") (serialize-qp "ConsistentRead" $consistent_read "scalar") (serialize-qp "Action" $action_2 "scalar") (serialize-qp "Version" $version_2 "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/" $qp)
+  let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"AWSAccessKeyId": $aws_access_key_id, "Action": $action, "SignatureMethod": $signature_method, "SignatureVersion": $signature_version, "Timestamp": $timestamp, "Version": $version, "Signature": $signature, "SelectExpression": $select_expression, "NextToken": $next_token, "ConsistentRead": $consistent_read, "Action": $action_2, "Version": $version_2} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"AWSAccessKeyId": $aws_access_key_id, "Action": $action, "SignatureMethod": $signature_method, "SignatureVersion": $signature_version, "Timestamp": $timestamp, "Version": $version, "Signature": $signature, "SelectExpression": $select_expression, "NextToken": $next_token, "ConsistentRead": $consistent_read, "Action": $action_2, "Version": $version_2} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # The Select operation returns a set of attributes for ItemNames that match the select expression. Select is similar to the standard SQL SELECT statement. The total size of the response cannot exceed 1 MB in total size. Amazon SimpleDB automatically adjusts the number of items returned per page to enforce this limit. For example, if the client asks to retrieve 2500 items, but each individual item is 10 kB in size, the system returns 100 items and an appropriate NextToken so the client can access the next page of results. For information on how to construct select expressions, see Using Select to Create Amazon SimpleDB Queries in the Developer Guide.
@@ -864,10 +1064,21 @@ export def "api create-select" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Version" $version "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "NextToken" $next_token "scalar") (serialize-qp "Action" $action_2 "scalar") (serialize-qp "Version" $version_2 "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/" $qp)
+  let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "text/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "text/xml" $req_body {query: ({"AWSAccessKeyId": $aws_access_key_id, "Action": $action, "SignatureMethod": $signature_method, "SignatureVersion": $signature_version, "Timestamp": $timestamp, "Version": $version, "Signature": $signature, "NextToken": $next_token, "Action": $action_2, "Version": $version_2} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"AWSAccessKeyId": $aws_access_key_id, "Action": $action, "SignatureMethod": $signature_method, "SignatureVersion": $signature_version, "Timestamp": $timestamp, "Version": $version, "Signature": $signature, "NextToken": $next_token, "Action": $action_2, "Version": $version_2} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "text/xml"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }

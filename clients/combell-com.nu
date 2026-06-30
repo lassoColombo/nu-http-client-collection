@@ -8,7 +8,7 @@ const BASE_URL = "http://localhost/v2"
 # `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
 # where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o PUBLIC_API_TOKEN | default "" }
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o PUBLIC_API_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
@@ -40,14 +40,11 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
-# Trick: `url encode --all` over-encodes, then we decode the four unreserved
-# punctuation chars back. Pre-existing %XX sequences in the input survive
-# because `url encode --all` first turns their % into %25.
 def encode-path-segment [v: any]: nothing -> string {
   $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
-# Serialize an array-typed path parameter (issue 49.A). OpenAPI 3 `style: simple`
+# Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
 # (the default for path params) and Swagger 2 `collectionFormat: csv` both join
 # the elements with a literal comma WITHIN the single path segment, each element
 # RFC-3986-encoded individually (so a comma inside an element stays %2C). Without
@@ -58,51 +55,57 @@ def encode-path-array [v: any]: nothing -> string {
   if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
 }
 
-# Build URL from base, path, and optional query string
-def build-url [base: string, path: string, query?: string]: nothing -> string {
+# Build the request URL from base, path, and any number of pre-encoded query
+# fragments (param serializer output and/or the auth query). Each fragment is an
+# `&`-joinable `key=value` string already percent-encoded by its producer; empty
+# fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
+# delimiters are hand-spliced — and any query already on the base URL is merged in.
+def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
   let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
-  let result = ($parsed | upsert path $full_path)
-  if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
+  let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
+  $parsed | upsert path $full_path | upsert query $query | url join
 }
 
-# Build the dry-run record returned by --dry-run. Shape:
-#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
-#    auth: {scheme, location}}
-# `meta` carries logical-form data (the query record by spec name, the pre-serialization
-# body) that do-request itself cannot reconstruct from its wire-format args.
-def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
-  let m = ($meta | default {})
-  {
-    dry_run: true
-    method: $method
-    url: $url
-    query: ($m | get -o query | default {})
-    headers: $auth.headers
-    body: ($m | get -o body)
-    content_type: $content_type
-    timeout: $timeout
-    auth: {scheme: $auth.scheme, location: $auth.location}
-  }
+# Success policy: did this response succeed? Single source of truth, consulted by
+# handle-response and the HEAD header-unwrap. Empty ok_codes means the spec listed
+# none, so fall back to < 400. Otherwise: any 2xx, plus documented success codes.
+def status-ok [status: int, ok_codes: list<int>]: nothing -> bool {
+  if ($ok_codes | is-empty) { $status < 400 } else { ($status >= 200 and $status < 300) or ($status in $ok_codes) }
 }
 
-# Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
-  let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
-  let timeout = ($max_time | default 30min)
-  let ct = ($content_type | default "application/json")
-  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
-  let resp = match $method {
-    "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
-  }
-  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
-  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
+# Unwrap a `--full` HTTP response into the user-facing value. Response arrives
+# via pipeline; ok_codes gates the error throw (see status-ok).
+def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: record -> any {
+  let resp = $in
+  if $allow_errors { return $resp }
+  if not (status-ok $resp.status $ok_codes) { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } }
+  if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
+  if $resp.status == 204 { return null }
+  $resp.body
+}
+
+# GET — bodyless, honours --raw
+def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+}
+
+# POST — body + content-type
+def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# PUT — body + content-type
+def send-put [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http put --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http put --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# DELETE — body via --data
+def send-delete [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http delete --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url } else { http delete --headers $req.headers --content-type $req.content_type --data $body --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url }
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 def base-url-completer [] { ["http://localhost/v2"] }
@@ -160,10 +163,21 @@ export def "accounts list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "skip" $skip "scalar") (serialize-qp "take" $take "scalar") (serialize-qp "asset_type" $asset_type "scalar") (serialize-qp "identifier" $identifier "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/accounts" $qp)
+  let full_url = (build-url $base "/accounts" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"skip": $skip, "take": $take, "asset_type": $asset_type, "identifier": $identifier} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"skip": $skip, "take": $take, "asset_type": $asset_type, "identifier": $identifier} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a new account
@@ -187,12 +201,23 @@ export def "accounts create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/accounts")
+  let full_url = (build-url $base "/accounts" $auth.query)
   let req_body = {"ftp_password": $ftp_password, "identifier": $identifier, "servicepack_id": $servicepack_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [202]
 }
 
 # Get a specific account
@@ -216,10 +241,21 @@ export def "accounts get" [
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let qp = [(serialize-qp "account_id" $account_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"account_id": $account_id} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"account_id": $account_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get records
@@ -247,10 +283,21 @@ export def "dns-records list" [
   let base = ($base_url | default $BASE_URL)
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'domainName' must be non-empty" } }
   let qp = [(serialize-qp "domain_name" $domain_name "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "take" $take "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "record_name" $record_name "scalar") (serialize-qp "service" $service "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name)} | format pattern "/dns/{domain_name}/records") $qp)
+  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name)} | format pattern "/dns/{domain_name}/records") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"domain_name": $domain_name, "skip": $skip, "take": $take, "type": $type, "record_name": $record_name, "service": $service} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"domain_name": $domain_name, "skip": $skip, "take": $take, "type": $type, "record_name": $record_name, "service": $service} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a record
@@ -285,12 +332,23 @@ export def "dns-records create" [
   let base = ($base_url | default $BASE_URL)
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'domainName' must be non-empty" } }
   let qp = [(serialize-qp "domain_name" $domain_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name)} | format pattern "/dns/{domain_name}/records") $qp)
+  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name)} | format pattern "/dns/{domain_name}/records") $qp $auth.query)
   let req_body = {"content": $content, "id": $id, "port": $port, "priority": $priority, "protocol": $protocol, "record_name": $record_name, "service": $service, "target": $target, "ttl": $ttl, "type": $type, "weight": $weight} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"domain_name": $domain_name} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"domain_name": $domain_name} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Delete a record
@@ -316,10 +374,21 @@ export def "dns-records delete" [
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'domainName' must be non-empty" } }
   if ($record_id | is-empty) { error make --unspanned { msg: "path parameter 'recordId' must be non-empty" } }
   let qp = [(serialize-qp "domain_name" $domain_name "scalar") (serialize-qp "record_id" $record_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name), record_id: (encode-path-segment $record_id)} | format pattern "/dns/{domain_name}/records/{record_id}") $qp)
+  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name), record_id: (encode-path-segment $record_id)} | format pattern "/dns/{domain_name}/records/{record_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"domain_name": $domain_name, "record_id": $record_id} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"domain_name": $domain_name, "record_id": $record_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Get specific record
@@ -345,10 +414,21 @@ export def "dns-records get" [
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'domainName' must be non-empty" } }
   if ($record_id | is-empty) { error make --unspanned { msg: "path parameter 'recordId' must be non-empty" } }
   let qp = [(serialize-qp "domain_name" $domain_name "scalar") (serialize-qp "record_id" $record_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name), record_id: (encode-path-segment $record_id)} | format pattern "/dns/{domain_name}/records/{record_id}") $qp)
+  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name), record_id: (encode-path-segment $record_id)} | format pattern "/dns/{domain_name}/records/{record_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"domain_name": $domain_name, "record_id": $record_id} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"domain_name": $domain_name, "record_id": $record_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Edit a record
@@ -386,12 +466,23 @@ export def "dns-records update" [
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'domainName' must be non-empty" } }
   if ($record_id | is-empty) { error make --unspanned { msg: "path parameter 'recordId' must be non-empty" } }
   let qp = [(serialize-qp "domain_name" $domain_name "scalar") (serialize-qp "record_id" $record_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name), record_id: (encode-path-segment $record_id)} | format pattern "/dns/{domain_name}/records/{record_id}") $qp)
+  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name), record_id: (encode-path-segment $record_id)} | format pattern "/dns/{domain_name}/records/{record_id}") $qp $auth.query)
   let req_body = {"content": $content, "id": $id, "port": $port, "priority": $priority, "protocol": $protocol, "record_name": $record_name, "service": $service, "target": $target, "ttl": $ttl, "type": $type, "weight": $weight} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"domain_name": $domain_name, "record_id": $record_id} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"domain_name": $domain_name, "record_id": $record_id} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Overviews of domains
@@ -414,10 +505,21 @@ export def "domains list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "skip" $skip "scalar") (serialize-qp "take" $take "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/domains" $qp)
+  let full_url = (build-url $base "/domains" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"skip": $skip, "take": $take} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"skip": $skip, "take": $take} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Register a domain
@@ -442,12 +544,23 @@ export def "domains-registrations create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/domains/registrations")
+  let full_url = (build-url $base "/domains/registrations" $auth.query)
   let req_body = {"domain_name": $domain_name, "name_servers": $name_servers, "registrant": $registrant} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [202]
 }
 
 # Transfer a domain
@@ -473,12 +586,23 @@ export def "domains-transfers create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/domains/transfers")
+  let full_url = (build-url $base "/domains/transfers" $auth.query)
   let req_body = {"auth_code": $auth_code, "domain_name": $domain_name, "name_servers": $name_servers, "registrant": $registrant} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [202]
 }
 
 # Details of a domain
@@ -502,10 +626,21 @@ export def "domains get" [
   let base = ($base_url | default $BASE_URL)
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'domainName' must be non-empty" } }
   let qp = [(serialize-qp "domain_name" $domain_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name)} | format pattern "/domains/{domain_name}") $qp)
+  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name)} | format pattern "/domains/{domain_name}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"domain_name": $domain_name} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"domain_name": $domain_name} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Edit domain name servers
@@ -532,12 +667,23 @@ export def "domains-nameservers update-edit-name-servers" [
   let base = ($base_url | default $BASE_URL)
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'domainName' must be non-empty" } }
   let qp = [(serialize-qp "domain_name" $domain_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name)} | format pattern "/domains/{domain_name}/nameservers") $qp)
+  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name)} | format pattern "/domains/{domain_name}/nameservers") $qp $auth.query)
   let req_body = {"domain_name": $body_domain_name, "name_servers": $name_servers} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"domain_name": $domain_name} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"domain_name": $domain_name} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Edit domain name renew state
@@ -563,12 +709,23 @@ export def "domains-renew update-configure" [
   let base = ($base_url | default $BASE_URL)
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'domainName' must be non-empty" } }
   let qp = [(serialize-qp "domain_name" $domain_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name)} | format pattern "/domains/{domain_name}/renew") $qp)
+  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name)} | format pattern "/domains/{domain_name}/renew") $qp $auth.query)
   let req_body = {"will_renew": $will_renew} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"domain_name": $domain_name} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"domain_name": $domain_name} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Overview of linux hostings
@@ -591,10 +748,21 @@ export def "linuxhostings get-linux-hostings" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "skip" $skip "scalar") (serialize-qp "take" $take "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/linuxhostings" $qp)
+  let full_url = (build-url $base "/linuxhostings" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"skip": $skip, "take": $take} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"skip": $skip, "take": $take} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Linux hosting detail
@@ -618,10 +786,21 @@ export def "linuxhostings get-linux-hosting" [
   let base = ($base_url | default $BASE_URL)
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'domainName' must be non-empty" } }
   let qp = [(serialize-qp "domain_name" $domain_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name)} | format pattern "/linuxhostings/{domain_name}") $qp)
+  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name)} | format pattern "/linuxhostings/{domain_name}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"domain_name": $domain_name} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"domain_name": $domain_name} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Configure FTP
@@ -647,12 +826,23 @@ export def "linuxhostings-ftp-configuration update-configure" [
   let base = ($base_url | default $BASE_URL)
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'domainName' must be non-empty" } }
   let qp = [(serialize-qp "domain_name" $domain_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name)} | format pattern "/linuxhostings/{domain_name}/ftp/configuration") $qp)
+  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name)} | format pattern "/linuxhostings/{domain_name}/ftp/configuration") $qp $auth.query)
   let req_body = {"enabled": $enabled} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"domain_name": $domain_name} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"domain_name": $domain_name} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Configure PHP APCu setting
@@ -679,12 +869,23 @@ export def "linuxhostings-phpsettings-apcu update-change" [
   let base = ($base_url | default $BASE_URL)
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'domainName' must be non-empty" } }
   let qp = [(serialize-qp "domain_name" $domain_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name)} | format pattern "/linuxhostings/{domain_name}/phpsettings/apcu") $qp)
+  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name)} | format pattern "/linuxhostings/{domain_name}/phpsettings/apcu") $qp $auth.query)
   let req_body = {"apcu_size": $apcu_size, "enabled": $enabled} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"domain_name": $domain_name} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"domain_name": $domain_name} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Get the available PHP versions.
@@ -708,10 +909,21 @@ export def "linuxhostings-phpsettings-availableversions get-available-php-versio
   let base = ($base_url | default $BASE_URL)
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'domainName' must be non-empty" } }
   let qp = [(serialize-qp "domain_name" $domain_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name)} | format pattern "/linuxhostings/{domain_name}/phpsettings/availableversions") $qp)
+  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name)} | format pattern "/linuxhostings/{domain_name}/phpsettings/availableversions") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"domain_name": $domain_name} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"domain_name": $domain_name} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Configure PHP memory limit
@@ -737,12 +949,23 @@ export def "linuxhostings-phpsettings-memorylimit update-change-php-memory-limit
   let base = ($base_url | default $BASE_URL)
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'domainName' must be non-empty" } }
   let qp = [(serialize-qp "domain_name" $domain_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name)} | format pattern "/linuxhostings/{domain_name}/phpsettings/memorylimit") $qp)
+  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name)} | format pattern "/linuxhostings/{domain_name}/phpsettings/memorylimit") $qp $auth.query)
   let req_body = {"memory_limit": $memory_limit} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"domain_name": $domain_name} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"domain_name": $domain_name} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Change the Linux hosting PHP version.
@@ -768,12 +991,23 @@ export def "linuxhostings-phpsettings-version version-change-php" [
   let base = ($base_url | default $BASE_URL)
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'domainName' must be non-empty" } }
   let qp = [(serialize-qp "domain_name" $domain_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name)} | format pattern "/linuxhostings/{domain_name}/phpsettings/version") $qp)
+  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name)} | format pattern "/linuxhostings/{domain_name}/phpsettings/version") $qp $auth.query)
   let req_body = {"version": $version} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"domain_name": $domain_name} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"domain_name": $domain_name} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Overview of scheduled tasks
@@ -797,10 +1031,21 @@ export def "linuxhostings-scheduledtasks get-scheduled-tasks" [
   let base = ($base_url | default $BASE_URL)
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'domainName' must be non-empty" } }
   let qp = [(serialize-qp "domain_name" $domain_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name)} | format pattern "/linuxhostings/{domain_name}/scheduledtasks") $qp)
+  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name)} | format pattern "/linuxhostings/{domain_name}/scheduledtasks") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"domain_name": $domain_name} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"domain_name": $domain_name} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Add a scheduled task
@@ -829,12 +1074,23 @@ export def "linuxhostings-scheduledtasks create-scheduled-tasks" [
   let base = ($base_url | default $BASE_URL)
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'domainName' must be non-empty" } }
   let qp = [(serialize-qp "domain_name" $domain_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name)} | format pattern "/linuxhostings/{domain_name}/scheduledtasks") $qp)
+  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name)} | format pattern "/linuxhostings/{domain_name}/scheduledtasks") $qp $auth.query)
   let req_body = {"cron_expression": $cron_expression, "enabled": $enabled, "id": $id, "script_location": $script_location} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"domain_name": $domain_name} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"domain_name": $domain_name} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Delete a scheduled task
@@ -861,10 +1117,21 @@ export def "linuxhostings-scheduledtasks delete-scheduled-task" [
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'domainName' must be non-empty" } }
   if ($scheduled_task_id | is-empty) { error make --unspanned { msg: "path parameter 'scheduledTaskId' must be non-empty" } }
   let qp = [(serialize-qp "domain_name" $domain_name "scalar") (serialize-qp "scheduled_task_id" $scheduled_task_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name), scheduled_task_id: (encode-path-segment $scheduled_task_id)} | format pattern "/linuxhostings/{domain_name}/scheduledtasks/{scheduled_task_id}") $qp)
+  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name), scheduled_task_id: (encode-path-segment $scheduled_task_id)} | format pattern "/linuxhostings/{domain_name}/scheduledtasks/{scheduled_task_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"domain_name": $domain_name, "scheduled_task_id": $scheduled_task_id} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"domain_name": $domain_name, "scheduled_task_id": $scheduled_task_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Get scheduled task detail
@@ -891,10 +1158,21 @@ export def "linuxhostings-scheduledtasks get-scheduled-task" [
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'domainName' must be non-empty" } }
   if ($scheduled_task_id | is-empty) { error make --unspanned { msg: "path parameter 'scheduledTaskId' must be non-empty" } }
   let qp = [(serialize-qp "domain_name" $domain_name "scalar") (serialize-qp "scheduled_task_id" $scheduled_task_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name), scheduled_task_id: (encode-path-segment $scheduled_task_id)} | format pattern "/linuxhostings/{domain_name}/scheduledtasks/{scheduled_task_id}") $qp)
+  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name), scheduled_task_id: (encode-path-segment $scheduled_task_id)} | format pattern "/linuxhostings/{domain_name}/scheduledtasks/{scheduled_task_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"domain_name": $domain_name, "scheduled_task_id": $scheduled_task_id} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"domain_name": $domain_name, "scheduled_task_id": $scheduled_task_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Configure a scheduled task
@@ -926,12 +1204,23 @@ export def "linuxhostings-scheduledtasks update-configure-scheduled-task" [
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'domainName' must be non-empty" } }
   if ($scheduled_task_id | is-empty) { error make --unspanned { msg: "path parameter 'scheduledTaskId' must be non-empty" } }
   let qp = [(serialize-qp "domain_name" $domain_name "scalar") (serialize-qp "scheduled_task_id" $scheduled_task_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name), scheduled_task_id: (encode-path-segment $scheduled_task_id)} | format pattern "/linuxhostings/{domain_name}/scheduledtasks/{scheduled_task_id}") $qp)
+  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name), scheduled_task_id: (encode-path-segment $scheduled_task_id)} | format pattern "/linuxhostings/{domain_name}/scheduledtasks/{scheduled_task_id}") $qp $auth.query)
   let req_body = {"cron_expression": $cron_expression, "enabled": $enabled, "id": $id, "script_location": $script_location} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"domain_name": $domain_name, "scheduled_task_id": $scheduled_task_id} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"domain_name": $domain_name, "scheduled_task_id": $scheduled_task_id} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Enable/disable GZIP compression
@@ -957,12 +1246,23 @@ export def "linuxhostings-settings-gzipcompression update-change-gzip-compressio
   let base = ($base_url | default $BASE_URL)
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'domainName' must be non-empty" } }
   let qp = [(serialize-qp "domain_name" $domain_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name)} | format pattern "/linuxhostings/{domain_name}/settings/gzipcompression") $qp)
+  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name)} | format pattern "/linuxhostings/{domain_name}/settings/gzipcompression") $qp $auth.query)
   let req_body = {"enabled": $enabled} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"domain_name": $domain_name} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"domain_name": $domain_name} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Create a host header
@@ -991,12 +1291,23 @@ export def "linuxhostings-sites-hostheaders create-host-header" [
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'domainName' must be non-empty" } }
   if ($site_name | is-empty) { error make --unspanned { msg: "path parameter 'siteName' must be non-empty" } }
   let qp = [(serialize-qp "domain_name" $domain_name "scalar") (serialize-qp "site_name" $site_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name), site_name: (encode-path-segment $site_name)} | format pattern "/linuxhostings/{domain_name}/sites/{site_name}/hostheaders") $qp)
+  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name), site_name: (encode-path-segment $site_name)} | format pattern "/linuxhostings/{domain_name}/sites/{site_name}/hostheaders") $qp $auth.query)
   let req_body = {"domain_name": $body_domain_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"domain_name": $domain_name, "site_name": $site_name} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"domain_name": $domain_name, "site_name": $site_name} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Configure HTTP/2
@@ -1025,12 +1336,23 @@ export def "linuxhostings-sites-http2-configuration update-configure" [
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'domainName' must be non-empty" } }
   if ($site_name | is-empty) { error make --unspanned { msg: "path parameter 'siteName' must be non-empty" } }
   let qp = [(serialize-qp "domain_name" $domain_name "scalar") (serialize-qp "site_name" $site_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name), site_name: (encode-path-segment $site_name)} | format pattern "/linuxhostings/{domain_name}/sites/{site_name}/http2/configuration") $qp)
+  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name), site_name: (encode-path-segment $site_name)} | format pattern "/linuxhostings/{domain_name}/sites/{site_name}/http2/configuration") $qp $auth.query)
   let req_body = {"enabled": $enabled} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"domain_name": $domain_name, "site_name": $site_name} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"domain_name": $domain_name, "site_name": $site_name} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Configure SSH
@@ -1056,12 +1378,23 @@ export def "linuxhostings-ssh-configuration update-configure" [
   let base = ($base_url | default $BASE_URL)
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'domainName' must be non-empty" } }
   let qp = [(serialize-qp "domain_name" $domain_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name)} | format pattern "/linuxhostings/{domain_name}/ssh/configuration") $qp)
+  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name)} | format pattern "/linuxhostings/{domain_name}/ssh/configuration") $qp $auth.query)
   let req_body = {"enabled": $enabled} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"domain_name": $domain_name} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"domain_name": $domain_name} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Overview of SSH keys
@@ -1085,10 +1418,21 @@ export def "linuxhostings-ssh-keys get" [
   let base = ($base_url | default $BASE_URL)
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'domainName' must be non-empty" } }
   let qp = [(serialize-qp "domain_name" $domain_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name)} | format pattern "/linuxhostings/{domain_name}/ssh/keys") $qp)
+  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name)} | format pattern "/linuxhostings/{domain_name}/ssh/keys") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"domain_name": $domain_name} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"domain_name": $domain_name} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Add a SSH key
@@ -1114,12 +1458,23 @@ export def "linuxhostings-ssh-keys create" [
   let base = ($base_url | default $BASE_URL)
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'domainName' must be non-empty" } }
   let qp = [(serialize-qp "domain_name" $domain_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name)} | format pattern "/linuxhostings/{domain_name}/ssh/keys") $qp)
+  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name)} | format pattern "/linuxhostings/{domain_name}/ssh/keys") $qp $auth.query)
   let req_body = {"public_key": $public_key} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"domain_name": $domain_name} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"domain_name": $domain_name} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Delete a SSH key
@@ -1145,10 +1500,21 @@ export def "linuxhostings-ssh-keys delete" [
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'domainName' must be non-empty" } }
   if ($fingerprint | is-empty) { error make --unspanned { msg: "path parameter 'fingerprint' must be non-empty" } }
   let qp = [(serialize-qp "domain_name" $domain_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name), fingerprint: (encode-path-segment $fingerprint)} | format pattern "/linuxhostings/{domain_name}/ssh/keys/{fingerprint}") $qp)
+  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name), fingerprint: (encode-path-segment $fingerprint)} | format pattern "/linuxhostings/{domain_name}/ssh/keys/{fingerprint}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"domain_name": $domain_name} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"domain_name": $domain_name} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Configure auto redirect
@@ -1176,12 +1542,23 @@ export def "linuxhostings-sslsettings-autoredirect update-change-auto-redirect" 
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'domainName' must be non-empty" } }
   if ($hostname | is-empty) { error make --unspanned { msg: "path parameter 'hostname' must be non-empty" } }
   let qp = [(serialize-qp "domain_name" $domain_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name), hostname: (encode-path-segment $hostname)} | format pattern "/linuxhostings/{domain_name}/sslsettings/{hostname}/autoredirect") $qp)
+  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name), hostname: (encode-path-segment $hostname)} | format pattern "/linuxhostings/{domain_name}/sslsettings/{hostname}/autoredirect") $qp $auth.query)
   let req_body = {"enabled": $enabled} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"domain_name": $domain_name} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"domain_name": $domain_name} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Configure let's encrypt
@@ -1209,12 +1586,23 @@ export def "linuxhostings-sslsettings-letsencrypt update-change-lets-encrypt" [
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'domainName' must be non-empty" } }
   if ($hostname | is-empty) { error make --unspanned { msg: "path parameter 'hostname' must be non-empty" } }
   let qp = [(serialize-qp "domain_name" $domain_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name), hostname: (encode-path-segment $hostname)} | format pattern "/linuxhostings/{domain_name}/sslsettings/{hostname}/letsencrypt") $qp)
+  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name), hostname: (encode-path-segment $hostname)} | format pattern "/linuxhostings/{domain_name}/sslsettings/{hostname}/letsencrypt") $qp $auth.query)
   let req_body = {"enabled": $enabled} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"domain_name": $domain_name} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"domain_name": $domain_name} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Create a subsite
@@ -1241,12 +1629,23 @@ export def "linuxhostings-subsites create" [
   let base = ($base_url | default $BASE_URL)
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'domainName' must be non-empty" } }
   let qp = [(serialize-qp "domain_name" $domain_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name)} | format pattern "/linuxhostings/{domain_name}/subsites") $qp)
+  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name)} | format pattern "/linuxhostings/{domain_name}/subsites") $qp $auth.query)
   let req_body = {"domain_name": $body_domain_name, "path": $path} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"domain_name": $domain_name} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"domain_name": $domain_name} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Delete a subsite
@@ -1273,10 +1672,21 @@ export def "linuxhostings-subsites delete" [
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'domainName' must be non-empty" } }
   if ($site_name | is-empty) { error make --unspanned { msg: "path parameter 'siteName' must be non-empty" } }
   let qp = [(serialize-qp "domain_name" $domain_name "scalar") (serialize-qp "site_name" $site_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name), site_name: (encode-path-segment $site_name)} | format pattern "/linuxhostings/{domain_name}/subsites/{site_name}") $qp)
+  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name), site_name: (encode-path-segment $site_name)} | format pattern "/linuxhostings/{domain_name}/subsites/{site_name}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"domain_name": $domain_name, "site_name": $site_name} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"domain_name": $domain_name, "site_name": $site_name} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Gets your mailboxes.
@@ -1298,10 +1708,21 @@ export def "mailboxes get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain_name" $domain_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/mailboxes" $qp)
+  let full_url = (build-url $base "/mailboxes" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"domain_name": $domain_name} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"domain_name": $domain_name} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a new mailbox.
@@ -1325,12 +1746,23 @@ export def "mailboxes create-mailbox" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/mailboxes")
+  let full_url = (build-url $base "/mailboxes" $auth.query)
   let req_body = {"account_id": $account_id, "email_address": $email_address, "password": $password} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Delete a mailbox
@@ -1354,10 +1786,21 @@ export def "mailboxes delete-mailbox" [
   let base = ($base_url | default $BASE_URL)
   if ($mailbox_name | is-empty) { error make --unspanned { msg: "path parameter 'mailboxName' must be non-empty" } }
   let qp = [(serialize-qp "mailbox_name" $mailbox_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({mailbox_name: (encode-path-segment $mailbox_name)} | format pattern "/mailboxes/{mailbox_name}") $qp)
+  let full_url = (build-url $base ({mailbox_name: (encode-path-segment $mailbox_name)} | format pattern "/mailboxes/{mailbox_name}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"mailbox_name": $mailbox_name} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"mailbox_name": $mailbox_name} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Get a specific mailbox
@@ -1381,10 +1824,21 @@ export def "mailboxes get-mailbox" [
   let base = ($base_url | default $BASE_URL)
   if ($mailbox_name | is-empty) { error make --unspanned { msg: "path parameter 'mailboxName' must be non-empty" } }
   let qp = [(serialize-qp "mailbox_name" $mailbox_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({mailbox_name: (encode-path-segment $mailbox_name)} | format pattern "/mailboxes/{mailbox_name}") $qp)
+  let full_url = (build-url $base ({mailbox_name: (encode-path-segment $mailbox_name)} | format pattern "/mailboxes/{mailbox_name}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"mailbox_name": $mailbox_name} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"mailbox_name": $mailbox_name} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Configure auto-forward for mailbox
@@ -1412,12 +1866,23 @@ export def "mailboxes-autoforward update-configure-mailbox-auto-forward" [
   let base = ($base_url | default $BASE_URL)
   if ($mailbox_name | is-empty) { error make --unspanned { msg: "path parameter 'mailboxName' must be non-empty" } }
   let qp = [(serialize-qp "mailbox_name" $mailbox_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({mailbox_name: (encode-path-segment $mailbox_name)} | format pattern "/mailboxes/{mailbox_name}/autoforward") $qp)
+  let full_url = (build-url $base ({mailbox_name: (encode-path-segment $mailbox_name)} | format pattern "/mailboxes/{mailbox_name}/autoforward") $qp $auth.query)
   let req_body = {"copy_to_myself": $copy_to_myself, "email_addresses": $email_addresses, "enabled": $enabled} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"mailbox_name": $mailbox_name} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"mailbox_name": $mailbox_name} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Configure auto-reply for mailbox
@@ -1445,12 +1910,23 @@ export def "mailboxes-autoreply update-configure-mailbox-auto-reply" [
   let base = ($base_url | default $BASE_URL)
   if ($mailbox_name | is-empty) { error make --unspanned { msg: "path parameter 'mailboxName' must be non-empty" } }
   let qp = [(serialize-qp "mailbox_name" $mailbox_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({mailbox_name: (encode-path-segment $mailbox_name)} | format pattern "/mailboxes/{mailbox_name}/autoreply") $qp)
+  let full_url = (build-url $base ({mailbox_name: (encode-path-segment $mailbox_name)} | format pattern "/mailboxes/{mailbox_name}/autoreply") $qp $auth.query)
   let req_body = {"enabled": $enabled, "message": $message, "subject": $subject} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"mailbox_name": $mailbox_name} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"mailbox_name": $mailbox_name} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Change password for mailbox
@@ -1476,12 +1952,23 @@ export def "mailboxes-password update-change-mailbox" [
   let base = ($base_url | default $BASE_URL)
   if ($mailbox_name | is-empty) { error make --unspanned { msg: "path parameter 'mailboxName' must be non-empty" } }
   let qp = [(serialize-qp "mailbox_name" $mailbox_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({mailbox_name: (encode-path-segment $mailbox_name)} | format pattern "/mailboxes/{mailbox_name}/password") $qp)
+  let full_url = (build-url $base ({mailbox_name: (encode-path-segment $mailbox_name)} | format pattern "/mailboxes/{mailbox_name}/password") $qp $auth.query)
   let req_body = {"password": $password} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"mailbox_name": $mailbox_name} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"mailbox_name": $mailbox_name} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Get the mail zone.
@@ -1505,10 +1992,21 @@ export def "mailzones get-mail-zone" [
   let base = ($base_url | default $BASE_URL)
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'domainName' must be non-empty" } }
   let qp = [(serialize-qp "domain_name" $domain_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name)} | format pattern "/mailzones/{domain_name}") $qp)
+  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name)} | format pattern "/mailzones/{domain_name}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"domain_name": $domain_name} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"domain_name": $domain_name} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a new alias
@@ -1535,12 +2033,23 @@ export def "mailzones-aliases create-alias" [
   let base = ($base_url | default $BASE_URL)
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'domainName' must be non-empty" } }
   let qp = [(serialize-qp "domain_name" $domain_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name)} | format pattern "/mailzones/{domain_name}/aliases") $qp)
+  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name)} | format pattern "/mailzones/{domain_name}/aliases") $qp $auth.query)
   let req_body = {"destinations": $destinations, "email_address": $email_address} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"domain_name": $domain_name} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"domain_name": $domain_name} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Delete a alias
@@ -1567,10 +2076,21 @@ export def "mailzones-aliases delete-alias" [
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'domainName' must be non-empty" } }
   if ($email_address | is-empty) { error make --unspanned { msg: "path parameter 'emailAddress' must be non-empty" } }
   let qp = [(serialize-qp "domain_name" $domain_name "scalar") (serialize-qp "email_address" $email_address "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name), email_address: (encode-path-segment $email_address)} | format pattern "/mailzones/{domain_name}/aliases/{email_address}") $qp)
+  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name), email_address: (encode-path-segment $email_address)} | format pattern "/mailzones/{domain_name}/aliases/{email_address}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"domain_name": $domain_name, "email_address": $email_address} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"domain_name": $domain_name, "email_address": $email_address} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Configure a alias
@@ -1599,12 +2119,23 @@ export def "mailzones-aliases update-configure-alias" [
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'domainName' must be non-empty" } }
   if ($email_address | is-empty) { error make --unspanned { msg: "path parameter 'emailAddress' must be non-empty" } }
   let qp = [(serialize-qp "domain_name" $domain_name "scalar") (serialize-qp "email_address" $email_address "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name), email_address: (encode-path-segment $email_address)} | format pattern "/mailzones/{domain_name}/aliases/{email_address}") $qp)
+  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name), email_address: (encode-path-segment $email_address)} | format pattern "/mailzones/{domain_name}/aliases/{email_address}") $qp $auth.query)
   let req_body = {"destinations": $destinations} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"domain_name": $domain_name, "email_address": $email_address} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"domain_name": $domain_name, "email_address": $email_address} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [202]
 }
 
 # Configure anti-spam for mail zone
@@ -1630,12 +2161,23 @@ export def "mailzones-antispam update-configure-anti-spam" [
   let base = ($base_url | default $BASE_URL)
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'domainName' must be non-empty" } }
   let qp = [(serialize-qp "domain_name" $domain_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name)} | format pattern "/mailzones/{domain_name}/antispam") $qp)
+  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name)} | format pattern "/mailzones/{domain_name}/antispam") $qp $auth.query)
   let req_body = {"type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"domain_name": $domain_name} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"domain_name": $domain_name} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Create a catch-all on the mail zone
@@ -1661,12 +2203,23 @@ export def "mailzones-catchall create-catch-list" [
   let base = ($base_url | default $BASE_URL)
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'domainName' must be non-empty" } }
   let qp = [(serialize-qp "domain_name" $domain_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name)} | format pattern "/mailzones/{domain_name}/catchall") $qp)
+  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name)} | format pattern "/mailzones/{domain_name}/catchall") $qp $auth.query)
   let req_body = {"email_address": $email_address} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"domain_name": $domain_name} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"domain_name": $domain_name} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Delete a catch-all on the mail zone
@@ -1693,10 +2246,21 @@ export def "mailzones-catchall delete-catch-list" [
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'domainName' must be non-empty" } }
   if ($email_address | is-empty) { error make --unspanned { msg: "path parameter 'emailAddress' must be non-empty" } }
   let qp = [(serialize-qp "domain_name" $domain_name "scalar") (serialize-qp "email_address" $email_address "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name), email_address: (encode-path-segment $email_address)} | format pattern "/mailzones/{domain_name}/catchall/{email_address}") $qp)
+  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name), email_address: (encode-path-segment $email_address)} | format pattern "/mailzones/{domain_name}/catchall/{email_address}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"domain_name": $domain_name, "email_address": $email_address} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"domain_name": $domain_name, "email_address": $email_address} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Create an extra smtp domain
@@ -1722,12 +2286,23 @@ export def "mailzones-smtpdomains create-smtp-domain" [
   let base = ($base_url | default $BASE_URL)
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'domainName' must be non-empty" } }
   let qp = [(serialize-qp "domain_name" $domain_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name)} | format pattern "/mailzones/{domain_name}/smtpdomains") $qp)
+  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name)} | format pattern "/mailzones/{domain_name}/smtpdomains") $qp $auth.query)
   let req_body = {"hostname": $hostname} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"domain_name": $domain_name} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"domain_name": $domain_name} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Delete an extra smtp domain
@@ -1753,10 +2328,21 @@ export def "mailzones-smtpdomains delete-smtp-domain" [
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'domainName' must be non-empty" } }
   if ($hostname | is-empty) { error make --unspanned { msg: "path parameter 'hostname' must be non-empty" } }
   let qp = [(serialize-qp "domain_name" $domain_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name), hostname: (encode-path-segment $hostname)} | format pattern "/mailzones/{domain_name}/smtpdomains/{hostname}") $qp)
+  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name), hostname: (encode-path-segment $hostname)} | format pattern "/mailzones/{domain_name}/smtpdomains/{hostname}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"domain_name": $domain_name} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"domain_name": $domain_name} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Configure an extra smtp domain
@@ -1784,12 +2370,23 @@ export def "mailzones-smtpdomains update-configure-smtp-domain" [
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'domainName' must be non-empty" } }
   if ($hostname | is-empty) { error make --unspanned { msg: "path parameter 'hostname' must be non-empty" } }
   let qp = [(serialize-qp "domain_name" $domain_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name), hostname: (encode-path-segment $hostname)} | format pattern "/mailzones/{domain_name}/smtpdomains/{hostname}") $qp)
+  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name), hostname: (encode-path-segment $hostname)} | format pattern "/mailzones/{domain_name}/smtpdomains/{hostname}") $qp $auth.query)
   let req_body = {"enabled": $enabled} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"domain_name": $domain_name} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"domain_name": $domain_name} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [202]
 }
 
 # Overview of mysql databases
@@ -1812,10 +2409,21 @@ export def "mysqldatabases get-my-sql-databases" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "skip" $skip "scalar") (serialize-qp "take" $take "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/mysqldatabases" $qp)
+  let full_url = (build-url $base "/mysqldatabases" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"skip": $skip, "take": $take} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"skip": $skip, "take": $take} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a new mysql database
@@ -1839,12 +2447,23 @@ export def "mysqldatabases create-my-sql-database" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/mysqldatabases")
+  let full_url = (build-url $base "/mysqldatabases" $auth.query)
   let req_body = {"account_id": $account_id, "database_name": $database_name, "password": $password} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [202]
 }
 
 # Delete a mysql database
@@ -1868,10 +2487,21 @@ export def "mysqldatabases delete-database" [
   let base = ($base_url | default $BASE_URL)
   if ($database_name | is-empty) { error make --unspanned { msg: "path parameter 'databaseName' must be non-empty" } }
   let qp = [(serialize-qp "database_name" $database_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({database_name: (encode-path-segment $database_name)} | format pattern "/mysqldatabases/{database_name}") $qp)
+  let full_url = (build-url $base ({database_name: (encode-path-segment $database_name)} | format pattern "/mysqldatabases/{database_name}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"database_name": $database_name} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"database_name": $database_name} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Get a specific database
@@ -1895,10 +2525,21 @@ export def "mysqldatabases get-my-sql-database" [
   let base = ($base_url | default $BASE_URL)
   if ($database_name | is-empty) { error make --unspanned { msg: "path parameter 'databaseName' must be non-empty" } }
   let qp = [(serialize-qp "database_name" $database_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({database_name: (encode-path-segment $database_name)} | format pattern "/mysqldatabases/{database_name}") $qp)
+  let full_url = (build-url $base ({database_name: (encode-path-segment $database_name)} | format pattern "/mysqldatabases/{database_name}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"database_name": $database_name} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"database_name": $database_name} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Overview of mysql users
@@ -1922,10 +2563,21 @@ export def "mysqldatabases-users get-database" [
   let base = ($base_url | default $BASE_URL)
   if ($database_name | is-empty) { error make --unspanned { msg: "path parameter 'databaseName' must be non-empty" } }
   let qp = [(serialize-qp "database_name" $database_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({database_name: (encode-path-segment $database_name)} | format pattern "/mysqldatabases/{database_name}/users") $qp)
+  let full_url = (build-url $base ({database_name: (encode-path-segment $database_name)} | format pattern "/mysqldatabases/{database_name}/users") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"database_name": $database_name} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"database_name": $database_name} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a new mysql user
@@ -1952,12 +2604,23 @@ export def "mysqldatabases-users create-my-sql" [
   let base = ($base_url | default $BASE_URL)
   if ($database_name | is-empty) { error make --unspanned { msg: "path parameter 'databaseName' must be non-empty" } }
   let qp = [(serialize-qp "database_name" $database_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({database_name: (encode-path-segment $database_name)} | format pattern "/mysqldatabases/{database_name}/users") $qp)
+  let full_url = (build-url $base ({database_name: (encode-path-segment $database_name)} | format pattern "/mysqldatabases/{database_name}/users") $qp $auth.query)
   let req_body = {"name": $name, "password": $password} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"database_name": $database_name} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"database_name": $database_name} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [202]
 }
 
 # Delete a mysql user
@@ -1984,10 +2647,21 @@ export def "mysqldatabases-users delete-database" [
   if ($database_name | is-empty) { error make --unspanned { msg: "path parameter 'databaseName' must be non-empty" } }
   if ($user_name | is-empty) { error make --unspanned { msg: "path parameter 'userName' must be non-empty" } }
   let qp = [(serialize-qp "database_name" $database_name "scalar") (serialize-qp "user_name" $user_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({database_name: (encode-path-segment $database_name), user_name: (encode-path-segment $user_name)} | format pattern "/mysqldatabases/{database_name}/users/{user_name}") $qp)
+  let full_url = (build-url $base ({database_name: (encode-path-segment $database_name), user_name: (encode-path-segment $user_name)} | format pattern "/mysqldatabases/{database_name}/users/{user_name}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"database_name": $database_name, "user_name": $user_name} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"database_name": $database_name, "user_name": $user_name} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Change password for mysql user
@@ -2016,12 +2690,23 @@ export def "mysqldatabases-users-password update-change-database" [
   if ($database_name | is-empty) { error make --unspanned { msg: "path parameter 'databaseName' must be non-empty" } }
   if ($user_name | is-empty) { error make --unspanned { msg: "path parameter 'userName' must be non-empty" } }
   let qp = [(serialize-qp "database_name" $database_name "scalar") (serialize-qp "user_name" $user_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({database_name: (encode-path-segment $database_name), user_name: (encode-path-segment $user_name)} | format pattern "/mysqldatabases/{database_name}/users/{user_name}/password") $qp)
+  let full_url = (build-url $base ({database_name: (encode-path-segment $database_name), user_name: (encode-path-segment $user_name)} | format pattern "/mysqldatabases/{database_name}/users/{user_name}/password") $qp $auth.query)
   let req_body = {"password": $password} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"database_name": $database_name, "user_name": $user_name} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"database_name": $database_name, "user_name": $user_name} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Enable/disable mysql user
@@ -2050,12 +2735,23 @@ export def "mysqldatabases-users-status update-change-database" [
   if ($database_name | is-empty) { error make --unspanned { msg: "path parameter 'databaseName' must be non-empty" } }
   if ($user_name | is-empty) { error make --unspanned { msg: "path parameter 'userName' must be non-empty" } }
   let qp = [(serialize-qp "database_name" $database_name "scalar") (serialize-qp "user_name" $user_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({database_name: (encode-path-segment $database_name), user_name: (encode-path-segment $user_name)} | format pattern "/mysqldatabases/{database_name}/users/{user_name}/status") $qp)
+  let full_url = (build-url $base ({database_name: (encode-path-segment $database_name), user_name: (encode-path-segment $user_name)} | format pattern "/mysqldatabases/{database_name}/users/{user_name}/status") $qp $auth.query)
   let req_body = {"enabled": $enabled} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"database_name": $database_name, "user_name": $user_name} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"database_name": $database_name, "user_name": $user_name} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Detail of a provisioning job
@@ -2078,10 +2774,21 @@ export def "provisioningjobs get" [
   let base = ($base_url | default $BASE_URL)
   if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'jobId' must be non-empty" } }
   let qp = [(serialize-qp "job_id" $job_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/provisioningjobs/{job_id}") $qp)
+  let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/provisioningjobs/{job_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"job_id": $job_id} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"job_id": $job_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 201]
 }
 
 # Overview of service packs
@@ -2101,10 +2808,21 @@ export def "servicepacks get" [
 ]: nothing -> table<id: int, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/servicepacks")
+  let full_url = (build-url $base "/servicepacks" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Overview of SSH keys
@@ -2127,10 +2845,21 @@ export def "ssh get-list-keys" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "skip" $skip "scalar") (serialize-qp "take" $take "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/ssh" $qp)
+  let full_url = (build-url $base "/ssh" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"skip": $skip, "take": $take} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"skip": $skip, "take": $take} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Overview of SSL certificate requests
@@ -2153,10 +2882,21 @@ export def "sslcertificaterequests get-ssl-certificate-requests" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "skip" $skip "scalar") (serialize-qp "take" $take "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/sslcertificaterequests" $qp)
+  let full_url = (build-url $base "/sslcertificaterequests" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"skip": $skip, "take": $take} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"skip": $skip, "take": $take} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Add a SSL certificate request
@@ -2182,12 +2922,23 @@ export def "sslcertificaterequests create-ssl-certificate-request" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/sslcertificaterequests")
+  let full_url = (build-url $base "/sslcertificaterequests" $auth.query)
   let req_body = {"additional_validation_attributes": $additional_validation_attributes, "certificate_type": $certificate_type, "csr": $csr, "validation_level": $validation_level} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Detail of a SSL certificate request
@@ -2209,10 +2960,21 @@ export def "sslcertificaterequests get-ssl-certificate-request" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/sslcertificaterequests/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/sslcertificaterequests/{id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 303]
 }
 
 # Verify the SSL certificate request domain validations
@@ -2234,10 +2996,21 @@ export def "sslcertificaterequests verify-ssl-certificate-request-domain-validat
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/sslcertificaterequests/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/sslcertificaterequests/{id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req null $insecure $raw $allow_errors $full [202 303]
 }
 
 # Overview of SSL certificates
@@ -2260,10 +3033,21 @@ export def "sslcertificates get-ssl-certificates" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "skip" $skip "scalar") (serialize-qp "take" $take "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/sslcertificates" $qp)
+  let full_url = (build-url $base "/sslcertificates" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"skip": $skip, "take": $take} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"skip": $skip, "take": $take} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Detail of a SSL certificate
@@ -2287,10 +3071,21 @@ export def "sslcertificates get-ssl-certificate" [
   let base = ($base_url | default $BASE_URL)
   if ($sha1_fingerprint | is-empty) { error make --unspanned { msg: "path parameter 'sha1Fingerprint' must be non-empty" } }
   let qp = [(serialize-qp "sha1_fingerprint" $sha1_fingerprint "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({sha1_fingerprint: (encode-path-segment $sha1_fingerprint)} | format pattern "/sslcertificates/{sha1_fingerprint}") $qp)
+  let full_url = (build-url $base ({sha1_fingerprint: (encode-path-segment $sha1_fingerprint)} | format pattern "/sslcertificates/{sha1_fingerprint}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"sha1_fingerprint": $sha1_fingerprint} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"sha1_fingerprint": $sha1_fingerprint} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Download a SSL certificate
@@ -2316,10 +3111,21 @@ export def "sslcertificates-download download-certificate" [
   let base = ($base_url | default $BASE_URL)
   if ($sha1_fingerprint | is-empty) { error make --unspanned { msg: "path parameter 'sha1Fingerprint' must be non-empty" } }
   let qp = [(serialize-qp "sha1_fingerprint" $sha1_fingerprint "scalar") (serialize-qp "file_format" $file_format "scalar") (serialize-qp "password" $password "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({sha1_fingerprint: (encode-path-segment $sha1_fingerprint)} | format pattern "/sslcertificates/{sha1_fingerprint}/download") $qp)
+  let full_url = (build-url $base ({sha1_fingerprint: (encode-path-segment $sha1_fingerprint)} | format pattern "/sslcertificates/{sha1_fingerprint}/download") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"sha1_fingerprint": $sha1_fingerprint, "file_format": $file_format, "password": $password} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"sha1_fingerprint": $sha1_fingerprint, "file_format": $file_format, "password": $password} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Overview of windows hostings
@@ -2342,10 +3148,21 @@ export def "windowshostings get-windows-hostings" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "skip" $skip "scalar") (serialize-qp "take" $take "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/windowshostings" $qp)
+  let full_url = (build-url $base "/windowshostings" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"skip": $skip, "take": $take} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"skip": $skip, "take": $take} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Windows hosting detail
@@ -2369,8 +3186,19 @@ export def "windowshostings get-windows-hosting" [
   let base = ($base_url | default $BASE_URL)
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'domainName' must be non-empty" } }
   let qp = [(serialize-qp "domain_name" $domain_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name)} | format pattern "/windowshostings/{domain_name}") $qp)
+  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name)} | format pattern "/windowshostings/{domain_name}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"domain_name": $domain_name} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"domain_name": $domain_name} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }

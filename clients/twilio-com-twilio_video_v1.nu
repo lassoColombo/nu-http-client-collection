@@ -8,7 +8,7 @@ const BASE_URL = "https://video.twilio.com"
 # `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
 # where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o TWILIO_VIDEO_TOKEN | default "" }
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o TWILIO_VIDEO_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
@@ -42,14 +42,11 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
-# Trick: `url encode --all` over-encodes, then we decode the four unreserved
-# punctuation chars back. Pre-existing %XX sequences in the input survive
-# because `url encode --all` first turns their % into %25.
 def encode-path-segment [v: any]: nothing -> string {
   $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
-# Serialize an array-typed path parameter (issue 49.A). OpenAPI 3 `style: simple`
+# Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
 # (the default for path params) and Swagger 2 `collectionFormat: csv` both join
 # the elements with a literal comma WITHIN the single path segment, each element
 # RFC-3986-encoded individually (so a comma inside an element stays %2C). Without
@@ -60,51 +57,51 @@ def encode-path-array [v: any]: nothing -> string {
   if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
 }
 
-# Build URL from base, path, and optional query string
-def build-url [base: string, path: string, query?: string]: nothing -> string {
+# Build the request URL from base, path, and any number of pre-encoded query
+# fragments (param serializer output and/or the auth query). Each fragment is an
+# `&`-joinable `key=value` string already percent-encoded by its producer; empty
+# fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
+# delimiters are hand-spliced — and any query already on the base URL is merged in.
+def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
   let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
-  let result = ($parsed | upsert path $full_path)
-  if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
+  let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
+  $parsed | upsert path $full_path | upsert query $query | url join
 }
 
-# Build the dry-run record returned by --dry-run. Shape:
-#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
-#    auth: {scheme, location}}
-# `meta` carries logical-form data (the query record by spec name, the pre-serialization
-# body) that do-request itself cannot reconstruct from its wire-format args.
-def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
-  let m = ($meta | default {})
-  {
-    dry_run: true
-    method: $method
-    url: $url
-    query: ($m | get -o query | default {})
-    headers: $auth.headers
-    body: ($m | get -o body)
-    content_type: $content_type
-    timeout: $timeout
-    auth: {scheme: $auth.scheme, location: $auth.location}
-  }
+# Success policy: did this response succeed? Single source of truth, consulted by
+# handle-response and the HEAD header-unwrap. Empty ok_codes means the spec listed
+# none, so fall back to < 400. Otherwise: any 2xx, plus documented success codes.
+def status-ok [status: int, ok_codes: list<int>]: nothing -> bool {
+  if ($ok_codes | is-empty) { $status < 400 } else { ($status >= 200 and $status < 300) or ($status in $ok_codes) }
 }
 
-# Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
-  let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
-  let timeout = ($max_time | default 30min)
-  let ct = ($content_type | default "application/json")
-  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
-  let resp = match $method {
-    "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
-  }
-  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
-  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
+# Unwrap a `--full` HTTP response into the user-facing value. Response arrives
+# via pipeline; ok_codes gates the error throw (see status-ok).
+def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: record -> any {
+  let resp = $in
+  if $allow_errors { return $resp }
+  if not (status-ok $resp.status $ok_codes) { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } }
+  if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
+  if $resp.status == 204 { return null }
+  $resp.body
+}
+
+# GET — bodyless, honours --raw
+def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+}
+
+# POST — body + content-type
+def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# DELETE — body via --data
+def send-delete [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http delete --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url } else { http delete --headers $req.headers --content-type $req.content_type --data $body --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url }
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 def base-url-completer [] { ["https://video.twilio.com"] }
@@ -168,10 +165,21 @@ export def "composition-hooks list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://video.twilio.com")
   let qp = [(serialize-qp "Enabled" $enabled "scalar") (serialize-qp "DateCreatedAfter" $date_created_after "scalar") (serialize-qp "DateCreatedBefore" $date_created_before "scalar") (serialize-qp "FriendlyName" $friendly_name "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v1/CompositionHooks" $qp)
+  let full_url = (build-url $base "/v1/CompositionHooks" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"Enabled": $enabled, "DateCreatedAfter": $date_created_after, "DateCreatedBefore": $date_created_before, "FriendlyName": $friendly_name, "PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"Enabled": $enabled, "DateCreatedAfter": $date_created_after, "DateCreatedBefore": $date_created_before, "FriendlyName": $friendly_name, "PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # POST /v1/CompositionHooks
@@ -201,13 +209,24 @@ export def "composition-hooks create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://video.twilio.com")
-  let full_url = (build-url $base "/v1/CompositionHooks")
+  let full_url = (build-url $base "/v1/CompositionHooks" $auth.query)
   let req_body = {"AudioSources": $audio_sources, "AudioSourcesExcluded": $audio_sources_excluded, "Enabled": $enabled, "Format": $format, "FriendlyName": $friendly_name, "Resolution": $resolution, "StatusCallback": $status_callback, "StatusCallbackMethod": $status_callback_method, "Trim": $trim, "VideoLayout": $video_layout} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/x-www-form-urlencoded"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [201]
 }
 
 # Delete a Recording CompositionHook resource identified by a `CompositionHook SID`.
@@ -229,10 +248,21 @@ export def "composition-hooks delete" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://video.twilio.com")
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
-  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/CompositionHooks/{sid}"))
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/CompositionHooks/{sid}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Returns a single CompositionHook resource identified by a CompositionHook SID.
@@ -254,10 +284,21 @@ export def "composition-hooks get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://video.twilio.com")
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
-  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/CompositionHooks/{sid}"))
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/CompositionHooks/{sid}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # POST /v1/CompositionHooks/{Sid}
@@ -289,13 +330,24 @@ export def "composition-hooks update" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://video.twilio.com")
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
-  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/CompositionHooks/{sid}"))
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/CompositionHooks/{sid}") $auth.query)
   let req_body = {"AudioSources": $audio_sources, "AudioSourcesExcluded": $audio_sources_excluded, "Enabled": $enabled, "Format": $format, "FriendlyName": $friendly_name, "Resolution": $resolution, "StatusCallback": $status_callback, "StatusCallbackMethod": $status_callback_method, "Trim": $trim, "VideoLayout": $video_layout} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/x-www-form-urlencoded"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # GET /v1/CompositionSettings/Default
@@ -314,10 +366,21 @@ export def "composition-settings-default get" [
 ]: nothing -> record<account_sid: string, aws_credentials_sid: string, aws_s3_url: string, aws_storage_enabled: bool, encryption_enabled: bool, encryption_key_sid: string, friendly_name: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://video.twilio.com")
-  let full_url = (build-url $base "/v1/CompositionSettings/Default")
+  let full_url = (build-url $base "/v1/CompositionSettings/Default" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # POST /v1/CompositionSettings/Default
@@ -343,13 +406,24 @@ export def "composition-settings-default create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://video.twilio.com")
-  let full_url = (build-url $base "/v1/CompositionSettings/Default")
+  let full_url = (build-url $base "/v1/CompositionSettings/Default" $auth.query)
   let req_body = {"AwsCredentialsSid": $aws_credentials_sid, "AwsS3Url": $aws_s3_url, "AwsStorageEnabled": $aws_storage_enabled, "EncryptionEnabled": $encryption_enabled, "EncryptionKeySid": $encryption_key_sid, "FriendlyName": $friendly_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/x-www-form-urlencoded"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [201]
 }
 
 # List of all Recording compositions.
@@ -377,10 +451,21 @@ export def "compositions list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://video.twilio.com")
   let qp = [(serialize-qp "Status" $status "scalar") (serialize-qp "DateCreatedAfter" $date_created_after "scalar") (serialize-qp "DateCreatedBefore" $date_created_before "scalar") (serialize-qp "RoomSid" $room_sid "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v1/Compositions" $qp)
+  let full_url = (build-url $base "/v1/Compositions" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"Status": $status, "DateCreatedAfter": $date_created_after, "DateCreatedBefore": $date_created_before, "RoomSid": $room_sid, "PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"Status": $status, "DateCreatedAfter": $date_created_after, "DateCreatedBefore": $date_created_before, "RoomSid": $room_sid, "PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # POST /v1/Compositions
@@ -409,13 +494,24 @@ export def "compositions create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://video.twilio.com")
-  let full_url = (build-url $base "/v1/Compositions")
+  let full_url = (build-url $base "/v1/Compositions" $auth.query)
   let req_body = {"AudioSources": $audio_sources, "AudioSourcesExcluded": $audio_sources_excluded, "Format": $format, "Resolution": $resolution, "RoomSid": $room_sid, "StatusCallback": $status_callback, "StatusCallbackMethod": $status_callback_method, "Trim": $trim, "VideoLayout": $video_layout} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/x-www-form-urlencoded"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [201]
 }
 
 # Delete a Recording Composition resource identified by a Composition SID.
@@ -437,10 +533,21 @@ export def "compositions delete" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://video.twilio.com")
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
-  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/Compositions/{sid}"))
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/Compositions/{sid}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Returns a single Composition resource identified by a Composition SID.
@@ -462,10 +569,21 @@ export def "compositions get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://video.twilio.com")
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
-  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/Compositions/{sid}"))
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/Compositions/{sid}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /v1/RecordingSettings/Default
@@ -484,10 +602,21 @@ export def "recording-settings-default get" [
 ]: nothing -> record<account_sid: string, aws_credentials_sid: string, aws_s3_url: string, aws_storage_enabled: bool, encryption_enabled: bool, encryption_key_sid: string, friendly_name: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://video.twilio.com")
-  let full_url = (build-url $base "/v1/RecordingSettings/Default")
+  let full_url = (build-url $base "/v1/RecordingSettings/Default" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # POST /v1/RecordingSettings/Default
@@ -513,13 +642,24 @@ export def "recording-settings-default create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://video.twilio.com")
-  let full_url = (build-url $base "/v1/RecordingSettings/Default")
+  let full_url = (build-url $base "/v1/RecordingSettings/Default" $auth.query)
   let req_body = {"AwsCredentialsSid": $aws_credentials_sid, "AwsS3Url": $aws_s3_url, "AwsStorageEnabled": $aws_storage_enabled, "EncryptionEnabled": $encryption_enabled, "EncryptionKeySid": $encryption_key_sid, "FriendlyName": $friendly_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/x-www-form-urlencoded"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [201]
 }
 
 # List of all Track recordings.
@@ -549,10 +689,21 @@ export def "recordings list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://video.twilio.com")
   let qp = [(serialize-qp "Status" $status "scalar") (serialize-qp "SourceSid" $source_sid "scalar") (serialize-qp "GroupingSid" $grouping_sid "multi") (serialize-qp "DateCreatedAfter" $date_created_after "scalar") (serialize-qp "DateCreatedBefore" $date_created_before "scalar") (serialize-qp "MediaType" $media_type "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v1/Recordings" $qp)
+  let full_url = (build-url $base "/v1/Recordings" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"Status": $status, "SourceSid": $source_sid, "GroupingSid": $grouping_sid, "DateCreatedAfter": $date_created_after, "DateCreatedBefore": $date_created_before, "MediaType": $media_type, "PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"Status": $status, "SourceSid": $source_sid, "GroupingSid": $grouping_sid, "DateCreatedAfter": $date_created_after, "DateCreatedBefore": $date_created_before, "MediaType": $media_type, "PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Delete a Recording resource identified by a Recording SID.
@@ -574,10 +725,21 @@ export def "recordings delete" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://video.twilio.com")
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
-  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/Recordings/{sid}"))
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/Recordings/{sid}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Returns a single Recording resource identified by a Recording SID.
@@ -599,10 +761,21 @@ export def "recordings get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://video.twilio.com")
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
-  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/Recordings/{sid}"))
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/Recordings/{sid}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /v1/Rooms
@@ -629,10 +802,21 @@ export def "rooms list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://video.twilio.com")
   let qp = [(serialize-qp "Status" $status "scalar") (serialize-qp "UniqueName" $unique_name "scalar") (serialize-qp "DateCreatedAfter" $date_created_after "scalar") (serialize-qp "DateCreatedBefore" $date_created_before "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v1/Rooms" $qp)
+  let full_url = (build-url $base "/v1/Rooms" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"Status": $status, "UniqueName": $unique_name, "DateCreatedAfter": $date_created_after, "DateCreatedBefore": $date_created_before, "PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"Status": $status, "UniqueName": $unique_name, "DateCreatedAfter": $date_created_after, "DateCreatedBefore": $date_created_before, "PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # POST /v1/Rooms
@@ -667,13 +851,24 @@ export def "rooms create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://video.twilio.com")
-  let full_url = (build-url $base "/v1/Rooms")
+  let full_url = (build-url $base "/v1/Rooms" $auth.query)
   let req_body = {"AudioOnly": $audio_only, "EmptyRoomTimeout": $empty_room_timeout, "EnableTurn": $enable_turn, "LargeRoom": $large_room, "MaxParticipantDuration": $max_participant_duration, "MaxParticipants": $max_participants, "MediaRegion": $media_region, "RecordParticipantsOnConnect": $record_participants_on_connect, "RecordingRules": $recording_rules, "StatusCallback": $status_callback, "StatusCallbackMethod": $status_callback_method, "Type": $type, "UniqueName": $unique_name, "UnusedRoomTimeout": $unused_room_timeout, "VideoCodecs": $video_codecs} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/x-www-form-urlencoded"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [201]
 }
 
 # GET /v1/Rooms/{RoomSid}/Participants
@@ -702,10 +897,21 @@ export def "rooms-participants list" [
   let base = ($base_url | default "https://video.twilio.com")
   if ($room_sid | is-empty) { error make --unspanned { msg: "path parameter 'RoomSid' must be non-empty" } }
   let qp = [(serialize-qp "Status" $status "scalar") (serialize-qp "Identity" $identity "scalar") (serialize-qp "DateCreatedAfter" $date_created_after "scalar") (serialize-qp "DateCreatedBefore" $date_created_before "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({room_sid: (encode-path-segment $room_sid)} | format pattern "/v1/Rooms/{room_sid}/Participants") $qp)
+  let full_url = (build-url $base ({room_sid: (encode-path-segment $room_sid)} | format pattern "/v1/Rooms/{room_sid}/Participants") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"Status": $status, "Identity": $identity, "DateCreatedAfter": $date_created_after, "DateCreatedBefore": $date_created_before, "PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"Status": $status, "Identity": $identity, "DateCreatedAfter": $date_created_after, "DateCreatedBefore": $date_created_before, "PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns a list of tracks associated with a given Participant. Only `currently` Published Tracks are in the list resource.
@@ -733,10 +939,21 @@ export def "rooms-participants-published-tracks list" [
   if ($room_sid | is-empty) { error make --unspanned { msg: "path parameter 'RoomSid' must be non-empty" } }
   if ($participant_sid | is-empty) { error make --unspanned { msg: "path parameter 'ParticipantSid' must be non-empty" } }
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({room_sid: (encode-path-segment $room_sid), participant_sid: (encode-path-segment $participant_sid)} | format pattern "/v1/Rooms/{room_sid}/Participants/{participant_sid}/PublishedTracks") $qp)
+  let full_url = (build-url $base ({room_sid: (encode-path-segment $room_sid), participant_sid: (encode-path-segment $participant_sid)} | format pattern "/v1/Rooms/{room_sid}/Participants/{participant_sid}/PublishedTracks") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns a single Track resource represented by TrackName or SID.
@@ -762,10 +979,21 @@ export def "rooms-participants-published-tracks get" [
   if ($room_sid | is-empty) { error make --unspanned { msg: "path parameter 'RoomSid' must be non-empty" } }
   if ($participant_sid | is-empty) { error make --unspanned { msg: "path parameter 'ParticipantSid' must be non-empty" } }
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
-  let full_url = (build-url $base ({room_sid: (encode-path-segment $room_sid), participant_sid: (encode-path-segment $participant_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Rooms/{room_sid}/Participants/{participant_sid}/PublishedTracks/{sid}"))
+  let full_url = (build-url $base ({room_sid: (encode-path-segment $room_sid), participant_sid: (encode-path-segment $participant_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Rooms/{room_sid}/Participants/{participant_sid}/PublishedTracks/{sid}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns a list of Subscribe Rules for the Participant.
@@ -789,10 +1017,21 @@ export def "rooms-participants-subscribe-rules get" [
   let base = ($base_url | default "https://video.twilio.com")
   if ($room_sid | is-empty) { error make --unspanned { msg: "path parameter 'RoomSid' must be non-empty" } }
   if ($participant_sid | is-empty) { error make --unspanned { msg: "path parameter 'ParticipantSid' must be non-empty" } }
-  let full_url = (build-url $base ({room_sid: (encode-path-segment $room_sid), participant_sid: (encode-path-segment $participant_sid)} | format pattern "/v1/Rooms/{room_sid}/Participants/{participant_sid}/SubscribeRules"))
+  let full_url = (build-url $base ({room_sid: (encode-path-segment $room_sid), participant_sid: (encode-path-segment $participant_sid)} | format pattern "/v1/Rooms/{room_sid}/Participants/{participant_sid}/SubscribeRules") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update the Subscribe Rules for the Participant
@@ -818,13 +1057,24 @@ export def "rooms-participants-subscribe-rules update" [
   let base = ($base_url | default "https://video.twilio.com")
   if ($room_sid | is-empty) { error make --unspanned { msg: "path parameter 'RoomSid' must be non-empty" } }
   if ($participant_sid | is-empty) { error make --unspanned { msg: "path parameter 'ParticipantSid' must be non-empty" } }
-  let full_url = (build-url $base ({room_sid: (encode-path-segment $room_sid), participant_sid: (encode-path-segment $participant_sid)} | format pattern "/v1/Rooms/{room_sid}/Participants/{participant_sid}/SubscribeRules"))
+  let full_url = (build-url $base ({room_sid: (encode-path-segment $room_sid), participant_sid: (encode-path-segment $participant_sid)} | format pattern "/v1/Rooms/{room_sid}/Participants/{participant_sid}/SubscribeRules") $auth.query)
   let req_body = {"Rules": $rules} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/x-www-form-urlencoded"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [202]
 }
 
 # Returns a list of tracks that are subscribed for the participant.
@@ -852,10 +1102,21 @@ export def "rooms-participants-subscribed-tracks list" [
   if ($room_sid | is-empty) { error make --unspanned { msg: "path parameter 'RoomSid' must be non-empty" } }
   if ($participant_sid | is-empty) { error make --unspanned { msg: "path parameter 'ParticipantSid' must be non-empty" } }
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({room_sid: (encode-path-segment $room_sid), participant_sid: (encode-path-segment $participant_sid)} | format pattern "/v1/Rooms/{room_sid}/Participants/{participant_sid}/SubscribedTracks") $qp)
+  let full_url = (build-url $base ({room_sid: (encode-path-segment $room_sid), participant_sid: (encode-path-segment $participant_sid)} | format pattern "/v1/Rooms/{room_sid}/Participants/{participant_sid}/SubscribedTracks") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns a single Track resource represented by `track_sid`. Note: This is one resource with the Video API that requires a SID, be Track Name on the subscriber side is not guaranteed to be unique.
@@ -881,10 +1142,21 @@ export def "rooms-participants-subscribed-tracks get" [
   if ($room_sid | is-empty) { error make --unspanned { msg: "path parameter 'RoomSid' must be non-empty" } }
   if ($participant_sid | is-empty) { error make --unspanned { msg: "path parameter 'ParticipantSid' must be non-empty" } }
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
-  let full_url = (build-url $base ({room_sid: (encode-path-segment $room_sid), participant_sid: (encode-path-segment $participant_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Rooms/{room_sid}/Participants/{participant_sid}/SubscribedTracks/{sid}"))
+  let full_url = (build-url $base ({room_sid: (encode-path-segment $room_sid), participant_sid: (encode-path-segment $participant_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Rooms/{room_sid}/Participants/{participant_sid}/SubscribedTracks/{sid}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /v1/Rooms/{RoomSid}/Participants/{Sid}
@@ -907,10 +1179,21 @@ export def "rooms-participants get" [
   let base = ($base_url | default "https://video.twilio.com")
   if ($room_sid | is-empty) { error make --unspanned { msg: "path parameter 'RoomSid' must be non-empty" } }
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
-  let full_url = (build-url $base ({room_sid: (encode-path-segment $room_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Rooms/{room_sid}/Participants/{sid}"))
+  let full_url = (build-url $base ({room_sid: (encode-path-segment $room_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Rooms/{room_sid}/Participants/{sid}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # POST /v1/Rooms/{RoomSid}/Participants/{Sid}
@@ -935,13 +1218,24 @@ export def "rooms-participants update" [
   let base = ($base_url | default "https://video.twilio.com")
   if ($room_sid | is-empty) { error make --unspanned { msg: "path parameter 'RoomSid' must be non-empty" } }
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
-  let full_url = (build-url $base ({room_sid: (encode-path-segment $room_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Rooms/{room_sid}/Participants/{sid}"))
+  let full_url = (build-url $base ({room_sid: (encode-path-segment $room_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Rooms/{room_sid}/Participants/{sid}") $auth.query)
   let req_body = {"Status": $status} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/x-www-form-urlencoded"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # POST /v1/Rooms/{RoomSid}/Participants/{Sid}/Anonymize
@@ -964,10 +1258,21 @@ export def "rooms-participants-anonymize update" [
   let base = ($base_url | default "https://video.twilio.com")
   if ($room_sid | is-empty) { error make --unspanned { msg: "path parameter 'RoomSid' must be non-empty" } }
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
-  let full_url = (build-url $base ({room_sid: (encode-path-segment $room_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Rooms/{room_sid}/Participants/{sid}/Anonymize"))
+  let full_url = (build-url $base ({room_sid: (encode-path-segment $room_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Rooms/{room_sid}/Participants/{sid}/Anonymize") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Returns a list of Recording Rules for the Room.
@@ -989,10 +1294,21 @@ export def "rooms-recording-rules get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://video.twilio.com")
   if ($room_sid | is-empty) { error make --unspanned { msg: "path parameter 'RoomSid' must be non-empty" } }
-  let full_url = (build-url $base ({room_sid: (encode-path-segment $room_sid)} | format pattern "/v1/Rooms/{room_sid}/RecordingRules"))
+  let full_url = (build-url $base ({room_sid: (encode-path-segment $room_sid)} | format pattern "/v1/Rooms/{room_sid}/RecordingRules") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update the Recording Rules for the Room
@@ -1016,13 +1332,24 @@ export def "rooms-recording-rules update" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://video.twilio.com")
   if ($room_sid | is-empty) { error make --unspanned { msg: "path parameter 'RoomSid' must be non-empty" } }
-  let full_url = (build-url $base ({room_sid: (encode-path-segment $room_sid)} | format pattern "/v1/Rooms/{room_sid}/RecordingRules"))
+  let full_url = (build-url $base ({room_sid: (encode-path-segment $room_sid)} | format pattern "/v1/Rooms/{room_sid}/RecordingRules") $auth.query)
   let req_body = {"Rules": $rules} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/x-www-form-urlencoded"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [202]
 }
 
 # GET /v1/Rooms/{RoomSid}/Recordings
@@ -1051,10 +1378,21 @@ export def "rooms-recordings list" [
   let base = ($base_url | default "https://video.twilio.com")
   if ($room_sid | is-empty) { error make --unspanned { msg: "path parameter 'RoomSid' must be non-empty" } }
   let qp = [(serialize-qp "Status" $status "scalar") (serialize-qp "SourceSid" $source_sid "scalar") (serialize-qp "DateCreatedAfter" $date_created_after "scalar") (serialize-qp "DateCreatedBefore" $date_created_before "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({room_sid: (encode-path-segment $room_sid)} | format pattern "/v1/Rooms/{room_sid}/Recordings") $qp)
+  let full_url = (build-url $base ({room_sid: (encode-path-segment $room_sid)} | format pattern "/v1/Rooms/{room_sid}/Recordings") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"Status": $status, "SourceSid": $source_sid, "DateCreatedAfter": $date_created_after, "DateCreatedBefore": $date_created_before, "PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"Status": $status, "SourceSid": $source_sid, "DateCreatedAfter": $date_created_after, "DateCreatedBefore": $date_created_before, "PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # DELETE /v1/Rooms/{RoomSid}/Recordings/{Sid}
@@ -1077,10 +1415,21 @@ export def "rooms-recordings delete" [
   let base = ($base_url | default "https://video.twilio.com")
   if ($room_sid | is-empty) { error make --unspanned { msg: "path parameter 'RoomSid' must be non-empty" } }
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
-  let full_url = (build-url $base ({room_sid: (encode-path-segment $room_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Rooms/{room_sid}/Recordings/{sid}"))
+  let full_url = (build-url $base ({room_sid: (encode-path-segment $room_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Rooms/{room_sid}/Recordings/{sid}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # GET /v1/Rooms/{RoomSid}/Recordings/{Sid}
@@ -1103,10 +1452,21 @@ export def "rooms-recordings get" [
   let base = ($base_url | default "https://video.twilio.com")
   if ($room_sid | is-empty) { error make --unspanned { msg: "path parameter 'RoomSid' must be non-empty" } }
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
-  let full_url = (build-url $base ({room_sid: (encode-path-segment $room_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Rooms/{room_sid}/Recordings/{sid}"))
+  let full_url = (build-url $base ({room_sid: (encode-path-segment $room_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Rooms/{room_sid}/Recordings/{sid}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /v1/Rooms/{Sid}
@@ -1127,10 +1487,21 @@ export def "rooms get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://video.twilio.com")
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
-  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/Rooms/{sid}"))
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/Rooms/{sid}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # POST /v1/Rooms/{Sid}
@@ -1153,11 +1524,22 @@ export def "rooms update" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://video.twilio.com")
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
-  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/Rooms/{sid}"))
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/Rooms/{sid}") $auth.query)
   let req_body = {"Status": $status} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/x-www-form-urlencoded"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }

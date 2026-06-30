@@ -8,7 +8,7 @@ const BASE_URL = "https://api.avaza.com"
 # `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
 # where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o AVAZA_API_DOCUMENTATION_TOKEN | default "" }
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o AVAZA_API_DOCUMENTATION_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
@@ -41,14 +41,11 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
-# Trick: `url encode --all` over-encodes, then we decode the four unreserved
-# punctuation chars back. Pre-existing %XX sequences in the input survive
-# because `url encode --all` first turns their % into %25.
 def encode-path-segment [v: any]: nothing -> string {
   $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
-# Serialize an array-typed path parameter (issue 49.A). OpenAPI 3 `style: simple`
+# Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
 # (the default for path params) and Swagger 2 `collectionFormat: csv` both join
 # the elements with a literal comma WITHIN the single path segment, each element
 # RFC-3986-encoded individually (so a comma inside an element stays %2C). Without
@@ -59,60 +56,66 @@ def encode-path-array [v: any]: nothing -> string {
   if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
 }
 
-# Build URL from base, path, and optional query string
-def build-url [base: string, path: string, query?: string]: nothing -> string {
+# Build the request URL from base, path, and any number of pre-encoded query
+# fragments (param serializer output and/or the auth query). Each fragment is an
+# `&`-joinable `key=value` string already percent-encoded by its producer; empty
+# fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
+# delimiters are hand-spliced — and any query already on the base URL is merged in.
+def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
   let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
-  let result = ($parsed | upsert path $full_path)
-  if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
+  let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
+  $parsed | upsert path $full_path | upsert query $query | url join
 }
 
-# Build the dry-run record returned by --dry-run. Shape:
-#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
-#    auth: {scheme, location}}
-# `meta` carries logical-form data (the query record by spec name, the pre-serialization
-# body) that do-request itself cannot reconstruct from its wire-format args.
-def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
-  let m = ($meta | default {})
-  {
-    dry_run: true
-    method: $method
-    url: $url
-    query: ($m | get -o query | default {})
-    headers: $auth.headers
-    body: ($m | get -o body)
-    content_type: $content_type
-    timeout: $timeout
-    auth: {scheme: $auth.scheme, location: $auth.location}
-  }
+# Success policy: did this response succeed? Single source of truth, consulted by
+# handle-response and the HEAD header-unwrap. Empty ok_codes means the spec listed
+# none, so fall back to < 400. Otherwise: any 2xx, plus documented success codes.
+def status-ok [status: int, ok_codes: list<int>]: nothing -> bool {
+  if ($ok_codes | is-empty) { $status < 400 } else { ($status >= 200 and $status < 300) or ($status in $ok_codes) }
 }
 
-# Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
-  let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
-  let timeout = ($max_time | default 30min)
-  let ct = ($content_type | default "application/json")
-  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
-  let resp = match $method {
-    "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
-  }
-  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
-  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
+# Unwrap a `--full` HTTP response into the user-facing value. Response arrives
+# via pipeline; ok_codes gates the error throw (see status-ok).
+def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: record -> any {
+  let resp = $in
+  if $allow_errors { return $resp }
+  if not (status-ok $resp.status $ok_codes) { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } }
+  if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
+  if $resp.status == 204 { return null }
+  $resp.body
+}
+
+# GET — bodyless, honours --raw
+def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+}
+
+# POST — body + content-type
+def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# PUT — body + content-type
+def send-put [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http put --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http put --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# DELETE — body via --data
+def send-delete [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http delete --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url } else { http delete --headers $req.headers --content-type $req.content_type --data $body --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url }
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # Build a `multipart/form-data` envelope per RFC 7578. `file_fields` lists
 # the field names whose value should be read from disk as bytes; every
 # other field is sent as a text part (records/lists JSON-stringified).
-# Returns {content_type, body} ready to pass to `do-request`.
+# Returns {content_type, body}.
 # When `$dry_run` is true, file fields are NOT read from disk — they emit
 # an empty-bytes placeholder so callers can inspect the request shape
-# without the file existing on disk (issue 11.B).
+# without the file existing on disk.
 def build-multipart-body [parts: record, file_fields: list<string>, dry_run: bool = false]: nothing -> record {
   let boundary = $"----nu-(random chars --length 24)"
   let crlf = "\r\n"
@@ -193,12 +196,23 @@ export def "schedule-series-add-booking create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/ScheduleSeries/AddBooking")
+  let full_url = (build-url $base "/ScheduleSeries/AddBooking" $auth.query)
   let req_body = {"CategoryIDFK": $category_idfk, "DurationType": $duration_type, "EndDate": $end_date, "HoursPerDay": $hours_per_day, "Notes": $notes, "ProjectIDFK": $project_idfk, "ScheduleOnDaysOff": $schedule_on_days_off, "StartDate": $start_date, "TaskIDFK": $task_idfk, "TotalDuration": $total_duration, "UserIDFK": $user_idfk} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Create new Leave Booking
@@ -227,12 +241,23 @@ export def "schedule-series-add-leave create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/ScheduleSeries/AddLeave")
+  let full_url = (build-url $base "/ScheduleSeries/AddLeave" $auth.query)
   let req_body = {"LeaveEndDate": $leave_end_date, "LeaveHoursPerDay": $leave_hours_per_day, "LeaveNotes": $leave_notes, "LeaveNotify": $leave_notify, "LeaveStartDate": $leave_start_date, "LeaveTypeIDFK": $leave_type_idfk, "LeaveUserIDFK": $leave_user_idfk} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Edit Booking
@@ -266,12 +291,23 @@ export def "schedule-series-edit-booking update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/ScheduleSeries/EditBooking")
+  let full_url = (build-url $base "/ScheduleSeries/EditBooking" $auth.query)
   let req_body = {"CategoryIDFK": $category_idfk, "DurationType": $duration_type, "EndDate": $end_date, "HoursPerDay": $hours_per_day, "Notes": $notes, "ProjectIDFK": $project_idfk, "ScheduleOnDaysOff": $schedule_on_days_off, "ScheduleSeriesID": $schedule_series_id, "StartDate": $start_date, "TaskIDFK": $task_idfk, "TotalDuration": $total_duration, "UserIDFK": $user_idfk} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Edit Leave Booking
@@ -300,12 +336,23 @@ export def "schedule-series-edit-leave update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/ScheduleSeries/EditLeave")
+  let full_url = (build-url $base "/ScheduleSeries/EditLeave" $auth.query)
   let req_body = {"EndDate": $end_date, "HoursPerDay": $hours_per_day, "LeaveTypeIDFK": $leave_type_idfk, "Notes": $notes, "ScheduleSeriesID": $schedule_series_id, "StartDate": $start_date, "UserIDFK": $user_idfk} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Account Details
@@ -326,10 +373,21 @@ export def "account get" [
 ]: nothing -> record<AccountEmail: string, AccountID: int, AllowHidingCompletedTasksOnTimesheet: bool, BrandPrimaryColor: string, BrandPrimaryColorLuminance: string, CompanyName: string, CurrentServerTimeISO: string, DefaultCurrencyCode: string, ExpenseApprovalRequired: bool, LockApprovedExpenses: bool, LockApprovedTimesheets: bool, SC: string, Subdomain: string, TimesheetDayOfWeek: int, TimesheetDisplayFormatCode: string, WeeklyTimesheetReminder: bool, has24HourTimesheetFormat: bool, hasStartEndTimesheets: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/Account")
+  let full_url = (build-url $base "/api/Account" $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets list of Bills
@@ -356,10 +414,21 @@ export def "bill list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "UpdatedAfter" $updated_after "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "Sort" $qp_sort "scalar") (serialize-qp "CompanyIDFK" $company_idfk "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/Bill" $qp)
+  let full_url = (build-url $base "/api/Bill" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"UpdatedAfter": $updated_after, "pageSize": $page_size, "pageNumber": $page_number, "Sort": $qp_sort, "CompanyIDFK": $company_idfk} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"UpdatedAfter": $updated_after, "pageSize": $page_size, "pageNumber": $page_number, "Sort": $qp_sort, "CompanyIDFK": $company_idfk} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a new draft Bill
@@ -400,12 +469,23 @@ export def "bill create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/Bill")
+  let full_url = (build-url $base "/api/Bill" $auth.query)
   let req_body = {"BillNumber": $bill_number, "BillTemplateIDFK": $bill_template_idfk, "CompanyIDFK": $company_idfk, "CompanyName": $company_name, "CurrencyCode": $currency_code, "DateIssued": $date_issued, "DueDate": $due_date, "Email": $email, "ExchangeRate": $exchange_rate, "Firstname": $firstname, "Lastname": $lastname, "LineItems": $line_items, "Notes": $notes, "PaymentTerms": $payment_terms, "Subject": $subject, "SupplierPONumber": $supplier_po_number, "TransactionPrefix": $transaction_prefix, "TransactionTaxConfigCode": $transaction_tax_config_code} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Gets a Bill by Bill ID
@@ -428,10 +508,21 @@ export def "bill get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Bill/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Bill/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Gets list of Bill Payments
@@ -456,10 +547,21 @@ export def "bill-payment list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "UpdatedAfter" $updated_after "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/BillPayment" $qp)
+  let full_url = (build-url $base "/api/BillPayment" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"UpdatedAfter": $updated_after, "pageSize": $page_size, "pageNumber": $page_number} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"UpdatedAfter": $updated_after, "pageSize": $page_size, "pageNumber": $page_number} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create new Bill Payment and optionally assign payment allocations to Bills
@@ -493,12 +595,23 @@ export def "bill-payment create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/BillPayment")
+  let full_url = (build-url $base "/api/BillPayment" $auth.query)
   let req_body = {"Amount": $amount, "CompanyIDFK": $company_idfk, "CurrencyCode": $currency_code, "DateIssued": $date_issued, "ExchangeRate": $exchange_rate, "Notes": $notes, "PaymentAllocations": $payment_allocations, "PaymentNumber": $payment_number, "PaymentProviderCode": $payment_provider_code, "TransactionPrefix": $transaction_prefix, "TransactionReference": $transaction_reference} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Gets a Bill Payment by Payment Transaction ID
@@ -521,10 +634,21 @@ export def "bill-payment get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/BillPayment/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/BillPayment/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets list of Companies
@@ -550,10 +674,21 @@ export def "company list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "UpdatedAfter" $updated_after "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "Sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/Company" $qp)
+  let full_url = (build-url $base "/api/Company" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"UpdatedAfter": $updated_after, "pageSize": $page_size, "pageNumber": $page_number, "Sort": $qp_sort} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"UpdatedAfter": $updated_after, "pageSize": $page_size, "pageNumber": $page_number, "Sort": $qp_sort} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a Company
@@ -588,12 +723,23 @@ export def "company create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/Company")
+  let full_url = (build-url $base "/api/Company" $auth.query)
   let req_body = {"BillingAddress": $billing_address, "BillingAddressCity": $billing_address_city, "BillingAddressLine": $billing_address_line, "BillingAddressPostCode": $billing_address_post_code, "BillingAddressState": $billing_address_state, "BillingCountryCode": $billing_country_code, "Comments": $comments, "CompanyName": $company_name, "CurrencyCode": $currency_code, "Fax": $fax, "Phone": $phone, "TaxNumber": $tax_number, "website": $website} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Update a Company record.
@@ -629,12 +775,23 @@ export def "company update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/Company")
+  let full_url = (build-url $base "/api/Company" $auth.query)
   let req_body = {"BillingAddress": $billing_address, "BillingAddressCity": $billing_address_city, "BillingAddressLine": $billing_address_line, "BillingAddressPostCode": $billing_address_post_code, "BillingAddressState": $billing_address_state, "BillingCountryCode": $billing_country_code, "Comments": $comments, "CompanyID": $company_id, "CompanyName": $company_name, "Fax": $fax, "FieldsToUpdate": $fields_to_update, "Phone": $phone, "TaxNumber": $tax_number, "website": $website} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Gets minimal list of Companies.
@@ -659,10 +816,21 @@ export def "company-lookup get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "search" $search "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/Company/Lookup" $qp)
+  let full_url = (build-url $base "/api/Company/Lookup" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"pageSize": $page_size, "pageNumber": $page_number, "search": $search} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"pageSize": $page_size, "pageNumber": $page_number, "search": $search} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets Company by Company ID
@@ -685,10 +853,21 @@ export def "company get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Company/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Company/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets list of Contacts
@@ -715,10 +894,21 @@ export def "contact list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "UpdatedAfter" $updated_after "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "Sort" $qp_sort "scalar") (serialize-qp "CompanyIDFK" $company_idfk "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/Contact" $qp)
+  let full_url = (build-url $base "/api/Contact" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"UpdatedAfter": $updated_after, "pageSize": $page_size, "pageNumber": $page_number, "Sort": $qp_sort, "CompanyIDFK": $company_idfk} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"UpdatedAfter": $updated_after, "pageSize": $page_size, "pageNumber": $page_number, "Sort": $qp_sort, "CompanyIDFK": $company_idfk} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a Contact
@@ -756,12 +946,23 @@ export def "contact create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/Contact")
+  let full_url = (build-url $base "/api/Contact" $auth.query)
   let req_body = {"CompanyBillingAddress": $company_billing_address, "CompanyBillingAddressCity": $company_billing_address_city, "CompanyBillingAddressCountryCode": $company_billing_address_country_code, "CompanyBillingAddressLine": $company_billing_address_line, "CompanyBillingAddressPostCode": $company_billing_address_post_code, "CompanyBillingAddressState": $company_billing_address_state, "CompanyIDFK": $company_idfk, "CompanyName": $company_name, "ContactEmail": $contact_email, "CurrencyCode": $currency_code, "Firstname": $firstname, "Lastname": $lastname, "Mobile": $mobile, "Phone": $phone, "PositionTitle": $position_title, "UpdateExisting": $update_existing} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Gets Contact by Contact ID
@@ -784,10 +985,21 @@ export def "contact get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Contact/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Contact/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets list of CreditNotes
@@ -812,10 +1024,21 @@ export def "credit-note list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "UpdatedAfter" $updated_after "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/CreditNote" $qp)
+  let full_url = (build-url $base "/api/CreditNote" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"UpdatedAfter": $updated_after, "pageSize": $page_size, "pageNumber": $page_number} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"UpdatedAfter": $updated_after, "pageSize": $page_size, "pageNumber": $page_number} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets Credit Note by CreditNoteID
@@ -838,10 +1061,21 @@ export def "credit-note get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/CreditNote/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/CreditNote/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets list of Currencies
@@ -862,10 +1096,21 @@ export def "currency get" [
 ]: nothing -> record<Currencies: table<CurrencyCode: string, DecimalPlaces: int, Name: string, Symbol: string, Symbol2: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/Currency")
+  let full_url = (build-url $base "/api/Currency" $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets list of Estimates
@@ -892,10 +1137,21 @@ export def "estimate list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "UpdatedAfter" $updated_after "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "Sort" $qp_sort "scalar") (serialize-qp "CompanyIDFK" $company_idfk "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/Estimate" $qp)
+  let full_url = (build-url $base "/api/Estimate" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"UpdatedAfter": $updated_after, "pageSize": $page_size, "pageNumber": $page_number, "Sort": $qp_sort, "CompanyIDFK": $company_idfk} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"UpdatedAfter": $updated_after, "pageSize": $page_size, "pageNumber": $page_number, "Sort": $qp_sort, "CompanyIDFK": $company_idfk} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a new draft Estimate
@@ -935,12 +1191,23 @@ export def "estimate create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/Estimate")
+  let full_url = (build-url $base "/api/Estimate" $auth.query)
   let req_body = {"CompanyIDFK": $company_idfk, "CompanyName": $company_name, "CurrencyCode": $currency_code, "CustomerPONumber": $customer_po_number, "DateIssued": $date_issued, "DueDate": $due_date, "Email": $email, "EstimateNumber": $estimate_number, "EstimatePrefix": $estimate_prefix, "EstimateTaxConfigCode": $estimate_tax_config_code, "ExchangeRate": $exchange_rate, "Firstname": $firstname, "InvoiceTemplateIDFK": $invoice_template_idfk, "Lastname": $lastname, "LineItems": $line_items, "Notes": $notes, "Subject": $subject} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Gets Estimate by Estimate ID
@@ -963,10 +1230,21 @@ export def "estimate get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Estimate/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Estimate/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Delete a Timesheet Entry
@@ -989,12 +1267,23 @@ export def "expense delete" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/Expense")
+  let full_url = (build-url $base "/api/Expense" $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Gets list of Expenses
@@ -1033,10 +1322,21 @@ export def "expense list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "UpdatedAfter" $updated_after "scalar") (serialize-qp "ExpenseDateFrom" $expense_date_from "scalar") (serialize-qp "ExpenseDateTo" $expense_date_to "scalar") (serialize-qp "UserEmail" $user_email "scalar") (serialize-qp "UserID" $user_id "scalar") (serialize-qp "CategoryName" $category_name "scalar") (serialize-qp "CustomerID" $customer_id "scalar") (serialize-qp "ProjectID" $project_id "scalar") (serialize-qp "isChargeable" $is_chargeable "scalar") (serialize-qp "isInvoiced" $is_invoiced "scalar") (serialize-qp "ExpenseReimbursementIDFK" $expense_reimbursement_idfk "scalar") (serialize-qp "ExpensePaymentMethodIDFK" $expense_payment_method_idfk "scalar") (serialize-qp "ExpenseApprovalStatusCode" $expense_approval_status_code "scalar") (serialize-qp "Search" $search "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "Sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/Expense" $qp)
+  let full_url = (build-url $base "/api/Expense" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"UpdatedAfter": $updated_after, "ExpenseDateFrom": $expense_date_from, "ExpenseDateTo": $expense_date_to, "UserEmail": $user_email, "UserID": $user_id, "CategoryName": $category_name, "CustomerID": $customer_id, "ProjectID": $project_id, "isChargeable": $is_chargeable, "isInvoiced": $is_invoiced, "ExpenseReimbursementIDFK": $expense_reimbursement_idfk, "ExpensePaymentMethodIDFK": $expense_payment_method_idfk, "ExpenseApprovalStatusCode": $expense_approval_status_code, "Search": $search, "pageSize": $page_size, "pageNumber": $page_number, "Sort": $qp_sort} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"UpdatedAfter": $updated_after, "ExpenseDateFrom": $expense_date_from, "ExpenseDateTo": $expense_date_to, "UserEmail": $user_email, "UserID": $user_id, "CategoryName": $category_name, "CustomerID": $customer_id, "ProjectID": $project_id, "isChargeable": $is_chargeable, "isInvoiced": $is_invoiced, "ExpenseReimbursementIDFK": $expense_reimbursement_idfk, "ExpensePaymentMethodIDFK": $expense_payment_method_idfk, "ExpenseApprovalStatusCode": $expense_approval_status_code, "Search": $search, "pageSize": $page_size, "pageNumber": $page_number, "Sort": $qp_sort} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create an Expense
@@ -1084,12 +1384,23 @@ export def "expense create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/Expense")
+  let full_url = (build-url $base "/api/Expense" $auth.query)
   let req_body = {"Amount": $amount, "CurrencyCode": $currency_code, "CustomerIDFK": $customer_idfk, "CustomerName": $customer_name, "ExchangeRate": $exchange_rate, "ExpenseCategoryIDFK": $expense_category_idfk, "ExpenseCategoryName": $expense_category_name, "ExpenseDate": $expense_date, "ExpensePaymentMethodIDFK": $expense_payment_method_idfk, "FileAttachmentIDs": $file_attachment_i_ds, "GroupTripName": $group_trip_name, "Merchant": $merchant, "MerchantTaxNumber": $merchant_tax_number, "Notes": $notes, "ProjectIDFK": $project_idfk, "ProjectName": $project_name, "Quantity": $quantity, "TaskIDFK": $task_idfk, "TaxIDFK": $tax_idfk, "TaxName": $tax_name, "TransactionTaxConfigCode": $transaction_tax_config_code, "UserEmail": $user_email, "UserIDFK": $user_idfk, "VerifyAndSave": $verify_and_save, "isChargeable": $is_chargeable, "isReimbursable": $is_reimbursable} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Update an Expense
@@ -1133,12 +1444,23 @@ export def "expense update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/Expense")
+  let full_url = (build-url $base "/api/Expense" $auth.query)
   let req_body = {"Amount": $amount, "CurrencyCode": $currency_code, "CustomerIDFK": $customer_idfk, "ExchangeRate": $exchange_rate, "ExpenseCategoryIDFK": $expense_category_idfk, "ExpenseDate": $expense_date, "ExpenseID": $expense_id, "ExpensePaymentMethodIDFK": $expense_payment_method_idfk, "FieldsToUpdate": $fields_to_update, "FileAttachmentIDs": $file_attachment_i_ds, "GroupTripName": $group_trip_name, "Merchant": $merchant, "MerchantTaxNumber": $merchant_tax_number, "Notes": $notes, "ProjectIDFK": $project_idfk, "Quantity": $quantity, "TaskIDFK": $task_idfk, "TaxIDFK": $tax_idfk, "TransactionTaxConfigCode": $transaction_tax_config_code, "VerifyAndSave": $verify_and_save, "isChargeable": $is_chargeable, "isReimbursable": $is_reimbursable} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # POST /api/Expense/Attachment
@@ -1160,14 +1482,25 @@ export def "expense-attachment create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/Expense/Attachment")
+  let full_url = (build-url $base "/api/Expense/Attachment" $auth.query)
   let req_body = {"File": $file} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body ["File"] $dry_run)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: $mp.content_type
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $mp.body $insecure $raw $allow_errors $full [200]
 }
 
 # Gets an Expense Entry by Expense ID
@@ -1190,10 +1523,21 @@ export def "expense get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Expense/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Expense/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Submit Expenses for Approval.
@@ -1219,12 +1563,23 @@ export def "expense-approval-submit create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "UserID" $user_id "scalar") (serialize-qp "SendNotifications" $send_notifications "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/ExpenseApproval/Submit" $qp)
+  let full_url = (build-url $base "/api/ExpenseApproval/Submit" $qp $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"UserID": $user_id, "SendNotifications": $send_notifications} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"UserID": $user_id, "SendNotifications": $send_notifications} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Gets list of Expense Categories
@@ -1247,10 +1602,21 @@ export def "expense-category get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "isEnabled" $is_enabled "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/ExpenseCategory" $qp)
+  let full_url = (build-url $base "/api/ExpenseCategory" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"isEnabled": $is_enabled} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"isEnabled": $is_enabled} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets minimal list of Expense Groups.
@@ -1275,10 +1641,21 @@ export def "expense-group-lookup get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "search" $search "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/ExpenseGroup/Lookup" $qp)
+  let full_url = (build-url $base "/api/ExpenseGroup/Lookup" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"pageSize": $page_size, "pageNumber": $page_number, "search": $search} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"pageSize": $page_size, "pageNumber": $page_number, "search": $search} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets minimal list of Expense Merchants.
@@ -1303,10 +1680,21 @@ export def "expense-merchant-lookup get-merchange" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "search" $search "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/ExpenseMerchant/Lookup" $qp)
+  let full_url = (build-url $base "/api/ExpenseMerchant/Lookup" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"pageSize": $page_size, "pageNumber": $page_number, "search": $search} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"pageSize": $page_size, "pageNumber": $page_number, "search": $search} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets minimal list of Expense Payment Methods.
@@ -1327,10 +1715,21 @@ export def "expense-payment-method-lookup get" [
 ]: nothing -> record<ExpensePaymentMethods: table<ExpensePaymentMethodID: int, Name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/ExpensePaymentMethod/Lookup")
+  let full_url = (build-url $base "/api/ExpensePaymentMethod/Lookup" $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets Basic Summary of Expense Statistics
@@ -1357,10 +1756,21 @@ export def "expense-summary get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "model.groupBy" $model_group_by "multi") (serialize-qp "model.expenseDateFrom" $model_expense_date_from "scalar") (serialize-qp "model.expenseDateTo" $model_expense_date_to "scalar") (serialize-qp "model.userID" $model_user_id "multi") (serialize-qp "model.projectID" $model_project_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/ExpenseSummary" $qp)
+  let full_url = (build-url $base "/api/ExpenseSummary" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"model.groupBy": $model_group_by, "model.expenseDateFrom": $model_expense_date_from, "model.expenseDateTo": $model_expense_date_to, "model.userID": $model_user_id, "model.projectID": $model_project_id} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"model.groupBy": $model_group_by, "model.expenseDateFrom": $model_expense_date_from, "model.expenseDateTo": $model_expense_date_to, "model.userID": $model_user_id, "model.projectID": $model_project_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets list of Fixed Amounts
@@ -1391,10 +1801,21 @@ export def "fixed-amount get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "UpdatedAfter" $updated_after "scalar") (serialize-qp "EntryDateFrom" $entry_date_from "scalar") (serialize-qp "EntryDateTo" $entry_date_to "scalar") (serialize-qp "ProjectID" $project_id "scalar") (serialize-qp "TaskID" $task_id "scalar") (serialize-qp "isInvoiced" $is_invoiced "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "Sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/FixedAmount" $qp)
+  let full_url = (build-url $base "/api/FixedAmount" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"UpdatedAfter": $updated_after, "EntryDateFrom": $entry_date_from, "EntryDateTo": $entry_date_to, "ProjectID": $project_id, "TaskID": $task_id, "isInvoiced": $is_invoiced, "pageSize": $page_size, "pageNumber": $page_number, "Sort": $qp_sort} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"UpdatedAfter": $updated_after, "EntryDateFrom": $entry_date_from, "EntryDateTo": $entry_date_to, "ProjectID": $project_id, "TaskID": $task_id, "isInvoiced": $is_invoiced, "pageSize": $page_size, "pageNumber": $page_number, "Sort": $qp_sort} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets list of Inventory
@@ -1419,10 +1840,21 @@ export def "inventory list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "UpdatedAfter" $updated_after "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/Inventory" $qp)
+  let full_url = (build-url $base "/api/Inventory" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"UpdatedAfter": $updated_after, "pageSize": $page_size, "pageNumber": $page_number} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"UpdatedAfter": $updated_after, "pageSize": $page_size, "pageNumber": $page_number} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets InventoryItem by InventoryItem ID
@@ -1445,10 +1877,21 @@ export def "inventory get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Inventory/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Inventory/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Gets list of Invoices
@@ -1475,10 +1918,21 @@ export def "invoice list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "UpdatedAfter" $updated_after "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "Sort" $qp_sort "scalar") (serialize-qp "CompanyIDFK" $company_idfk "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/Invoice" $qp)
+  let full_url = (build-url $base "/api/Invoice" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"UpdatedAfter": $updated_after, "pageSize": $page_size, "pageNumber": $page_number, "Sort": $qp_sort, "CompanyIDFK": $company_idfk} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"UpdatedAfter": $updated_after, "pageSize": $page_size, "pageNumber": $page_number, "Sort": $qp_sort, "CompanyIDFK": $company_idfk} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a new draft invoice
@@ -1519,12 +1973,23 @@ export def "invoice create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/Invoice")
+  let full_url = (build-url $base "/api/Invoice" $auth.query)
   let req_body = {"CompanyIDFK": $company_idfk, "CompanyName": $company_name, "CurrencyCode": $currency_code, "CustomerPONumber": $customer_po_number, "DateIssued": $date_issued, "DueDate": $due_date, "Email": $email, "ExchangeRate": $exchange_rate, "Firstname": $firstname, "InvoiceNumber": $invoice_number, "InvoiceTemplateIDFK": $invoice_template_idfk, "Lastname": $lastname, "LineItems": $line_items, "Notes": $notes, "PaymentTerms": $payment_terms, "Subject": $subject, "TransactionPrefix": $transaction_prefix, "TransactionTaxConfigCode": $transaction_tax_config_code} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Gets Invoice by Invoice ID
@@ -1547,10 +2012,21 @@ export def "invoice get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Invoice/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Invoice/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Gets list of Payments
@@ -1575,10 +2051,21 @@ export def "payment list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "UpdatedAfter" $updated_after "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/Payment" $qp)
+  let full_url = (build-url $base "/api/Payment" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"UpdatedAfter": $updated_after, "pageSize": $page_size, "pageNumber": $page_number} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"UpdatedAfter": $updated_after, "pageSize": $page_size, "pageNumber": $page_number} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create new Payment and optionally assign payment allocations to Invoices
@@ -1611,12 +2098,23 @@ export def "payment create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/Payment")
+  let full_url = (build-url $base "/api/Payment" $auth.query)
   let req_body = {"Amount": $amount, "CustomerIDFK": $customer_idfk, "DateIssued": $date_issued, "ExchangeRate": $exchange_rate, "Notes": $notes, "PaymentAllocations": $payment_allocations, "PaymentNumber": $payment_number, "PaymentProviderCode": $payment_provider_code, "TransactionPrefix": $transaction_prefix, "TransactionReference": $transaction_reference} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Gets Payment by Payment Transaction ID
@@ -1639,10 +2137,21 @@ export def "payment get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Payment/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Payment/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets list of Projects
@@ -1670,10 +2179,21 @@ export def "project list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "UpdatedAfter" $updated_after "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "Sort" $qp_sort "scalar") (serialize-qp "TimesheetUserID" $timesheet_user_id "scalar") (serialize-qp "includeArchived" $include_archived "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/Project" $qp)
+  let full_url = (build-url $base "/api/Project" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"UpdatedAfter": $updated_after, "pageSize": $page_size, "pageNumber": $page_number, "Sort": $qp_sort, "TimesheetUserID": $timesheet_user_id, "includeArchived": $include_archived} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"UpdatedAfter": $updated_after, "pageSize": $page_size, "pageNumber": $page_number, "Sort": $qp_sort, "TimesheetUserID": $timesheet_user_id, "includeArchived": $include_archived} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a Project
@@ -1710,12 +2230,23 @@ export def "project create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/Project")
+  let full_url = (build-url $base "/api/Project" $auth.query)
   let req_body = {"BudgetAmount": $budget_amount, "BudgetHours": $budget_hours, "CompanyIDFK": $company_idfk, "CompanyName": $company_name, "CurrencyCode": $currency_code, "EndDate": $end_date, "PopulateDefaultProjectMembers": $populate_default_project_members, "ProjectCategoryIDFK": $project_category_idfk, "ProjectCode": $project_code, "ProjectNotes": $project_notes, "ProjectStatusCode": $project_status_code, "ProjectTitle": $project_title, "StartDate": $start_date, "TimesheetApprovalRequiredbyDefault": $timesheet_approval_requiredby_default, "isTaskRequiredOnTimesheet": $is_task_required_on_timesheet} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Update an Project
@@ -1751,12 +2282,23 @@ export def "project update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/Project")
+  let full_url = (build-url $base "/api/Project" $auth.query)
   let req_body = {"BudgetAmount": $budget_amount, "BudgetHours": $budget_hours, "EndDate": $end_date, "FieldsToUpdate": $fields_to_update, "ProjectBillableTypeCode": $project_billable_type_code, "ProjectBudgetTypeCode": $project_budget_type_code, "ProjectCategoryIDFK": $project_category_idfk, "ProjectID": $project_id, "ProjectNotes": $project_notes, "ProjectStatusCode": $project_status_code, "ProjectTitle": $project_title, "StartDate": $start_date, "TimesheetApprovalRequiredbyDefault": $timesheet_approval_requiredby_default, "isTaskRequiredOnTimesheet": $is_task_required_on_timesheet} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Gets minimal list of active Projects for the current user
@@ -1783,10 +2325,21 @@ export def "project-lookup get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "TimesheetUserID" $timesheet_user_id "scalar") (serialize-qp "CompanyIDFK" $company_idfk "scalar") (serialize-qp "search" $search "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/Project/Lookup" $qp)
+  let full_url = (build-url $base "/api/Project/Lookup" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"pageSize": $page_size, "pageNumber": $page_number, "TimesheetUserID": $timesheet_user_id, "CompanyIDFK": $company_idfk, "search": $search} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"pageSize": $page_size, "pageNumber": $page_number, "TimesheetUserID": $timesheet_user_id, "CompanyIDFK": $company_idfk, "search": $search} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets Project by Project ID
@@ -1809,10 +2362,21 @@ export def "project get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Project/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Project/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets list of Project Members
@@ -1836,10 +2400,21 @@ export def "project-member get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ProjectID" $project_id "scalar") (serialize-qp "UserID" $user_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/ProjectMember" $qp)
+  let full_url = (build-url $base "/api/ProjectMember" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"ProjectID": $project_id, "UserID": $user_id} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"ProjectID": $project_id, "UserID": $user_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Assign a user as a Member of a Project
@@ -1874,12 +2449,23 @@ export def "project-member create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/ProjectMember")
+  let full_url = (build-url $base "/api/ProjectMember" $auth.query)
   let req_body = {"BudgetAmount": $budget_amount, "CostAmount": $cost_amount, "ProjectIDFK": $project_idfk, "RateAmount": $rate_amount, "UserIDFK": $user_idfk, "canCommentOnTasks": $can_comment_on_tasks, "canCreateTasks": $can_create_tasks, "canDeleteTasks": $can_delete_tasks, "canUpdateTasks": $can_update_tasks, "isProjectManager": $is_project_manager, "isTimesheetAllowed": $is_timesheet_allowed, "isTimesheetApprovalRequired": $is_timesheet_approval_required, "isTimesheetApprover": $is_timesheet_approver} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Update a Member of a Project
@@ -1915,12 +2501,23 @@ export def "project-member update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/ProjectMember")
+  let full_url = (build-url $base "/api/ProjectMember" $auth.query)
   let req_body = {"BudgetAmount": $budget_amount, "CostAmount": $cost_amount, "FieldsToUpdate": $fields_to_update, "ProjectIDFK": $project_idfk, "RateAmount": $rate_amount, "UserIDFK": $user_idfk, "canCommentOnTasks": $can_comment_on_tasks, "canCreateTasks": $can_create_tasks, "canDeleteTasks": $can_delete_tasks, "canUpdateTasks": $can_update_tasks, "isProjectManager": $is_project_manager, "isTimesheetAllowed": $is_timesheet_allowed, "isTimesheetApprovalRequired": $is_timesheet_approval_required, "isTimesheetApprover": $is_timesheet_approver} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Gets list of Project Timesheet Categories
@@ -1943,10 +2540,21 @@ export def "project-timesheet-category get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ProjectID" $project_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/ProjectTimesheetCategory" $qp)
+  let full_url = (build-url $base "/api/ProjectTimesheetCategory" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"ProjectID": $project_id} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"ProjectID": $project_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Assign a TimeSheetCategory to a Project.
@@ -1975,12 +2583,23 @@ export def "project-timesheet-category create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/ProjectTimesheetCategory")
+  let full_url = (build-url $base "/api/ProjectTimesheetCategory" $auth.query)
   let req_body = {"BudgetHours": $budget_hours, "CostAmount": $cost_amount, "ProjectIDFK": $project_idfk, "RateAmount": $rate_amount, "TimesheetCategoryIDFK": $timesheet_category_idfk, "isBillable": $is_billable, "isPayable": $is_payable} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Gets list of Schedule Assignments.
@@ -2011,10 +2630,21 @@ export def "schedule-assignment get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "UpdatedAfter" $updated_after "scalar") (serialize-qp "ScheduleDateFrom" $schedule_date_from "scalar") (serialize-qp "ScheduleDateTo" $schedule_date_to "scalar") (serialize-qp "ScheduleSeriesID" $schedule_series_id "scalar") (serialize-qp "UserID" $user_id "scalar") (serialize-qp "UserEmail" $user_email "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "Sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/ScheduleAssignment" $qp)
+  let full_url = (build-url $base "/api/ScheduleAssignment" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"UpdatedAfter": $updated_after, "ScheduleDateFrom": $schedule_date_from, "ScheduleDateTo": $schedule_date_to, "ScheduleSeriesID": $schedule_series_id, "UserID": $user_id, "UserEmail": $user_email, "pageSize": $page_size, "pageNumber": $page_number, "Sort": $qp_sort} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"UpdatedAfter": $updated_after, "ScheduleDateFrom": $schedule_date_from, "ScheduleDateTo": $schedule_date_to, "ScheduleSeriesID": $schedule_series_id, "UserID": $user_id, "UserEmail": $user_email, "pageSize": $page_size, "pageNumber": $page_number, "Sort": $qp_sort} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets list of Schedule Series
@@ -2051,10 +2681,21 @@ export def "schedule-series get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "UpdatedAfter" $updated_after "scalar") (serialize-qp "ScheduleStartDateFrom" $schedule_start_date_from "scalar") (serialize-qp "ScheduleStartDateTo" $schedule_start_date_to "scalar") (serialize-qp "ScheduleEndDateFrom" $schedule_end_date_from "scalar") (serialize-qp "ScheduleEndDateTo" $schedule_end_date_to "scalar") (serialize-qp "UserID" $user_id "scalar") (serialize-qp "UserEmail" $user_email "scalar") (serialize-qp "TimeSheetCategoryID" $time_sheet_category_id "scalar") (serialize-qp "TimeSheetCategoryName" $time_sheet_category_name "scalar") (serialize-qp "LeaveTypeID" $leave_type_id "scalar") (serialize-qp "ProjectID" $project_id "scalar") (serialize-qp "CompanyID" $company_id "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "Sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/ScheduleSeries" $qp)
+  let full_url = (build-url $base "/api/ScheduleSeries" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"UpdatedAfter": $updated_after, "ScheduleStartDateFrom": $schedule_start_date_from, "ScheduleStartDateTo": $schedule_start_date_to, "ScheduleEndDateFrom": $schedule_end_date_from, "ScheduleEndDateTo": $schedule_end_date_to, "UserID": $user_id, "UserEmail": $user_email, "TimeSheetCategoryID": $time_sheet_category_id, "TimeSheetCategoryName": $time_sheet_category_name, "LeaveTypeID": $leave_type_id, "ProjectID": $project_id, "CompanyID": $company_id, "pageSize": $page_size, "pageNumber": $page_number, "Sort": $qp_sort} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"UpdatedAfter": $updated_after, "ScheduleStartDateFrom": $schedule_start_date_from, "ScheduleStartDateTo": $schedule_start_date_to, "ScheduleEndDateFrom": $schedule_end_date_from, "ScheduleEndDateTo": $schedule_end_date_to, "UserID": $user_id, "UserEmail": $user_email, "TimeSheetCategoryID": $time_sheet_category_id, "TimeSheetCategoryName": $time_sheet_category_name, "LeaveTypeID": $leave_type_id, "ProjectID": $project_id, "CompanyID": $company_id, "pageSize": $page_size, "pageNumber": $page_number, "Sort": $qp_sort} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Delete a Section
@@ -2077,10 +2718,21 @@ export def "section delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "SectionID" $section_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/Section" $qp)
+  let full_url = (build-url $base "/api/Section" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"SectionID": $section_id} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"SectionID": $section_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Gets list of Sections
@@ -2103,10 +2755,21 @@ export def "section get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ProjectID" $project_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/Section" $qp)
+  let full_url = (build-url $base "/api/Section" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"ProjectID": $project_id} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"ProjectID": $project_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a Section
@@ -2132,12 +2795,23 @@ export def "section create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/Section")
+  let full_url = (build-url $base "/api/Section" $auth.query)
   let req_body = {"EndDateUTC": $end_date_utc, "ProjectIDFK": $project_idfk, "StartDateUTC": $start_date_utc, "Title": $title} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Delete a Task
@@ -2160,10 +2834,21 @@ export def "task delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "TaskID" $task_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/Task" $qp)
+  let full_url = (build-url $base "/api/Task" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"TaskID": $task_id} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"TaskID": $task_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Gets list of Tasks
@@ -2191,10 +2876,21 @@ export def "task list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "UpdatedAfter" $updated_after "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "Sort" $qp_sort "scalar") (serialize-qp "isComplete" $is_complete "scalar") (serialize-qp "ProjectID" $project_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/Task" $qp)
+  let full_url = (build-url $base "/api/Task" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"UpdatedAfter": $updated_after, "pageSize": $page_size, "pageNumber": $page_number, "Sort": $qp_sort, "isComplete": $is_complete, "ProjectID": $project_id} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"UpdatedAfter": $updated_after, "pageSize": $page_size, "pageNumber": $page_number, "Sort": $qp_sort, "isComplete": $is_complete, "ProjectID": $project_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a Task
@@ -2228,12 +2924,23 @@ export def "task create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/Task")
+  let full_url = (build-url $base "/api/Task" $auth.query)
   let req_body = {"AccountTaskTypeIDFK": $account_task_type_idfk, "AssignedToUserIDFKs": $assigned_to_user_idf_ks, "DateDue": $date_due, "DateStart": $date_start, "Description": $description, "EstimatedEffort": $estimated_effort, "ProjectIDFK": $project_idfk, "SectionIDFK": $section_idfk, "Tags": $tags, "TaskPriorityCode": $task_priority_code, "Title": $title} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Update a Task.
@@ -2269,12 +2976,23 @@ export def "task update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/Task")
+  let full_url = (build-url $base "/api/Task" $auth.query)
   let req_body = {"AssignedToUserIDFK": $assigned_to_user_idfk, "DateDue": $date_due, "DateStart": $date_start, "Description": $description, "EstimatedEffort": $estimated_effort, "FieldsToUpdate": $fields_to_update, "PercentComplete": $percent_complete, "SectionIDFK": $section_idfk, "Tags": $tags, "TaskID": $task_id, "TaskPriorityCode": $task_priority_code, "TaskStatusCode": $task_status_code, "Title": $title} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Gets minimal list of Tasks for the current user
@@ -2301,10 +3019,21 @@ export def "task-lookup get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "projectID" $project_id "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "hideCompleted" $hide_completed "scalar") (serialize-qp "search" $search "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/Task/Lookup" $qp)
+  let full_url = (build-url $base "/api/Task/Lookup" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"projectID": $project_id, "pageSize": $page_size, "pageNumber": $page_number, "hideCompleted": $hide_completed, "search": $search} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"projectID": $project_id, "pageSize": $page_size, "pageNumber": $page_number, "hideCompleted": $hide_completed, "search": $search} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets Task by Task ID
@@ -2327,10 +3056,21 @@ export def "task get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Task/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Task/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets list of Task Statuses
@@ -2351,10 +3091,21 @@ export def "task-status get" [
 ]: nothing -> record<statuses: table<AccountTaskTypeIDFK: int, Color: string, DisplayOrder: int, Name: string, TaskStatusCode: string, TaskTypeName: string, isComplete: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/TaskStatus")
+  let full_url = (build-url $base "/api/TaskStatus" $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets list of Task Types
@@ -2375,10 +3126,21 @@ export def "task-type get" [
 ]: nothing -> record<tasktypes: table<AccountTaskTypeID: int, Icon: string, IconType: string, Name: string, isDefault: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/TaskType")
+  let full_url = (build-url $base "/api/TaskType" $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get List of Taxes configured in the Avaza account.
@@ -2399,10 +3161,21 @@ export def "tax get" [
 ]: nothing -> record<Taxes: table<CalculatedPercent: float, Name: string, TaxCode: string, TaxComponents: list, TaxID: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/Tax")
+  let full_url = (build-url $base "/api/Tax" $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets list of Timsheets
@@ -2438,10 +3211,21 @@ export def "timesheet list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "UpdatedAfter" $updated_after "scalar") (serialize-qp "EntryDateFrom" $entry_date_from "scalar") (serialize-qp "EntryDateTo" $entry_date_to "scalar") (serialize-qp "UserID" $user_id "scalar") (serialize-qp "UserEmail" $user_email "scalar") (serialize-qp "CategoryName" $category_name "scalar") (serialize-qp "ProjectID" $project_id "scalar") (serialize-qp "isBillable" $is_billable "scalar") (serialize-qp "isInvoiced" $is_invoiced "scalar") (serialize-qp "isTimerRunning" $is_timer_running "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "includeInvoiceDetails" $include_invoice_details "scalar") (serialize-qp "Sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/Timesheet" $qp)
+  let full_url = (build-url $base "/api/Timesheet" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"UpdatedAfter": $updated_after, "EntryDateFrom": $entry_date_from, "EntryDateTo": $entry_date_to, "UserID": $user_id, "UserEmail": $user_email, "CategoryName": $category_name, "ProjectID": $project_id, "isBillable": $is_billable, "isInvoiced": $is_invoiced, "isTimerRunning": $is_timer_running, "pageSize": $page_size, "pageNumber": $page_number, "includeInvoiceDetails": $include_invoice_details, "Sort": $qp_sort} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"UpdatedAfter": $updated_after, "EntryDateFrom": $entry_date_from, "EntryDateTo": $entry_date_to, "UserID": $user_id, "UserEmail": $user_email, "CategoryName": $category_name, "ProjectID": $project_id, "isBillable": $is_billable, "isInvoiced": $is_invoiced, "isTimerRunning": $is_timer_running, "pageSize": $page_size, "pageNumber": $page_number, "includeInvoiceDetails": $include_invoice_details, "Sort": $qp_sort} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a new Timesheet Entry
@@ -2473,12 +3257,23 @@ export def "timesheet create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/Timesheet")
+  let full_url = (build-url $base "/api/Timesheet" $auth.query)
   let req_body = {"CustomMetadata": $custom_metadata, "Duration": $duration, "EntryDate": $entry_date, "Notes": $notes, "ProjectIDFK": $project_idfk, "TaskIDFK": $task_idfk, "TimesheetCategoryIDFK": $timesheet_category_idfk, "UserIDFK": $user_idfk, "hasStartEndTime": $has_start_end_time, "isInvoiced": $is_invoiced} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Update a Timesheet
@@ -2510,12 +3305,23 @@ export def "timesheet update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/Timesheet")
+  let full_url = (build-url $base "/api/Timesheet" $auth.query)
   let req_body = {"CustomMetadata": $custom_metadata, "Duration": $duration, "EntryDate": $entry_date, "FieldsToUpdate": $fields_to_update, "Notes": $notes, "ProjectIDFK": $project_idfk, "TaskIDFK": $task_idfk, "TimeSheetEntryID": $time_sheet_entry_id, "TimesheetCategoryIDFK": $timesheet_category_idfk, "hasStartEndTime": $has_start_end_time} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Delete a Timesheet Entry
@@ -2538,10 +3344,21 @@ export def "timesheet delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Timesheet/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Timesheet/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Gets a Timesheet Entry by Timesheet ID
@@ -2564,10 +3381,21 @@ export def "timesheet get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Timesheet/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Timesheet/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Submit Timesheets for Approval.
@@ -2593,10 +3421,21 @@ export def "timesheet-submission create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "SendNotifications" $send_notifications "scalar") (serialize-qp "WholeWeekOf" $whole_week_of "scalar") (serialize-qp "WholeDayOf" $whole_day_of "scalar") (serialize-qp "UserID" $user_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/TimesheetSubmission" $qp)
+  let full_url = (build-url $base "/api/TimesheetSubmission" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"SendNotifications": $send_notifications, "WholeWeekOf": $whole_week_of, "WholeDayOf": $whole_day_of, "UserID": $user_id} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"SendNotifications": $send_notifications, "WholeWeekOf": $whole_week_of, "WholeDayOf": $whole_day_of, "UserID": $user_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Gets Basic Summary of Timesheet Statistics
@@ -2625,10 +3464,21 @@ export def "timesheet-summary get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "model.groupBy" $model_group_by "multi") (serialize-qp "model.entryDateFrom" $model_entry_date_from "scalar") (serialize-qp "model.entryDateTo" $model_entry_date_to "scalar") (serialize-qp "model.userID" $model_user_id "multi") (serialize-qp "model.projectID" $model_project_id "scalar") (serialize-qp "model.isBillable" $model_is_billable "scalar") (serialize-qp "model.isInvoiced" $model_is_invoiced "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/TimesheetSummary" $qp)
+  let full_url = (build-url $base "/api/TimesheetSummary" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"model.groupBy": $model_group_by, "model.entryDateFrom": $model_entry_date_from, "model.entryDateTo": $model_entry_date_to, "model.userID": $model_user_id, "model.projectID": $model_project_id, "model.isBillable": $model_is_billable, "model.isInvoiced": $model_is_invoiced} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"model.groupBy": $model_group_by, "model.entryDateFrom": $model_entry_date_from, "model.entryDateTo": $model_entry_date_to, "model.userID": $model_user_id, "model.projectID": $model_project_id, "model.isBillable": $model_is_billable, "model.isInvoiced": $model_is_invoiced} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the Running Timer if there is one for a user.
@@ -2651,10 +3501,21 @@ export def "timesheet-timer get-running" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "UserID" $user_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/TimesheetTimer" $qp)
+  let full_url = (build-url $base "/api/TimesheetTimer" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"UserID": $user_id} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"UserID": $user_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Stop the timer running on an existing Timesheet Entry
@@ -2679,10 +3540,21 @@ export def "timesheet-timer stop" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "UserID" $user_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/TimesheetTimer/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/TimesheetTimer/{id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"UserID": $user_id} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"UserID": $user_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Starts a Timer running on an existing Timesheet Entry
@@ -2707,10 +3579,21 @@ export def "timesheet-timer start" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "UserID" $user_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/TimesheetTimer/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/TimesheetTimer/{id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"UserID": $user_id} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"UserID": $user_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Get Collection of Users who have roles in the current Avaza account.
@@ -2736,10 +3619,21 @@ export def "user-profile get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "Roles" $roles "scalar") (serialize-qp "Tags" $tags "scalar") (serialize-qp "CurrentUserOnly" $current_user_only "scalar") (serialize-qp "CompanyIDFK" $company_idfk "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/UserProfile" $qp)
+  let full_url = (build-url $base "/api/UserProfile" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"Roles": $roles, "Tags": $tags, "CurrentUserOnly": $current_user_only, "CompanyIDFK": $company_idfk} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"Roles": $roles, "Tags": $tags, "CurrentUserOnly": $current_user_only, "CompanyIDFK": $company_idfk} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Delete webhook subscription by URL
@@ -2762,10 +3656,21 @@ export def "webhook delete-by-url" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "target_url" $target_url "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/Webhook" $qp)
+  let full_url = (build-url $base "/api/Webhook" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"target_url": $target_url} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"target_url": $target_url} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Get list of Webhook Subscriptions
@@ -2786,10 +3691,21 @@ export def "webhook list" [
 ]: nothing -> record<Webhooks: table<EventCode: string, NotificationURL: string, SubscriptionID: int, UserIDFK: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/Webhook")
+  let full_url = (build-url $base "/api/Webhook" $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Subscribe to Webhook. On success, returns ID of webhook subscription.
@@ -2814,12 +3730,23 @@ export def "webhook create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/Webhook")
+  let full_url = (build-url $base "/api/Webhook" $auth.query)
   let req_body = {"event": $event, "secret": $secret, "target_url": $target_url} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Delete Webhook Subscription by ID
@@ -2842,10 +3769,21 @@ export def "webhook delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Webhook/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Webhook/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Get Webhook Subscription by SubscriptionID
@@ -2868,8 +3806,19 @@ export def "webhook get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Webhook/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Webhook/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }

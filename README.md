@@ -3,7 +3,7 @@
 Your collection of Nushell HTTP clients, automatically generated from API specifications.
 
 <!-- STATS:START -->
-**2,517** clients · **123,336** operations · **4.5M** lines of Nu
+**2,517** clients · **123,336** operations · **5.8M** lines of Nu
 <!-- STATS:END -->
 
 > [The full list](CLIENTS.md)

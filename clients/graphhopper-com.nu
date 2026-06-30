@@ -8,7 +8,7 @@ const BASE_URL = "https://graphhopper.com/api/1"
 # `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
 # where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o GRAPHHOPPER_DIRECTIONS_API_TOKEN | default "" }
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o GRAPHHOPPER_DIRECTIONS_API_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
@@ -41,14 +41,11 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
-# Trick: `url encode --all` over-encodes, then we decode the four unreserved
-# punctuation chars back. Pre-existing %XX sequences in the input survive
-# because `url encode --all` first turns their % into %25.
 def encode-path-segment [v: any]: nothing -> string {
   $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
-# Serialize an array-typed path parameter (issue 49.A). OpenAPI 3 `style: simple`
+# Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
 # (the default for path params) and Swagger 2 `collectionFormat: csv` both join
 # the elements with a literal comma WITHIN the single path segment, each element
 # RFC-3986-encoded individually (so a comma inside an element stays %2C). Without
@@ -59,51 +56,45 @@ def encode-path-array [v: any]: nothing -> string {
   if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
 }
 
-# Build URL from base, path, and optional query string
-def build-url [base: string, path: string, query?: string]: nothing -> string {
+# Build the request URL from base, path, and any number of pre-encoded query
+# fragments (param serializer output and/or the auth query). Each fragment is an
+# `&`-joinable `key=value` string already percent-encoded by its producer; empty
+# fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
+# delimiters are hand-spliced — and any query already on the base URL is merged in.
+def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
   let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
-  let result = ($parsed | upsert path $full_path)
-  if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
+  let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
+  $parsed | upsert path $full_path | upsert query $query | url join
 }
 
-# Build the dry-run record returned by --dry-run. Shape:
-#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
-#    auth: {scheme, location}}
-# `meta` carries logical-form data (the query record by spec name, the pre-serialization
-# body) that do-request itself cannot reconstruct from its wire-format args.
-def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
-  let m = ($meta | default {})
-  {
-    dry_run: true
-    method: $method
-    url: $url
-    query: ($m | get -o query | default {})
-    headers: $auth.headers
-    body: ($m | get -o body)
-    content_type: $content_type
-    timeout: $timeout
-    auth: {scheme: $auth.scheme, location: $auth.location}
-  }
+# Success policy: did this response succeed? Single source of truth, consulted by
+# handle-response and the HEAD header-unwrap. Empty ok_codes means the spec listed
+# none, so fall back to < 400. Otherwise: any 2xx, plus documented success codes.
+def status-ok [status: int, ok_codes: list<int>]: nothing -> bool {
+  if ($ok_codes | is-empty) { $status < 400 } else { ($status >= 200 and $status < 300) or ($status in $ok_codes) }
 }
 
-# Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
-  let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
-  let timeout = ($max_time | default 30min)
-  let ct = ($content_type | default "application/json")
-  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
-  let resp = match $method {
-    "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
-  }
-  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
-  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
+# Unwrap a `--full` HTTP response into the user-facing value. Response arrives
+# via pipeline; ok_codes gates the error throw (see status-ok).
+def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: record -> any {
+  let resp = $in
+  if $allow_errors { return $resp }
+  if not (status-ok $resp.status $ok_codes) { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } }
+  if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
+  if $resp.status == 204 { return null }
+  $resp.body
+}
+
+# GET — bodyless, honours --raw
+def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+}
+
+# POST — body + content-type
+def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 def base-url-completer [] { ["https://graphhopper.com/api/1"] }
@@ -159,12 +150,23 @@ export def "cluster create-solve-clustering-problem" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/cluster")
+  let full_url = (build-url $base "/cluster" $auth.query)
   let req_body = {"configuration": $configuration, "customers": $customers} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Batch Cluster Endpoint
@@ -189,12 +191,23 @@ export def "cluster-calculate create-async-clustering-problem" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/cluster/calculate")
+  let full_url = (build-url $base "/cluster/calculate" $auth.query)
   let req_body = {"configuration": $configuration, "customers": $customers} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # GET Batch Solution Endpoint
@@ -216,10 +229,21 @@ export def "cluster-solution get" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'jobId' must be non-empty" } }
-  let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/cluster/solution/{job_id}"))
+  let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/cluster/solution/{job_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Geocoding Endpoint
@@ -247,10 +271,21 @@ export def "geocode get" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "locale" $locale "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "reverse" $reverse "scalar") (serialize-qp "debug" $debug "scalar") (serialize-qp "point" $point "scalar") (serialize-qp "provider" $provider "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/geocode" $qp)
+  let full_url = (build-url $base "/geocode" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"q": $q, "locale": $locale, "limit": $limit, "reverse": $reverse, "debug": $debug, "point": $point, "provider": $provider} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"q": $q, "locale": $locale, "limit": $limit, "reverse": $reverse, "debug": $debug, "point": $point, "provider": $provider} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Isochrone Endpoint
@@ -278,10 +313,21 @@ export def "isochrone get" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "point" $point "scalar") (serialize-qp "time_limit" $time_limit "scalar") (serialize-qp "distance_limit" $distance_limit "scalar") (serialize-qp "vehicle" $vehicle "scalar") (serialize-qp "buckets" $buckets "scalar") (serialize-qp "reverse_flow" $reverse_flow "scalar") (serialize-qp "weighting" $weighting "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/isochrone" $qp)
+  let full_url = (build-url $base "/isochrone" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"point": $point, "time_limit": $time_limit, "distance_limit": $distance_limit, "vehicle": $vehicle, "buckets": $buckets, "reverse_flow": $reverse_flow, "weighting": $weighting} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"point": $point, "time_limit": $time_limit, "distance_limit": $distance_limit, "vehicle": $vehicle, "buckets": $buckets, "reverse_flow": $reverse_flow, "weighting": $weighting} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Map-match a GPX file
@@ -304,10 +350,21 @@ export def "match create-gpx" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "gps_accuracy" $gps_accuracy "scalar") (serialize-qp "vehicle" $vehicle "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/match" $qp)
+  let full_url = (build-url $base "/match" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"gps_accuracy": $gps_accuracy, "vehicle": $vehicle} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"gps_accuracy": $gps_accuracy, "vehicle": $vehicle} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # GET Matrix Endpoint
@@ -342,10 +399,21 @@ export def "matrix get" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "point" $point "multi") (serialize-qp "from_point" $from_point "multi") (serialize-qp "to_point" $to_point "multi") (serialize-qp "point_hint" $point_hint "multi") (serialize-qp "from_point_hint" $from_point_hint "multi") (serialize-qp "to_point_hint" $to_point_hint "multi") (serialize-qp "snap_prevention" $snap_prevention "multi") (serialize-qp "curbside" $curbside "multi") (serialize-qp "from_curbside" $from_curbside "multi") (serialize-qp "to_curbside" $to_curbside "multi") (serialize-qp "out_array" $out_array "multi") (serialize-qp "vehicle" $vehicle "scalar") (serialize-qp "fail_fast" $fail_fast "scalar") (serialize-qp "turn_costs" $turn_costs "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/matrix" $qp)
+  let full_url = (build-url $base "/matrix" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"point": $point, "from_point": $from_point, "to_point": $to_point, "point_hint": $point_hint, "from_point_hint": $from_point_hint, "to_point_hint": $to_point_hint, "snap_prevention": $snap_prevention, "curbside": $curbside, "from_curbside": $from_curbside, "to_curbside": $to_curbside, "out_array": $out_array, "vehicle": $vehicle, "fail_fast": $fail_fast, "turn_costs": $turn_costs} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"point": $point, "from_point": $from_point, "to_point": $to_point, "point_hint": $point_hint, "from_point_hint": $from_point_hint, "to_point_hint": $to_point_hint, "snap_prevention": $snap_prevention, "curbside": $curbside, "from_curbside": $from_curbside, "to_curbside": $to_curbside, "out_array": $out_array, "vehicle": $vehicle, "fail_fast": $fail_fast, "turn_costs": $turn_costs} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # POST Matrix Endpoint
@@ -380,12 +448,23 @@ export def "matrix create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/matrix")
+  let full_url = (build-url $base "/matrix" $auth.query)
   let req_body = {"fail_fast": $fail_fast, "from_curbsides": $from_curbsides, "from_point_hints": $from_point_hints, "from_points": $from_points, "out_arrays": $out_arrays, "snap_preventions": $snap_preventions, "to_curbsides": $to_curbsides, "to_point_hints": $to_point_hints, "to_points": $to_points, "turn_costs": $turn_costs, "vehicle": $vehicle, "curbsides": $curbsides, "point_hints": $point_hints, "points": $points} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Batch Matrix Endpoint
@@ -420,12 +499,23 @@ export def "matrix-calculate create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/matrix/calculate")
+  let full_url = (build-url $base "/matrix/calculate" $auth.query)
   let req_body = {"fail_fast": $fail_fast, "from_curbsides": $from_curbsides, "from_point_hints": $from_point_hints, "from_points": $from_points, "out_arrays": $out_arrays, "snap_preventions": $snap_preventions, "to_curbsides": $to_curbsides, "to_point_hints": $to_point_hints, "to_points": $to_points, "turn_costs": $turn_costs, "vehicle": $vehicle, "curbsides": $curbsides, "point_hints": $point_hints, "points": $points} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # GET Batch Matrix Endpoint
@@ -447,10 +537,21 @@ export def "matrix-solution get" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'jobId' must be non-empty" } }
-  let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/matrix/solution/{job_id}"))
+  let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/matrix/solution/{job_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET Route Endpoint
@@ -498,10 +599,21 @@ export def "route get" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "point" $point "multi") (serialize-qp "point_hint" $point_hint "multi") (serialize-qp "snap_prevention" $snap_prevention "multi") (serialize-qp "vehicle" $vehicle "scalar") (serialize-qp "curbside" $curbside "multi") (serialize-qp "turn_costs" $turn_costs "scalar") (serialize-qp "locale" $locale "scalar") (serialize-qp "elevation" $elevation "scalar") (serialize-qp "details" $details "multi") (serialize-qp "optimize" $optimize "scalar") (serialize-qp "instructions" $instructions "scalar") (serialize-qp "calc_points" $calc_points "scalar") (serialize-qp "debug" $debug "scalar") (serialize-qp "points_encoded" $points_encoded "scalar") (serialize-qp "ch.disable" $ch_disable "scalar") (serialize-qp "weighting" $weighting "scalar") (serialize-qp "heading" $heading "multi") (serialize-qp "heading_penalty" $heading_penalty "scalar") (serialize-qp "pass_through" $pass_through "scalar") (serialize-qp "block_area" $block_area "scalar") (serialize-qp "avoid" $avoid "scalar") (serialize-qp "algorithm" $algorithm "scalar") (serialize-qp "round_trip.distance" $round_trip_distance "scalar") (serialize-qp "round_trip.seed" $round_trip_seed "scalar") (serialize-qp "alternative_route.max_paths" $alternative_route_max_paths "scalar") (serialize-qp "alternative_route.max_weight_factor" $alternative_route_max_weight_factor "scalar") (serialize-qp "alternative_route.max_share_factor" $alternative_route_max_share_factor "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/route" $qp)
+  let full_url = (build-url $base "/route" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"point": $point, "point_hint": $point_hint, "snap_prevention": $snap_prevention, "vehicle": $vehicle, "curbside": $curbside, "turn_costs": $turn_costs, "locale": $locale, "elevation": $elevation, "details": $details, "optimize": $optimize, "instructions": $instructions, "calc_points": $calc_points, "debug": $debug, "points_encoded": $points_encoded, "ch.disable": $ch_disable, "weighting": $weighting, "heading": $heading, "heading_penalty": $heading_penalty, "pass_through": $pass_through, "block_area": $block_area, "avoid": $avoid, "algorithm": $algorithm, "round_trip.distance": $round_trip_distance, "round_trip.seed": $round_trip_seed, "alternative_route.max_paths": $alternative_route_max_paths, "alternative_route.max_weight_factor": $alternative_route_max_weight_factor, "alternative_route.max_share_factor": $alternative_route_max_share_factor} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"point": $point, "point_hint": $point_hint, "snap_prevention": $snap_prevention, "vehicle": $vehicle, "curbside": $curbside, "turn_costs": $turn_costs, "locale": $locale, "elevation": $elevation, "details": $details, "optimize": $optimize, "instructions": $instructions, "calc_points": $calc_points, "debug": $debug, "points_encoded": $points_encoded, "ch.disable": $ch_disable, "weighting": $weighting, "heading": $heading, "heading_penalty": $heading_penalty, "pass_through": $pass_through, "block_area": $block_area, "avoid": $avoid, "algorithm": $algorithm, "round_trip.distance": $round_trip_distance, "round_trip.seed": $round_trip_seed, "alternative_route.max_paths": $alternative_route_max_paths, "alternative_route.max_weight_factor": $alternative_route_max_weight_factor, "alternative_route.max_share_factor": $alternative_route_max_share_factor} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # POST Route Endpoint
@@ -548,12 +660,23 @@ export def "route create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/route")
+  let full_url = (build-url $base "/route" $auth.query)
   let req_body = {"algorithm": $algorithm, "alternative_route.max_paths": $alternative_route_max_paths, "alternative_route.max_share_factor": $alternative_route_max_share_factor, "alternative_route.max_weight_factor": $alternative_route_max_weight_factor, "avoid": $avoid, "block_area": $block_area, "calc_points": $calc_points, "ch.disable": $ch_disable, "curbsides": $curbsides, "debug": $debug, "details": $details, "elevation": $elevation, "heading_penalty": $heading_penalty, "headings": $headings, "instructions": $instructions, "locale": $locale, "optimize": $optimize, "pass_through": $pass_through, "point_hints": $point_hints, "points": $points, "points_encoded": $points_encoded, "round_trip.distance": $round_trip_distance, "round_trip.seed": $round_trip_seed, "snap_preventions": $snap_preventions, "vehicle": $vehicle, "weighting": $weighting} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Coverage information
@@ -572,10 +695,21 @@ export def "route-info get" [
 ]: nothing -> record<bbox: string, features: record, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/route/info")
+  let full_url = (build-url $base "/route/info" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # POST route optimization problem
@@ -614,12 +748,23 @@ export def "vrp create-solve" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/vrp")
+  let full_url = (build-url $base "/vrp" $auth.query)
   let req_body = {"algorithm": $algorithm, "configuration": $configuration, "cost_matrices": $cost_matrices, "objectives": $objectives, "relations": $relations, "services": $services, "shipments": $shipments, "vehicle_types": $vehicle_types, "vehicles": $vehicles} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # POST route optimization problem (batch mode)
@@ -658,12 +803,23 @@ export def "vrp-optimize create-async" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/vrp/optimize")
+  let full_url = (build-url $base "/vrp/optimize" $auth.query)
   let req_body = {"algorithm": $algorithm, "configuration": $configuration, "cost_matrices": $cost_matrices, "objectives": $objectives, "relations": $relations, "services": $services, "shipments": $shipments, "vehicle_types": $vehicle_types, "vehicles": $vehicles} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # GET the solution (batch mode)
@@ -685,8 +841,19 @@ export def "vrp-solution get" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'jobId' must be non-empty" } }
-  let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/vrp/solution/{job_id}"))
+  let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/vrp/solution/{job_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }

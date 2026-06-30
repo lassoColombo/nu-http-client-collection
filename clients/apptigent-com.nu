@@ -8,7 +8,7 @@ const BASE_URL = "https://connect.apptigent.com/api/utilities"
 # `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
 # where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o POWERTOOLS_DEVELOPER_TOKEN | default "" }
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o POWERTOOLS_DEVELOPER_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
@@ -41,14 +41,11 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
-# Trick: `url encode --all` over-encodes, then we decode the four unreserved
-# punctuation chars back. Pre-existing %XX sequences in the input survive
-# because `url encode --all` first turns their % into %25.
 def encode-path-segment [v: any]: nothing -> string {
   $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
-# Serialize an array-typed path parameter (issue 49.A). OpenAPI 3 `style: simple`
+# Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
 # (the default for path params) and Swagger 2 `collectionFormat: csv` both join
 # the elements with a literal comma WITHIN the single path segment, each element
 # RFC-3986-encoded individually (so a comma inside an element stays %2C). Without
@@ -59,60 +56,49 @@ def encode-path-array [v: any]: nothing -> string {
   if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
 }
 
-# Build URL from base, path, and optional query string
-def build-url [base: string, path: string, query?: string]: nothing -> string {
+# Build the request URL from base, path, and any number of pre-encoded query
+# fragments (param serializer output and/or the auth query). Each fragment is an
+# `&`-joinable `key=value` string already percent-encoded by its producer; empty
+# fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
+# delimiters are hand-spliced — and any query already on the base URL is merged in.
+def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
   let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
-  let result = ($parsed | upsert path $full_path)
-  if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
+  let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
+  $parsed | upsert path $full_path | upsert query $query | url join
 }
 
-# Build the dry-run record returned by --dry-run. Shape:
-#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
-#    auth: {scheme, location}}
-# `meta` carries logical-form data (the query record by spec name, the pre-serialization
-# body) that do-request itself cannot reconstruct from its wire-format args.
-def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
-  let m = ($meta | default {})
-  {
-    dry_run: true
-    method: $method
-    url: $url
-    query: ($m | get -o query | default {})
-    headers: $auth.headers
-    body: ($m | get -o body)
-    content_type: $content_type
-    timeout: $timeout
-    auth: {scheme: $auth.scheme, location: $auth.location}
-  }
+# Success policy: did this response succeed? Single source of truth, consulted by
+# handle-response and the HEAD header-unwrap. Empty ok_codes means the spec listed
+# none, so fall back to < 400. Otherwise: any 2xx, plus documented success codes.
+def status-ok [status: int, ok_codes: list<int>]: nothing -> bool {
+  if ($ok_codes | is-empty) { $status < 400 } else { ($status >= 200 and $status < 300) or ($status in $ok_codes) }
 }
 
-# Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
-  let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
-  let timeout = ($max_time | default 30min)
-  let ct = ($content_type | default "application/json")
-  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
-  let resp = match $method {
-    "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
-  }
-  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
-  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
+# Unwrap a `--full` HTTP response into the user-facing value. Response arrives
+# via pipeline; ok_codes gates the error throw (see status-ok).
+def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: record -> any {
+  let resp = $in
+  if $allow_errors { return $resp }
+  if not (status-ok $resp.status $ok_codes) { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } }
+  if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
+  if $resp.status == 204 { return null }
+  $resp.body
+}
+
+# POST — body + content-type
+def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # Build a `multipart/form-data` envelope per RFC 7578. `file_fields` lists
 # the field names whose value should be read from disk as bytes; every
 # other field is sent as a text part (records/lists JSON-stringified).
-# Returns {content_type, body} ready to pass to `do-request`.
+# Returns {content_type, body}.
 # When `$dry_run` is true, file fields are NOT read from disk — they emit
 # an empty-bytes placeholder so callers can inspect the request shape
-# without the file existing on disk (issue 11.B).
+# without the file existing on disk.
 def build-multipart-body [parts: record, file_fields: list<string>, dry_run: bool = false]: nothing -> record {
   let boundary = $"----nu-(random chars --length 24)"
   let crlf = "\r\n"
@@ -239,12 +225,23 @@ export def "add-to-collection create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/AddToCollection")
+  let full_url = (build-url $base "/AddToCollection" $auth.query)
   let req_body = {"index": $index, "input": $input, "item": $item, "items": $items} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Data - CSV to JSON
@@ -267,12 +264,23 @@ export def "cs-vto-json create-csv" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/CSVtoJSON")
+  let full_url = (build-url $base "/CSVtoJSON" $auth.query)
   let req_body = {"header": $header, "input": $input} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Math - Calculate Absolute
@@ -295,12 +303,23 @@ export def "calculate-absolute create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/CalculateAbsolute")
+  let full_url = (build-url $base "/CalculateAbsolute" $auth.query)
   let req_body = {"decimals": $decimals, "input": $input} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Math - Calculate Addition
@@ -324,12 +343,23 @@ export def "calculate-addition create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/CalculateAddition")
+  let full_url = (build-url $base "/CalculateAddition" $auth.query)
   let req_body = {"decimals": $decimals, "input": $input, "value": $value} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Math - Calculate average
@@ -352,12 +382,23 @@ export def "calculate-average create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/CalculateAverage")
+  let full_url = (build-url $base "/CalculateAverage" $auth.query)
   let req_body = {"decimals": $decimals, "input": $input} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Math - Calculate Cosine
@@ -380,12 +421,23 @@ export def "calculate-cosine create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/CalculateCosine")
+  let full_url = (build-url $base "/CalculateCosine" $auth.query)
   let req_body = {"decimals": $decimals, "input": $input} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Math - Calculate Division
@@ -409,12 +461,23 @@ export def "calculate-division create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/CalculateDivision")
+  let full_url = (build-url $base "/CalculateDivision" $auth.query)
   let req_body = {"decimals": $decimals, "input": $input, "value": $value} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Math - Calculate Logarithm
@@ -437,12 +500,23 @@ export def "calculate-logarithm create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/CalculateLogarithm")
+  let full_url = (build-url $base "/CalculateLogarithm" $auth.query)
   let req_body = {"decimals": $decimals, "input": $input} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Math - Calculate median
@@ -465,12 +539,23 @@ export def "calculate-median create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/CalculateMedian")
+  let full_url = (build-url $base "/CalculateMedian" $auth.query)
   let req_body = {"decimals": $decimals, "input": $input} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Math - Calculate minimum or maximum
@@ -493,12 +578,23 @@ export def "calculate-min-max create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/CalculateMinMax")
+  let full_url = (build-url $base "/CalculateMinMax" $auth.query)
   let req_body = {"input": $input, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Math - Calculate Modulo
@@ -522,12 +618,23 @@ export def "calculate-modulo create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/CalculateModulo")
+  let full_url = (build-url $base "/CalculateModulo" $auth.query)
   let req_body = {"decimals": $decimals, "input": $input, "value": $value} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Math - Calculate Multiplication
@@ -551,12 +658,23 @@ export def "calculate-multiplication create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/CalculateMultiplication")
+  let full_url = (build-url $base "/CalculateMultiplication" $auth.query)
   let req_body = {"decimals": $decimals, "input": $input, "value": $value} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Math - Calculate Nth Root
@@ -580,12 +698,23 @@ export def "calculate-nth-root create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/CalculateNthRoot")
+  let full_url = (build-url $base "/CalculateNthRoot" $auth.query)
   let req_body = {"decimals": $decimals, "input": $input, "value": $value} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Math - Calculate power
@@ -609,12 +738,23 @@ export def "calculate-power create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/CalculatePower")
+  let full_url = (build-url $base "/CalculatePower" $auth.query)
   let req_body = {"decimals": $decimals, "input": $input, "power": $power} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Math - Calculate Sine
@@ -637,12 +777,23 @@ export def "calculate-sine create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/CalculateSine")
+  let full_url = (build-url $base "/CalculateSine" $auth.query)
   let req_body = {"decimals": $decimals, "input": $input} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Math - Calculate Square Root
@@ -665,12 +816,23 @@ export def "calculate-square-root create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/CalculateSquareRoot")
+  let full_url = (build-url $base "/CalculateSquareRoot" $auth.query)
   let req_body = {"decimals": $decimals, "input": $input} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Math - Calculate Subtraction
@@ -694,12 +856,23 @@ export def "calculate-subtraction create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/CalculateSubtraction")
+  let full_url = (build-url $base "/CalculateSubtraction" $auth.query)
   let req_body = {"decimals": $decimals, "input": $input, "value": $value} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Math - Calculate sum
@@ -722,12 +895,23 @@ export def "calculate-sum create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/CalculateSum")
+  let full_url = (build-url $base "/CalculateSum" $auth.query)
   let req_body = {"decimals": $decimals, "input": $input} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Math - Calculate Tangent
@@ -750,12 +934,23 @@ export def "calculate-tangent create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/CalculateTangent")
+  let full_url = (build-url $base "/CalculateTangent" $auth.query)
   let req_body = {"decimals": $decimals, "input": $input} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Math - Calculate variance
@@ -778,12 +973,23 @@ export def "calculate-variance create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/CalculateVariance")
+  let full_url = (build-url $base "/CalculateVariance" $auth.query)
   let req_body = {"decimals": $decimals, "input": $input} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Collections - Contains number
@@ -807,12 +1013,23 @@ export def "collection-contains-number create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/CollectionContainsNumber")
+  let full_url = (build-url $base "/CollectionContainsNumber" $auth.query)
   let req_body = {"input": $input, "match": $body_match, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Collections - Contains string
@@ -837,12 +1054,23 @@ export def "collection-contains-string create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/CollectionContainsString")
+  let full_url = (build-url $base "/CollectionContainsString" $auth.query)
   let req_body = {"ignorecase": $ignorecase, "input": $input, "match": $body_match, "trim": $trim} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Collections - Ends with string
@@ -867,12 +1095,23 @@ export def "collection-ends-with-string create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/CollectionEndsWithString")
+  let full_url = (build-url $base "/CollectionEndsWithString" $auth.query)
   let req_body = {"ignorecase": $ignorecase, "input": $input, "match": $body_match, "trim": $trim} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Collections - Starts with string
@@ -897,12 +1136,23 @@ export def "collection-starts-with-string create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/CollectionStartsWithString")
+  let full_url = (build-url $base "/CollectionStartsWithString" $auth.query)
   let req_body = {"ignorecase": $ignorecase, "input": $input, "match": $body_match, "trim": $trim} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Collections - Collection to JSON
@@ -925,12 +1175,23 @@ export def "collection-to-json create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/CollectionToJSON")
+  let full_url = (build-url $base "/CollectionToJSON" $auth.query)
   let req_body = {"input": $input, "name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Collections - Collection to XML
@@ -954,12 +1215,23 @@ export def "collection-to-xml create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/CollectionToXML")
+  let full_url = (build-url $base "/CollectionToXML" $auth.query)
   let req_body = {"child": $child, "input": $input, "root": $root} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Text - Compare strings
@@ -984,12 +1256,23 @@ export def "compare-strings create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/CompareStrings")
+  let full_url = (build-url $base "/CompareStrings" $auth.query)
   let req_body = {"compare": $compare, "input": $input, "lower": $lower, "trim": $trim} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Text - Contains string
@@ -1013,12 +1296,23 @@ export def "contains-string create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/ContainsString")
+  let full_url = (build-url $base "/ContainsString" $auth.query)
   let req_body = {"find": $find, "input": $input, "lower": $lower} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Math - Convert angle
@@ -1042,12 +1336,23 @@ export def "convert-angle create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/ConvertAngle")
+  let full_url = (build-url $base "/ConvertAngle" $auth.query)
   let req_body = {"input": $input, "source": $body_source, "target": $target} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Math - Convert area
@@ -1071,12 +1376,23 @@ export def "convert-area create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/ConvertArea")
+  let full_url = (build-url $base "/ConvertArea" $auth.query)
   let req_body = {"input": $input, "source": $body_source, "target": $target} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Text - Convert case
@@ -1099,12 +1415,23 @@ export def "convert-case create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/ConvertCase")
+  let full_url = (build-url $base "/ConvertCase" $auth.query)
   let req_body = {"alphacase": $alphacase, "input": $input} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Currency - Convert currency
@@ -1128,12 +1455,23 @@ export def "convert-currency create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/ConvertCurrency")
+  let full_url = (build-url $base "/ConvertCurrency" $auth.query)
   let req_body = {"input": $input, "source": $body_source, "target": $target} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Math - Convert distance
@@ -1157,12 +1495,23 @@ export def "convert-distance create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/ConvertDistance")
+  let full_url = (build-url $base "/ConvertDistance" $auth.query)
   let req_body = {"input": $input, "source": $body_source, "target": $target} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Math - Convert duration
@@ -1186,12 +1535,23 @@ export def "convert-duration create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/ConvertDuration")
+  let full_url = (build-url $base "/ConvertDuration" $auth.query)
   let req_body = {"input": $input, "source": $body_source, "target": $target} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Math - Convert energy
@@ -1215,12 +1575,23 @@ export def "convert-energy create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/ConvertEnergy")
+  let full_url = (build-url $base "/ConvertEnergy" $auth.query)
   let req_body = {"input": $input, "source": $body_source, "target": $target} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Files - Convert Image
@@ -1244,14 +1615,25 @@ export def "convert-image create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/ConvertImage")
+  let full_url = (build-url $base "/ConvertImage" $auth.query)
   let req_body = {"file": $file, "format": $format} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "image/bmp")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body ["file"] $dry_run)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: $mp.content_type
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $mp.body $insecure $raw $allow_errors $full [200]
 }
 
 # Math - Convert power
@@ -1275,12 +1657,23 @@ export def "convert-power create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/ConvertPower")
+  let full_url = (build-url $base "/ConvertPower" $auth.query)
   let req_body = {"input": $input, "source": $body_source, "target": $target} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Math - Convert speed
@@ -1304,12 +1697,23 @@ export def "convert-speed create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/ConvertSpeed")
+  let full_url = (build-url $base "/ConvertSpeed" $auth.query)
   let req_body = {"input": $input, "source": $body_source, "target": $target} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Math - Convert temperature
@@ -1333,12 +1737,23 @@ export def "convert-temperature create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/ConvertTemperature")
+  let full_url = (build-url $base "/ConvertTemperature" $auth.query)
   let req_body = {"input": $input, "source": $body_source, "target": $target} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Math - Convert volume
@@ -1362,12 +1777,23 @@ export def "convert-volume create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/ConvertVolume")
+  let full_url = (build-url $base "/ConvertVolume" $auth.query)
   let req_body = {"input": $input, "source": $body_source, "target": $target} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Math - Convert weight
@@ -1391,12 +1817,23 @@ export def "convert-weight create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/ConvertWeight")
+  let full_url = (build-url $base "/ConvertWeight" $auth.query)
   let req_body = {"input": $input, "source": $body_source, "target": $target} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Collections - Count collection
@@ -1418,12 +1855,23 @@ export def "count-collection create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/CountCollection")
+  let full_url = (build-url $base "/CountCollection" $auth.query)
   let req_body = {"input": $input} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Files - Crop Image
@@ -1449,14 +1897,25 @@ export def "crop-image create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/CropImage")
+  let full_url = (build-url $base "/CropImage" $auth.query)
   let req_body = {"Height": $height, "Width": $width, "file": $file, "position": $position} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "image/bmp")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body ["file"] $dry_run)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: $mp.content_type
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $mp.body $insecure $raw $allow_errors $full [200]
 }
 
 # DateTime - DateTime difference
@@ -1479,12 +1938,23 @@ export def "date-time-difference create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/DateTimeDifference")
+  let full_url = (build-url $base "/DateTimeDifference" $auth.query)
   let req_body = {"dateTime1": $date_time1, "dateTime2": $date_time2} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # DateTime - Get date and time information
@@ -1507,12 +1977,23 @@ export def "date-time-info get" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/DateTimeInfo")
+  let full_url = (build-url $base "/DateTimeInfo" $auth.query)
   let req_body = {"culture": $culture, "input": $input} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Text - Decode string
@@ -1534,12 +2015,23 @@ export def "decode-string create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/DecodeString")
+  let full_url = (build-url $base "/DecodeString" $auth.query)
   let req_body = {"source": $body_source} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Text - Encode string
@@ -1561,12 +2053,23 @@ export def "encode-string create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/EncodeString")
+  let full_url = (build-url $base "/EncodeString" $auth.query)
   let req_body = {"source": $body_source} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Files - File to string
@@ -1588,14 +2091,25 @@ export def "file-to-string create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/FileToString")
+  let full_url = (build-url $base "/FileToString" $auth.query)
   let req_body = {"file": $file} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body ["file"] $dry_run)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: $mp.content_type
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $mp.body $insecure $raw $allow_errors $full [200]
 }
 
 # Collections - Filter collection
@@ -1619,12 +2133,23 @@ export def "filter-collection create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/FilterCollection")
+  let full_url = (build-url $base "/FilterCollection" $auth.query)
   let req_body = {"input": $input, "keywords": $keywords, "match": $body_match} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Files - Flip Image
@@ -1647,14 +2172,25 @@ export def "flip-image create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/FlipImage")
+  let full_url = (build-url $base "/FlipImage" $auth.query)
   let req_body = {"file": $file, "orientation": $orientation} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body ["file"] $dry_run)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: $mp.content_type
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $mp.body $insecure $raw $allow_errors $full [200]
 }
 
 # Currency - Format currency
@@ -1677,12 +2213,23 @@ export def "format-currency create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/FormatCurrency")
+  let full_url = (build-url $base "/FormatCurrency" $auth.query)
   let req_body = {"input": $input, "target": $target} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # DateTime - Format date and time
@@ -1706,12 +2253,23 @@ export def "format-date-time create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/FormatDateTime")
+  let full_url = (build-url $base "/FormatDateTime" $auth.query)
   let req_body = {"culture": $culture, "format": $format, "input": $input} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Text - Generate GUID
@@ -1733,12 +2291,23 @@ export def "generate-guid generate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/GenerateGuid")
+  let full_url = (build-url $base "/GenerateGuid" $auth.query)
   let req_body = {"uppercase": $uppercase} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Text - Generate hash
@@ -1761,12 +2330,23 @@ export def "generate-hash generate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/GenerateHash")
+  let full_url = (build-url $base "/GenerateHash" $auth.query)
   let req_body = {"algorithm": $algorithm, "input": $input} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Files - Generate QR code
@@ -1789,12 +2369,23 @@ export def "generate-qr-code generate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/GenerateQRCode")
+  let full_url = (build-url $base "/GenerateQRCode" $auth.query)
   let req_body = {"input": $input, "payload": $payload} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "image/png"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Data - JSON to CSV
@@ -1819,12 +2410,23 @@ export def "jso-nto-csv create-json" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/JSONtoCSV")
+  let full_url = (build-url $base "/JSONtoCSV" $auth.query)
   let req_body = {"header": $header, "input": $input, "omit": $omit, "order": $order} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Data - JSON to HTML Table
@@ -1851,12 +2453,23 @@ export def "jso-nto-html create-json" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/JSONtoHTML")
+  let full_url = (build-url $base "/JSONtoHTML" $auth.query)
   let req_body = {"alternate": $alternate, "attributes": $attributes, "header": $header, "input": $input, "omit": $omit, "order": $order} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Data - JSON to XML
@@ -1879,12 +2492,23 @@ export def "jso-nto-xml create-json" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/JSONtoXML")
+  let full_url = (build-url $base "/JSONtoXML" $auth.query)
   let req_body = {"input": $input, "root": $root} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Text - Join strings
@@ -1909,12 +2533,23 @@ export def "join-strings create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/JoinStrings")
+  let full_url = (build-url $base "/JoinStrings" $auth.query)
   let req_body = {"input": $input, "lower": $lower, "separator": $separator, "trim": $trim} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Finance - Market index
@@ -1937,12 +2572,23 @@ export def "market-index create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/MarketIndex")
+  let full_url = (build-url $base "/MarketIndex" $auth.query)
   let req_body = {"date": $date, "symbol": $symbol} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Data - Query JSON
@@ -1965,12 +2611,23 @@ export def "query-json list" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/QueryJSON")
+  let full_url = (build-url $base "/QueryJSON" $auth.query)
   let req_body = {"input": $input, "query": $query} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Data - Query XML
@@ -1993,12 +2650,23 @@ export def "query-xml list" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/QueryXML")
+  let full_url = (build-url $base "/QueryXML" $auth.query)
   let req_body = {"input": $input, "query": $query} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Math - Random number
@@ -2021,12 +2689,23 @@ export def "random-number create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/RandomNumber")
+  let full_url = (build-url $base "/RandomNumber" $auth.query)
   let req_body = {"end": $end, "start": $start} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Text - Redact string
@@ -2051,12 +2730,23 @@ export def "redact-string create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/RedactString")
+  let full_url = (build-url $base "/RedactString" $auth.query)
   let req_body = {"regex": $regex, "source": $body_source, "value": $value, "values": $values} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Collections - Remove from collection
@@ -2081,12 +2771,23 @@ export def "remove-from-collection delete" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/RemoveFromCollection")
+  let full_url = (build-url $base "/RemoveFromCollection" $auth.query)
   let req_body = {"index": $index, "input": $input, "item": $item, "items": $items} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Text - Replace string
@@ -2110,12 +2811,23 @@ export def "replace-string update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/ReplaceString")
+  let full_url = (build-url $base "/ReplaceString" $auth.query)
   let req_body = {"replacement": $replacement, "source": $body_source, "value": $value} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Collections - Replace values in collection
@@ -2140,12 +2852,23 @@ export def "replace-values-in-collection update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/ReplaceValuesInCollection")
+  let full_url = (build-url $base "/ReplaceValuesInCollection" $auth.query)
   let req_body = {"ignoreCase": $ignore_case, "input": $input, "match": $body_match, "replacement": $replacement} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Files - Resize Image
@@ -2172,14 +2895,25 @@ export def "resize-image resize" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/ResizeImage")
+  let full_url = (build-url $base "/ResizeImage" $auth.query)
   let req_body = {"algorithm": $algorithm, "file": $file, "height": $height, "units": $units, "width": $width} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "image/bmp")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body ["file"] $dry_run)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: $mp.content_type
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $mp.body $insecure $raw $allow_errors $full [200]
 }
 
 # Files - Rotate Image
@@ -2202,14 +2936,25 @@ export def "rotate-image create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/RotateImage")
+  let full_url = (build-url $base "/RotateImage" $auth.query)
   let req_body = {"degrees": $degrees, "file": $file} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body ["file"] $dry_run)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: $mp.content_type
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $mp.body $insecure $raw $allow_errors $full [200]
 }
 
 # Math - Round number
@@ -2232,12 +2977,23 @@ export def "round-number create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/RoundNumber")
+  let full_url = (build-url $base "/RoundNumber" $auth.query)
   let req_body = {"decimals": $decimals, "input": $input} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Text - Shorten hyperlink
@@ -2259,12 +3015,23 @@ export def "shorten-link create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/ShortenLink")
+  let full_url = (build-url $base "/ShortenLink" $auth.query)
   let req_body = {"source": $body_source} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Collections - Sort collection
@@ -2287,12 +3054,23 @@ export def "sort-collection create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/SortCollection")
+  let full_url = (build-url $base "/SortCollection" $auth.query)
   let req_body = {"input": $input, "order": $order} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Text - Speech to Text
@@ -2315,14 +3093,25 @@ export def "speech-to-text create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/SpeechToText")
+  let full_url = (build-url $base "/SpeechToText" $auth.query)
   let req_body = {"file": $file, "language": $language} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body ["file"] $dry_run)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: $mp.content_type
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $mp.body $insecure $raw $allow_errors $full [200]
 }
 
 # Collections - Split collection
@@ -2346,12 +3135,23 @@ export def "split-collection create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/SplitCollection")
+  let full_url = (build-url $base "/SplitCollection" $auth.query)
   let req_body = {"index": $index, "input": $input, "match": $body_match} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Text - Split string
@@ -2374,12 +3174,23 @@ export def "split-string create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/SplitString")
+  let full_url = (build-url $base "/SplitString" $auth.query)
   let req_body = {"characters": $characters, "input": $input} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Math - Calculate standard deviation
@@ -2402,12 +3213,23 @@ export def "standard-deviation create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/StandardDeviation")
+  let full_url = (build-url $base "/StandardDeviation" $auth.query)
   let req_body = {"decimals": $decimals, "input": $input} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Finance - Stock prices
@@ -2431,12 +3253,23 @@ export def "stock-prices create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/StockPrices")
+  let full_url = (build-url $base "/StockPrices" $auth.query)
   let req_body = {"date": $date, "exchange": $exchange, "symbols": $symbols} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Text - String to File
@@ -2461,12 +3294,23 @@ export def "string-to-file create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/StringToFile")
+  let full_url = (build-url $base "/StringToFile" $auth.query)
   let req_body = {"extension": $extension, "filename": $filename, "input": $input} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Text - Text to Speech
@@ -2490,12 +3334,23 @@ export def "text-to-speech create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/TextToSpeech")
+  let full_url = (build-url $base "/TextToSpeech" $auth.query)
   let req_body = {"text": $text, "type": $type, "voice": $voice} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "audio/mp3"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Text - Translate string
@@ -2518,12 +3373,23 @@ export def "translate-string create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/TranslateString")
+  let full_url = (build-url $base "/TranslateString" $auth.query)
   let req_body = {"input": $input, "language": $language} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Text - Trim string
@@ -2546,12 +3412,23 @@ export def "trim-string create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/TrimString")
+  let full_url = (build-url $base "/TrimString" $auth.query)
   let req_body = {"source": $body_source, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Text - Decode URL
@@ -2573,12 +3450,23 @@ export def "url-decode create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/URLDecode")
+  let full_url = (build-url $base "/URLDecode" $auth.query)
   let req_body = {"source": $body_source} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Text - Encode URL
@@ -2600,12 +3488,23 @@ export def "url-encode create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/URLEncode")
+  let full_url = (build-url $base "/URLEncode" $auth.query)
   let req_body = {"source": $body_source} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Text - Validate email
@@ -2627,12 +3526,23 @@ export def "validate-email validate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/ValidateEmail")
+  let full_url = (build-url $base "/ValidateEmail" $auth.query)
   let req_body = {"source": $body_source} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Text - Verify hash
@@ -2656,12 +3566,23 @@ export def "verify-hash verify" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/VerifyHash")
+  let full_url = (build-url $base "/VerifyHash" $auth.query)
   let req_body = {"algorithm": $algorithm, "hash": $hash, "input": $input} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Files - Watermark Image
@@ -2689,14 +3610,25 @@ export def "watermark-image create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/WatermarkImage")
+  let full_url = (build-url $base "/WatermarkImage" $auth.query)
   let req_body = {"color": $color, "file": $file, "font": $font, "horizontal": $horizontal, "size": $size, "text": $text, "vertical": $vertical} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body ["file"] $dry_run)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: $mp.content_type
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $mp.body $insecure $raw $allow_errors $full [200]
 }
 
 # DateTime - Get world time
@@ -2721,12 +3653,23 @@ export def "world-time create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/WorldTime")
+  let full_url = (build-url $base "/WorldTime" $auth.query)
   let req_body = {"format": $format, "input": $input, "source": $body_source, "target": $target} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Data - XML to JSON
@@ -2748,10 +3691,21 @@ export def "xm-lto-json create-xml" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/XMLtoJSON")
+  let full_url = (build-url $base "/XMLtoJSON" $auth.query)
   let req_body = {"input": $input} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }

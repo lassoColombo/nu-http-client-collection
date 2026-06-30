@@ -8,7 +8,7 @@ const BASE_URL = "http://localhost//config2.gamesparks.net"
 # `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
 # where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o GAMESPARKS_GAME_DETAILS_API_TOKEN | default "" }
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o GAMESPARKS_GAME_DETAILS_API_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
@@ -44,14 +44,11 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
-# Trick: `url encode --all` over-encodes, then we decode the four unreserved
-# punctuation chars back. Pre-existing %XX sequences in the input survive
-# because `url encode --all` first turns their % into %25.
 def encode-path-segment [v: any]: nothing -> string {
   $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
-# Serialize an array-typed path parameter (issue 49.A). OpenAPI 3 `style: simple`
+# Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
 # (the default for path params) and Swagger 2 `collectionFormat: csv` both join
 # the elements with a literal comma WITHIN the single path segment, each element
 # RFC-3986-encoded individually (so a comma inside an element stays %2C). Without
@@ -62,60 +59,66 @@ def encode-path-array [v: any]: nothing -> string {
   if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
 }
 
-# Build URL from base, path, and optional query string
-def build-url [base: string, path: string, query?: string]: nothing -> string {
+# Build the request URL from base, path, and any number of pre-encoded query
+# fragments (param serializer output and/or the auth query). Each fragment is an
+# `&`-joinable `key=value` string already percent-encoded by its producer; empty
+# fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
+# delimiters are hand-spliced — and any query already on the base URL is merged in.
+def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
   let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
-  let result = ($parsed | upsert path $full_path)
-  if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
+  let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
+  $parsed | upsert path $full_path | upsert query $query | url join
 }
 
-# Build the dry-run record returned by --dry-run. Shape:
-#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
-#    auth: {scheme, location}}
-# `meta` carries logical-form data (the query record by spec name, the pre-serialization
-# body) that do-request itself cannot reconstruct from its wire-format args.
-def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
-  let m = ($meta | default {})
-  {
-    dry_run: true
-    method: $method
-    url: $url
-    query: ($m | get -o query | default {})
-    headers: $auth.headers
-    body: ($m | get -o body)
-    content_type: $content_type
-    timeout: $timeout
-    auth: {scheme: $auth.scheme, location: $auth.location}
-  }
+# Success policy: did this response succeed? Single source of truth, consulted by
+# handle-response and the HEAD header-unwrap. Empty ok_codes means the spec listed
+# none, so fall back to < 400. Otherwise: any 2xx, plus documented success codes.
+def status-ok [status: int, ok_codes: list<int>]: nothing -> bool {
+  if ($ok_codes | is-empty) { $status < 400 } else { ($status >= 200 and $status < 300) or ($status in $ok_codes) }
 }
 
-# Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
-  let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
-  let timeout = ($max_time | default 30min)
-  let ct = ($content_type | default "application/json")
-  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
-  let resp = match $method {
-    "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
-  }
-  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
-  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
+# Unwrap a `--full` HTTP response into the user-facing value. Response arrives
+# via pipeline; ok_codes gates the error throw (see status-ok).
+def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: record -> any {
+  let resp = $in
+  if $allow_errors { return $resp }
+  if not (status-ok $resp.status $ok_codes) { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } }
+  if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
+  if $resp.status == 204 { return null }
+  $resp.body
+}
+
+# GET — bodyless, honours --raw
+def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+}
+
+# POST — body + content-type
+def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# PUT — body + content-type
+def send-put [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http put --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http put --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# DELETE — body via --data
+def send-delete [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http delete --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url } else { http delete --headers $req.headers --content-type $req.content_type --data $body --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url }
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # Build a `multipart/form-data` envelope per RFC 7578. `file_fields` lists
 # the field names whose value should be read from disk as bytes; every
 # other field is sent as a text part (records/lists JSON-stringified).
-# Returns {content_type, body} ready to pass to `do-request`.
+# Returns {content_type, body}.
 # When `$dry_run` is true, file fields are NOT read from disk — they emit
 # an empty-bytes placeholder so callers can inspect the request shape
-# without the file existing on disk (issue 11.B).
+# without the file existing on disk.
 def build-multipart-body [parts: record, file_fields: list<string>, dry_run: bool = false]: nothing -> record {
   let boundary = $"----nu-(random chars --length 24)"
   let crlf = "\r\n"
@@ -186,10 +189,21 @@ export def "restv2-game-regions list" [
 ]: nothing -> record<locked: bool, options: table<regionCode: string, regionName: string, selected: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/restv2/game/regions")
+  let full_url = (build-url $base "/restv2/game/regions" $auth.query)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the results of executed query defined by the parameters passed in
@@ -218,10 +232,21 @@ export def "restv2-game-admin-analytics get-data-using" [
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
   let qp = [(serialize-qp "stage" $stage "scalar") (serialize-qp "dataType" $data_type "scalar") (serialize-qp "precision" $precision "scalar") (serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar") (serialize-qp "keys" $keys "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/admin/analytics") $qp)
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/admin/analytics") $qp $auth.query)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"stage": $stage, "dataType": $data_type, "precision": $precision, "startDate": $start_date, "endDate": $end_date, "keys": $keys} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"stage": $stage, "dataType": $data_type, "precision": $precision, "startDate": $start_date, "endDate": $end_date, "keys": $keys} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the count of executed query
@@ -246,10 +271,21 @@ export def "restv2-game-admin-analytics-count get-data-using" [
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
   let qp = [(serialize-qp "stage" $stage "scalar") (serialize-qp "queryName" $query_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/admin/analytics/count") $qp)
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/admin/analytics/count") $qp $auth.query)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"stage": $stage, "queryName": $query_name} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"stage": $stage, "queryName": $query_name} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the percentage of user retention over the last 30 days
@@ -273,10 +309,21 @@ export def "restv2-game-admin-analytics-rolling-retention get-using" [
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
   let qp = [(serialize-qp "stage" $stage "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/admin/analytics/rollingRetention") $qp)
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/admin/analytics/rollingRetention") $qp $auth.query)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"stage": $stage} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"stage": $stage} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieves the Billing Details
@@ -298,10 +345,21 @@ export def "restv2-game-admin-billing-details get" [
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/admin/billingDetails"))
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/admin/billingDetails") $auth.query)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates the Billing Details
@@ -341,12 +399,23 @@ export def "restv2-game-admin-billing-details update" [
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/admin/billingDetails"))
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/admin/billingDetails") $auth.query)
   let req_body = {"building": $building, "city": $city, "companyName": $company_name, "country": $country, "email1": $email1, "email2": $email2, "email3": $email3, "firstName1": $first_name1, "firstName2": $first_name2, "firstName3": $first_name3, "lastName1": $last_name1, "lastName2": $last_name2, "lastName3": $last_name3, "postcode": $postcode, "state": $state, "street": $street, "taxNumber": $tax_number} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # getGameSummary
@@ -372,10 +441,21 @@ export def "restv2-game-admin-notifications-summary get-using" [
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
   let qp = [(serialize-qp "stage" $stage "scalar") (serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/admin/notifications/summary") $qp)
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/admin/notifications/summary") $qp $auth.query)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"stage": $stage, "startDate": $start_date, "endDate": $end_date} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"stage": $stage, "startDate": $start_date, "endDate": $end_date} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # testPushAmazonNotifications
@@ -404,12 +484,23 @@ export def "restv2-game-admin-push-notifications-test-amazon create-using" [
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/admin/pushNotifications/test/amazon"))
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/admin/pushNotifications/test/amazon") $auth.query)
   let req_body = {"customJson": $custom_json, "messageId": $message_id, "pushId": $push_id, "subtitle": $subtitle, "summary": $summary, "title": $title} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # testPushAppleDevNotifications
@@ -438,12 +529,23 @@ export def "restv2-game-admin-push-notifications-test-apple-development create-d
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/admin/pushNotifications/test/apple/development"))
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/admin/pushNotifications/test/apple/development") $auth.query)
   let req_body = {"customJson": $custom_json, "messageId": $message_id, "pushId": $push_id, "subtitle": $subtitle, "summary": $summary, "title": $title} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # testPushAppleProdNotifications
@@ -472,12 +574,23 @@ export def "restv2-game-admin-push-notifications-test-apple-production create-pr
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/admin/pushNotifications/test/apple/production"))
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/admin/pushNotifications/test/apple/production") $auth.query)
   let req_body = {"customJson": $custom_json, "messageId": $message_id, "pushId": $push_id, "subtitle": $subtitle, "summary": $summary, "title": $title} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # testPushGoogleNotifications
@@ -506,12 +619,23 @@ export def "restv2-game-admin-push-notifications-test-google create-using" [
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/admin/pushNotifications/test/google"))
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/admin/pushNotifications/test/google") $auth.query)
   let req_body = {"customJson": $custom_json, "messageId": $message_id, "pushId": $push_id, "subtitle": $subtitle, "summary": $summary, "title": $title} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # testWindows8Notifications
@@ -540,12 +664,23 @@ export def "restv2-game-admin-push-notifications-test-microsoft-windows8 create-
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/admin/pushNotifications/test/microsoft/windows8"))
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/admin/pushNotifications/test/microsoft/windows8") $auth.query)
   let req_body = {"customJson": $custom_json, "messageId": $message_id, "pushId": $push_id, "subtitle": $subtitle, "summary": $summary, "title": $title} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # testWindowsPhone8Notifications
@@ -574,12 +709,23 @@ export def "restv2-game-admin-push-notifications-test-microsoft-windows-phone8 c
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/admin/pushNotifications/test/microsoft/windowsPhone8"))
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/admin/pushNotifications/test/microsoft/windowsPhone8") $auth.query)
   let req_body = {"customJson": $custom_json, "messageId": $message_id, "pushId": $push_id, "subtitle": $subtitle, "summary": $summary, "title": $title} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # testViberIntegrationNotifications
@@ -608,12 +754,23 @@ export def "restv2-game-admin-push-notifications-test-viber-integration create-u
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/admin/pushNotifications/test/viber/integration"))
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/admin/pushNotifications/test/viber/integration") $auth.query)
   let req_body = {"customJson": $custom_json, "messageId": $message_id, "pushId": $push_id, "subtitle": $subtitle, "summary": $summary, "title": $title} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # testViberProductionNotifications
@@ -642,12 +799,23 @@ export def "restv2-game-admin-push-notifications-test-viber-production create-us
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/admin/pushNotifications/test/viber/production"))
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/admin/pushNotifications/test/viber/production") $auth.query)
   let req_body = {"customJson": $custom_json, "messageId": $message_id, "pushId": $push_id, "subtitle": $subtitle, "summary": $summary, "title": $title} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # getScriptDifferences
@@ -673,10 +841,21 @@ export def "restv2-game-admin-scripts-differences get-using" [
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
   if ($snapshot_id1 | is-empty) { error make --unspanned { msg: "path parameter 'snapshotId1' must be non-empty" } }
   if ($snapshot_id2 | is-empty) { error make --unspanned { msg: "path parameter 'snapshotId2' must be non-empty" } }
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key), snapshot_id1: (encode-path-segment $snapshot_id1), snapshot_id2: (encode-path-segment $snapshot_id2)} | format pattern "/restv2/game/{api_key}/admin/scripts/differences/{snapshot_id1}/{snapshot_id2}"))
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key), snapshot_id1: (encode-path-segment $snapshot_id1), snapshot_id2: (encode-path-segment $snapshot_id2)} | format pattern "/restv2/game/{api_key}/admin/scripts/differences/{snapshot_id1}/{snapshot_id2}") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # exportZip
@@ -698,10 +877,21 @@ export def "restv2-game-admin-scripts-export get-zip-using" [
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/admin/scripts/export"))
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/admin/scripts/export") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # importAccept
@@ -727,14 +917,25 @@ export def "restv2-game-admin-scripts-import-accept create-using" [
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
   let qp = [(serialize-qp "body" $body "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/admin/scripts/import/accept") $qp)
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/admin/scripts/import/accept") $qp $auth.query)
   let req_body = {"file": $file} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body ["file"] $dry_run)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: ({"body": $body} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"body": $body} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: $mp.content_type
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $mp.body $insecure $raw $allow_errors $full [200]
 }
 
 # importZip
@@ -758,14 +959,25 @@ export def "restv2-game-admin-scripts-import-preview create-zip-using" [
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/admin/scripts/import/preview"))
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/admin/scripts/import/preview") $auth.query)
   let req_body = {"file": $file} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body ["file"] $dry_run)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: $mp.content_type
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $mp.body $insecure $raw $allow_errors $full [200]
 }
 
 # getScriptVersions
@@ -789,10 +1001,21 @@ export def "restv2-game-admin-scripts-versions get-using-by-api-key" [
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
   let qp = [(serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/admin/scripts/versions") $qp)
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/admin/scripts/versions") $qp $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"pageSize": $page_size} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"pageSize": $page_size} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # getScriptVersions
@@ -818,10 +1041,21 @@ export def "restv2-game-admin-scripts-versions get-using" [
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
   if ($page | is-empty) { error make --unspanned { msg: "path parameter 'page' must be non-empty" } }
   let qp = [(serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key), page: (encode-path-segment $page)} | format pattern "/restv2/game/{api_key}/admin/scripts/versions/{page}") $qp)
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key), page: (encode-path-segment $page)} | format pattern "/restv2/game/{api_key}/admin/scripts/versions/{page}") $qp $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"pageSize": $page_size} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"pageSize": $page_size} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # getSegmentQueryFilters
@@ -843,10 +1077,21 @@ export def "restv2-game-admin-segment-query-filters get-using" [
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/admin/segmentQueryFilters"))
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/admin/segmentQueryFilters") $auth.query)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # getSegmentQueryFiltersConfig
@@ -868,10 +1113,21 @@ export def "restv2-game-admin-segment-query-filters-config get-using" [
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/admin/segmentQueryFilters/config"))
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/admin/segmentQueryFilters/config") $auth.query)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # updateSegmentQueryFiltersConfig
@@ -897,12 +1153,23 @@ export def "restv2-game-admin-segment-query-filters-config update-using" [
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/admin/segmentQueryFilters/config"))
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/admin/segmentQueryFilters/config") $auth.query)
   let req_body = {"customFilters": $custom_filters, "hiddenFilters": $hidden_filters} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # getSegmentQueryStandardFilters
@@ -924,10 +1191,21 @@ export def "restv2-game-admin-segment-query-filters-standard-filters get-using" 
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/admin/segmentQueryFilters/standardFilters"))
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/admin/segmentQueryFilters/standardFilters") $auth.query)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # getSnapshots
@@ -951,10 +1229,21 @@ export def "restv2-game-admin-snapshots get-using-by-api-key" [
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
   let qp = [(serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/admin/snapshots") $qp)
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/admin/snapshots") $qp $auth.query)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"pageSize": $page_size} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"pageSize": $page_size} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # createSnapshots
@@ -978,12 +1267,23 @@ export def "restv2-game-admin-snapshots create-using" [
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/admin/snapshots"))
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/admin/snapshots") $auth.query)
   let req_body = {"description": $description} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # getLiveSnapshotId
@@ -1005,10 +1305,21 @@ export def "restv2-game-admin-snapshots-live-snapshot-id get-using" [
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/admin/snapshots/liveSnapshotId"))
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/admin/snapshots/liveSnapshotId") $auth.query)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # getSnapshots
@@ -1034,10 +1345,21 @@ export def "restv2-game-admin-snapshots-page get-using" [
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
   if ($page | is-empty) { error make --unspanned { msg: "path parameter 'page' must be non-empty" } }
   let qp = [(serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key), page: (encode-path-segment $page)} | format pattern "/restv2/game/{api_key}/admin/snapshots/page/{page}") $qp)
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key), page: (encode-path-segment $page)} | format pattern "/restv2/game/{api_key}/admin/snapshots/page/{page}") $qp $auth.query)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"pageSize": $page_size} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"pageSize": $page_size} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # revertToSnapshot
@@ -1061,10 +1383,21 @@ export def "restv2-game-admin-snapshots-revert-to create-using" [
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
   if ($snapshot_id | is-empty) { error make --unspanned { msg: "path parameter 'snapshotId' must be non-empty" } }
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key), snapshot_id: (encode-path-segment $snapshot_id)} | format pattern "/restv2/game/{api_key}/admin/snapshots/revert/to/{snapshot_id}"))
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key), snapshot_id: (encode-path-segment $snapshot_id)} | format pattern "/restv2/game/{api_key}/admin/snapshots/revert/to/{snapshot_id}") $auth.query)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # deleteSnapshot
@@ -1088,10 +1421,21 @@ export def "restv2-game-admin-snapshots delete-using-by-api-key-snapshot-id" [
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
   if ($snapshot_id | is-empty) { error make --unspanned { msg: "path parameter 'snapshotId' must be non-empty" } }
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key), snapshot_id: (encode-path-segment $snapshot_id)} | format pattern "/restv2/game/{api_key}/admin/snapshots/{snapshot_id}"))
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key), snapshot_id: (encode-path-segment $snapshot_id)} | format pattern "/restv2/game/{api_key}/admin/snapshots/{snapshot_id}") $auth.query)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # getSnapshot
@@ -1115,10 +1459,21 @@ export def "restv2-game-admin-snapshots get-using" [
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
   if ($snapshot_id | is-empty) { error make --unspanned { msg: "path parameter 'snapshotId' must be non-empty" } }
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key), snapshot_id: (encode-path-segment $snapshot_id)} | format pattern "/restv2/game/{api_key}/admin/snapshots/{snapshot_id}"))
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key), snapshot_id: (encode-path-segment $snapshot_id)} | format pattern "/restv2/game/{api_key}/admin/snapshots/{snapshot_id}") $auth.query)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # copySnapshotToNewGame
@@ -1147,10 +1502,21 @@ export def "restv2-game-admin-snapshots-copy create-to-new-using" [
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
   if ($snapshot_id | is-empty) { error make --unspanned { msg: "path parameter 'snapshotId' must be non-empty" } }
   let qp = [(serialize-qp "includeGameConfig" $include_game_config "scalar") (serialize-qp "includeMetadata" $include_metadata "scalar") (serialize-qp "includeBinaries" $include_binaries "scalar") (serialize-qp "includeCollaborators" $include_collaborators "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key), snapshot_id: (encode-path-segment $snapshot_id)} | format pattern "/restv2/game/{api_key}/admin/snapshots/{snapshot_id}/copy") $qp)
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key), snapshot_id: (encode-path-segment $snapshot_id)} | format pattern "/restv2/game/{api_key}/admin/snapshots/{snapshot_id}/copy") $qp $auth.query)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"includeGameConfig": $include_game_config, "includeMetadata": $include_metadata, "includeBinaries": $include_binaries, "includeCollaborators": $include_collaborators} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"includeGameConfig": $include_game_config, "includeMetadata": $include_metadata, "includeBinaries": $include_binaries, "includeCollaborators": $include_collaborators} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # copySnapshotToExistingGame
@@ -1181,10 +1547,21 @@ export def "restv2-game-admin-snapshots-copy-to create-existing-using-by-api-key
   if ($snapshot_id | is-empty) { error make --unspanned { msg: "path parameter 'snapshotId' must be non-empty" } }
   if ($target_api_key | is-empty) { error make --unspanned { msg: "path parameter 'targetApiKey' must be non-empty" } }
   let qp = [(serialize-qp "includeGameConfig" $include_game_config "scalar") (serialize-qp "includeMetadata" $include_metadata "scalar") (serialize-qp "includeBinaries" $include_binaries "scalar") (serialize-qp "includeCollaborators" $include_collaborators "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key), snapshot_id: (encode-path-segment $snapshot_id), target_api_key: (encode-path-segment $target_api_key)} | format pattern "/restv2/game/{api_key}/admin/snapshots/{snapshot_id}/copy/to/{target_api_key}") $qp)
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key), snapshot_id: (encode-path-segment $snapshot_id), target_api_key: (encode-path-segment $target_api_key)} | format pattern "/restv2/game/{api_key}/admin/snapshots/{snapshot_id}/copy/to/{target_api_key}") $qp $auth.query)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"includeGameConfig": $include_game_config, "includeMetadata": $include_metadata, "includeBinaries": $include_binaries, "includeCollaborators": $include_collaborators} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"includeGameConfig": $include_game_config, "includeMetadata": $include_metadata, "includeBinaries": $include_binaries, "includeCollaborators": $include_collaborators} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # publishSnapshot
@@ -1208,10 +1585,21 @@ export def "restv2-game-admin-snapshots-publish create-using-by-api-key-snapshot
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
   if ($snapshot_id | is-empty) { error make --unspanned { msg: "path parameter 'snapshotId' must be non-empty" } }
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key), snapshot_id: (encode-path-segment $snapshot_id)} | format pattern "/restv2/game/{api_key}/admin/snapshots/{snapshot_id}/publish"))
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key), snapshot_id: (encode-path-segment $snapshot_id)} | format pattern "/restv2/game/{api_key}/admin/snapshots/{snapshot_id}/publish") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # unpublishSnapshot
@@ -1235,10 +1623,21 @@ export def "restv2-game-admin-snapshots-unpublish create-using" [
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
   if ($snapshot_id | is-empty) { error make --unspanned { msg: "path parameter 'snapshotId' must be non-empty" } }
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key), snapshot_id: (encode-path-segment $snapshot_id)} | format pattern "/restv2/game/{api_key}/admin/snapshots/{snapshot_id}/unpublish"))
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key), snapshot_id: (encode-path-segment $snapshot_id)} | format pattern "/restv2/game/{api_key}/admin/snapshots/{snapshot_id}/unpublish") $auth.query)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # getTestHarnessScenarios
@@ -1260,10 +1659,21 @@ export def "restv2-game-admin-test-harness-scenarios list" [
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/admin/testHarness/scenarios"))
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/admin/testHarness/scenarios") $auth.query)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # createTestHarnessScenario
@@ -1288,12 +1698,23 @@ export def "restv2-game-admin-test-harness-scenarios create-using" [
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/admin/testHarness/scenarios"))
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/admin/testHarness/scenarios") $auth.query)
   let req_body = {"scenarioJson": $scenario_json, "scenarioName": $scenario_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # deleteTestHarnessScenario
@@ -1317,10 +1738,21 @@ export def "restv2-game-admin-test-harness-scenarios delete-using" [
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
   if ($scenario_name | is-empty) { error make --unspanned { msg: "path parameter 'scenarioName' must be non-empty" } }
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key), scenario_name: (encode-path-segment $scenario_name)} | format pattern "/restv2/game/{api_key}/admin/testHarness/scenarios/{scenario_name}"))
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key), scenario_name: (encode-path-segment $scenario_name)} | format pattern "/restv2/game/{api_key}/admin/testHarness/scenarios/{scenario_name}") $auth.query)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # getTestHarnessScenario
@@ -1344,10 +1776,21 @@ export def "restv2-game-admin-test-harness-scenarios get-using" [
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
   if ($scenario_name | is-empty) { error make --unspanned { msg: "path parameter 'scenarioName' must be non-empty" } }
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key), scenario_name: (encode-path-segment $scenario_name)} | format pattern "/restv2/game/{api_key}/admin/testHarness/scenarios/{scenario_name}"))
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key), scenario_name: (encode-path-segment $scenario_name)} | format pattern "/restv2/game/{api_key}/admin/testHarness/scenarios/{scenario_name}") $auth.query)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # updateTestHarnessScenario
@@ -1374,12 +1817,23 @@ export def "restv2-game-admin-test-harness-scenarios update-using" [
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
   if ($scenario_name | is-empty) { error make --unspanned { msg: "path parameter 'scenarioName' must be non-empty" } }
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key), scenario_name: (encode-path-segment $scenario_name)} | format pattern "/restv2/game/{api_key}/admin/testHarness/scenarios/{scenario_name}"))
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key), scenario_name: (encode-path-segment $scenario_name)} | format pattern "/restv2/game/{api_key}/admin/testHarness/scenarios/{scenario_name}") $auth.query)
   let req_body = {"scenarioJson": $scenario_json, "scenarioName": $body_scenario_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Resets the secret of a credential
@@ -1403,10 +1857,21 @@ export def "restv2-game-config-credentials-reset-secret update-credential-using-
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
   if ($credential_name | is-empty) { error make --unspanned { msg: "path parameter 'credentialName' must be non-empty" } }
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key), credential_name: (encode-path-segment $credential_name)} | format pattern "/restv2/game/{api_key}/config/~credentials/{credential_name}/resetSecret"))
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key), credential_name: (encode-path-segment $credential_name)} | format pattern "/restv2/game/{api_key}/config/~credentials/{credential_name}/resetSecret") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # getGamesEndpoints
@@ -1428,10 +1893,21 @@ export def "restv2-game-endpoints get-using" [
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/endpoints"))
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/endpoints") $auth.query)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # getExperiments
@@ -1453,10 +1929,21 @@ export def "restv2-game-manage-experiments list" [
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/manage/experiments"))
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/manage/experiments") $auth.query)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # createExperiment
@@ -1492,12 +1979,23 @@ export def "restv2-game-manage-experiments create-using" [
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/manage/experiments"))
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/manage/experiments") $auth.query)
   let req_body = {"active": $active, "changedFieldsAndInitialValues": $changed_fields_and_initial_values, "complete": $complete, "config": $config, "endDate": $end_date, "id": $id, "measurements": $measurements, "measurementsEsQuery": $measurements_es_query, "name": $name, "percentHash": $percent_hash, "publishedStages": $published_stages, "startDate": $start_date} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # deleteExperiment
@@ -1521,10 +2019,21 @@ export def "restv2-game-manage-experiments delete-using" [
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key), id: (encode-path-segment $id)} | format pattern "/restv2/game/{api_key}/manage/experiments/{id}"))
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key), id: (encode-path-segment $id)} | format pattern "/restv2/game/{api_key}/manage/experiments/{id}") $auth.query)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # getExperiment
@@ -1548,10 +2057,21 @@ export def "restv2-game-manage-experiments get-using" [
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key), id: (encode-path-segment $id)} | format pattern "/restv2/game/{api_key}/manage/experiments/{id}"))
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key), id: (encode-path-segment $id)} | format pattern "/restv2/game/{api_key}/manage/experiments/{id}") $auth.query)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # updateExperiment
@@ -1589,12 +2109,23 @@ export def "restv2-game-manage-experiments update-using" [
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key), id: (encode-path-segment $id)} | format pattern "/restv2/game/{api_key}/manage/experiments/{id}"))
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key), id: (encode-path-segment $id)} | format pattern "/restv2/game/{api_key}/manage/experiments/{id}") $auth.query)
   let req_body = {"active": $active, "changedFieldsAndInitialValues": $changed_fields_and_initial_values, "complete": $complete, "config": $config, "endDate": $end_date, "id": $body_id, "measurements": $measurements, "measurementsEsQuery": $measurements_es_query, "name": $name, "percentHash": $percent_hash, "publishedStages": $published_stages, "startDate": $start_date} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # doActionExperiment
@@ -1620,10 +2151,21 @@ export def "restv2-game-manage-experiments create-do-using" [
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($action | is-empty) { error make --unspanned { msg: "path parameter 'action' must be non-empty" } }
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key), id: (encode-path-segment $id), action: (encode-path-segment $action)} | format pattern "/restv2/game/{api_key}/manage/experiments/{id}/{action}"))
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key), id: (encode-path-segment $id), action: (encode-path-segment $action)} | format pattern "/restv2/game/{api_key}/manage/experiments/{id}/{action}") $auth.query)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # listQueries
@@ -1645,10 +2187,21 @@ export def "restv2-game-manage-queries list-using-get" [
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/manage/queries"))
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/manage/queries") $auth.query)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # createQuery
@@ -1675,12 +2228,23 @@ export def "restv2-game-manage-queries create-list-using" [
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/manage/queries"))
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/manage/queries") $auth.query)
   let req_body = {"esRules": $es_rules, "name": $name, "qbRules": $qb_rules, "shortCode": $short_code} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # deleteQuery
@@ -1704,10 +2268,21 @@ export def "restv2-game-manage-queries delete-list-using" [
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
   if ($short_code | is-empty) { error make --unspanned { msg: "path parameter 'shortCode' must be non-empty" } }
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key), short_code: (encode-path-segment $short_code)} | format pattern "/restv2/game/{api_key}/manage/queries/{short_code}"))
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key), short_code: (encode-path-segment $short_code)} | format pattern "/restv2/game/{api_key}/manage/queries/{short_code}") $auth.query)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # getQuery
@@ -1731,10 +2306,21 @@ export def "restv2-game-manage-queries get-list-using" [
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
   if ($short_code | is-empty) { error make --unspanned { msg: "path parameter 'shortCode' must be non-empty" } }
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key), short_code: (encode-path-segment $short_code)} | format pattern "/restv2/game/{api_key}/manage/queries/{short_code}"))
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key), short_code: (encode-path-segment $short_code)} | format pattern "/restv2/game/{api_key}/manage/queries/{short_code}") $auth.query)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # updateQuery
@@ -1763,12 +2349,23 @@ export def "restv2-game-manage-queries update-list-using" [
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
   if ($short_code | is-empty) { error make --unspanned { msg: "path parameter 'shortCode' must be non-empty" } }
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key), short_code: (encode-path-segment $short_code)} | format pattern "/restv2/game/{api_key}/manage/queries/{short_code}"))
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key), short_code: (encode-path-segment $short_code)} | format pattern "/restv2/game/{api_key}/manage/queries/{short_code}") $auth.query)
   let req_body = {"esRules": $es_rules, "name": $name, "qbRules": $qb_rules, "shortCode": $body_short_code} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # listScreens
@@ -1790,10 +2387,21 @@ export def "restv2-game-manage-screens list-using-get" [
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/manage/screens"))
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/manage/screens") $auth.query)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # createScreen
@@ -1820,12 +2428,23 @@ export def "restv2-game-manage-screens create-using" [
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/manage/screens"))
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/manage/screens") $auth.query)
   let req_body = {"groups": $groups, "name": $name, "shortCode": $short_code, "template": $template} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # listExecutableScreens
@@ -1847,10 +2466,21 @@ export def "restv2-game-manage-screens-executable list-using-get" [
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/manage/screens/executable"))
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/manage/screens/executable") $auth.query)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # deleteScreen
@@ -1874,10 +2504,21 @@ export def "restv2-game-manage-screens delete-using" [
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
   if ($short_code | is-empty) { error make --unspanned { msg: "path parameter 'shortCode' must be non-empty" } }
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key), short_code: (encode-path-segment $short_code)} | format pattern "/restv2/game/{api_key}/manage/screens/{short_code}"))
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key), short_code: (encode-path-segment $short_code)} | format pattern "/restv2/game/{api_key}/manage/screens/{short_code}") $auth.query)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # getScreen
@@ -1901,10 +2542,21 @@ export def "restv2-game-manage-screens get-using" [
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
   if ($short_code | is-empty) { error make --unspanned { msg: "path parameter 'shortCode' must be non-empty" } }
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key), short_code: (encode-path-segment $short_code)} | format pattern "/restv2/game/{api_key}/manage/screens/{short_code}"))
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key), short_code: (encode-path-segment $short_code)} | format pattern "/restv2/game/{api_key}/manage/screens/{short_code}") $auth.query)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # updateScreen
@@ -1933,12 +2585,23 @@ export def "restv2-game-manage-screens update-using" [
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
   if ($short_code | is-empty) { error make --unspanned { msg: "path parameter 'shortCode' must be non-empty" } }
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key), short_code: (encode-path-segment $short_code)} | format pattern "/restv2/game/{api_key}/manage/screens/{short_code}"))
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key), short_code: (encode-path-segment $short_code)} | format pattern "/restv2/game/{api_key}/manage/screens/{short_code}") $auth.query)
   let req_body = {"groups": $groups, "name": $name, "shortCode": $body_short_code, "template": $template} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # listSnapshots
@@ -1960,10 +2623,21 @@ export def "restv2-game-manage-snapshots list-using-get" [
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/manage/snapshots"))
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/manage/snapshots") $auth.query)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # createSnapshot
@@ -1987,12 +2661,23 @@ export def "restv2-game-manage-snapshots create-using" [
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/manage/snapshots"))
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/manage/snapshots") $auth.query)
   let req_body = {"description": $description} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # deleteSnapshot
@@ -2016,10 +2701,21 @@ export def "restv2-game-manage-snapshots delete-using" [
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
   if ($snapshot_id | is-empty) { error make --unspanned { msg: "path parameter 'snapshotId' must be non-empty" } }
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key), snapshot_id: (encode-path-segment $snapshot_id)} | format pattern "/restv2/game/{api_key}/manage/snapshots/{snapshot_id}"))
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key), snapshot_id: (encode-path-segment $snapshot_id)} | format pattern "/restv2/game/{api_key}/manage/snapshots/{snapshot_id}") $auth.query)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200 201]
 }
 
 # copySnapshotToExistingGame
@@ -2045,10 +2741,21 @@ export def "restv2-game-manage-snapshots-copy-to create-existing-using" [
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
   if ($snapshot_id | is-empty) { error make --unspanned { msg: "path parameter 'snapshotId' must be non-empty" } }
   if ($target_api_key | is-empty) { error make --unspanned { msg: "path parameter 'targetApiKey' must be non-empty" } }
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key), snapshot_id: (encode-path-segment $snapshot_id), target_api_key: (encode-path-segment $target_api_key)} | format pattern "/restv2/game/{api_key}/manage/snapshots/{snapshot_id}/copy/to/{target_api_key}"))
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key), snapshot_id: (encode-path-segment $snapshot_id), target_api_key: (encode-path-segment $target_api_key)} | format pattern "/restv2/game/{api_key}/manage/snapshots/{snapshot_id}/copy/to/{target_api_key}") $auth.query)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # publishSnapshot
@@ -2072,10 +2779,21 @@ export def "restv2-game-manage-snapshots-publish create-using" [
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
   if ($snapshot_id | is-empty) { error make --unspanned { msg: "path parameter 'snapshotId' must be non-empty" } }
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key), snapshot_id: (encode-path-segment $snapshot_id)} | format pattern "/restv2/game/{api_key}/manage/snapshots/{snapshot_id}/publish"))
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key), snapshot_id: (encode-path-segment $snapshot_id)} | format pattern "/restv2/game/{api_key}/manage/snapshots/{snapshot_id}/publish") $auth.query)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [201]
 }
 
 # revertSnapshot
@@ -2099,10 +2817,21 @@ export def "restv2-game-manage-snapshots-revert create-using" [
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
   if ($snapshot_id | is-empty) { error make --unspanned { msg: "path parameter 'snapshotId' must be non-empty" } }
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key), snapshot_id: (encode-path-segment $snapshot_id)} | format pattern "/restv2/game/{api_key}/manage/snapshots/{snapshot_id}/revert"))
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key), snapshot_id: (encode-path-segment $snapshot_id)} | format pattern "/restv2/game/{api_key}/manage/snapshots/{snapshot_id}/revert") $auth.query)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [201]
 }
 
 # listSnippets
@@ -2124,10 +2853,21 @@ export def "restv2-game-manage-snippets list-using-get" [
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/manage/snippets"))
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/manage/snippets") $auth.query)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # createSnippet
@@ -2156,12 +2896,23 @@ export def "restv2-game-manage-snippets create-using" [
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/manage/snippets"))
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/manage/snippets") $auth.query)
   let req_body = {"groups": $groups, "name": $name, "script": $script, "scriptData": $script_data, "shortCode": $short_code, "template": $template} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # deleteSnippet
@@ -2185,10 +2936,21 @@ export def "restv2-game-manage-snippets delete-using" [
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
   if ($short_code | is-empty) { error make --unspanned { msg: "path parameter 'shortCode' must be non-empty" } }
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key), short_code: (encode-path-segment $short_code)} | format pattern "/restv2/game/{api_key}/manage/snippets/{short_code}"))
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key), short_code: (encode-path-segment $short_code)} | format pattern "/restv2/game/{api_key}/manage/snippets/{short_code}") $auth.query)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # getSnippet
@@ -2212,10 +2974,21 @@ export def "restv2-game-manage-snippets get-using" [
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
   if ($short_code | is-empty) { error make --unspanned { msg: "path parameter 'shortCode' must be non-empty" } }
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key), short_code: (encode-path-segment $short_code)} | format pattern "/restv2/game/{api_key}/manage/snippets/{short_code}"))
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key), short_code: (encode-path-segment $short_code)} | format pattern "/restv2/game/{api_key}/manage/snippets/{short_code}") $auth.query)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # updateSnippet
@@ -2246,12 +3019,23 @@ export def "restv2-game-manage-snippets update-using" [
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
   if ($short_code | is-empty) { error make --unspanned { msg: "path parameter 'shortCode' must be non-empty" } }
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key), short_code: (encode-path-segment $short_code)} | format pattern "/restv2/game/{api_key}/manage/snippets/{short_code}"))
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key), short_code: (encode-path-segment $short_code)} | format pattern "/restv2/game/{api_key}/manage/snippets/{short_code}") $auth.query)
   let req_body = {"groups": $groups, "name": $name, "script": $script, "scriptData": $script_data, "shortCode": $body_short_code, "template": $template} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # restoreDeletedGame
@@ -2273,10 +3057,21 @@ export def "restv2-game-restore create-deleted-using" [
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/restore"))
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/restore") $auth.query)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # setGameRegion
@@ -2300,10 +3095,21 @@ export def "restv2-game-region update-using-create" [
   let base = ($base_url | default $BASE_URL)
   if ($game_api_key | is-empty) { error make --unspanned { msg: "path parameter 'gameApiKey' must be non-empty" } }
   if ($region_code | is-empty) { error make --unspanned { msg: "path parameter 'regionCode' must be non-empty" } }
-  let full_url = (build-url $base ({game_api_key: (encode-path-segment $game_api_key), region_code: (encode-path-segment $region_code)} | format pattern "/restv2/game/{game_api_key}/region/{region_code}"))
+  let full_url = (build-url $base ({game_api_key: (encode-path-segment $game_api_key), region_code: (encode-path-segment $region_code)} | format pattern "/restv2/game/{game_api_key}/region/{region_code}") $auth.query)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # getGameRegionOptions
@@ -2325,10 +3131,21 @@ export def "restv2-game-regions get-options-using" [
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   if ($game_api_key | is-empty) { error make --unspanned { msg: "path parameter 'gameApiKey' must be non-empty" } }
-  let full_url = (build-url $base ({game_api_key: (encode-path-segment $game_api_key)} | format pattern "/restv2/game/{game_api_key}/regions"))
+  let full_url = (build-url $base ({game_api_key: (encode-path-segment $game_api_key)} | format pattern "/restv2/game/{game_api_key}/regions") $auth.query)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # list
@@ -2348,10 +3165,21 @@ export def "restv2-games list-using-get" [
 ]: nothing -> table<_id: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/restv2/games")
+  let full_url = (build-url $base "/restv2/games" $auth.query)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # listDeleted
@@ -2371,8 +3199,19 @@ export def "restv2-games-deleted list-using-get" [
 ]: nothing -> table<apiKey: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/restv2/games/deleted")
+  let full_url = (build-url $base "/restv2/games/deleted" $auth.query)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }

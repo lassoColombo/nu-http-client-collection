@@ -8,7 +8,7 @@ const BASE_URL = "https://api.hillbillysoftware.com"
 # `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
 # where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o SHINOBIAPI_TOKEN | default "" }
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o SHINOBIAPI_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
@@ -40,14 +40,11 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
-# Trick: `url encode --all` over-encodes, then we decode the four unreserved
-# punctuation chars back. Pre-existing %XX sequences in the input survive
-# because `url encode --all` first turns their % into %25.
 def encode-path-segment [v: any]: nothing -> string {
   $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
-# Serialize an array-typed path parameter (issue 49.A). OpenAPI 3 `style: simple`
+# Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
 # (the default for path params) and Swagger 2 `collectionFormat: csv` both join
 # the elements with a literal comma WITHIN the single path segment, each element
 # RFC-3986-encoded individually (so a comma inside an element stays %2C). Without
@@ -58,51 +55,45 @@ def encode-path-array [v: any]: nothing -> string {
   if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
 }
 
-# Build URL from base, path, and optional query string
-def build-url [base: string, path: string, query?: string]: nothing -> string {
+# Build the request URL from base, path, and any number of pre-encoded query
+# fragments (param serializer output and/or the auth query). Each fragment is an
+# `&`-joinable `key=value` string already percent-encoded by its producer; empty
+# fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
+# delimiters are hand-spliced — and any query already on the base URL is merged in.
+def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
   let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
-  let result = ($parsed | upsert path $full_path)
-  if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
+  let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
+  $parsed | upsert path $full_path | upsert query $query | url join
 }
 
-# Build the dry-run record returned by --dry-run. Shape:
-#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
-#    auth: {scheme, location}}
-# `meta` carries logical-form data (the query record by spec name, the pre-serialization
-# body) that do-request itself cannot reconstruct from its wire-format args.
-def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
-  let m = ($meta | default {})
-  {
-    dry_run: true
-    method: $method
-    url: $url
-    query: ($m | get -o query | default {})
-    headers: $auth.headers
-    body: ($m | get -o body)
-    content_type: $content_type
-    timeout: $timeout
-    auth: {scheme: $auth.scheme, location: $auth.location}
-  }
+# Success policy: did this response succeed? Single source of truth, consulted by
+# handle-response and the HEAD header-unwrap. Empty ok_codes means the spec listed
+# none, so fall back to < 400. Otherwise: any 2xx, plus documented success codes.
+def status-ok [status: int, ok_codes: list<int>]: nothing -> bool {
+  if ($ok_codes | is-empty) { $status < 400 } else { ($status >= 200 and $status < 300) or ($status in $ok_codes) }
 }
 
-# Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
-  let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
-  let timeout = ($max_time | default 30min)
-  let ct = ($content_type | default "application/json")
-  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
-  let resp = match $method {
-    "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
-  }
-  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
-  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
+# Unwrap a `--full` HTTP response into the user-facing value. Response arrives
+# via pipeline; ok_codes gates the error throw (see status-ok).
+def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: record -> any {
+  let resp = $in
+  if $allow_errors { return $resp }
+  if not (status-ok $resp.status $ok_codes) { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } }
+  if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
+  if $resp.status == 204 { return null }
+  $resp.body
+}
+
+# GET — bodyless, honours --raw
+def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+}
+
+# POST — body + content-type
+def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 def base-url-completer [] { ["https://api.hillbillysoftware.com"] }
@@ -156,10 +147,21 @@ export def "actors-search get" [
   let base = ($base_url | default $BASE_URL)
   if ($accesstoken | is-empty) { error make --unspanned { msg: "path parameter 'accesstoken' must be non-empty" } }
   if ($query | is-empty) { error make --unspanned { msg: "path parameter 'Query' must be non-empty" } }
-  let full_url = (build-url $base ({accesstoken: (encode-path-segment $accesstoken), query: (encode-path-segment $query)} | format pattern "/Actors/Search/{accesstoken}/{query}"))
+  let full_url = (build-url $base ({accesstoken: (encode-path-segment $accesstoken), query: (encode-path-segment $query)} | format pattern "/Actors/Search/{accesstoken}/{query}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Add new actor or actress to database
@@ -189,12 +191,23 @@ export def "add-actor create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/AddActor")
+  let full_url = (build-url $base "/AddActor" $auth.query)
   let req_body = {"AccessToken": $access_token, "Bio": $bio, "BirthYear": $birth_year, "DeathYear": $death_year, "Gender": $gender, "Name": $name, "PopularityIndex": $popularity_index, "ProfileImage": $profile_image} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200 204]
 }
 
 # Add new show to database
@@ -227,12 +240,23 @@ export def "add-tv-show create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/AddTVShow")
+  let full_url = (build-url $base "/AddTVShow" $auth.query)
   let req_body = {"AccessToken": $access_token, "EpisodeCount": $episode_count, "EpisodeRuntime": $episode_runtime, "Genres": $genres, "ImdbID": $imdb_id, "PremierYear": $premier_year, "Seasons": $seasons, "ShowImage": $show_image, "ShowStatus": $show_status, "Synopsis": $synopsis, "Title": $title} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200 204]
 }
 
 # Get known aliases for Movies or Television shows from passed imdbID
@@ -257,10 +281,21 @@ export def "aliases-by-id get" [
   let base = ($base_url | default $BASE_URL)
   if ($access_token | is-empty) { error make --unspanned { msg: "path parameter 'AccessToken' must be non-empty" } }
   if ($imdb_id | is-empty) { error make --unspanned { msg: "path parameter 'imdbID' must be non-empty" } }
-  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), imdb_id: (encode-path-segment $imdb_id)} | format pattern "/Aliases/ByID/{access_token}/{imdb_id}"))
+  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), imdb_id: (encode-path-segment $imdb_id)} | format pattern "/Aliases/ByID/{access_token}/{imdb_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get known aliases for Movies or Television shows
@@ -285,10 +320,21 @@ export def "aliases-by-name get" [
   let base = ($base_url | default $BASE_URL)
   if ($access_token | is-empty) { error make --unspanned { msg: "path parameter 'AccessToken' must be non-empty" } }
   if ($title | is-empty) { error make --unspanned { msg: "path parameter 'Title' must be non-empty" } }
-  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), title: (encode-path-segment $title)} | format pattern "/Aliases/ByName/{access_token}/{title}"))
+  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), title: (encode-path-segment $title)} | format pattern "/Aliases/ByName/{access_token}/{title}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets all awards by nominiee
@@ -313,10 +359,21 @@ export def "awards-by-winner get-awardsby" [
   let base = ($base_url | default $BASE_URL)
   if ($access_token | is-empty) { error make --unspanned { msg: "path parameter 'AccessToken' must be non-empty" } }
   if ($nominee | is-empty) { error make --unspanned { msg: "path parameter 'Nominee' must be non-empty" } }
-  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), nominee: (encode-path-segment $nominee)} | format pattern "/Awards/ByWinner/{access_token}/{nominee}"))
+  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), nominee: (encode-path-segment $nominee)} | format pattern "/Awards/ByWinner/{access_token}/{nominee}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets all awards for requested year
@@ -339,10 +396,21 @@ export def "awards-by-year get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($year | is-empty) { error make --unspanned { msg: "path parameter 'Year' must be non-empty" } }
-  let full_url = (build-url $base ({year: (encode-path-segment $year)} | format pattern "/Awards/ByYear/{year}"))
+  let full_url = (build-url $base ({year: (encode-path-segment $year)} | format pattern "/Awards/ByYear/{year}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets TV Schedule for selected data
@@ -369,10 +437,21 @@ export def "calendar-by-date get-schedule" [
   if ($access_token | is-empty) { error make --unspanned { msg: "path parameter 'AccessToken' must be non-empty" } }
   if ($date | is-empty) { error make --unspanned { msg: "path parameter 'Date' must be non-empty" } }
   if ($country | is-empty) { error make --unspanned { msg: "path parameter 'Country' must be non-empty" } }
-  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), date: (encode-path-segment $date), country: (encode-path-segment $country)} | format pattern "/Calendar/ByDate/{access_token}/{date}/{country}"))
+  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), date: (encode-path-segment $date), country: (encode-path-segment $country)} | format pattern "/Calendar/ByDate/{access_token}/{date}/{country}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns list of available countries in calendar database
@@ -395,10 +474,21 @@ export def "calendar-countries get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($access_token | is-empty) { error make --unspanned { msg: "path parameter 'AccessToken' must be non-empty" } }
-  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token)} | format pattern "/Calendar/Countries/{access_token}"))
+  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token)} | format pattern "/Calendar/Countries/{access_token}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets a list of available networks
@@ -421,10 +511,21 @@ export def "calendar-networks get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($access_token | is-empty) { error make --unspanned { msg: "path parameter 'AccessToken' must be non-empty" } }
-  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token)} | format pattern "/Calendar/Networks/{access_token}"))
+  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token)} | format pattern "/Calendar/Networks/{access_token}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns list of seasons available in the calendar for show
@@ -449,10 +550,21 @@ export def "calendar-seasons get-show" [
   let base = ($base_url | default $BASE_URL)
   if ($access_token | is-empty) { error make --unspanned { msg: "path parameter 'AccessToken' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'Name' must be non-empty" } }
-  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), name: (encode-path-segment $name)} | format pattern "/Calendar/Seasons/{access_token}/{name}"))
+  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), name: (encode-path-segment $name)} | format pattern "/Calendar/Seasons/{access_token}/{name}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get Calendar by showname and season
@@ -479,10 +591,21 @@ export def "calendar-show-season get-calendarby-showname" [
   if ($access_token | is-empty) { error make --unspanned { msg: "path parameter 'AccessToken' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'Name' must be non-empty" } }
   if ($season | is-empty) { error make --unspanned { msg: "path parameter 'Season' must be non-empty" } }
-  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), name: (encode-path-segment $name), season: (encode-path-segment $season)} | format pattern "/Calendar/Show/Season/{access_token}/{name}/{season}"))
+  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), name: (encode-path-segment $name), season: (encode-path-segment $season)} | format pattern "/Calendar/Show/Season/{access_token}/{name}/{season}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Will return show schedule for queried showname and year
@@ -509,10 +632,21 @@ export def "calendar-show get-by" [
   if ($access_token | is-empty) { error make --unspanned { msg: "path parameter 'AccessToken' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'Name' must be non-empty" } }
   if ($year | is-empty) { error make --unspanned { msg: "path parameter 'Year' must be non-empty" } }
-  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), name: (encode-path-segment $name), year: (encode-path-segment $year)} | format pattern "/Calendar/Show/{access_token}/{name}/{year}"))
+  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), name: (encode-path-segment $name), year: (encode-path-segment $year)} | format pattern "/Calendar/Show/{access_token}/{name}/{year}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Will return show schedule for today for all countries in database
@@ -535,10 +669,21 @@ export def "calendar-today get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($access_token | is-empty) { error make --unspanned { msg: "path parameter 'AccessToken' must be non-empty" } }
-  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token)} | format pattern "/Calendar/Today/{access_token}"))
+  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token)} | format pattern "/Calendar/Today/{access_token}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns all shows queried actor/actress is or has been in
@@ -563,10 +708,21 @@ export def "cast-actor-by-search get-in-shows" [
   let base = ($base_url | default $BASE_URL)
   if ($access_token | is-empty) { error make --unspanned { msg: "path parameter 'AccessToken' must be non-empty" } }
   if ($actor | is-empty) { error make --unspanned { msg: "path parameter 'Actor' must be non-empty" } }
-  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), actor: (encode-path-segment $actor)} | format pattern "/Cast/ActorBySearch/{access_token}/{actor}"))
+  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), actor: (encode-path-segment $actor)} | format pattern "/Cast/ActorBySearch/{access_token}/{actor}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns list of show actor is appearing in
@@ -591,10 +747,21 @@ export def "cast-by-actor get" [
   let base = ($base_url | default $BASE_URL)
   if ($access_token | is-empty) { error make --unspanned { msg: "path parameter 'AccessToken' must be non-empty" } }
   if ($actor | is-empty) { error make --unspanned { msg: "path parameter 'Actor' must be non-empty" } }
-  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), actor: (encode-path-segment $actor)} | format pattern "/Cast/ByActor/{access_token}/{actor}"))
+  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), actor: (encode-path-segment $actor)} | format pattern "/Cast/ByActor/{access_token}/{actor}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns all actors in queried tvshow
@@ -619,10 +786,21 @@ export def "cast-by-tv-show get-actors-in" [
   let base = ($base_url | default $BASE_URL)
   if ($accesstoken | is-empty) { error make --unspanned { msg: "path parameter 'accesstoken' must be non-empty" } }
   if ($show_name | is-empty) { error make --unspanned { msg: "path parameter 'ShowName' must be non-empty" } }
-  let full_url = (build-url $base ({accesstoken: (encode-path-segment $accesstoken), show_name: (encode-path-segment $show_name)} | format pattern "/Cast/ByTVShow/{accesstoken}/{show_name}"))
+  let full_url = (build-url $base ({accesstoken: (encode-path-segment $accesstoken), show_name: (encode-path-segment $show_name)} | format pattern "/Cast/ByTVShow/{accesstoken}/{show_name}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get crew list by ID
@@ -647,10 +825,21 @@ export def "crew-by-id get" [
   let base = ($base_url | default $BASE_URL)
   if ($access_token | is-empty) { error make --unspanned { msg: "path parameter 'AccessToken' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'ID' must be non-empty" } }
-  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), id: (encode-path-segment $id)} | format pattern "/Crew/ByID/{access_token}/{id}"))
+  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), id: (encode-path-segment $id)} | format pattern "/Crew/ByID/{access_token}/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets list of productions searched person is/was involved in.
@@ -675,10 +864,21 @@ export def "crew-by-person get" [
   let base = ($base_url | default $BASE_URL)
   if ($access_token | is-empty) { error make --unspanned { msg: "path parameter 'AccessToken' must be non-empty" } }
   if ($person_name | is-empty) { error make --unspanned { msg: "path parameter 'PersonName' must be non-empty" } }
-  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), person_name: (encode-path-segment $person_name)} | format pattern "/Crew/ByPerson/{access_token}/{person_name}"))
+  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), person_name: (encode-path-segment $person_name)} | format pattern "/Crew/ByPerson/{access_token}/{person_name}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get crew list by showname
@@ -703,10 +903,21 @@ export def "crew-by-show-name get-crewby" [
   let base = ($base_url | default $BASE_URL)
   if ($access_token | is-empty) { error make --unspanned { msg: "path parameter 'AccessToken' must be non-empty" } }
   if ($show_name | is-empty) { error make --unspanned { msg: "path parameter 'ShowName' must be non-empty" } }
-  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), show_name: (encode-path-segment $show_name)} | format pattern "/Crew/ByShowName/{access_token}/{show_name}"))
+  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), show_name: (encode-path-segment $show_name)} | format pattern "/Crew/ByShowName/{access_token}/{show_name}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns crew for queried show.
@@ -731,10 +942,21 @@ export def "crew-search get" [
   let base = ($base_url | default $BASE_URL)
   if ($access_token | is-empty) { error make --unspanned { msg: "path parameter 'AccessToken' must be non-empty" } }
   if ($phrase | is-empty) { error make --unspanned { msg: "path parameter 'Phrase' must be non-empty" } }
-  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), phrase: (encode-path-segment $phrase)} | format pattern "/Crew/Search/{access_token}/{phrase}"))
+  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), phrase: (encode-path-segment $phrase)} | format pattern "/Crew/Search/{access_token}/{phrase}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets all episodes for selected ID
@@ -759,10 +981,21 @@ export def "episodes-by-id get" [
   let base = ($base_url | default $BASE_URL)
   if ($access_token | is-empty) { error make --unspanned { msg: "path parameter 'AccessToken' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'ID' must be non-empty" } }
-  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), id: (encode-path-segment $id)} | format pattern "/Episodes/ByID/{access_token}/{id}"))
+  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), id: (encode-path-segment $id)} | format pattern "/Episodes/ByID/{access_token}/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets list of episodes for specified imdbID and Season number
@@ -789,10 +1022,21 @@ export def "episodes-by-season get" [
   if ($access_token | is-empty) { error make --unspanned { msg: "path parameter 'AccessToken' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'ID' must be non-empty" } }
   if ($season | is-empty) { error make --unspanned { msg: "path parameter 'Season' must be non-empty" } }
-  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), id: (encode-path-segment $id), season: (encode-path-segment $season)} | format pattern "/Episodes/BySeason/{access_token}/{id}/{season}"))
+  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), id: (encode-path-segment $id), season: (encode-path-segment $season)} | format pattern "/Episodes/BySeason/{access_token}/{id}/{season}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets all episodes for selected show
@@ -817,10 +1061,21 @@ export def "episodes-by-show-name get" [
   let base = ($base_url | default $BASE_URL)
   if ($access_token | is-empty) { error make --unspanned { msg: "path parameter 'AccessToken' must be non-empty" } }
   if ($showname | is-empty) { error make --unspanned { msg: "path parameter 'Showname' must be non-empty" } }
-  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), showname: (encode-path-segment $showname)} | format pattern "/Episodes/ByShowName/{access_token}/{showname}"))
+  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), showname: (encode-path-segment $showname)} | format pattern "/Episodes/ByShowName/{access_token}/{showname}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets latest season number based on show name
@@ -845,10 +1100,21 @@ export def "episodes-latest-season-show get-last-available-seasonby" [
   let base = ($base_url | default $BASE_URL)
   if ($access_token | is-empty) { error make --unspanned { msg: "path parameter 'AccessToken' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'Name' must be non-empty" } }
-  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), name: (encode-path-segment $name)} | format pattern "/Episodes/LatestSeason/Show/{access_token}/{name}"))
+  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), name: (encode-path-segment $name)} | format pattern "/Episodes/LatestSeason/Show/{access_token}/{name}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns last available season number in database, based on passed imdbID
@@ -873,10 +1139,21 @@ export def "episodes-latest-season get-last-available" [
   let base = ($base_url | default $BASE_URL)
   if ($access_token | is-empty) { error make --unspanned { msg: "path parameter 'AccessToken' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'ID' must be non-empty" } }
-  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), id: (encode-path-segment $id)} | format pattern "/Episodes/LatestSeason/{access_token}/{id}"))
+  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), id: (encode-path-segment $id)} | format pattern "/Episodes/LatestSeason/{access_token}/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns number of available seasons and episodes
@@ -901,10 +1178,21 @@ export def "episodes-season-count get" [
   let base = ($base_url | default $BASE_URL)
   if ($access_token | is-empty) { error make --unspanned { msg: "path parameter 'AccessToken' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'ID' must be non-empty" } }
-  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), id: (encode-path-segment $id)} | format pattern "/Episodes/SeasonCount/{access_token}/{id}"))
+  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), id: (encode-path-segment $id)} | format pattern "/Episodes/SeasonCount/{access_token}/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets list of avaiable IMDB ids from Movies and TV Show databases, you can use those to query other end points that need ID's
@@ -929,10 +1217,21 @@ export def "get-imd-bid-by-id get-async" [
   let base = ($base_url | default $BASE_URL)
   if ($access_token | is-empty) { error make --unspanned { msg: "path parameter 'AccessToken' must be non-empty" } }
   if ($query | is-empty) { error make --unspanned { msg: "path parameter 'Query' must be non-empty" } }
-  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), query: (encode-path-segment $query)} | format pattern "/GetIMDBid/ByID/{access_token}/{query}"))
+  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), query: (encode-path-segment $query)} | format pattern "/GetIMDBid/ByID/{access_token}/{query}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get images available for movie/tv show with passed imdbID
@@ -957,10 +1256,21 @@ export def "images-by-id get" [
   let base = ($base_url | default $BASE_URL)
   if ($access_token | is-empty) { error make --unspanned { msg: "path parameter 'AccessToken' must be non-empty" } }
   if ($imdb_id | is-empty) { error make --unspanned { msg: "path parameter 'imdbID' must be non-empty" } }
-  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), imdb_id: (encode-path-segment $imdb_id)} | format pattern "/Images/ByID/{access_token}/{imdb_id}"))
+  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), imdb_id: (encode-path-segment $imdb_id)} | format pattern "/Images/ByID/{access_token}/{imdb_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get images available for movie/tv show with passed query
@@ -987,10 +1297,21 @@ export def "images-search get" [
   if ($accesstoken | is-empty) { error make --unspanned { msg: "path parameter 'Accesstoken' must be non-empty" } }
   if ($query | is-empty) { error make --unspanned { msg: "path parameter 'Query' must be non-empty" } }
   let qp = [(serialize-qp "Strictmatch" $strictmatch "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({accesstoken: (encode-path-segment $accesstoken), query: (encode-path-segment $query)} | format pattern "/Images/Search/{accesstoken}/{query}") $qp)
+  let full_url = (build-url $base ({accesstoken: (encode-path-segment $accesstoken), query: (encode-path-segment $query)} | format pattern "/Images/Search/{accesstoken}/{query}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"Strictmatch": $strictmatch} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"Strictmatch": $strictmatch} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets available magnet hashes on passed date (yyyy-mm-dd). Feature not available on free plan, please donate to be able to use this feature.
@@ -1015,10 +1336,21 @@ export def "magnets-by-date get-async" [
   let base = ($base_url | default $BASE_URL)
   if ($access_token | is-empty) { error make --unspanned { msg: "path parameter 'AccessToken' must be non-empty" } }
   if ($date | is-empty) { error make --unspanned { msg: "path parameter 'Date' must be non-empty" } }
-  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), date: (encode-path-segment $date)} | format pattern "/Magnets/ByDate/{access_token}/{date}"))
+  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), date: (encode-path-segment $date)} | format pattern "/Magnets/ByDate/{access_token}/{date}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns list of magnet hashes for passed IMDBID. Feature not available on free plan, please donate to be able to use this feature.
@@ -1043,10 +1375,21 @@ export def "magnets-by-imdb get-byimdb-async" [
   let base = ($base_url | default $BASE_URL)
   if ($access_token | is-empty) { error make --unspanned { msg: "path parameter 'AccessToken' must be non-empty" } }
   if ($imdb_id | is-empty) { error make --unspanned { msg: "path parameter 'imdbID' must be non-empty" } }
-  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), imdb_id: (encode-path-segment $imdb_id)} | format pattern "/Magnets/ByIMDB/{access_token}/{imdb_id}"))
+  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), imdb_id: (encode-path-segment $imdb_id)} | format pattern "/Magnets/ByIMDB/{access_token}/{imdb_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Try and find magnet links for queried movie. Feature not available on free plan, please donate to be able to use this feature
@@ -1071,10 +1414,21 @@ export def "magnets-search get-movie-by-async" [
   let base = ($base_url | default $BASE_URL)
   if ($access_token | is-empty) { error make --unspanned { msg: "path parameter 'AccessToken' must be non-empty" } }
   if ($query | is-empty) { error make --unspanned { msg: "path parameter 'Query' must be non-empty" } }
-  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), query: (encode-path-segment $query)} | format pattern "/Magnets/Search/{access_token}/{query}"))
+  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), query: (encode-path-segment $query)} | format pattern "/Magnets/Search/{access_token}/{query}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns results based on query, Feature not available on free plan, please donate to be able to use this feature.
@@ -1099,10 +1453,21 @@ export def "magnets-tv-show get-showsearch" [
   let base = ($base_url | default $BASE_URL)
   if ($access_token | is-empty) { error make --unspanned { msg: "path parameter 'AccessToken' must be non-empty" } }
   if ($tv_show | is-empty) { error make --unspanned { msg: "path parameter 'TVShow' must be non-empty" } }
-  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), tv_show: (encode-path-segment $tv_show)} | format pattern "/Magnets/TVShow/{access_token}/{tv_show}"))
+  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), tv_show: (encode-path-segment $tv_show)} | format pattern "/Magnets/TVShow/{access_token}/{tv_show}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /Movie/ByID/{accesstoken}/{imdbID}
@@ -1126,10 +1491,21 @@ export def "movie-by-id get" [
   let base = ($base_url | default $BASE_URL)
   if ($accesstoken | is-empty) { error make --unspanned { msg: "path parameter 'accesstoken' must be non-empty" } }
   if ($imdb_id | is-empty) { error make --unspanned { msg: "path parameter 'imdbID' must be non-empty" } }
-  let full_url = (build-url $base ({accesstoken: (encode-path-segment $accesstoken), imdb_id: (encode-path-segment $imdb_id)} | format pattern "/Movie/ByID/{accesstoken}/{imdb_id}"))
+  let full_url = (build-url $base ({accesstoken: (encode-path-segment $accesstoken), imdb_id: (encode-path-segment $imdb_id)} | format pattern "/Movie/ByID/{accesstoken}/{imdb_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Searches for movies, result set limited to 5 records
@@ -1154,10 +1530,21 @@ export def "movie-search get-async" [
   let base = ($base_url | default $BASE_URL)
   if ($access_token | is-empty) { error make --unspanned { msg: "path parameter 'AccessToken' must be non-empty" } }
   if ($query | is-empty) { error make --unspanned { msg: "path parameter 'Query' must be non-empty" } }
-  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), query: (encode-path-segment $query)} | format pattern "/Movie/Search/{access_token}/{query}"))
+  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), query: (encode-path-segment $query)} | format pattern "/Movie/Search/{access_token}/{query}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns Albumart for passed AlbumID
@@ -1182,10 +1569,21 @@ export def "music-albums-art get" [
   let base = ($base_url | default $BASE_URL)
   if ($access_token | is-empty) { error make --unspanned { msg: "path parameter 'AccessToken' must be non-empty" } }
   if ($album_id | is-empty) { error make --unspanned { msg: "path parameter 'AlbumID' must be non-empty" } }
-  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), album_id: (encode-path-segment $album_id)} | format pattern "/Music/Albums/Art/{access_token}/{album_id}"))
+  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), album_id: (encode-path-segment $album_id)} | format pattern "/Music/Albums/Art/{access_token}/{album_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets CD art for passed MusicBrainzID
@@ -1210,10 +1608,21 @@ export def "music-albums-cover-art get-cd" [
   let base = ($base_url | default $BASE_URL)
   if ($access_token | is-empty) { error make --unspanned { msg: "path parameter 'AccessToken' must be non-empty" } }
   if ($mbid | is-empty) { error make --unspanned { msg: "path parameter 'MBID' must be non-empty" } }
-  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), mbid: (encode-path-segment $mbid)} | format pattern "/Music/Albums/CoverArt/{access_token}/{mbid}"))
+  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), mbid: (encode-path-segment $mbid)} | format pattern "/Music/Albums/CoverArt/{access_token}/{mbid}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get Artist / Band information on MusicBrainzID
@@ -1238,10 +1647,21 @@ export def "music-albums-music-brainz-id get-by" [
   let base = ($base_url | default $BASE_URL)
   if ($access_token | is-empty) { error make --unspanned { msg: "path parameter 'AccessToken' must be non-empty" } }
   if ($mbid | is-empty) { error make --unspanned { msg: "path parameter 'MBID' must be non-empty" } }
-  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), mbid: (encode-path-segment $mbid)} | format pattern "/Music/Albums/MusicBrainzID/{access_token}/{mbid}"))
+  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), mbid: (encode-path-segment $mbid)} | format pattern "/Music/Albums/MusicBrainzID/{access_token}/{mbid}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get albums from passed ArtistID
@@ -1266,10 +1686,21 @@ export def "music-albums get" [
   let base = ($base_url | default $BASE_URL)
   if ($access_token | is-empty) { error make --unspanned { msg: "path parameter 'AccessToken' must be non-empty" } }
   if ($artist_id | is-empty) { error make --unspanned { msg: "path parameter 'ArtistID' must be non-empty" } }
-  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), artist_id: (encode-path-segment $artist_id)} | format pattern "/Music/Albums/{access_token}/{artist_id}"))
+  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), artist_id: (encode-path-segment $artist_id)} | format pattern "/Music/Albums/{access_token}/{artist_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieves artist / band Banner and logo based on ArtistID
@@ -1294,10 +1725,21 @@ export def "music-artist-art-id get-cover" [
   let base = ($base_url | default $BASE_URL)
   if ($access_token | is-empty) { error make --unspanned { msg: "path parameter 'AccessToken' must be non-empty" } }
   if ($artist_id | is-empty) { error make --unspanned { msg: "path parameter 'ArtistID' must be non-empty" } }
-  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), artist_id: (encode-path-segment $artist_id)} | format pattern "/Music/Artist/Art/ID/{access_token}/{artist_id}"))
+  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), artist_id: (encode-path-segment $artist_id)} | format pattern "/Music/Artist/Art/ID/{access_token}/{artist_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieves artist / band Banner and logo based on artist or bandname
@@ -1322,10 +1764,21 @@ export def "music-artist-art-name get-cover-by" [
   let base = ($base_url | default $BASE_URL)
   if ($access_token | is-empty) { error make --unspanned { msg: "path parameter 'AccessToken' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'Name' must be non-empty" } }
-  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), name: (encode-path-segment $name)} | format pattern "/Music/Artist/Art/Name/{access_token}/{name}"))
+  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), name: (encode-path-segment $name)} | format pattern "/Music/Artist/Art/Name/{access_token}/{name}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Provides extended information, which includes all known albums and music videos of artist / band
@@ -1350,10 +1803,21 @@ export def "music-artist-extended get" [
   let base = ($base_url | default $BASE_URL)
   if ($access_token | is-empty) { error make --unspanned { msg: "path parameter 'AccessToken' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'Name' must be non-empty" } }
-  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), name: (encode-path-segment $name)} | format pattern "/Music/Artist/Extended/{access_token}/{name}"))
+  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), name: (encode-path-segment $name)} | format pattern "/Music/Artist/Extended/{access_token}/{name}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get information about passed band name or artist
@@ -1378,10 +1842,21 @@ export def "music-artist get" [
   let base = ($base_url | default $BASE_URL)
   if ($access_token | is-empty) { error make --unspanned { msg: "path parameter 'AccessToken' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'Name' must be non-empty" } }
-  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), name: (encode-path-segment $name)} | format pattern "/Music/Artist/{access_token}/{name}"))
+  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), name: (encode-path-segment $name)} | format pattern "/Music/Artist/{access_token}/{name}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns all lyrics for requested AlbumID
@@ -1406,10 +1881,21 @@ export def "music-lyrics-album-id get-lyricsby" [
   let base = ($base_url | default $BASE_URL)
   if ($access_token | is-empty) { error make --unspanned { msg: "path parameter 'AccessToken' must be non-empty" } }
   if ($album_id | is-empty) { error make --unspanned { msg: "path parameter 'AlbumID' must be non-empty" } }
-  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), album_id: (encode-path-segment $album_id)} | format pattern "/Music/Lyrics/AlbumID/{access_token}/{album_id}"))
+  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), album_id: (encode-path-segment $album_id)} | format pattern "/Music/Lyrics/AlbumID/{access_token}/{album_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get lyrics for band or artist (record set limited to 25)
@@ -1434,10 +1920,21 @@ export def "music-lyrics-by-name get" [
   let base = ($base_url | default $BASE_URL)
   if ($access_token | is-empty) { error make --unspanned { msg: "path parameter 'AccessToken' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'Name' must be non-empty" } }
-  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), name: (encode-path-segment $name)} | format pattern "/Music/Lyrics/ByName/{access_token}/{name}"))
+  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), name: (encode-path-segment $name)} | format pattern "/Music/Lyrics/ByName/{access_token}/{name}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get lyrics on song title
@@ -1462,10 +1959,21 @@ export def "music-lyrics-by-song get" [
   let base = ($base_url | default $BASE_URL)
   if ($access_token | is-empty) { error make --unspanned { msg: "path parameter 'AccessToken' must be non-empty" } }
   if ($song | is-empty) { error make --unspanned { msg: "path parameter 'Song' must be non-empty" } }
-  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), song: (encode-path-segment $song)} | format pattern "/Music/Lyrics/BySong/{access_token}/{song}"))
+  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), song: (encode-path-segment $song)} | format pattern "/Music/Lyrics/BySong/{access_token}/{song}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get all tracks from requested album
@@ -1490,10 +1998,21 @@ export def "music-tracks get" [
   let base = ($base_url | default $BASE_URL)
   if ($access_token | is-empty) { error make --unspanned { msg: "path parameter 'AccessToken' must be non-empty" } }
   if ($album_id | is-empty) { error make --unspanned { msg: "path parameter 'AlbumID' must be non-empty" } }
-  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), album_id: (encode-path-segment $album_id)} | format pattern "/Music/Tracks/{access_token}/{album_id}"))
+  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), album_id: (encode-path-segment $album_id)} | format pattern "/Music/Tracks/{access_token}/{album_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Lists all videos available for this Artist / Band
@@ -1518,10 +2037,21 @@ export def "music-videos get-musi" [
   let base = ($base_url | default $BASE_URL)
   if ($access_token | is-empty) { error make --unspanned { msg: "path parameter 'AccessToken' must be non-empty" } }
   if ($artist_id | is-empty) { error make --unspanned { msg: "path parameter 'ArtistID' must be non-empty" } }
-  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), artist_id: (encode-path-segment $artist_id)} | format pattern "/Music/Videos/{access_token}/{artist_id}"))
+  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), artist_id: (encode-path-segment $artist_id)} | format pattern "/Music/Videos/{access_token}/{artist_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns ratings from various resources(IMDB,Rotten Tomatoes, metaCritics, TVMaze etc) of passed IMDBid
@@ -1546,10 +2076,21 @@ export def "rating-by-id get" [
   let base = ($base_url | default $BASE_URL)
   if ($access_token | is-empty) { error make --unspanned { msg: "path parameter 'AccessToken' must be non-empty" } }
   if ($imdb_id | is-empty) { error make --unspanned { msg: "path parameter 'imdbID' must be non-empty" } }
-  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), imdb_id: (encode-path-segment $imdb_id)} | format pattern "/Rating/ByID/{access_token}/{imdb_id}"))
+  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), imdb_id: (encode-path-segment $imdb_id)} | format pattern "/Rating/ByID/{access_token}/{imdb_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /Rating/ByName/{AccessToken}/{Name}
@@ -1573,10 +2114,21 @@ export def "rating-by-name get" [
   let base = ($base_url | default $BASE_URL)
   if ($access_token | is-empty) { error make --unspanned { msg: "path parameter 'AccessToken' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'Name' must be non-empty" } }
-  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), name: (encode-path-segment $name)} | format pattern "/Rating/ByName/{access_token}/{name}"))
+  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), name: (encode-path-segment $name)} | format pattern "/Rating/ByName/{access_token}/{name}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns status of queried show (query can be IMDB, TVDB, or showname)
@@ -1601,10 +2153,21 @@ export def "status get-show" [
   let base = ($base_url | default $BASE_URL)
   if ($access_token | is-empty) { error make --unspanned { msg: "path parameter 'AccessToken' must be non-empty" } }
   if ($query | is-empty) { error make --unspanned { msg: "path parameter 'Query' must be non-empty" } }
-  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), query: (encode-path-segment $query)} | format pattern "/Status/{access_token}/{query}"))
+  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), query: (encode-path-segment $query)} | format pattern "/Status/{access_token}/{query}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns TVShow information based on IMDBid
@@ -1631,10 +2194,21 @@ export def "tv-by-id get-show" [
   if ($accesstoken | is-empty) { error make --unspanned { msg: "path parameter 'accesstoken' must be non-empty" } }
   if ($imdb_id | is-empty) { error make --unspanned { msg: "path parameter 'imdbID' must be non-empty" } }
   let qp = [(serialize-qp "id" $id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({accesstoken: (encode-path-segment $accesstoken), imdb_id: (encode-path-segment $imdb_id)} | format pattern "/TV/ByID/{accesstoken}/{imdb_id}") $qp)
+  let full_url = (build-url $base ({accesstoken: (encode-path-segment $accesstoken), imdb_id: (encode-path-segment $imdb_id)} | format pattern "/TV/ByID/{accesstoken}/{imdb_id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"id": $id} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"id": $id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns results based on query, result set limited to 5 records
@@ -1659,10 +2233,21 @@ export def "tv-by-name get-show" [
   let base = ($base_url | default $BASE_URL)
   if ($access_token | is-empty) { error make --unspanned { msg: "path parameter 'AccessToken' must be non-empty" } }
   if ($query | is-empty) { error make --unspanned { msg: "path parameter 'Query' must be non-empty" } }
-  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), query: (encode-path-segment $query)} | format pattern "/TV/ByName/{access_token}/{query}"))
+  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), query: (encode-path-segment $query)} | format pattern "/TV/ByName/{access_token}/{query}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get Trailers for passed imdbID
@@ -1687,10 +2272,21 @@ export def "trailers-by-id get-trailersby" [
   let base = ($base_url | default $BASE_URL)
   if ($access_token | is-empty) { error make --unspanned { msg: "path parameter 'AccessToken' must be non-empty" } }
   if ($imdb_id | is-empty) { error make --unspanned { msg: "path parameter 'imdbID' must be non-empty" } }
-  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), imdb_id: (encode-path-segment $imdb_id)} | format pattern "/Trailers/ByID/{access_token}/{imdb_id}"))
+  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), imdb_id: (encode-path-segment $imdb_id)} | format pattern "/Trailers/ByID/{access_token}/{imdb_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get trailer count for passed ID
@@ -1715,10 +2311,21 @@ export def "trailers-count-by-id get" [
   let base = ($base_url | default $BASE_URL)
   if ($access_token | is-empty) { error make --unspanned { msg: "path parameter 'AccessToken' must be non-empty" } }
   if ($imdb_id | is-empty) { error make --unspanned { msg: "path parameter 'imdbID' must be non-empty" } }
-  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), imdb_id: (encode-path-segment $imdb_id)} | format pattern "/Trailers/CountByID/{access_token}/{imdb_id}"))
+  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), imdb_id: (encode-path-segment $imdb_id)} | format pattern "/Trailers/CountByID/{access_token}/{imdb_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get trailer count for passed name (Movie title or TVShow name)
@@ -1743,10 +2350,21 @@ export def "trailers-count-by-name get" [
   let base = ($base_url | default $BASE_URL)
   if ($access_token | is-empty) { error make --unspanned { msg: "path parameter 'AccessToken' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'Name' must be non-empty" } }
-  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), name: (encode-path-segment $name)} | format pattern "/Trailers/CountByName/{access_token}/{name}"))
+  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), name: (encode-path-segment $name)} | format pattern "/Trailers/CountByName/{access_token}/{name}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets trailers by search phrase (limited to 10 records)
@@ -1771,8 +2389,19 @@ export def "trailers-search get" [
   let base = ($base_url | default $BASE_URL)
   if ($access_token | is-empty) { error make --unspanned { msg: "path parameter 'AccessToken' must be non-empty" } }
   if ($phrase | is-empty) { error make --unspanned { msg: "path parameter 'Phrase' must be non-empty" } }
-  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), phrase: (encode-path-segment $phrase)} | format pattern "/Trailers/Search/{access_token}/{phrase}"))
+  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), phrase: (encode-path-segment $phrase)} | format pattern "/Trailers/Search/{access_token}/{phrase}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }

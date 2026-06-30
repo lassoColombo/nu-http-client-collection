@@ -4921,7 +4921,7 @@ clients:
     source: https://api.apis.guru/v2/specs/vtex.local/Profile-System/1.0/openapi.json
   - name: vtex-local-promotions-
     source: https://api.apis.guru/v2/specs/vtex.local/Promotions-/1.0/openapi.json
-  - name: vtex-local-recurrence-v1
+  - name: vtex-local-recurrence-v1-
     source: https://api.apis.guru/v2/specs/vtex.local/Recurrence-(v1-/1.0/openapi.json
   - name: vtex-local-reviews-and-ratings-api
     source: https://api.apis.guru/v2/specs/vtex.local/Reviews-and-Ratings-API/1.0/openapi.json

@@ -8,7 +8,7 @@ const BASE_URL = "http://localhost/api/v2"
 # `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
 # where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o HHS_MEDIA_SERVICES_API_TOKEN | default "" }
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o HHS_MEDIA_SERVICES_API_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
@@ -40,14 +40,11 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
-# Trick: `url encode --all` over-encodes, then we decode the four unreserved
-# punctuation chars back. Pre-existing %XX sequences in the input survive
-# because `url encode --all` first turns their % into %25.
 def encode-path-segment [v: any]: nothing -> string {
   $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
-# Serialize an array-typed path parameter (issue 49.A). OpenAPI 3 `style: simple`
+# Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
 # (the default for path params) and Swagger 2 `collectionFormat: csv` both join
 # the elements with a literal comma WITHIN the single path segment, each element
 # RFC-3986-encoded individually (so a comma inside an element stays %2C). Without
@@ -58,51 +55,39 @@ def encode-path-array [v: any]: nothing -> string {
   if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
 }
 
-# Build URL from base, path, and optional query string
-def build-url [base: string, path: string, query?: string]: nothing -> string {
+# Build the request URL from base, path, and any number of pre-encoded query
+# fragments (param serializer output and/or the auth query). Each fragment is an
+# `&`-joinable `key=value` string already percent-encoded by its producer; empty
+# fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
+# delimiters are hand-spliced — and any query already on the base URL is merged in.
+def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
   let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
-  let result = ($parsed | upsert path $full_path)
-  if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
+  let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
+  $parsed | upsert path $full_path | upsert query $query | url join
 }
 
-# Build the dry-run record returned by --dry-run. Shape:
-#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
-#    auth: {scheme, location}}
-# `meta` carries logical-form data (the query record by spec name, the pre-serialization
-# body) that do-request itself cannot reconstruct from its wire-format args.
-def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
-  let m = ($meta | default {})
-  {
-    dry_run: true
-    method: $method
-    url: $url
-    query: ($m | get -o query | default {})
-    headers: $auth.headers
-    body: ($m | get -o body)
-    content_type: $content_type
-    timeout: $timeout
-    auth: {scheme: $auth.scheme, location: $auth.location}
-  }
+# Success policy: did this response succeed? Single source of truth, consulted by
+# handle-response and the HEAD header-unwrap. Empty ok_codes means the spec listed
+# none, so fall back to < 400. Otherwise: any 2xx, plus documented success codes.
+def status-ok [status: int, ok_codes: list<int>]: nothing -> bool {
+  if ($ok_codes | is-empty) { $status < 400 } else { ($status >= 200 and $status < 300) or ($status in $ok_codes) }
 }
 
-# Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
-  let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
-  let timeout = ($max_time | default 30min)
-  let ct = ($content_type | default "application/json")
-  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
-  let resp = match $method {
-    "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
-  }
-  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
-  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
+# Unwrap a `--full` HTTP response into the user-facing value. Response arrives
+# via pipeline; ok_codes gates the error throw (see status-ok).
+def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: record -> any {
+  let resp = $in
+  if $allow_errors { return $resp }
+  if not (status-ok $resp.status $ok_codes) { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } }
+  if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
+  if $resp.status == 204 { return null }
+  $resp.body
+}
+
+# GET — bodyless, honours --raw
+def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
 }
 
 def base-url-completer [] { ["http://localhost/api/v2"] }
@@ -150,10 +135,21 @@ export def "resources-json get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/resources.json" $qp)
+  let full_url = (build-url $base "/resources.json" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"q": $q} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"q": $q} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get Campaigns
@@ -176,10 +172,21 @@ export def "resources-campaigns-json get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "max" $max "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/resources/campaigns.json" $qp)
+  let full_url = (build-url $base "/resources/campaigns.json" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"max": $max, "offset": $offset, "sort": $qp_sort} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"max": $max, "offset": $offset, "sort": $qp_sort} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get Campaign by ID
@@ -200,10 +207,21 @@ export def "resources-campaigns get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/resources/campaigns/{id}.json"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/resources/campaigns/{id}.json") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get MediaItems by Campaign ID
@@ -228,10 +246,21 @@ export def "resources-campaigns-media-json get" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "sort" $qp_sort "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/resources/campaigns/{id}/media.json") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/resources/campaigns/{id}/media.json") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"sort": $qp_sort, "max": $max, "offset": $offset} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"sort": $qp_sort, "max": $max, "offset": $offset} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get MediaItems for Campaign
@@ -256,10 +285,21 @@ export def "resources-campaigns-syndicate-format get" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
   let qp = [(serialize-qp "displayMethod" $display_method "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id), format: (encode-path-segment $format)} | format pattern "/resources/campaigns/{id}/syndicate.{format}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id), format: (encode-path-segment $format)} | format pattern "/resources/campaigns/{id}/syndicate.{format}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"displayMethod": $display_method} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"displayMethod": $display_method} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get Languages
@@ -282,10 +322,21 @@ export def "resources-languages-json get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "max" $max "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/resources/languages.json" $qp)
+  let full_url = (build-url $base "/resources/languages.json" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"max": $max, "offset": $offset, "sort": $qp_sort} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"max": $max, "offset": $offset, "sort": $qp_sort} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get Language by ID
@@ -306,10 +357,21 @@ export def "resources-languages get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/resources/languages/{id}.json"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/resources/languages/{id}.json") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get MediaItems
@@ -382,10 +444,21 @@ export def "resources-media-json get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "max" $max "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "mediaTypes" $media_types "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "collectionId" $collection_id "scalar") (serialize-qp "nameContains" $name_contains "scalar") (serialize-qp "descriptionContains" $description_contains "scalar") (serialize-qp "sourceUrl" $source_url "scalar") (serialize-qp "sourceUrlContains" $source_url_contains "scalar") (serialize-qp "customThumbnailUrl" $custom_thumbnail_url "scalar") (serialize-qp "customThumbnailUrlContains" $custom_thumbnail_url_contains "scalar") (serialize-qp "dateContentAuthored" $date_content_authored "scalar") (serialize-qp "dateContentUpdated" $date_content_updated "scalar") (serialize-qp "dateContentPublished" $date_content_published "scalar") (serialize-qp "dateContentReviewed" $date_content_reviewed "scalar") (serialize-qp "dateSyndicationCaptured" $date_syndication_captured "scalar") (serialize-qp "dateSyndicationUpdated" $date_syndication_updated "scalar") (serialize-qp "contentAuthoredSinceDate" $content_authored_since_date "scalar") (serialize-qp "contentAuthoredBeforeDate" $content_authored_before_date "scalar") (serialize-qp "contentAuthoredInRange" $content_authored_in_range "scalar") (serialize-qp "contentUpdatedSinceDate" $content_updated_since_date "scalar") (serialize-qp "contentUpdatedBeforeDate" $content_updated_before_date "scalar") (serialize-qp "contentUpdatedInRange" $content_updated_in_range "scalar") (serialize-qp "contentPublishedSinceDate" $content_published_since_date "scalar") (serialize-qp "contentPublishedBeforeDate" $content_published_before_date "scalar") (serialize-qp "contentPublishedInRange" $content_published_in_range "scalar") (serialize-qp "contentReviewedSinceDate" $content_reviewed_since_date "scalar") (serialize-qp "contentReviewedBeforeDate" $content_reviewed_before_date "scalar") (serialize-qp "contentReviewedInRange" $content_reviewed_in_range "scalar") (serialize-qp "syndicationCapturedSinceDate" $syndication_captured_since_date "scalar") (serialize-qp "syndicationCapturedBeforeDate" $syndication_captured_before_date "scalar") (serialize-qp "syndicationCapturedInRange" $syndication_captured_in_range "scalar") (serialize-qp "syndicationUpdatedSinceDate" $syndication_updated_since_date "scalar") (serialize-qp "syndicationUpdatedBeforeDate" $syndication_updated_before_date "scalar") (serialize-qp "syndicationUpdatedInRange" $syndication_updated_in_range "scalar") (serialize-qp "syndicationVisibleSinceDate" $syndication_visible_since_date "scalar") (serialize-qp "syndicationVisibleBeforeDate" $syndication_visible_before_date "scalar") (serialize-qp "syndicationVisibleInRange" $syndication_visible_in_range "scalar") (serialize-qp "languageId" $language_id "scalar") (serialize-qp "languageName" $language_name "scalar") (serialize-qp "languageIsoCode" $language_iso_code "scalar") (serialize-qp "hash" $hash "scalar") (serialize-qp "hashContains" $hash_contains "scalar") (serialize-qp "sourceId" $source_id "scalar") (serialize-qp "sourceName" $source_name "scalar") (serialize-qp "sourceNameContains" $source_name_contains "scalar") (serialize-qp "sourceAcronym" $source_acronym "scalar") (serialize-qp "sourceAcronymContains" $source_acronym_contains "scalar") (serialize-qp "tagIds" $tag_ids "scalar") (serialize-qp "restrictToSet" $restrict_to_set "scalar") (serialize-qp "createdBy" $created_by "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/resources/media.json" $qp)
+  let full_url = (build-url $base "/resources/media.json" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"max": $max, "offset": $offset, "sort": $qp_sort, "order": $order, "mediaTypes": $media_types, "name": $name, "collectionId": $collection_id, "nameContains": $name_contains, "descriptionContains": $description_contains, "sourceUrl": $source_url, "sourceUrlContains": $source_url_contains, "customThumbnailUrl": $custom_thumbnail_url, "customThumbnailUrlContains": $custom_thumbnail_url_contains, "dateContentAuthored": $date_content_authored, "dateContentUpdated": $date_content_updated, "dateContentPublished": $date_content_published, "dateContentReviewed": $date_content_reviewed, "dateSyndicationCaptured": $date_syndication_captured, "dateSyndicationUpdated": $date_syndication_updated, "contentAuthoredSinceDate": $content_authored_since_date, "contentAuthoredBeforeDate": $content_authored_before_date, "contentAuthoredInRange": $content_authored_in_range, "contentUpdatedSinceDate": $content_updated_since_date, "contentUpdatedBeforeDate": $content_updated_before_date, "contentUpdatedInRange": $content_updated_in_range, "contentPublishedSinceDate": $content_published_since_date, "contentPublishedBeforeDate": $content_published_before_date, "contentPublishedInRange": $content_published_in_range, "contentReviewedSinceDate": $content_reviewed_since_date, "contentReviewedBeforeDate": $content_reviewed_before_date, "contentReviewedInRange": $content_reviewed_in_range, "syndicationCapturedSinceDate": $syndication_captured_since_date, "syndicationCapturedBeforeDate": $syndication_captured_before_date, "syndicationCapturedInRange": $syndication_captured_in_range, "syndicationUpdatedSinceDate": $syndication_updated_since_date, "syndicationUpdatedBeforeDate": $syndication_updated_before_date, "syndicationUpdatedInRange": $syndication_updated_in_range, "syndicationVisibleSinceDate": $syndication_visible_since_date, "syndicationVisibleBeforeDate": $syndication_visible_before_date, "syndicationVisibleInRange": $syndication_visible_in_range, "languageId": $language_id, "languageName": $language_name, "languageIsoCode": $language_iso_code, "hash": $hash, "hashContains": $hash_contains, "sourceId": $source_id, "sourceName": $source_name, "sourceNameContains": $source_name_contains, "sourceAcronym": $source_acronym, "sourceAcronymContains": $source_acronym_contains, "tagIds": $tag_ids, "restrictToSet": $restrict_to_set, "createdBy": $created_by} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"max": $max, "offset": $offset, "sort": $qp_sort, "order": $order, "mediaTypes": $media_types, "name": $name, "collectionId": $collection_id, "nameContains": $name_contains, "descriptionContains": $description_contains, "sourceUrl": $source_url, "sourceUrlContains": $source_url_contains, "customThumbnailUrl": $custom_thumbnail_url, "customThumbnailUrlContains": $custom_thumbnail_url_contains, "dateContentAuthored": $date_content_authored, "dateContentUpdated": $date_content_updated, "dateContentPublished": $date_content_published, "dateContentReviewed": $date_content_reviewed, "dateSyndicationCaptured": $date_syndication_captured, "dateSyndicationUpdated": $date_syndication_updated, "contentAuthoredSinceDate": $content_authored_since_date, "contentAuthoredBeforeDate": $content_authored_before_date, "contentAuthoredInRange": $content_authored_in_range, "contentUpdatedSinceDate": $content_updated_since_date, "contentUpdatedBeforeDate": $content_updated_before_date, "contentUpdatedInRange": $content_updated_in_range, "contentPublishedSinceDate": $content_published_since_date, "contentPublishedBeforeDate": $content_published_before_date, "contentPublishedInRange": $content_published_in_range, "contentReviewedSinceDate": $content_reviewed_since_date, "contentReviewedBeforeDate": $content_reviewed_before_date, "contentReviewedInRange": $content_reviewed_in_range, "syndicationCapturedSinceDate": $syndication_captured_since_date, "syndicationCapturedBeforeDate": $syndication_captured_before_date, "syndicationCapturedInRange": $syndication_captured_in_range, "syndicationUpdatedSinceDate": $syndication_updated_since_date, "syndicationUpdatedBeforeDate": $syndication_updated_before_date, "syndicationUpdatedInRange": $syndication_updated_in_range, "syndicationVisibleSinceDate": $syndication_visible_since_date, "syndicationVisibleBeforeDate": $syndication_visible_before_date, "syndicationVisibleInRange": $syndication_visible_in_range, "languageId": $language_id, "languageName": $language_name, "languageIsoCode": $language_iso_code, "hash": $hash, "hashContains": $hash_contains, "sourceId": $source_id, "sourceName": $source_name, "sourceNameContains": $source_name_contains, "sourceAcronym": $source_acronym, "sourceAcronymContains": $source_acronym_contains, "tagIds": $tag_ids, "restrictToSet": $restrict_to_set, "createdBy": $created_by} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get the list of featured content in the syndication system
@@ -408,10 +481,21 @@ export def "resources-media-featured-json get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "sort" $qp_sort "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/resources/media/featured.json" $qp)
+  let full_url = (build-url $base "/resources/media/featured.json" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"sort": $qp_sort, "max": $max, "offset": $offset} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"sort": $qp_sort, "max": $max, "offset": $offset} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get MediaItems by popularity
@@ -435,10 +519,21 @@ export def "resources-media-most-popular-media-format get" [
   let base = ($base_url | default $BASE_URL)
   if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
   let qp = [(serialize-qp "max" $max "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({format: (encode-path-segment $format)} | format pattern "/resources/media/mostPopularMedia.{format}") $qp)
+  let full_url = (build-url $base ({format: (encode-path-segment $format)} | format pattern "/resources/media/mostPopularMedia.{format}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"max": $max, "offset": $offset} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"max": $max, "offset": $offset} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get MediaItems by search query
@@ -461,10 +556,21 @@ export def "resources-media-search-results-json get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/resources/media/searchResults.json" $qp)
+  let full_url = (build-url $base "/resources/media/searchResults.json" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"q": $q, "max": $max, "offset": $offset} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"q": $q, "max": $max, "offset": $offset} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get MediaItem by ID
@@ -485,10 +591,21 @@ export def "resources-media get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/resources/media/{id}.json"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/resources/media/{id}.json") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get content for MediaItem
@@ -511,10 +628,21 @@ export def "resources-media-content get" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "calledByBuild" $called_by_build "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/resources/media/{id}/content") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/resources/media/{id}/content") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"calledByBuild": $called_by_build} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"calledByBuild": $called_by_build} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get embed code for MediaItem
@@ -544,10 +672,21 @@ export def "resources-media-embed-json get" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "flavor" $flavor "scalar") (serialize-qp "width" $width "scalar") (serialize-qp "height" $height "scalar") (serialize-qp "iframeName" $iframe_name "scalar") (serialize-qp "excludeJquery" $exclude_jquery "scalar") (serialize-qp "excludeDiv" $exclude_div "scalar") (serialize-qp "divId" $div_id "scalar") (serialize-qp "displayMethod" $display_method "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/resources/media/{id}/embed.json") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/resources/media/{id}/embed.json") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"flavor": $flavor, "width": $width, "height": $height, "iframeName": $iframe_name, "excludeJquery": $exclude_jquery, "excludeDiv": $exclude_div, "divId": $div_id, "displayMethod": $display_method} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"flavor": $flavor, "width": $width, "height": $height, "iframeName": $iframe_name, "excludeJquery": $exclude_jquery, "excludeDiv": $exclude_div, "divId": $div_id, "displayMethod": $display_method} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get Tag by ID
@@ -568,10 +707,21 @@ export def "resources-media-preview-jpg get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/resources/media/{id}/preview.jpg"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/resources/media/{id}/preview.jpg") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get related MediaItems by ID
@@ -598,10 +748,21 @@ export def "resources-media-related-media-format get" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
   let qp = [(serialize-qp "max" $max "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id), format: (encode-path-segment $format)} | format pattern "/resources/media/{id}/relatedMedia.{format}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id), format: (encode-path-segment $format)} | format pattern "/resources/media/{id}/relatedMedia.{format}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"max": $max, "offset": $offset, "sort": $qp_sort} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"max": $max, "offset": $offset, "sort": $qp_sort} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get syndicated content for MediaItem
@@ -636,10 +797,21 @@ export def "resources-media-syndicate-format get" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
   let qp = [(serialize-qp "cssClass" $css_class "scalar") (serialize-qp "stripStyles" $strip_styles "scalar") (serialize-qp "stripScripts" $strip_scripts "scalar") (serialize-qp "stripImages" $strip_images "scalar") (serialize-qp "stripBreaks" $strip_breaks "scalar") (serialize-qp "stripClasses" $strip_classes "scalar") (serialize-qp "font-size" $font_size "scalar") (serialize-qp "imageFloat" $image_float "scalar") (serialize-qp "imageMargin" $image_margin "scalar") (serialize-qp "autoplay" $autoplay "scalar") (serialize-qp "rel" $rel "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id), format: (encode-path-segment $format)} | format pattern "/resources/media/{id}/syndicate.{format}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id), format: (encode-path-segment $format)} | format pattern "/resources/media/{id}/syndicate.{format}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cssClass": $css_class, "stripStyles": $strip_styles, "stripScripts": $strip_scripts, "stripImages": $strip_images, "stripBreaks": $strip_breaks, "stripClasses": $strip_classes, "font-size": $font_size, "imageFloat": $image_float, "imageMargin": $image_margin, "autoplay": $autoplay, "rel": $rel} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"cssClass": $css_class, "stripStyles": $strip_styles, "stripScripts": $strip_scripts, "stripImages": $strip_images, "stripBreaks": $strip_breaks, "stripClasses": $strip_classes, "font-size": $font_size, "imageFloat": $image_float, "imageMargin": $image_margin, "autoplay": $autoplay, "rel": $rel} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get JPG thumbnail for MediaItem
@@ -660,10 +832,21 @@ export def "resources-media-thumbnail-jpg get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/resources/media/{id}/thumbnail.jpg"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/resources/media/{id}/thumbnail.jpg") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get Youtube metadata for MediaItem
@@ -684,10 +867,21 @@ export def "resources-media-youtube-meta-data-json get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/resources/media/{id}/youtubeMetaData.json"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/resources/media/{id}/youtubeMetaData.json") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get MediaTypes
@@ -708,10 +902,21 @@ export def "resources-media-types-format get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
-  let full_url = (build-url $base ({format: (encode-path-segment $format)} | format pattern "/resources/mediaTypes.{format}"))
+  let full_url = (build-url $base ({format: (encode-path-segment $format)} | format pattern "/resources/mediaTypes.{format}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get Sources
@@ -734,10 +939,21 @@ export def "resources-sources-json get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "max" $max "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/resources/sources.json" $qp)
+  let full_url = (build-url $base "/resources/sources.json" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"max": $max, "offset": $offset, "sort": $qp_sort} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"max": $max, "offset": $offset, "sort": $qp_sort} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get Source by ID
@@ -758,10 +974,21 @@ export def "resources-sources get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/resources/sources/{id}.json"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/resources/sources/{id}.json") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get MediaItems for Source
@@ -786,10 +1013,21 @@ export def "resources-sources-syndicate-format get" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
   let qp = [(serialize-qp "displayMethod" $display_method "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id), format: (encode-path-segment $format)} | format pattern "/resources/sources/{id}/syndicate.{format}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id), format: (encode-path-segment $format)} | format pattern "/resources/sources/{id}/syndicate.{format}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"displayMethod": $display_method} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"displayMethod": $display_method} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get Tags
@@ -819,10 +1057,21 @@ export def "resources-tags-format get" [
   let base = ($base_url | default $BASE_URL)
   if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
   let qp = [(serialize-qp "sort" $qp_sort "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "nameContains" $name_contains "scalar") (serialize-qp "mediaId" $media_id "scalar") (serialize-qp "typeId" $type_id "scalar") (serialize-qp "typeName" $type_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({format: (encode-path-segment $format)} | format pattern "/resources/tags.{format}") $qp)
+  let full_url = (build-url $base ({format: (encode-path-segment $format)} | format pattern "/resources/tags.{format}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"sort": $qp_sort, "max": $max, "offset": $offset, "name": $name, "nameContains": $name_contains, "mediaId": $media_id, "typeId": $type_id, "typeName": $type_name} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"sort": $qp_sort, "max": $max, "offset": $offset, "name": $name, "nameContains": $name_contains, "mediaId": $media_id, "typeId": $type_id, "typeName": $type_name} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get TagLanguages
@@ -843,10 +1092,21 @@ export def "resources-tags-tag-languages-format get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
-  let full_url = (build-url $base ({format: (encode-path-segment $format)} | format pattern "/resources/tags/tagLanguages.{format}"))
+  let full_url = (build-url $base ({format: (encode-path-segment $format)} | format pattern "/resources/tags/tagLanguages.{format}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get MediaItems for Tag
@@ -867,10 +1127,21 @@ export def "resources-tags-tag-types-format get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
-  let full_url = (build-url $base ({format: (encode-path-segment $format)} | format pattern "/resources/tags/tagTypes.{format}"))
+  let full_url = (build-url $base ({format: (encode-path-segment $format)} | format pattern "/resources/tags/tagTypes.{format}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get Tag by ID
@@ -893,10 +1164,21 @@ export def "resources-tags get" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), format: (encode-path-segment $format)} | format pattern "/resources/tags/{id}.{format}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), format: (encode-path-segment $format)} | format pattern "/resources/tags/{id}.{format}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get MediaItems for Tag
@@ -923,10 +1205,21 @@ export def "resources-tags-media-format get" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
   let qp = [(serialize-qp "sort" $qp_sort "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id), format: (encode-path-segment $format)} | format pattern "/resources/tags/{id}/media.{format}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id), format: (encode-path-segment $format)} | format pattern "/resources/tags/{id}/media.{format}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"sort": $qp_sort, "max": $max, "offset": $offset} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"sort": $qp_sort, "max": $max, "offset": $offset} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get related Tags by ID
@@ -953,10 +1246,21 @@ export def "resources-tags-related-format get" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
   let qp = [(serialize-qp "sort" $qp_sort "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id), format: (encode-path-segment $format)} | format pattern "/resources/tags/{id}/related.{format}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id), format: (encode-path-segment $format)} | format pattern "/resources/tags/{id}/related.{format}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"sort": $qp_sort, "max": $max, "offset": $offset} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"sort": $qp_sort, "max": $max, "offset": $offset} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get MediaItems for Tag
@@ -981,10 +1285,21 @@ export def "resources-tags-syndicate-format get" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
   let qp = [(serialize-qp "displayMethod" $display_method "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id), format: (encode-path-segment $format)} | format pattern "/resources/tags/{id}/syndicate.{format}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id), format: (encode-path-segment $format)} | format pattern "/resources/tags/{id}/syndicate.{format}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"displayMethod": $display_method} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"displayMethod": $display_method} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get UserMediaList by ID
@@ -1007,8 +1322,19 @@ export def "resources-user-media-lists get" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "displayMethod" $display_method "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/resources/userMediaLists/{id}.json") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/resources/userMediaLists/{id}.json") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"displayMethod": $display_method} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"displayMethod": $display_method} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }

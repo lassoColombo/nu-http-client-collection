@@ -8,7 +8,7 @@ const BASE_URL = "http://apigateway.us-east-1.amazonaws.com"
 # `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
 # where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o AMAZON_API_GATEWAY_TOKEN | default "" }
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o AMAZON_API_GATEWAY_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
@@ -41,14 +41,11 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
-# Trick: `url encode --all` over-encodes, then we decode the four unreserved
-# punctuation chars back. Pre-existing %XX sequences in the input survive
-# because `url encode --all` first turns their % into %25.
 def encode-path-segment [v: any]: nothing -> string {
   $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
-# Serialize an array-typed path parameter (issue 49.A). OpenAPI 3 `style: simple`
+# Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
 # (the default for path params) and Swagger 2 `collectionFormat: csv` both join
 # the elements with a literal comma WITHIN the single path segment, each element
 # RFC-3986-encoded individually (so a comma inside an element stays %2C). Without
@@ -59,51 +56,63 @@ def encode-path-array [v: any]: nothing -> string {
   if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
 }
 
-# Build URL from base, path, and optional query string
-def build-url [base: string, path: string, query?: string]: nothing -> string {
+# Build the request URL from base, path, and any number of pre-encoded query
+# fragments (param serializer output and/or the auth query). Each fragment is an
+# `&`-joinable `key=value` string already percent-encoded by its producer; empty
+# fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
+# delimiters are hand-spliced — and any query already on the base URL is merged in.
+def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
   let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
-  let result = ($parsed | upsert path $full_path)
-  if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
+  let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
+  $parsed | upsert path $full_path | upsert query $query | url join
 }
 
-# Build the dry-run record returned by --dry-run. Shape:
-#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
-#    auth: {scheme, location}}
-# `meta` carries logical-form data (the query record by spec name, the pre-serialization
-# body) that do-request itself cannot reconstruct from its wire-format args.
-def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
-  let m = ($meta | default {})
-  {
-    dry_run: true
-    method: $method
-    url: $url
-    query: ($m | get -o query | default {})
-    headers: $auth.headers
-    body: ($m | get -o body)
-    content_type: $content_type
-    timeout: $timeout
-    auth: {scheme: $auth.scheme, location: $auth.location}
-  }
+# Success policy: did this response succeed? Single source of truth, consulted by
+# handle-response and the HEAD header-unwrap. Empty ok_codes means the spec listed
+# none, so fall back to < 400. Otherwise: any 2xx, plus documented success codes.
+def status-ok [status: int, ok_codes: list<int>]: nothing -> bool {
+  if ($ok_codes | is-empty) { $status < 400 } else { ($status >= 200 and $status < 300) or ($status in $ok_codes) }
 }
 
-# Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
-  let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
-  let timeout = ($max_time | default 30min)
-  let ct = ($content_type | default "application/json")
-  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
-  let resp = match $method {
-    "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
-  }
-  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
-  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
+# Unwrap a `--full` HTTP response into the user-facing value. Response arrives
+# via pipeline; ok_codes gates the error throw (see status-ok).
+def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: record -> any {
+  let resp = $in
+  if $allow_errors { return $resp }
+  if not (status-ok $resp.status $ok_codes) { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } }
+  if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
+  if $resp.status == 204 { return null }
+  $resp.body
+}
+
+# GET — bodyless, honours --raw
+def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+}
+
+# POST — body + content-type
+def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# PUT — body + content-type
+def send-put [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http put --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http put --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# PATCH — body + content-type
+def send-patch [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http patch --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http patch --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# DELETE — body via --data
+def send-delete [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http delete --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url } else { http delete --headers $req.headers --content-type $req.content_type --data $body --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url }
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 def base-url-completer [] { ["http://apigateway.us-east-1.amazonaws.com" "http://apigateway.us-east-2.amazonaws.com" "http://apigateway.us-west-1.amazonaws.com" "http://apigateway.us-west-2.amazonaws.com" "http://apigateway.us-gov-west-1.amazonaws.com" "http://apigateway.us-gov-east-1.amazonaws.com" "http://apigateway.ca-central-1.amazonaws.com" "http://apigateway.eu-north-1.amazonaws.com" "http://apigateway.eu-west-1.amazonaws.com" "http://apigateway.eu-west-2.amazonaws.com" "http://apigateway.eu-west-3.amazonaws.com" "http://apigateway.eu-central-1.amazonaws.com" "http://apigateway.eu-south-1.amazonaws.com" "http://apigateway.af-south-1.amazonaws.com" "http://apigateway.ap-northeast-1.amazonaws.com" "http://apigateway.ap-northeast-2.amazonaws.com" "http://apigateway.ap-northeast-3.amazonaws.com" "http://apigateway.ap-southeast-1.amazonaws.com" "http://apigateway.ap-southeast-2.amazonaws.com" "http://apigateway.ap-east-1.amazonaws.com" "http://apigateway.ap-south-1.amazonaws.com" "http://apigateway.sa-east-1.amazonaws.com" "http://apigateway.me-south-1.amazonaws.com" "https://apigateway.us-east-1.amazonaws.com" "https://apigateway.us-east-2.amazonaws.com" "https://apigateway.us-west-1.amazonaws.com" "https://apigateway.us-west-2.amazonaws.com" "https://apigateway.us-gov-west-1.amazonaws.com" "https://apigateway.us-gov-east-1.amazonaws.com" "https://apigateway.ca-central-1.amazonaws.com" "https://apigateway.eu-north-1.amazonaws.com" "https://apigateway.eu-west-1.amazonaws.com" "https://apigateway.eu-west-2.amazonaws.com" "https://apigateway.eu-west-3.amazonaws.com" "https://apigateway.eu-central-1.amazonaws.com" "https://apigateway.eu-south-1.amazonaws.com" "https://apigateway.af-south-1.amazonaws.com" "https://apigateway.ap-northeast-1.amazonaws.com" "https://apigateway.ap-northeast-2.amazonaws.com" "https://apigateway.ap-northeast-3.amazonaws.com" "https://apigateway.ap-southeast-1.amazonaws.com" "https://apigateway.ap-southeast-2.amazonaws.com" "https://apigateway.ap-east-1.amazonaws.com" "https://apigateway.ap-south-1.amazonaws.com" "https://apigateway.sa-east-1.amazonaws.com" "https://apigateway.me-south-1.amazonaws.com" "http://apigateway.cn-north-1.amazonaws.com.cn" "http://apigateway.cn-northwest-1.amazonaws.com.cn" "https://apigateway.cn-north-1.amazonaws.com.cn" "https://apigateway.cn-northwest-1.amazonaws.com.cn"] }
@@ -180,14 +189,25 @@ export def "apikeys create-key" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/apikeys")
+  let full_url = (build-url $base "/apikeys" $auth.query)
   let req_body = {"name": $name, "description": $description, "enabled": $enabled, "generateDistinctId": $generate_distinct_id, "value": $value, "stageKeys": $stage_keys, "customerId": $customer_id, "tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Gets information about the current ApiKeys resource.
@@ -220,12 +240,23 @@ export def "apikeys get-keys" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "position" $position "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "customerId" $customer_id "scalar") (serialize-qp "includeValues" $include_values "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/apikeys" $qp)
+  let full_url = (build-url $base "/apikeys" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"position": $position, "limit": $limit, "name": $name, "customerId": $customer_id, "includeValues": $include_values} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"position": $position, "limit": $limit, "name": $name, "customerId": $customer_id, "includeValues": $include_values} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Adds a new Authorizer resource to an existing RestApi resource.
@@ -264,14 +295,25 @@ export def "restapis-authorizers create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($restapi_id | is-empty) { error make --unspanned { msg: "path parameter 'restapi_id' must be non-empty" } }
-  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id)} | format pattern "/restapis/{restapi_id}/authorizers"))
+  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id)} | format pattern "/restapis/{restapi_id}/authorizers") $auth.query)
   let req_body = {"name": $name, "type": $type, "providerARNs": $provider_ar_ns, "authType": $auth_type, "authorizerUri": $authorizer_uri, "authorizerCredentials": $authorizer_credentials, "identitySource": $identity_source, "identityValidationExpression": $identity_validation_expression, "authorizerResultTtlInSeconds": $authorizer_result_ttl_in_seconds} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Describe an existing Authorizers resource.
@@ -303,12 +345,23 @@ export def "restapis-authorizers list" [
   let base = ($base_url | default $BASE_URL)
   if ($restapi_id | is-empty) { error make --unspanned { msg: "path parameter 'restapi_id' must be non-empty" } }
   let qp = [(serialize-qp "position" $position "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id)} | format pattern "/restapis/{restapi_id}/authorizers") $qp)
+  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id)} | format pattern "/restapis/{restapi_id}/authorizers") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"position": $position, "limit": $limit} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"position": $position, "limit": $limit} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Creates a new BasePathMapping resource.
@@ -341,14 +394,25 @@ export def "domainnames-basepathmappings create-base-path-mapping" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'domain_name' must be non-empty" } }
-  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name)} | format pattern "/domainnames/{domain_name}/basepathmappings"))
+  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name)} | format pattern "/domainnames/{domain_name}/basepathmappings") $auth.query)
   let req_body = {"basePath": $base_path, "restApiId": $rest_api_id, "stage": $stage} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Represents a collection of BasePathMapping resources.
@@ -380,12 +444,23 @@ export def "domainnames-basepathmappings get-base-path-mappings" [
   let base = ($base_url | default $BASE_URL)
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'domain_name' must be non-empty" } }
   let qp = [(serialize-qp "position" $position "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name)} | format pattern "/domainnames/{domain_name}/basepathmappings") $qp)
+  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name)} | format pattern "/domainnames/{domain_name}/basepathmappings") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"position": $position, "limit": $limit} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"position": $position, "limit": $limit} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Creates a Deployment resource, which makes a specified RestApi callable over the internet.
@@ -424,14 +499,25 @@ export def "restapis-deployments create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($restapi_id | is-empty) { error make --unspanned { msg: "path parameter 'restapi_id' must be non-empty" } }
-  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id)} | format pattern "/restapis/{restapi_id}/deployments"))
+  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id)} | format pattern "/restapis/{restapi_id}/deployments") $auth.query)
   let req_body = {"stageName": $stage_name, "stageDescription": $stage_description, "description": $description, "cacheClusterEnabled": $cache_cluster_enabled, "cacheClusterSize": $cache_cluster_size, "variables": $variables, "canarySettings": $canary_settings, "tracingEnabled": $tracing_enabled} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Gets information about a Deployments collection.
@@ -463,12 +549,23 @@ export def "restapis-deployments list" [
   let base = ($base_url | default $BASE_URL)
   if ($restapi_id | is-empty) { error make --unspanned { msg: "path parameter 'restapi_id' must be non-empty" } }
   let qp = [(serialize-qp "position" $position "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id)} | format pattern "/restapis/{restapi_id}/deployments") $qp)
+  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id)} | format pattern "/restapis/{restapi_id}/deployments") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"position": $position, "limit": $limit} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"position": $position, "limit": $limit} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Creates a documentation part.
@@ -501,14 +598,25 @@ export def "restapis-documentation-parts create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($restapi_id | is-empty) { error make --unspanned { msg: "path parameter 'restapi_id' must be non-empty" } }
-  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id)} | format pattern "/restapis/{restapi_id}/documentation/parts"))
+  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id)} | format pattern "/restapis/{restapi_id}/documentation/parts") $auth.query)
   let req_body = {"location": $location, "properties": $properties} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Gets documentation parts.
@@ -544,12 +652,23 @@ export def "restapis-documentation-parts list" [
   let base = ($base_url | default $BASE_URL)
   if ($restapi_id | is-empty) { error make --unspanned { msg: "path parameter 'restapi_id' must be non-empty" } }
   let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "path" $path "scalar") (serialize-qp "position" $position "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "locationStatus" $location_status "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id)} | format pattern "/restapis/{restapi_id}/documentation/parts") $qp)
+  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id)} | format pattern "/restapis/{restapi_id}/documentation/parts") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"type": $type, "name": $name, "path": $path, "position": $position, "limit": $limit, "locationStatus": $location_status} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"type": $type, "name": $name, "path": $path, "position": $position, "limit": $limit, "locationStatus": $location_status} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Imports documentation parts
@@ -583,14 +702,25 @@ export def "restapis-documentation-parts import" [
   let base = ($base_url | default $BASE_URL)
   if ($restapi_id | is-empty) { error make --unspanned { msg: "path parameter 'restapi_id' must be non-empty" } }
   let qp = [(serialize-qp "mode" $mode "scalar") (serialize-qp "failonwarnings" $failonwarnings "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id)} | format pattern "/restapis/{restapi_id}/documentation/parts") $qp)
+  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id)} | format pattern "/restapis/{restapi_id}/documentation/parts") $qp $auth.query)
   let req_body = {"body": $body} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"mode": $mode, "failonwarnings": $failonwarnings} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"mode": $mode, "failonwarnings": $failonwarnings} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Creates a documentation version
@@ -623,14 +753,25 @@ export def "restapis-documentation-versions create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($restapi_id | is-empty) { error make --unspanned { msg: "path parameter 'restapi_id' must be non-empty" } }
-  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id)} | format pattern "/restapis/{restapi_id}/documentation/versions"))
+  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id)} | format pattern "/restapis/{restapi_id}/documentation/versions") $auth.query)
   let req_body = {"documentationVersion": $documentation_version, "stageName": $stage_name, "description": $description} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Gets documentation versions.
@@ -662,12 +803,23 @@ export def "restapis-documentation-versions list" [
   let base = ($base_url | default $BASE_URL)
   if ($restapi_id | is-empty) { error make --unspanned { msg: "path parameter 'restapi_id' must be non-empty" } }
   let qp = [(serialize-qp "position" $position "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id)} | format pattern "/restapis/{restapi_id}/documentation/versions") $qp)
+  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id)} | format pattern "/restapis/{restapi_id}/documentation/versions") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"position": $position, "limit": $limit} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"position": $position, "limit": $limit} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Creates a new domain name.
@@ -710,14 +862,25 @@ export def "domainnames create-domain-name" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/domainnames")
+  let full_url = (build-url $base "/domainnames" $auth.query)
   let req_body = {"domainName": $domain_name, "certificateName": $certificate_name, "certificateBody": $certificate_body, "certificatePrivateKey": $certificate_private_key, "certificateChain": $certificate_chain, "certificateArn": $certificate_arn, "regionalCertificateName": $regional_certificate_name, "regionalCertificateArn": $regional_certificate_arn, "endpointConfiguration": $endpoint_configuration, "tags": $tags, "securityPolicy": $security_policy, "mutualTlsAuthentication": $mutual_tls_authentication, "ownershipVerificationCertificateArn": $ownership_verification_certificate_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Represents a collection of DomainName resources.
@@ -747,12 +910,23 @@ export def "domainnames get-domain-names" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "position" $position "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/domainnames" $qp)
+  let full_url = (build-url $base "/domainnames" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"position": $position, "limit": $limit} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"position": $position, "limit": $limit} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Adds a new Model resource to an existing RestApi resource.
@@ -786,14 +960,25 @@ export def "restapis-models create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($restapi_id | is-empty) { error make --unspanned { msg: "path parameter 'restapi_id' must be non-empty" } }
-  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id)} | format pattern "/restapis/{restapi_id}/models"))
+  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id)} | format pattern "/restapis/{restapi_id}/models") $auth.query)
   let req_body = {"name": $name, "description": $description, "schema": $schema, "contentType": $content_type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Describes existing Models defined for a RestApi resource.
@@ -825,12 +1010,23 @@ export def "restapis-models list" [
   let base = ($base_url | default $BASE_URL)
   if ($restapi_id | is-empty) { error make --unspanned { msg: "path parameter 'restapi_id' must be non-empty" } }
   let qp = [(serialize-qp "position" $position "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id)} | format pattern "/restapis/{restapi_id}/models") $qp)
+  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id)} | format pattern "/restapis/{restapi_id}/models") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"position": $position, "limit": $limit} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"position": $position, "limit": $limit} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Creates a RequestValidator of a given RestApi.
@@ -863,14 +1059,25 @@ export def "restapis-requestvalidators create-request-validator" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($restapi_id | is-empty) { error make --unspanned { msg: "path parameter 'restapi_id' must be non-empty" } }
-  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id)} | format pattern "/restapis/{restapi_id}/requestvalidators"))
+  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id)} | format pattern "/restapis/{restapi_id}/requestvalidators") $auth.query)
   let req_body = {"name": $name, "validateRequestBody": $validate_request_body, "validateRequestParameters": $validate_request_parameters} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Gets the RequestValidators collection of a given RestApi.
@@ -902,12 +1109,23 @@ export def "restapis-requestvalidators get-request-validators" [
   let base = ($base_url | default $BASE_URL)
   if ($restapi_id | is-empty) { error make --unspanned { msg: "path parameter 'restapi_id' must be non-empty" } }
   let qp = [(serialize-qp "position" $position "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id)} | format pattern "/restapis/{restapi_id}/requestvalidators") $qp)
+  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id)} | format pattern "/restapis/{restapi_id}/requestvalidators") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"position": $position, "limit": $limit} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"position": $position, "limit": $limit} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Creates a Resource resource.
@@ -940,14 +1158,25 @@ export def "restapis-resources create" [
   let base = ($base_url | default $BASE_URL)
   if ($restapi_id | is-empty) { error make --unspanned { msg: "path parameter 'restapi_id' must be non-empty" } }
   if ($parent_id | is-empty) { error make --unspanned { msg: "path parameter 'parent_id' must be non-empty" } }
-  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id), parent_id: (encode-path-segment $parent_id)} | format pattern "/restapis/{restapi_id}/resources/{parent_id}"))
+  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id), parent_id: (encode-path-segment $parent_id)} | format pattern "/restapis/{restapi_id}/resources/{parent_id}") $auth.query)
   let req_body = {"pathPart": $path_part} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Creates a new RestApi resource.
@@ -987,14 +1216,25 @@ export def "restapis create-rest" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/restapis")
+  let full_url = (build-url $base "/restapis" $auth.query)
   let req_body = {"name": $name, "description": $description, "version": $version, "cloneFrom": $clone_from, "binaryMediaTypes": $binary_media_types, "minimumCompressionSize": $minimum_compression_size, "apiKeySource": $api_key_source, "endpointConfiguration": $endpoint_configuration, "policy": $policy, "tags": $tags, "disableExecuteApiEndpoint": $disable_execute_api_endpoint} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Lists the RestApis resources for your collection.
@@ -1024,12 +1264,23 @@ export def "restapis list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "position" $position "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/restapis" $qp)
+  let full_url = (build-url $base "/restapis" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"position": $position, "limit": $limit} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"position": $position, "limit": $limit} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Creates a new Stage resource that references a pre-existing Deployment for the API.
@@ -1070,14 +1321,25 @@ export def "restapis-stages create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($restapi_id | is-empty) { error make --unspanned { msg: "path parameter 'restapi_id' must be non-empty" } }
-  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id)} | format pattern "/restapis/{restapi_id}/stages"))
+  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id)} | format pattern "/restapis/{restapi_id}/stages") $auth.query)
   let req_body = {"stageName": $stage_name, "deploymentId": $deployment_id, "description": $description, "cacheClusterEnabled": $cache_cluster_enabled, "cacheClusterSize": $cache_cluster_size, "variables": $variables, "documentationVersion": $documentation_version, "canarySettings": $canary_settings, "tracingEnabled": $tracing_enabled, "tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Gets information about one or more Stage resources.
@@ -1108,12 +1370,23 @@ export def "restapis-stages list" [
   let base = ($base_url | default $BASE_URL)
   if ($restapi_id | is-empty) { error make --unspanned { msg: "path parameter 'restapi_id' must be non-empty" } }
   let qp = [(serialize-qp "deploymentId" $deployment_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id)} | format pattern "/restapis/{restapi_id}/stages") $qp)
+  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id)} | format pattern "/restapis/{restapi_id}/stages") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"deploymentId": $deployment_id} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"deploymentId": $deployment_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Creates a usage plan with the throttle and quota limits, as well as the associated API stages, specified in the payload.
@@ -1150,14 +1423,25 @@ export def "usageplans create-usage-plan" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/usageplans")
+  let full_url = (build-url $base "/usageplans" $auth.query)
   let req_body = {"name": $name, "description": $description, "apiStages": $api_stages, "throttle": $throttle, "quota": $quota, "tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Gets all the usage plans of the caller's account.
@@ -1188,12 +1472,23 @@ export def "usageplans get-usage-plans" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "position" $position "scalar") (serialize-qp "keyId" $key_id "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/usageplans" $qp)
+  let full_url = (build-url $base "/usageplans" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"position": $position, "keyId": $key_id, "limit": $limit} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"position": $position, "keyId": $key_id, "limit": $limit} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Creates a usage plan key for adding an existing API key to a usage plan.
@@ -1225,14 +1520,25 @@ export def "usageplans-keys create-usage-plan" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($usageplan_id | is-empty) { error make --unspanned { msg: "path parameter 'usageplanId' must be non-empty" } }
-  let full_url = (build-url $base ({usageplan_id: (encode-path-segment $usageplan_id)} | format pattern "/usageplans/{usageplan_id}/keys"))
+  let full_url = (build-url $base ({usageplan_id: (encode-path-segment $usageplan_id)} | format pattern "/usageplans/{usageplan_id}/keys") $auth.query)
   let req_body = {"keyId": $key_id, "keyType": $key_type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Gets all the usage plan keys representing the API keys added to a specified usage plan.
@@ -1265,12 +1571,23 @@ export def "usageplans-keys list" [
   let base = ($base_url | default $BASE_URL)
   if ($usageplan_id | is-empty) { error make --unspanned { msg: "path parameter 'usageplanId' must be non-empty" } }
   let qp = [(serialize-qp "position" $position "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "name" $name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({usageplan_id: (encode-path-segment $usageplan_id)} | format pattern "/usageplans/{usageplan_id}/keys") $qp)
+  let full_url = (build-url $base ({usageplan_id: (encode-path-segment $usageplan_id)} | format pattern "/usageplans/{usageplan_id}/keys") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"position": $position, "limit": $limit, "name": $name} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"position": $position, "limit": $limit, "name": $name} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Creates a VPC link, under the caller's account in a selected region, in an asynchronous operation that typically takes 2-4 minutes to complete and become operational. The caller must have permissions to create and update VPC Endpoint services.
@@ -1302,14 +1619,25 @@ export def "vpclinks create-vpc-link" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/vpclinks")
+  let full_url = (build-url $base "/vpclinks" $auth.query)
   let req_body = {"name": $name, "description": $description, "targetArns": $target_arns, "tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [202]
 }
 
 # Gets the VpcLinks collection under the caller's account in a selected region.
@@ -1339,12 +1667,23 @@ export def "vpclinks get-vpc-links" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "position" $position "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/vpclinks" $qp)
+  let full_url = (build-url $base "/vpclinks" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"position": $position, "limit": $limit} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"position": $position, "limit": $limit} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes the ApiKey resource.
@@ -1373,12 +1712,23 @@ export def "apikeys delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'api_Key' must be non-empty" } }
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/apikeys/{api_key}"))
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/apikeys/{api_key}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [202]
 }
 
 # Gets information about the current ApiKey resource.
@@ -1409,12 +1759,23 @@ export def "apikeys get" [
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'api_Key' must be non-empty" } }
   let qp = [(serialize-qp "includeValue" $include_value "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/apikeys/{api_key}") $qp)
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/apikeys/{api_key}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"includeValue": $include_value} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"includeValue": $include_value} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Changes information about an ApiKey resource.
@@ -1446,14 +1807,25 @@ export def "apikeys update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'api_Key' must be non-empty" } }
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/apikeys/{api_key}"))
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/apikeys/{api_key}") $auth.query)
   let req_body = {"patchOperations": $patch_operations} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes an existing Authorizer resource.
@@ -1484,12 +1856,23 @@ export def "restapis-authorizers delete" [
   let base = ($base_url | default $BASE_URL)
   if ($restapi_id | is-empty) { error make --unspanned { msg: "path parameter 'restapi_id' must be non-empty" } }
   if ($authorizer_id | is-empty) { error make --unspanned { msg: "path parameter 'authorizer_id' must be non-empty" } }
-  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id), authorizer_id: (encode-path-segment $authorizer_id)} | format pattern "/restapis/{restapi_id}/authorizers/{authorizer_id}"))
+  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id), authorizer_id: (encode-path-segment $authorizer_id)} | format pattern "/restapis/{restapi_id}/authorizers/{authorizer_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [202]
 }
 
 # Describe an existing Authorizer resource.
@@ -1520,12 +1903,23 @@ export def "restapis-authorizers get" [
   let base = ($base_url | default $BASE_URL)
   if ($restapi_id | is-empty) { error make --unspanned { msg: "path parameter 'restapi_id' must be non-empty" } }
   if ($authorizer_id | is-empty) { error make --unspanned { msg: "path parameter 'authorizer_id' must be non-empty" } }
-  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id), authorizer_id: (encode-path-segment $authorizer_id)} | format pattern "/restapis/{restapi_id}/authorizers/{authorizer_id}"))
+  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id), authorizer_id: (encode-path-segment $authorizer_id)} | format pattern "/restapis/{restapi_id}/authorizers/{authorizer_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Simulate the execution of an Authorizer in your RestApi with headers, parameters, and an incoming request body.
@@ -1563,14 +1957,25 @@ export def "restapis-authorizers test-invoke" [
   let base = ($base_url | default $BASE_URL)
   if ($restapi_id | is-empty) { error make --unspanned { msg: "path parameter 'restapi_id' must be non-empty" } }
   if ($authorizer_id | is-empty) { error make --unspanned { msg: "path parameter 'authorizer_id' must be non-empty" } }
-  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id), authorizer_id: (encode-path-segment $authorizer_id)} | format pattern "/restapis/{restapi_id}/authorizers/{authorizer_id}"))
+  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id), authorizer_id: (encode-path-segment $authorizer_id)} | format pattern "/restapis/{restapi_id}/authorizers/{authorizer_id}") $auth.query)
   let req_body = {"headers": $headers, "multiValueHeaders": $multi_value_headers, "pathWithQueryString": $path_with_query_string, "body": $body, "stageVariables": $stage_variables, "additionalContext": $additional_context} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Updates an existing Authorizer resource.
@@ -1604,14 +2009,25 @@ export def "restapis-authorizers update" [
   let base = ($base_url | default $BASE_URL)
   if ($restapi_id | is-empty) { error make --unspanned { msg: "path parameter 'restapi_id' must be non-empty" } }
   if ($authorizer_id | is-empty) { error make --unspanned { msg: "path parameter 'authorizer_id' must be non-empty" } }
-  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id), authorizer_id: (encode-path-segment $authorizer_id)} | format pattern "/restapis/{restapi_id}/authorizers/{authorizer_id}"))
+  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id), authorizer_id: (encode-path-segment $authorizer_id)} | format pattern "/restapis/{restapi_id}/authorizers/{authorizer_id}") $auth.query)
   let req_body = {"patchOperations": $patch_operations} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes the BasePathMapping resource.
@@ -1642,12 +2058,23 @@ export def "domainnames-basepathmappings delete-mapping" [
   let base = ($base_url | default $BASE_URL)
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'domain_name' must be non-empty" } }
   if ($base_path | is-empty) { error make --unspanned { msg: "path parameter 'base_path' must be non-empty" } }
-  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name), base_path: (encode-path-segment $base_path)} | format pattern "/domainnames/{domain_name}/basepathmappings/{base_path}"))
+  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name), base_path: (encode-path-segment $base_path)} | format pattern "/domainnames/{domain_name}/basepathmappings/{base_path}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [202]
 }
 
 # Describe a BasePathMapping resource.
@@ -1678,12 +2105,23 @@ export def "domainnames-basepathmappings get-mapping" [
   let base = ($base_url | default $BASE_URL)
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'domain_name' must be non-empty" } }
   if ($base_path | is-empty) { error make --unspanned { msg: "path parameter 'base_path' must be non-empty" } }
-  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name), base_path: (encode-path-segment $base_path)} | format pattern "/domainnames/{domain_name}/basepathmappings/{base_path}"))
+  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name), base_path: (encode-path-segment $base_path)} | format pattern "/domainnames/{domain_name}/basepathmappings/{base_path}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Changes information about the BasePathMapping resource.
@@ -1717,14 +2155,25 @@ export def "domainnames-basepathmappings update-mapping" [
   let base = ($base_url | default $BASE_URL)
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'domain_name' must be non-empty" } }
   if ($base_path | is-empty) { error make --unspanned { msg: "path parameter 'base_path' must be non-empty" } }
-  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name), base_path: (encode-path-segment $base_path)} | format pattern "/domainnames/{domain_name}/basepathmappings/{base_path}"))
+  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name), base_path: (encode-path-segment $base_path)} | format pattern "/domainnames/{domain_name}/basepathmappings/{base_path}") $auth.query)
   let req_body = {"patchOperations": $patch_operations} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes the ClientCertificate resource.
@@ -1753,12 +2202,23 @@ export def "clientcertificates delete-client-certificate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($clientcertificate_id | is-empty) { error make --unspanned { msg: "path parameter 'clientcertificate_id' must be non-empty" } }
-  let full_url = (build-url $base ({clientcertificate_id: (encode-path-segment $clientcertificate_id)} | format pattern "/clientcertificates/{clientcertificate_id}"))
+  let full_url = (build-url $base ({clientcertificate_id: (encode-path-segment $clientcertificate_id)} | format pattern "/clientcertificates/{clientcertificate_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [202]
 }
 
 # Gets information about the current ClientCertificate resource.
@@ -1787,12 +2247,23 @@ export def "clientcertificates get-client-certificate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($clientcertificate_id | is-empty) { error make --unspanned { msg: "path parameter 'clientcertificate_id' must be non-empty" } }
-  let full_url = (build-url $base ({clientcertificate_id: (encode-path-segment $clientcertificate_id)} | format pattern "/clientcertificates/{clientcertificate_id}"))
+  let full_url = (build-url $base ({clientcertificate_id: (encode-path-segment $clientcertificate_id)} | format pattern "/clientcertificates/{clientcertificate_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Changes information about an ClientCertificate resource.
@@ -1824,14 +2295,25 @@ export def "clientcertificates update-client-certificate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($clientcertificate_id | is-empty) { error make --unspanned { msg: "path parameter 'clientcertificate_id' must be non-empty" } }
-  let full_url = (build-url $base ({clientcertificate_id: (encode-path-segment $clientcertificate_id)} | format pattern "/clientcertificates/{clientcertificate_id}"))
+  let full_url = (build-url $base ({clientcertificate_id: (encode-path-segment $clientcertificate_id)} | format pattern "/clientcertificates/{clientcertificate_id}") $auth.query)
   let req_body = {"patchOperations": $patch_operations} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes a Deployment resource. Deleting a deployment will only succeed if there are no Stage resources associated with it.
@@ -1862,12 +2344,23 @@ export def "restapis-deployments delete" [
   let base = ($base_url | default $BASE_URL)
   if ($restapi_id | is-empty) { error make --unspanned { msg: "path parameter 'restapi_id' must be non-empty" } }
   if ($deployment_id | is-empty) { error make --unspanned { msg: "path parameter 'deployment_id' must be non-empty" } }
-  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id), deployment_id: (encode-path-segment $deployment_id)} | format pattern "/restapis/{restapi_id}/deployments/{deployment_id}"))
+  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id), deployment_id: (encode-path-segment $deployment_id)} | format pattern "/restapis/{restapi_id}/deployments/{deployment_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [202]
 }
 
 # Gets information about a Deployment resource.
@@ -1900,12 +2393,23 @@ export def "restapis-deployments get" [
   if ($restapi_id | is-empty) { error make --unspanned { msg: "path parameter 'restapi_id' must be non-empty" } }
   if ($deployment_id | is-empty) { error make --unspanned { msg: "path parameter 'deployment_id' must be non-empty" } }
   let qp = [(serialize-qp "embed" $embed "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id), deployment_id: (encode-path-segment $deployment_id)} | format pattern "/restapis/{restapi_id}/deployments/{deployment_id}") $qp)
+  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id), deployment_id: (encode-path-segment $deployment_id)} | format pattern "/restapis/{restapi_id}/deployments/{deployment_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"embed": $embed} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"embed": $embed} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Changes information about a Deployment resource.
@@ -1939,14 +2443,25 @@ export def "restapis-deployments update" [
   let base = ($base_url | default $BASE_URL)
   if ($restapi_id | is-empty) { error make --unspanned { msg: "path parameter 'restapi_id' must be non-empty" } }
   if ($deployment_id | is-empty) { error make --unspanned { msg: "path parameter 'deployment_id' must be non-empty" } }
-  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id), deployment_id: (encode-path-segment $deployment_id)} | format pattern "/restapis/{restapi_id}/deployments/{deployment_id}"))
+  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id), deployment_id: (encode-path-segment $deployment_id)} | format pattern "/restapis/{restapi_id}/deployments/{deployment_id}") $auth.query)
   let req_body = {"patchOperations": $patch_operations} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes a documentation part
@@ -1977,12 +2492,23 @@ export def "restapis-documentation-parts delete" [
   let base = ($base_url | default $BASE_URL)
   if ($restapi_id | is-empty) { error make --unspanned { msg: "path parameter 'restapi_id' must be non-empty" } }
   if ($part_id | is-empty) { error make --unspanned { msg: "path parameter 'part_id' must be non-empty" } }
-  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id), part_id: (encode-path-segment $part_id)} | format pattern "/restapis/{restapi_id}/documentation/parts/{part_id}"))
+  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id), part_id: (encode-path-segment $part_id)} | format pattern "/restapis/{restapi_id}/documentation/parts/{part_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [202]
 }
 
 # Gets a documentation part.
@@ -2013,12 +2539,23 @@ export def "restapis-documentation-parts get" [
   let base = ($base_url | default $BASE_URL)
   if ($restapi_id | is-empty) { error make --unspanned { msg: "path parameter 'restapi_id' must be non-empty" } }
   if ($part_id | is-empty) { error make --unspanned { msg: "path parameter 'part_id' must be non-empty" } }
-  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id), part_id: (encode-path-segment $part_id)} | format pattern "/restapis/{restapi_id}/documentation/parts/{part_id}"))
+  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id), part_id: (encode-path-segment $part_id)} | format pattern "/restapis/{restapi_id}/documentation/parts/{part_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates a documentation part.
@@ -2052,14 +2589,25 @@ export def "restapis-documentation-parts update" [
   let base = ($base_url | default $BASE_URL)
   if ($restapi_id | is-empty) { error make --unspanned { msg: "path parameter 'restapi_id' must be non-empty" } }
   if ($part_id | is-empty) { error make --unspanned { msg: "path parameter 'part_id' must be non-empty" } }
-  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id), part_id: (encode-path-segment $part_id)} | format pattern "/restapis/{restapi_id}/documentation/parts/{part_id}"))
+  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id), part_id: (encode-path-segment $part_id)} | format pattern "/restapis/{restapi_id}/documentation/parts/{part_id}") $auth.query)
   let req_body = {"patchOperations": $patch_operations} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes a documentation version.
@@ -2090,12 +2638,23 @@ export def "restapis-documentation-versions delete" [
   let base = ($base_url | default $BASE_URL)
   if ($restapi_id | is-empty) { error make --unspanned { msg: "path parameter 'restapi_id' must be non-empty" } }
   if ($doc_version | is-empty) { error make --unspanned { msg: "path parameter 'doc_version' must be non-empty" } }
-  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id), doc_version: (encode-path-segment $doc_version)} | format pattern "/restapis/{restapi_id}/documentation/versions/{doc_version}"))
+  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id), doc_version: (encode-path-segment $doc_version)} | format pattern "/restapis/{restapi_id}/documentation/versions/{doc_version}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [202]
 }
 
 # Gets a documentation version.
@@ -2126,12 +2685,23 @@ export def "restapis-documentation-versions get" [
   let base = ($base_url | default $BASE_URL)
   if ($restapi_id | is-empty) { error make --unspanned { msg: "path parameter 'restapi_id' must be non-empty" } }
   if ($doc_version | is-empty) { error make --unspanned { msg: "path parameter 'doc_version' must be non-empty" } }
-  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id), doc_version: (encode-path-segment $doc_version)} | format pattern "/restapis/{restapi_id}/documentation/versions/{doc_version}"))
+  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id), doc_version: (encode-path-segment $doc_version)} | format pattern "/restapis/{restapi_id}/documentation/versions/{doc_version}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates a documentation version.
@@ -2165,14 +2735,25 @@ export def "restapis-documentation-versions update" [
   let base = ($base_url | default $BASE_URL)
   if ($restapi_id | is-empty) { error make --unspanned { msg: "path parameter 'restapi_id' must be non-empty" } }
   if ($doc_version | is-empty) { error make --unspanned { msg: "path parameter 'doc_version' must be non-empty" } }
-  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id), doc_version: (encode-path-segment $doc_version)} | format pattern "/restapis/{restapi_id}/documentation/versions/{doc_version}"))
+  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id), doc_version: (encode-path-segment $doc_version)} | format pattern "/restapis/{restapi_id}/documentation/versions/{doc_version}") $auth.query)
   let req_body = {"patchOperations": $patch_operations} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes the DomainName resource.
@@ -2201,12 +2782,23 @@ export def "domainnames delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'domain_name' must be non-empty" } }
-  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name)} | format pattern "/domainnames/{domain_name}"))
+  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name)} | format pattern "/domainnames/{domain_name}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [202]
 }
 
 # Represents a domain name that is contained in a simpler, more intuitive URL that can be called.
@@ -2235,12 +2827,23 @@ export def "domainnames get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'domain_name' must be non-empty" } }
-  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name)} | format pattern "/domainnames/{domain_name}"))
+  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name)} | format pattern "/domainnames/{domain_name}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Changes information about the DomainName resource.
@@ -2272,14 +2875,25 @@ export def "domainnames update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'domain_name' must be non-empty" } }
-  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name)} | format pattern "/domainnames/{domain_name}"))
+  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name)} | format pattern "/domainnames/{domain_name}") $auth.query)
   let req_body = {"patchOperations": $patch_operations} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Clears any customization of a GatewayResponse of a specified response type on the given RestApi and resets it with the default settings.
@@ -2310,12 +2924,23 @@ export def "restapis-gatewayresponses delete-gateway" [
   let base = ($base_url | default $BASE_URL)
   if ($restapi_id | is-empty) { error make --unspanned { msg: "path parameter 'restapi_id' must be non-empty" } }
   if ($response_type | is-empty) { error make --unspanned { msg: "path parameter 'response_type' must be non-empty" } }
-  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id), response_type: (encode-path-segment $response_type)} | format pattern "/restapis/{restapi_id}/gatewayresponses/{response_type}"))
+  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id), response_type: (encode-path-segment $response_type)} | format pattern "/restapis/{restapi_id}/gatewayresponses/{response_type}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [202]
 }
 
 # Gets a GatewayResponse of a specified response type on the given RestApi.
@@ -2346,12 +2971,23 @@ export def "restapis-gatewayresponses get-gateway" [
   let base = ($base_url | default $BASE_URL)
   if ($restapi_id | is-empty) { error make --unspanned { msg: "path parameter 'restapi_id' must be non-empty" } }
   if ($response_type | is-empty) { error make --unspanned { msg: "path parameter 'response_type' must be non-empty" } }
-  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id), response_type: (encode-path-segment $response_type)} | format pattern "/restapis/{restapi_id}/gatewayresponses/{response_type}"))
+  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id), response_type: (encode-path-segment $response_type)} | format pattern "/restapis/{restapi_id}/gatewayresponses/{response_type}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Creates a customization of a GatewayResponse of a specified response type and status code on the given RestApi.
@@ -2386,14 +3022,25 @@ export def "restapis-gatewayresponses update-gateway-by-restapi-id-response-type
   let base = ($base_url | default $BASE_URL)
   if ($restapi_id | is-empty) { error make --unspanned { msg: "path parameter 'restapi_id' must be non-empty" } }
   if ($response_type | is-empty) { error make --unspanned { msg: "path parameter 'response_type' must be non-empty" } }
-  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id), response_type: (encode-path-segment $response_type)} | format pattern "/restapis/{restapi_id}/gatewayresponses/{response_type}"))
+  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id), response_type: (encode-path-segment $response_type)} | format pattern "/restapis/{restapi_id}/gatewayresponses/{response_type}") $auth.query)
   let req_body = {"statusCode": $status_code, "responseParameters": $response_parameters, "responseTemplates": $response_templates} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Updates a GatewayResponse of a specified response type on the given RestApi.
@@ -2427,14 +3074,25 @@ export def "restapis-gatewayresponses update-gateway-by-restapi-id-response-type
   let base = ($base_url | default $BASE_URL)
   if ($restapi_id | is-empty) { error make --unspanned { msg: "path parameter 'restapi_id' must be non-empty" } }
   if ($response_type | is-empty) { error make --unspanned { msg: "path parameter 'response_type' must be non-empty" } }
-  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id), response_type: (encode-path-segment $response_type)} | format pattern "/restapis/{restapi_id}/gatewayresponses/{response_type}"))
+  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id), response_type: (encode-path-segment $response_type)} | format pattern "/restapis/{restapi_id}/gatewayresponses/{response_type}") $auth.query)
   let req_body = {"patchOperations": $patch_operations} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Represents a delete integration.
@@ -2467,12 +3125,23 @@ export def "restapis-resources-methods-integration delete" [
   if ($restapi_id | is-empty) { error make --unspanned { msg: "path parameter 'restapi_id' must be non-empty" } }
   if ($resource_id | is-empty) { error make --unspanned { msg: "path parameter 'resource_id' must be non-empty" } }
   if ($http_method | is-empty) { error make --unspanned { msg: "path parameter 'http_method' must be non-empty" } }
-  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id), resource_id: (encode-path-segment $resource_id), http_method: (encode-path-segment $http_method)} | format pattern "/restapis/{restapi_id}/resources/{resource_id}/methods/{http_method}/integration"))
+  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id), resource_id: (encode-path-segment $resource_id), http_method: (encode-path-segment $http_method)} | format pattern "/restapis/{restapi_id}/resources/{resource_id}/methods/{http_method}/integration") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Get the integration settings.
@@ -2505,12 +3174,23 @@ export def "restapis-resources-methods-integration get" [
   if ($restapi_id | is-empty) { error make --unspanned { msg: "path parameter 'restapi_id' must be non-empty" } }
   if ($resource_id | is-empty) { error make --unspanned { msg: "path parameter 'resource_id' must be non-empty" } }
   if ($http_method | is-empty) { error make --unspanned { msg: "path parameter 'http_method' must be non-empty" } }
-  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id), resource_id: (encode-path-segment $resource_id), http_method: (encode-path-segment $http_method)} | format pattern "/restapis/{restapi_id}/resources/{resource_id}/methods/{http_method}/integration"))
+  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id), resource_id: (encode-path-segment $resource_id), http_method: (encode-path-segment $http_method)} | format pattern "/restapis/{restapi_id}/resources/{resource_id}/methods/{http_method}/integration") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Sets up a method's integration.
@@ -2559,14 +3239,25 @@ export def "restapis-resources-methods-integration update-by-restapi-id-resource
   if ($restapi_id | is-empty) { error make --unspanned { msg: "path parameter 'restapi_id' must be non-empty" } }
   if ($resource_id | is-empty) { error make --unspanned { msg: "path parameter 'resource_id' must be non-empty" } }
   if ($http_method | is-empty) { error make --unspanned { msg: "path parameter 'http_method' must be non-empty" } }
-  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id), resource_id: (encode-path-segment $resource_id), http_method: (encode-path-segment $http_method)} | format pattern "/restapis/{restapi_id}/resources/{resource_id}/methods/{http_method}/integration"))
+  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id), resource_id: (encode-path-segment $resource_id), http_method: (encode-path-segment $http_method)} | format pattern "/restapis/{restapi_id}/resources/{resource_id}/methods/{http_method}/integration") $auth.query)
   let req_body = {"type": $type, "httpMethod": $body_http_method, "uri": $uri, "connectionType": $connection_type, "connectionId": $connection_id, "credentials": $credentials, "requestParameters": $request_parameters, "requestTemplates": $request_templates, "passthroughBehavior": $passthrough_behavior, "cacheNamespace": $cache_namespace, "cacheKeyParameters": $cache_key_parameters, "contentHandling": $content_handling, "timeoutInMillis": $timeout_in_millis, "tlsConfig": $tls_config} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Represents an update integration.
@@ -2602,14 +3293,25 @@ export def "restapis-resources-methods-integration update-by-restapi-id-resource
   if ($restapi_id | is-empty) { error make --unspanned { msg: "path parameter 'restapi_id' must be non-empty" } }
   if ($resource_id | is-empty) { error make --unspanned { msg: "path parameter 'resource_id' must be non-empty" } }
   if ($http_method | is-empty) { error make --unspanned { msg: "path parameter 'http_method' must be non-empty" } }
-  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id), resource_id: (encode-path-segment $resource_id), http_method: (encode-path-segment $http_method)} | format pattern "/restapis/{restapi_id}/resources/{resource_id}/methods/{http_method}/integration"))
+  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id), resource_id: (encode-path-segment $resource_id), http_method: (encode-path-segment $http_method)} | format pattern "/restapis/{restapi_id}/resources/{resource_id}/methods/{http_method}/integration") $auth.query)
   let req_body = {"patchOperations": $patch_operations} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Represents a delete integration response.
@@ -2644,12 +3346,23 @@ export def "restapis-resources-methods-integration-responses delete" [
   if ($resource_id | is-empty) { error make --unspanned { msg: "path parameter 'resource_id' must be non-empty" } }
   if ($http_method | is-empty) { error make --unspanned { msg: "path parameter 'http_method' must be non-empty" } }
   if ($status_code | is-empty) { error make --unspanned { msg: "path parameter 'status_code' must be non-empty" } }
-  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id), resource_id: (encode-path-segment $resource_id), http_method: (encode-path-segment $http_method), status_code: (encode-path-segment $status_code)} | format pattern "/restapis/{restapi_id}/resources/{resource_id}/methods/{http_method}/integration/responses/{status_code}"))
+  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id), resource_id: (encode-path-segment $resource_id), http_method: (encode-path-segment $http_method), status_code: (encode-path-segment $status_code)} | format pattern "/restapis/{restapi_id}/resources/{resource_id}/methods/{http_method}/integration/responses/{status_code}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Represents a get integration response.
@@ -2684,12 +3397,23 @@ export def "restapis-resources-methods-integration-responses get" [
   if ($resource_id | is-empty) { error make --unspanned { msg: "path parameter 'resource_id' must be non-empty" } }
   if ($http_method | is-empty) { error make --unspanned { msg: "path parameter 'http_method' must be non-empty" } }
   if ($status_code | is-empty) { error make --unspanned { msg: "path parameter 'status_code' must be non-empty" } }
-  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id), resource_id: (encode-path-segment $resource_id), http_method: (encode-path-segment $http_method), status_code: (encode-path-segment $status_code)} | format pattern "/restapis/{restapi_id}/resources/{resource_id}/methods/{http_method}/integration/responses/{status_code}"))
+  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id), resource_id: (encode-path-segment $resource_id), http_method: (encode-path-segment $http_method), status_code: (encode-path-segment $status_code)} | format pattern "/restapis/{restapi_id}/resources/{resource_id}/methods/{http_method}/integration/responses/{status_code}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Represents a put integration.
@@ -2729,14 +3453,25 @@ export def "restapis-resources-methods-integration-responses update-by-restapi-i
   if ($resource_id | is-empty) { error make --unspanned { msg: "path parameter 'resource_id' must be non-empty" } }
   if ($http_method | is-empty) { error make --unspanned { msg: "path parameter 'http_method' must be non-empty" } }
   if ($status_code | is-empty) { error make --unspanned { msg: "path parameter 'status_code' must be non-empty" } }
-  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id), resource_id: (encode-path-segment $resource_id), http_method: (encode-path-segment $http_method), status_code: (encode-path-segment $status_code)} | format pattern "/restapis/{restapi_id}/resources/{resource_id}/methods/{http_method}/integration/responses/{status_code}"))
+  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id), resource_id: (encode-path-segment $resource_id), http_method: (encode-path-segment $http_method), status_code: (encode-path-segment $status_code)} | format pattern "/restapis/{restapi_id}/resources/{resource_id}/methods/{http_method}/integration/responses/{status_code}") $auth.query)
   let req_body = {"selectionPattern": $selection_pattern, "responseParameters": $response_parameters, "responseTemplates": $response_templates, "contentHandling": $content_handling} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Represents an update integration response.
@@ -2774,14 +3509,25 @@ export def "restapis-resources-methods-integration-responses update-by-restapi-i
   if ($resource_id | is-empty) { error make --unspanned { msg: "path parameter 'resource_id' must be non-empty" } }
   if ($http_method | is-empty) { error make --unspanned { msg: "path parameter 'http_method' must be non-empty" } }
   if ($status_code | is-empty) { error make --unspanned { msg: "path parameter 'status_code' must be non-empty" } }
-  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id), resource_id: (encode-path-segment $resource_id), http_method: (encode-path-segment $http_method), status_code: (encode-path-segment $status_code)} | format pattern "/restapis/{restapi_id}/resources/{resource_id}/methods/{http_method}/integration/responses/{status_code}"))
+  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id), resource_id: (encode-path-segment $resource_id), http_method: (encode-path-segment $http_method), status_code: (encode-path-segment $status_code)} | format pattern "/restapis/{restapi_id}/resources/{resource_id}/methods/{http_method}/integration/responses/{status_code}") $auth.query)
   let req_body = {"patchOperations": $patch_operations} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes an existing Method resource.
@@ -2814,12 +3560,23 @@ export def "restapis-resources-methods delete" [
   if ($restapi_id | is-empty) { error make --unspanned { msg: "path parameter 'restapi_id' must be non-empty" } }
   if ($resource_id | is-empty) { error make --unspanned { msg: "path parameter 'resource_id' must be non-empty" } }
   if ($http_method | is-empty) { error make --unspanned { msg: "path parameter 'http_method' must be non-empty" } }
-  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id), resource_id: (encode-path-segment $resource_id), http_method: (encode-path-segment $http_method)} | format pattern "/restapis/{restapi_id}/resources/{resource_id}/methods/{http_method}"))
+  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id), resource_id: (encode-path-segment $resource_id), http_method: (encode-path-segment $http_method)} | format pattern "/restapis/{restapi_id}/resources/{resource_id}/methods/{http_method}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Describe an existing Method resource.
@@ -2852,12 +3609,23 @@ export def "restapis-resources-methods get" [
   if ($restapi_id | is-empty) { error make --unspanned { msg: "path parameter 'restapi_id' must be non-empty" } }
   if ($resource_id | is-empty) { error make --unspanned { msg: "path parameter 'resource_id' must be non-empty" } }
   if ($http_method | is-empty) { error make --unspanned { msg: "path parameter 'http_method' must be non-empty" } }
-  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id), resource_id: (encode-path-segment $resource_id), http_method: (encode-path-segment $http_method)} | format pattern "/restapis/{restapi_id}/resources/{resource_id}/methods/{http_method}"))
+  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id), resource_id: (encode-path-segment $resource_id), http_method: (encode-path-segment $http_method)} | format pattern "/restapis/{restapi_id}/resources/{resource_id}/methods/{http_method}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Add a method to an existing Resource resource.
@@ -2899,14 +3667,25 @@ export def "restapis-resources-methods update-by-restapi-id-resource-id-http-met
   if ($restapi_id | is-empty) { error make --unspanned { msg: "path parameter 'restapi_id' must be non-empty" } }
   if ($resource_id | is-empty) { error make --unspanned { msg: "path parameter 'resource_id' must be non-empty" } }
   if ($http_method | is-empty) { error make --unspanned { msg: "path parameter 'http_method' must be non-empty" } }
-  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id), resource_id: (encode-path-segment $resource_id), http_method: (encode-path-segment $http_method)} | format pattern "/restapis/{restapi_id}/resources/{resource_id}/methods/{http_method}"))
+  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id), resource_id: (encode-path-segment $resource_id), http_method: (encode-path-segment $http_method)} | format pattern "/restapis/{restapi_id}/resources/{resource_id}/methods/{http_method}") $auth.query)
   let req_body = {"authorizationType": $authorization_type, "authorizerId": $authorizer_id, "apiKeyRequired": $api_key_required, "operationName": $operation_name, "requestParameters": $request_parameters, "requestModels": $request_models, "requestValidatorId": $request_validator_id, "authorizationScopes": $authorization_scopes} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Simulate the invocation of a Method in your RestApi with headers, parameters, and an incoming request body.
@@ -2946,14 +3725,25 @@ export def "restapis-resources-methods test-invoke" [
   if ($restapi_id | is-empty) { error make --unspanned { msg: "path parameter 'restapi_id' must be non-empty" } }
   if ($resource_id | is-empty) { error make --unspanned { msg: "path parameter 'resource_id' must be non-empty" } }
   if ($http_method | is-empty) { error make --unspanned { msg: "path parameter 'http_method' must be non-empty" } }
-  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id), resource_id: (encode-path-segment $resource_id), http_method: (encode-path-segment $http_method)} | format pattern "/restapis/{restapi_id}/resources/{resource_id}/methods/{http_method}"))
+  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id), resource_id: (encode-path-segment $resource_id), http_method: (encode-path-segment $http_method)} | format pattern "/restapis/{restapi_id}/resources/{resource_id}/methods/{http_method}") $auth.query)
   let req_body = {"pathWithQueryString": $path_with_query_string, "body": $body, "headers": $headers, "multiValueHeaders": $multi_value_headers, "clientCertificateId": $client_certificate_id, "stageVariables": $stage_variables} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Updates an existing Method resource.
@@ -2989,14 +3779,25 @@ export def "restapis-resources-methods update-by-restapi-id-resource-id-http-met
   if ($restapi_id | is-empty) { error make --unspanned { msg: "path parameter 'restapi_id' must be non-empty" } }
   if ($resource_id | is-empty) { error make --unspanned { msg: "path parameter 'resource_id' must be non-empty" } }
   if ($http_method | is-empty) { error make --unspanned { msg: "path parameter 'http_method' must be non-empty" } }
-  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id), resource_id: (encode-path-segment $resource_id), http_method: (encode-path-segment $http_method)} | format pattern "/restapis/{restapi_id}/resources/{resource_id}/methods/{http_method}"))
+  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id), resource_id: (encode-path-segment $resource_id), http_method: (encode-path-segment $http_method)} | format pattern "/restapis/{restapi_id}/resources/{resource_id}/methods/{http_method}") $auth.query)
   let req_body = {"patchOperations": $patch_operations} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes an existing MethodResponse resource.
@@ -3031,12 +3832,23 @@ export def "restapis-resources-methods-responses delete" [
   if ($resource_id | is-empty) { error make --unspanned { msg: "path parameter 'resource_id' must be non-empty" } }
   if ($http_method | is-empty) { error make --unspanned { msg: "path parameter 'http_method' must be non-empty" } }
   if ($status_code | is-empty) { error make --unspanned { msg: "path parameter 'status_code' must be non-empty" } }
-  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id), resource_id: (encode-path-segment $resource_id), http_method: (encode-path-segment $http_method), status_code: (encode-path-segment $status_code)} | format pattern "/restapis/{restapi_id}/resources/{resource_id}/methods/{http_method}/responses/{status_code}"))
+  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id), resource_id: (encode-path-segment $resource_id), http_method: (encode-path-segment $http_method), status_code: (encode-path-segment $status_code)} | format pattern "/restapis/{restapi_id}/resources/{resource_id}/methods/{http_method}/responses/{status_code}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Describes a MethodResponse resource.
@@ -3071,12 +3883,23 @@ export def "restapis-resources-methods-responses get" [
   if ($resource_id | is-empty) { error make --unspanned { msg: "path parameter 'resource_id' must be non-empty" } }
   if ($http_method | is-empty) { error make --unspanned { msg: "path parameter 'http_method' must be non-empty" } }
   if ($status_code | is-empty) { error make --unspanned { msg: "path parameter 'status_code' must be non-empty" } }
-  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id), resource_id: (encode-path-segment $resource_id), http_method: (encode-path-segment $http_method), status_code: (encode-path-segment $status_code)} | format pattern "/restapis/{restapi_id}/resources/{resource_id}/methods/{http_method}/responses/{status_code}"))
+  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id), resource_id: (encode-path-segment $resource_id), http_method: (encode-path-segment $http_method), status_code: (encode-path-segment $status_code)} | format pattern "/restapis/{restapi_id}/resources/{resource_id}/methods/{http_method}/responses/{status_code}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Adds a MethodResponse to an existing Method resource.
@@ -3114,14 +3937,25 @@ export def "restapis-resources-methods-responses update-by-restapi-id-resource-i
   if ($resource_id | is-empty) { error make --unspanned { msg: "path parameter 'resource_id' must be non-empty" } }
   if ($http_method | is-empty) { error make --unspanned { msg: "path parameter 'http_method' must be non-empty" } }
   if ($status_code | is-empty) { error make --unspanned { msg: "path parameter 'status_code' must be non-empty" } }
-  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id), resource_id: (encode-path-segment $resource_id), http_method: (encode-path-segment $http_method), status_code: (encode-path-segment $status_code)} | format pattern "/restapis/{restapi_id}/resources/{resource_id}/methods/{http_method}/responses/{status_code}"))
+  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id), resource_id: (encode-path-segment $resource_id), http_method: (encode-path-segment $http_method), status_code: (encode-path-segment $status_code)} | format pattern "/restapis/{restapi_id}/resources/{resource_id}/methods/{http_method}/responses/{status_code}") $auth.query)
   let req_body = {"responseParameters": $response_parameters, "responseModels": $response_models} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Updates an existing MethodResponse resource.
@@ -3159,14 +3993,25 @@ export def "restapis-resources-methods-responses update-by-restapi-id-resource-i
   if ($resource_id | is-empty) { error make --unspanned { msg: "path parameter 'resource_id' must be non-empty" } }
   if ($http_method | is-empty) { error make --unspanned { msg: "path parameter 'http_method' must be non-empty" } }
   if ($status_code | is-empty) { error make --unspanned { msg: "path parameter 'status_code' must be non-empty" } }
-  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id), resource_id: (encode-path-segment $resource_id), http_method: (encode-path-segment $http_method), status_code: (encode-path-segment $status_code)} | format pattern "/restapis/{restapi_id}/resources/{resource_id}/methods/{http_method}/responses/{status_code}"))
+  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id), resource_id: (encode-path-segment $resource_id), http_method: (encode-path-segment $http_method), status_code: (encode-path-segment $status_code)} | format pattern "/restapis/{restapi_id}/resources/{resource_id}/methods/{http_method}/responses/{status_code}") $auth.query)
   let req_body = {"patchOperations": $patch_operations} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Deletes a model.
@@ -3197,12 +4042,23 @@ export def "restapis-models delete" [
   let base = ($base_url | default $BASE_URL)
   if ($restapi_id | is-empty) { error make --unspanned { msg: "path parameter 'restapi_id' must be non-empty" } }
   if ($model_name | is-empty) { error make --unspanned { msg: "path parameter 'model_name' must be non-empty" } }
-  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id), model_name: (encode-path-segment $model_name)} | format pattern "/restapis/{restapi_id}/models/{model_name}"))
+  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id), model_name: (encode-path-segment $model_name)} | format pattern "/restapis/{restapi_id}/models/{model_name}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [202]
 }
 
 # Describes an existing model defined for a RestApi resource.
@@ -3235,12 +4091,23 @@ export def "restapis-models get" [
   if ($restapi_id | is-empty) { error make --unspanned { msg: "path parameter 'restapi_id' must be non-empty" } }
   if ($model_name | is-empty) { error make --unspanned { msg: "path parameter 'model_name' must be non-empty" } }
   let qp = [(serialize-qp "flatten" $flatten "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id), model_name: (encode-path-segment $model_name)} | format pattern "/restapis/{restapi_id}/models/{model_name}") $qp)
+  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id), model_name: (encode-path-segment $model_name)} | format pattern "/restapis/{restapi_id}/models/{model_name}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"flatten": $flatten} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"flatten": $flatten} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Changes information about a model.
@@ -3274,14 +4141,25 @@ export def "restapis-models update" [
   let base = ($base_url | default $BASE_URL)
   if ($restapi_id | is-empty) { error make --unspanned { msg: "path parameter 'restapi_id' must be non-empty" } }
   if ($model_name | is-empty) { error make --unspanned { msg: "path parameter 'model_name' must be non-empty" } }
-  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id), model_name: (encode-path-segment $model_name)} | format pattern "/restapis/{restapi_id}/models/{model_name}"))
+  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id), model_name: (encode-path-segment $model_name)} | format pattern "/restapis/{restapi_id}/models/{model_name}") $auth.query)
   let req_body = {"patchOperations": $patch_operations} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes a RequestValidator of a given RestApi.
@@ -3312,12 +4190,23 @@ export def "restapis-requestvalidators delete-request-validator" [
   let base = ($base_url | default $BASE_URL)
   if ($restapi_id | is-empty) { error make --unspanned { msg: "path parameter 'restapi_id' must be non-empty" } }
   if ($requestvalidator_id | is-empty) { error make --unspanned { msg: "path parameter 'requestvalidator_id' must be non-empty" } }
-  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id), requestvalidator_id: (encode-path-segment $requestvalidator_id)} | format pattern "/restapis/{restapi_id}/requestvalidators/{requestvalidator_id}"))
+  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id), requestvalidator_id: (encode-path-segment $requestvalidator_id)} | format pattern "/restapis/{restapi_id}/requestvalidators/{requestvalidator_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [202]
 }
 
 # Gets a RequestValidator of a given RestApi.
@@ -3348,12 +4237,23 @@ export def "restapis-requestvalidators get-request-validator" [
   let base = ($base_url | default $BASE_URL)
   if ($restapi_id | is-empty) { error make --unspanned { msg: "path parameter 'restapi_id' must be non-empty" } }
   if ($requestvalidator_id | is-empty) { error make --unspanned { msg: "path parameter 'requestvalidator_id' must be non-empty" } }
-  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id), requestvalidator_id: (encode-path-segment $requestvalidator_id)} | format pattern "/restapis/{restapi_id}/requestvalidators/{requestvalidator_id}"))
+  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id), requestvalidator_id: (encode-path-segment $requestvalidator_id)} | format pattern "/restapis/{restapi_id}/requestvalidators/{requestvalidator_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates a RequestValidator of a given RestApi.
@@ -3387,14 +4287,25 @@ export def "restapis-requestvalidators update-request-validator" [
   let base = ($base_url | default $BASE_URL)
   if ($restapi_id | is-empty) { error make --unspanned { msg: "path parameter 'restapi_id' must be non-empty" } }
   if ($requestvalidator_id | is-empty) { error make --unspanned { msg: "path parameter 'requestvalidator_id' must be non-empty" } }
-  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id), requestvalidator_id: (encode-path-segment $requestvalidator_id)} | format pattern "/restapis/{restapi_id}/requestvalidators/{requestvalidator_id}"))
+  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id), requestvalidator_id: (encode-path-segment $requestvalidator_id)} | format pattern "/restapis/{restapi_id}/requestvalidators/{requestvalidator_id}") $auth.query)
   let req_body = {"patchOperations": $patch_operations} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes a Resource resource.
@@ -3425,12 +4336,23 @@ export def "restapis-resources delete" [
   let base = ($base_url | default $BASE_URL)
   if ($restapi_id | is-empty) { error make --unspanned { msg: "path parameter 'restapi_id' must be non-empty" } }
   if ($resource_id | is-empty) { error make --unspanned { msg: "path parameter 'resource_id' must be non-empty" } }
-  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id), resource_id: (encode-path-segment $resource_id)} | format pattern "/restapis/{restapi_id}/resources/{resource_id}"))
+  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id), resource_id: (encode-path-segment $resource_id)} | format pattern "/restapis/{restapi_id}/resources/{resource_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [202]
 }
 
 # Lists information about a resource.
@@ -3463,12 +4385,23 @@ export def "restapis-resources get" [
   if ($restapi_id | is-empty) { error make --unspanned { msg: "path parameter 'restapi_id' must be non-empty" } }
   if ($resource_id | is-empty) { error make --unspanned { msg: "path parameter 'resource_id' must be non-empty" } }
   let qp = [(serialize-qp "embed" $embed "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id), resource_id: (encode-path-segment $resource_id)} | format pattern "/restapis/{restapi_id}/resources/{resource_id}") $qp)
+  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id), resource_id: (encode-path-segment $resource_id)} | format pattern "/restapis/{restapi_id}/resources/{resource_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"embed": $embed} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"embed": $embed} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Changes information about a Resource resource.
@@ -3502,14 +4435,25 @@ export def "restapis-resources update" [
   let base = ($base_url | default $BASE_URL)
   if ($restapi_id | is-empty) { error make --unspanned { msg: "path parameter 'restapi_id' must be non-empty" } }
   if ($resource_id | is-empty) { error make --unspanned { msg: "path parameter 'resource_id' must be non-empty" } }
-  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id), resource_id: (encode-path-segment $resource_id)} | format pattern "/restapis/{restapi_id}/resources/{resource_id}"))
+  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id), resource_id: (encode-path-segment $resource_id)} | format pattern "/restapis/{restapi_id}/resources/{resource_id}") $auth.query)
   let req_body = {"patchOperations": $patch_operations} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes the specified API.
@@ -3538,12 +4482,23 @@ export def "restapis delete-rest" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($restapi_id | is-empty) { error make --unspanned { msg: "path parameter 'restapi_id' must be non-empty" } }
-  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id)} | format pattern "/restapis/{restapi_id}"))
+  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id)} | format pattern "/restapis/{restapi_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [202]
 }
 
 # Lists the RestApi resource in the collection.
@@ -3572,12 +4527,23 @@ export def "restapis get-rest" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($restapi_id | is-empty) { error make --unspanned { msg: "path parameter 'restapi_id' must be non-empty" } }
-  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id)} | format pattern "/restapis/{restapi_id}"))
+  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id)} | format pattern "/restapis/{restapi_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # A feature of the API Gateway control service for updating an existing API with an input of external API definitions. The update can take the form of merging the supplied definition into the existing API or overwriting the existing API.
@@ -3612,14 +4578,25 @@ export def "restapis update-rest-by-restapi-id" [
   let base = ($base_url | default $BASE_URL)
   if ($restapi_id | is-empty) { error make --unspanned { msg: "path parameter 'restapi_id' must be non-empty" } }
   let qp = [(serialize-qp "mode" $mode "scalar") (serialize-qp "failonwarnings" $failonwarnings "scalar") (serialize-qp "parameters" $parameters "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id)} | format pattern "/restapis/{restapi_id}") $qp)
+  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id)} | format pattern "/restapis/{restapi_id}") $qp $auth.query)
   let req_body = {"body": $body} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"mode": $mode, "failonwarnings": $failonwarnings, "parameters": $parameters} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"mode": $mode, "failonwarnings": $failonwarnings, "parameters": $parameters} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Changes information about the specified API.
@@ -3651,14 +4628,25 @@ export def "restapis update-rest-by-restapi-id-1" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($restapi_id | is-empty) { error make --unspanned { msg: "path parameter 'restapi_id' must be non-empty" } }
-  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id)} | format pattern "/restapis/{restapi_id}"))
+  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id)} | format pattern "/restapis/{restapi_id}") $auth.query)
   let req_body = {"patchOperations": $patch_operations} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes a Stage resource.
@@ -3689,12 +4677,23 @@ export def "restapis-stages delete" [
   let base = ($base_url | default $BASE_URL)
   if ($restapi_id | is-empty) { error make --unspanned { msg: "path parameter 'restapi_id' must be non-empty" } }
   if ($stage_name | is-empty) { error make --unspanned { msg: "path parameter 'stage_name' must be non-empty" } }
-  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id), stage_name: (encode-path-segment $stage_name)} | format pattern "/restapis/{restapi_id}/stages/{stage_name}"))
+  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id), stage_name: (encode-path-segment $stage_name)} | format pattern "/restapis/{restapi_id}/stages/{stage_name}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [202]
 }
 
 # Gets information about a Stage resource.
@@ -3725,12 +4724,23 @@ export def "restapis-stages get" [
   let base = ($base_url | default $BASE_URL)
   if ($restapi_id | is-empty) { error make --unspanned { msg: "path parameter 'restapi_id' must be non-empty" } }
   if ($stage_name | is-empty) { error make --unspanned { msg: "path parameter 'stage_name' must be non-empty" } }
-  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id), stage_name: (encode-path-segment $stage_name)} | format pattern "/restapis/{restapi_id}/stages/{stage_name}"))
+  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id), stage_name: (encode-path-segment $stage_name)} | format pattern "/restapis/{restapi_id}/stages/{stage_name}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Changes information about a Stage resource.
@@ -3764,14 +4774,25 @@ export def "restapis-stages update" [
   let base = ($base_url | default $BASE_URL)
   if ($restapi_id | is-empty) { error make --unspanned { msg: "path parameter 'restapi_id' must be non-empty" } }
   if ($stage_name | is-empty) { error make --unspanned { msg: "path parameter 'stage_name' must be non-empty" } }
-  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id), stage_name: (encode-path-segment $stage_name)} | format pattern "/restapis/{restapi_id}/stages/{stage_name}"))
+  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id), stage_name: (encode-path-segment $stage_name)} | format pattern "/restapis/{restapi_id}/stages/{stage_name}") $auth.query)
   let req_body = {"patchOperations": $patch_operations} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes a usage plan of a given plan Id.
@@ -3800,12 +4821,23 @@ export def "usageplans delete-usage-plan" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($usageplan_id | is-empty) { error make --unspanned { msg: "path parameter 'usageplanId' must be non-empty" } }
-  let full_url = (build-url $base ({usageplan_id: (encode-path-segment $usageplan_id)} | format pattern "/usageplans/{usageplan_id}"))
+  let full_url = (build-url $base ({usageplan_id: (encode-path-segment $usageplan_id)} | format pattern "/usageplans/{usageplan_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [202]
 }
 
 # Gets a usage plan of a given plan identifier.
@@ -3834,12 +4866,23 @@ export def "usageplans get-usage-plan" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($usageplan_id | is-empty) { error make --unspanned { msg: "path parameter 'usageplanId' must be non-empty" } }
-  let full_url = (build-url $base ({usageplan_id: (encode-path-segment $usageplan_id)} | format pattern "/usageplans/{usageplan_id}"))
+  let full_url = (build-url $base ({usageplan_id: (encode-path-segment $usageplan_id)} | format pattern "/usageplans/{usageplan_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates a usage plan of a given plan Id.
@@ -3871,14 +4914,25 @@ export def "usageplans update-usage-plan" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($usageplan_id | is-empty) { error make --unspanned { msg: "path parameter 'usageplanId' must be non-empty" } }
-  let full_url = (build-url $base ({usageplan_id: (encode-path-segment $usageplan_id)} | format pattern "/usageplans/{usageplan_id}"))
+  let full_url = (build-url $base ({usageplan_id: (encode-path-segment $usageplan_id)} | format pattern "/usageplans/{usageplan_id}") $auth.query)
   let req_body = {"patchOperations": $patch_operations} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes a usage plan key and remove the underlying API key from the associated usage plan.
@@ -3909,12 +4963,23 @@ export def "usageplans-keys delete-usage-plan" [
   let base = ($base_url | default $BASE_URL)
   if ($usageplan_id | is-empty) { error make --unspanned { msg: "path parameter 'usageplanId' must be non-empty" } }
   if ($key_id | is-empty) { error make --unspanned { msg: "path parameter 'keyId' must be non-empty" } }
-  let full_url = (build-url $base ({usageplan_id: (encode-path-segment $usageplan_id), key_id: (encode-path-segment $key_id)} | format pattern "/usageplans/{usageplan_id}/keys/{key_id}"))
+  let full_url = (build-url $base ({usageplan_id: (encode-path-segment $usageplan_id), key_id: (encode-path-segment $key_id)} | format pattern "/usageplans/{usageplan_id}/keys/{key_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [202]
 }
 
 # Gets a usage plan key of a given key identifier.
@@ -3945,12 +5010,23 @@ export def "usageplans-keys get-usage-plan" [
   let base = ($base_url | default $BASE_URL)
   if ($usageplan_id | is-empty) { error make --unspanned { msg: "path parameter 'usageplanId' must be non-empty" } }
   if ($key_id | is-empty) { error make --unspanned { msg: "path parameter 'keyId' must be non-empty" } }
-  let full_url = (build-url $base ({usageplan_id: (encode-path-segment $usageplan_id), key_id: (encode-path-segment $key_id)} | format pattern "/usageplans/{usageplan_id}/keys/{key_id}"))
+  let full_url = (build-url $base ({usageplan_id: (encode-path-segment $usageplan_id), key_id: (encode-path-segment $key_id)} | format pattern "/usageplans/{usageplan_id}/keys/{key_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes an existing VpcLink of a specified identifier.
@@ -3979,12 +5055,23 @@ export def "vpclinks delete-vpc-link" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($vpclink_id | is-empty) { error make --unspanned { msg: "path parameter 'vpclink_id' must be non-empty" } }
-  let full_url = (build-url $base ({vpclink_id: (encode-path-segment $vpclink_id)} | format pattern "/vpclinks/{vpclink_id}"))
+  let full_url = (build-url $base ({vpclink_id: (encode-path-segment $vpclink_id)} | format pattern "/vpclinks/{vpclink_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [202]
 }
 
 # Gets a specified VPC link under the caller's account in a region.
@@ -4013,12 +5100,23 @@ export def "vpclinks get-vpc-link" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($vpclink_id | is-empty) { error make --unspanned { msg: "path parameter 'vpclink_id' must be non-empty" } }
-  let full_url = (build-url $base ({vpclink_id: (encode-path-segment $vpclink_id)} | format pattern "/vpclinks/{vpclink_id}"))
+  let full_url = (build-url $base ({vpclink_id: (encode-path-segment $vpclink_id)} | format pattern "/vpclinks/{vpclink_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates an existing VpcLink of a specified identifier.
@@ -4050,14 +5148,25 @@ export def "vpclinks update-vpc-link" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($vpclink_id | is-empty) { error make --unspanned { msg: "path parameter 'vpclink_id' must be non-empty" } }
-  let full_url = (build-url $base ({vpclink_id: (encode-path-segment $vpclink_id)} | format pattern "/vpclinks/{vpclink_id}"))
+  let full_url = (build-url $base ({vpclink_id: (encode-path-segment $vpclink_id)} | format pattern "/vpclinks/{vpclink_id}") $auth.query)
   let req_body = {"patchOperations": $patch_operations} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Flushes all authorizer cache entries on a stage.
@@ -4088,12 +5197,23 @@ export def "restapis-stages-cache-authorizers delete-flush" [
   let base = ($base_url | default $BASE_URL)
   if ($restapi_id | is-empty) { error make --unspanned { msg: "path parameter 'restapi_id' must be non-empty" } }
   if ($stage_name | is-empty) { error make --unspanned { msg: "path parameter 'stage_name' must be non-empty" } }
-  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id), stage_name: (encode-path-segment $stage_name)} | format pattern "/restapis/{restapi_id}/stages/{stage_name}/cache/authorizers"))
+  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id), stage_name: (encode-path-segment $stage_name)} | format pattern "/restapis/{restapi_id}/stages/{stage_name}/cache/authorizers") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [202]
 }
 
 # Flushes a stage's cache.
@@ -4124,12 +5244,23 @@ export def "restapis-stages-cache-data delete-flush" [
   let base = ($base_url | default $BASE_URL)
   if ($restapi_id | is-empty) { error make --unspanned { msg: "path parameter 'restapi_id' must be non-empty" } }
   if ($stage_name | is-empty) { error make --unspanned { msg: "path parameter 'stage_name' must be non-empty" } }
-  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id), stage_name: (encode-path-segment $stage_name)} | format pattern "/restapis/{restapi_id}/stages/{stage_name}/cache/data"))
+  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id), stage_name: (encode-path-segment $stage_name)} | format pattern "/restapis/{restapi_id}/stages/{stage_name}/cache/data") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [202]
 }
 
 # Generates a ClientCertificate resource.
@@ -4159,14 +5290,25 @@ export def "clientcertificates generate-client-certificate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/clientcertificates")
+  let full_url = (build-url $base "/clientcertificates" $auth.query)
   let req_body = {"description": $description, "tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Gets a collection of ClientCertificate resources.
@@ -4196,12 +5338,23 @@ export def "clientcertificates get-client-certificates" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "position" $position "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/clientcertificates" $qp)
+  let full_url = (build-url $base "/clientcertificates" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"position": $position, "limit": $limit} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"position": $position, "limit": $limit} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets information about the current Account resource.
@@ -4228,12 +5381,23 @@ export def "account get" [
 ]: nothing -> record<cloudwatchRoleArn: record, throttleSettings: record<burstLimit: record, rateLimit: record>, features: record, apiKeyVersion: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/account")
+  let full_url = (build-url $base "/account" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Changes information about the current Account resource.
@@ -4263,14 +5427,25 @@ export def "account update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/account")
+  let full_url = (build-url $base "/account" $auth.query)
   let req_body = {"patchOperations": $patch_operations} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Exports a deployed version of a RestApi in a specified format.
@@ -4306,12 +5481,23 @@ export def "restapis-stages-exports get" [
   if ($stage_name | is-empty) { error make --unspanned { msg: "path parameter 'stage_name' must be non-empty" } }
   if ($export_type | is-empty) { error make --unspanned { msg: "path parameter 'export_type' must be non-empty" } }
   let qp = [(serialize-qp "parameters" $parameters "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id), stage_name: (encode-path-segment $stage_name), export_type: (encode-path-segment $export_type)} | format pattern "/restapis/{restapi_id}/stages/{stage_name}/exports/{export_type}") $qp)
+  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id), stage_name: (encode-path-segment $stage_name), export_type: (encode-path-segment $export_type)} | format pattern "/restapis/{restapi_id}/stages/{stage_name}/exports/{export_type}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"parameters": $parameters} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"parameters": $parameters} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the GatewayResponses collection on the given RestApi. If an API developer has not added any definitions for gateway responses, the result will be the API Gateway-generated default GatewayResponses collection for the supported response types.
@@ -4343,12 +5529,23 @@ export def "restapis-gatewayresponses get-gateway-responses" [
   let base = ($base_url | default $BASE_URL)
   if ($restapi_id | is-empty) { error make --unspanned { msg: "path parameter 'restapi_id' must be non-empty" } }
   let qp = [(serialize-qp "position" $position "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id)} | format pattern "/restapis/{restapi_id}/gatewayresponses") $qp)
+  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id)} | format pattern "/restapis/{restapi_id}/gatewayresponses") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"position": $position, "limit": $limit} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"position": $position, "limit": $limit} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Generates a sample mapping template that can be used to transform a payload into the structure of a model.
@@ -4379,12 +5576,23 @@ export def "restapis-models-default-template get" [
   let base = ($base_url | default $BASE_URL)
   if ($restapi_id | is-empty) { error make --unspanned { msg: "path parameter 'restapi_id' must be non-empty" } }
   if ($model_name | is-empty) { error make --unspanned { msg: "path parameter 'model_name' must be non-empty" } }
-  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id), model_name: (encode-path-segment $model_name)} | format pattern "/restapis/{restapi_id}/models/{model_name}/default_template"))
+  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id), model_name: (encode-path-segment $model_name)} | format pattern "/restapis/{restapi_id}/models/{model_name}/default_template") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Lists information about a collection of Resource resources.
@@ -4417,12 +5625,23 @@ export def "restapis-resources list" [
   let base = ($base_url | default $BASE_URL)
   if ($restapi_id | is-empty) { error make --unspanned { msg: "path parameter 'restapi_id' must be non-empty" } }
   let qp = [(serialize-qp "position" $position "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "embed" $embed "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id)} | format pattern "/restapis/{restapi_id}/resources") $qp)
+  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id)} | format pattern "/restapis/{restapi_id}/resources") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"position": $position, "limit": $limit, "embed": $embed} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"position": $position, "limit": $limit, "embed": $embed} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Generates a client SDK for a RestApi and Stage.
@@ -4457,12 +5676,23 @@ export def "restapis-stages-sdks get" [
   if ($stage_name | is-empty) { error make --unspanned { msg: "path parameter 'stage_name' must be non-empty" } }
   if ($sdk_type | is-empty) { error make --unspanned { msg: "path parameter 'sdk_type' must be non-empty" } }
   let qp = [(serialize-qp "parameters" $parameters "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id), stage_name: (encode-path-segment $stage_name), sdk_type: (encode-path-segment $sdk_type)} | format pattern "/restapis/{restapi_id}/stages/{stage_name}/sdks/{sdk_type}") $qp)
+  let full_url = (build-url $base ({restapi_id: (encode-path-segment $restapi_id), stage_name: (encode-path-segment $stage_name), sdk_type: (encode-path-segment $sdk_type)} | format pattern "/restapis/{restapi_id}/stages/{stage_name}/sdks/{sdk_type}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"parameters": $parameters} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"parameters": $parameters} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets an SDK type.
@@ -4491,12 +5721,23 @@ export def "sdktypes get-sdk-type" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($sdktype_id | is-empty) { error make --unspanned { msg: "path parameter 'sdktype_id' must be non-empty" } }
-  let full_url = (build-url $base ({sdktype_id: (encode-path-segment $sdktype_id)} | format pattern "/sdktypes/{sdktype_id}"))
+  let full_url = (build-url $base ({sdktype_id: (encode-path-segment $sdktype_id)} | format pattern "/sdktypes/{sdktype_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets SDK types
@@ -4526,12 +5767,23 @@ export def "sdktypes get-sdk-types" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "position" $position "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/sdktypes" $qp)
+  let full_url = (build-url $base "/sdktypes" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"position": $position, "limit": $limit} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"position": $position, "limit": $limit} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the Tags collection for a given resource.
@@ -4563,12 +5815,23 @@ export def "tags get" [
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn | is-empty) { error make --unspanned { msg: "path parameter 'resource_arn' must be non-empty" } }
   let qp = [(serialize-qp "position" $position "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn)} | format pattern "/tags/{resource_arn}") $qp)
+  let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn)} | format pattern "/tags/{resource_arn}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"position": $position, "limit": $limit} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"position": $position, "limit": $limit} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Adds or updates a tag on a given resource.
@@ -4599,14 +5862,25 @@ export def "tags tag" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn | is-empty) { error make --unspanned { msg: "path parameter 'resource_arn' must be non-empty" } }
-  let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn)} | format pattern "/tags/{resource_arn}"))
+  let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn)} | format pattern "/tags/{resource_arn}") $auth.query)
   let req_body = {"tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Gets the usage data of a usage plan in a specified time interval.
@@ -4641,12 +5915,23 @@ export def "usageplans-usage get" [
   let base = ($base_url | default $BASE_URL)
   if ($usageplan_id | is-empty) { error make --unspanned { msg: "path parameter 'usageplanId' must be non-empty" } }
   let qp = [(serialize-qp "keyId" $key_id "scalar") (serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar") (serialize-qp "position" $position "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({usageplan_id: (encode-path-segment $usageplan_id)} | format pattern "/usageplans/{usageplan_id}/usage") $qp)
+  let full_url = (build-url $base ({usageplan_id: (encode-path-segment $usageplan_id)} | format pattern "/usageplans/{usageplan_id}/usage") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"keyId": $key_id, "startDate": $start_date, "endDate": $end_date, "position": $position, "limit": $limit} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"keyId": $key_id, "startDate": $start_date, "endDate": $end_date, "position": $position, "limit": $limit} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Import API keys from an external source, such as a CSV-formatted file.
@@ -4679,14 +5964,25 @@ export def "apikeys import-keys" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "failonwarnings" $failonwarnings "scalar") (serialize-qp "mode" $mode "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/apikeys" $qp)
+  let full_url = (build-url $base "/apikeys" $qp $auth.query)
   let req_body = {"body": $body} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"format": $format, "failonwarnings": $failonwarnings, "mode": $mode} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"format": $format, "failonwarnings": $failonwarnings, "mode": $mode} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # A feature of the API Gateway control service for creating a new API from an external API definition file.
@@ -4719,14 +6015,25 @@ export def "restapis import-rest" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "failonwarnings" $failonwarnings "scalar") (serialize-qp "parameters" $parameters "multi") (serialize-qp "mode" $mode "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/restapis" $qp)
+  let full_url = (build-url $base "/restapis" $qp $auth.query)
   let req_body = {"body": $body} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"failonwarnings": $failonwarnings, "parameters": $parameters, "mode": $mode} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"failonwarnings": $failonwarnings, "parameters": $parameters, "mode": $mode} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Removes a tag from a given resource.
@@ -4757,12 +6064,23 @@ export def "tags untag" [
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn | is-empty) { error make --unspanned { msg: "path parameter 'resource_arn' must be non-empty" } }
   let qp = [(serialize-qp "tagKeys" $tag_keys "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn)} | format pattern "/tags/{resource_arn}") $qp)
+  let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn)} | format pattern "/tags/{resource_arn}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"tagKeys": $tag_keys} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"tagKeys": $tag_keys} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Grants a temporary extension to the remaining quota of a usage plan associated with a specified API key.
@@ -4796,12 +6114,23 @@ export def "usageplans-keys-usage update" [
   let base = ($base_url | default $BASE_URL)
   if ($usageplan_id | is-empty) { error make --unspanned { msg: "path parameter 'usageplanId' must be non-empty" } }
   if ($key_id | is-empty) { error make --unspanned { msg: "path parameter 'keyId' must be non-empty" } }
-  let full_url = (build-url $base ({usageplan_id: (encode-path-segment $usageplan_id), key_id: (encode-path-segment $key_id)} | format pattern "/usageplans/{usageplan_id}/keys/{key_id}/usage"))
+  let full_url = (build-url $base ({usageplan_id: (encode-path-segment $usageplan_id), key_id: (encode-path-segment $key_id)} | format pattern "/usageplans/{usageplan_id}/keys/{key_id}/usage") $auth.query)
   let req_body = {"patchOperations": $patch_operations} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }

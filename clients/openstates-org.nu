@@ -8,7 +8,7 @@ const BASE_URL = "http://localhost"
 # `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
 # where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o OPEN_STATES_API_V3_TOKEN | default "" }
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o OPEN_STATES_API_V3_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
@@ -40,14 +40,11 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
-# Trick: `url encode --all` over-encodes, then we decode the four unreserved
-# punctuation chars back. Pre-existing %XX sequences in the input survive
-# because `url encode --all` first turns their % into %25.
 def encode-path-segment [v: any]: nothing -> string {
   $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
-# Serialize an array-typed path parameter (issue 49.A). OpenAPI 3 `style: simple`
+# Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
 # (the default for path params) and Swagger 2 `collectionFormat: csv` both join
 # the elements with a literal comma WITHIN the single path segment, each element
 # RFC-3986-encoded individually (so a comma inside an element stays %2C). Without
@@ -58,51 +55,39 @@ def encode-path-array [v: any]: nothing -> string {
   if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
 }
 
-# Build URL from base, path, and optional query string
-def build-url [base: string, path: string, query?: string]: nothing -> string {
+# Build the request URL from base, path, and any number of pre-encoded query
+# fragments (param serializer output and/or the auth query). Each fragment is an
+# `&`-joinable `key=value` string already percent-encoded by its producer; empty
+# fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
+# delimiters are hand-spliced — and any query already on the base URL is merged in.
+def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
   let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
-  let result = ($parsed | upsert path $full_path)
-  if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
+  let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
+  $parsed | upsert path $full_path | upsert query $query | url join
 }
 
-# Build the dry-run record returned by --dry-run. Shape:
-#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
-#    auth: {scheme, location}}
-# `meta` carries logical-form data (the query record by spec name, the pre-serialization
-# body) that do-request itself cannot reconstruct from its wire-format args.
-def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
-  let m = ($meta | default {})
-  {
-    dry_run: true
-    method: $method
-    url: $url
-    query: ($m | get -o query | default {})
-    headers: $auth.headers
-    body: ($m | get -o body)
-    content_type: $content_type
-    timeout: $timeout
-    auth: {scheme: $auth.scheme, location: $auth.location}
-  }
+# Success policy: did this response succeed? Single source of truth, consulted by
+# handle-response and the HEAD header-unwrap. Empty ok_codes means the spec listed
+# none, so fall back to < 400. Otherwise: any 2xx, plus documented success codes.
+def status-ok [status: int, ok_codes: list<int>]: nothing -> bool {
+  if ($ok_codes | is-empty) { $status < 400 } else { ($status >= 200 and $status < 300) or ($status in $ok_codes) }
 }
 
-# Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
-  let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
-  let timeout = ($max_time | default 30min)
-  let ct = ($content_type | default "application/json")
-  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
-  let resp = match $method {
-    "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
-  }
-  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
-  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
+# Unwrap a `--full` HTTP response into the user-facing value. Response arrives
+# via pipeline; ok_codes gates the error throw (see status-ok).
+def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: record -> any {
+  let resp = $in
+  if $allow_errors { return $resp }
+  if not (status-ok $resp.status $ok_codes) { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } }
+  if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
+  if $resp.status == 204 { return null }
+  $resp.body
+}
+
+# GET — bodyless, honours --raw
+def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
 }
 
 def base-url-completer [] { ["http://localhost"] }
@@ -170,12 +155,23 @@ export def "bills list-get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "jurisdiction" $jurisdiction "scalar") (serialize-qp "session" $session "scalar") (serialize-qp "chamber" $chamber "scalar") (serialize-qp "identifier" $identifier "multi") (serialize-qp "classification" $classification "scalar") (serialize-qp "subject" $subject "multi") (serialize-qp "updated_since" $updated_since "scalar") (serialize-qp "created_since" $created_since "scalar") (serialize-qp "action_since" $action_since "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "sponsor" $sponsor "scalar") (serialize-qp "sponsor_classification" $sponsor_classification "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "include" $include "multi") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "apikey" $apikey "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/bills" $qp)
+  let full_url = (build-url $base "/bills" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"x-api-key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"jurisdiction": $jurisdiction, "session": $session, "chamber": $chamber, "identifier": $identifier, "classification": $classification, "subject": $subject, "updated_since": $updated_since, "created_since": $created_since, "action_since": $action_since, "sort": $qp_sort, "sponsor": $sponsor, "sponsor_classification": $sponsor_classification, "q": $q, "include": $include, "page": $page, "per_page": $per_page, "apikey": $apikey} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"jurisdiction": $jurisdiction, "session": $session, "chamber": $chamber, "identifier": $identifier, "classification": $classification, "subject": $subject, "updated_since": $updated_since, "created_since": $created_since, "action_since": $action_since, "sort": $qp_sort, "sponsor": $sponsor, "sponsor_classification": $sponsor_classification, "q": $q, "include": $include, "page": $page, "per_page": $per_page, "apikey": $apikey} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Bill Detail By Id
@@ -201,12 +197,23 @@ export def "bills-ocd-bill get-detail-by" [
   let base = ($base_url | default $BASE_URL)
   if ($openstates_bill_id | is-empty) { error make --unspanned { msg: "path parameter 'openstates_bill_id' must be non-empty" } }
   let qp = [(serialize-qp "include" $include "multi") (serialize-qp "apikey" $apikey "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({openstates_bill_id: (encode-path-segment $openstates_bill_id)} | format pattern "/bills/ocd-bill/{openstates_bill_id}") $qp)
+  let full_url = (build-url $base ({openstates_bill_id: (encode-path-segment $openstates_bill_id)} | format pattern "/bills/ocd-bill/{openstates_bill_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"x-api-key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"include": $include, "apikey": $apikey} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"include": $include, "apikey": $apikey} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Bill Detail
@@ -236,12 +243,23 @@ export def "bills get-detail" [
   if ($session | is-empty) { error make --unspanned { msg: "path parameter 'session' must be non-empty" } }
   if ($bill_id | is-empty) { error make --unspanned { msg: "path parameter 'bill_id' must be non-empty" } }
   let qp = [(serialize-qp "include" $include "multi") (serialize-qp "apikey" $apikey "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({jurisdiction: (encode-path-segment $jurisdiction), session: (encode-path-segment $session), bill_id: (encode-path-segment $bill_id)} | format pattern "/bills/{jurisdiction}/{session}/{bill_id}") $qp)
+  let full_url = (build-url $base ({jurisdiction: (encode-path-segment $jurisdiction), session: (encode-path-segment $session), bill_id: (encode-path-segment $bill_id)} | format pattern "/bills/{jurisdiction}/{session}/{bill_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"x-api-key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"include": $include, "apikey": $apikey} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"include": $include, "apikey": $apikey} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Committee List
@@ -271,12 +289,23 @@ export def "committees list-get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "jurisdiction" $jurisdiction "scalar") (serialize-qp "classification" $classification "scalar") (serialize-qp "parent" $parent "scalar") (serialize-qp "chamber" $chamber "scalar") (serialize-qp "include" $include "multi") (serialize-qp "apikey" $apikey "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/committees" $qp)
+  let full_url = (build-url $base "/committees" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"x-api-key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"jurisdiction": $jurisdiction, "classification": $classification, "parent": $parent, "chamber": $chamber, "include": $include, "apikey": $apikey, "page": $page, "per_page": $per_page} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"jurisdiction": $jurisdiction, "classification": $classification, "parent": $parent, "chamber": $chamber, "include": $include, "apikey": $apikey, "page": $page, "per_page": $per_page} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Committee Detail
@@ -302,12 +331,23 @@ export def "committees get-detail" [
   let base = ($base_url | default $BASE_URL)
   if ($committee_id | is-empty) { error make --unspanned { msg: "path parameter 'committee_id' must be non-empty" } }
   let qp = [(serialize-qp "include" $include "multi") (serialize-qp "apikey" $apikey "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({committee_id: (encode-path-segment $committee_id)} | format pattern "/committees/{committee_id}") $qp)
+  let full_url = (build-url $base ({committee_id: (encode-path-segment $committee_id)} | format pattern "/committees/{committee_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"x-api-key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"include": $include, "apikey": $apikey} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"include": $include, "apikey": $apikey} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Event List
@@ -338,12 +378,23 @@ export def "events list-get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "jurisdiction" $jurisdiction "scalar") (serialize-qp "deleted" $deleted "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "after" $after "scalar") (serialize-qp "require_bills" $require_bills "scalar") (serialize-qp "include" $include "multi") (serialize-qp "apikey" $apikey "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/events" $qp)
+  let full_url = (build-url $base "/events" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"x-api-key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"jurisdiction": $jurisdiction, "deleted": $deleted, "before": $before, "after": $after, "require_bills": $require_bills, "include": $include, "apikey": $apikey, "page": $page, "per_page": $per_page} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"jurisdiction": $jurisdiction, "deleted": $deleted, "before": $before, "after": $after, "require_bills": $require_bills, "include": $include, "apikey": $apikey, "page": $page, "per_page": $per_page} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Event Detail
@@ -369,12 +420,23 @@ export def "events get-detail" [
   let base = ($base_url | default $BASE_URL)
   if ($event_id | is-empty) { error make --unspanned { msg: "path parameter 'event_id' must be non-empty" } }
   let qp = [(serialize-qp "include" $include "multi") (serialize-qp "apikey" $apikey "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({event_id: (encode-path-segment $event_id)} | format pattern "/events/{event_id}") $qp)
+  let full_url = (build-url $base ({event_id: (encode-path-segment $event_id)} | format pattern "/events/{event_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"x-api-key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"include": $include, "apikey": $apikey} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"include": $include, "apikey": $apikey} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Jurisdiction List
@@ -401,12 +463,23 @@ export def "jurisdictions list-get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "classification" $classification "scalar") (serialize-qp "include" $include "multi") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "apikey" $apikey "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/jurisdictions" $qp)
+  let full_url = (build-url $base "/jurisdictions" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"x-api-key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"classification": $classification, "include": $include, "page": $page, "per_page": $per_page, "apikey": $apikey} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"classification": $classification, "include": $include, "page": $page, "per_page": $per_page, "apikey": $apikey} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Jurisdiction Detail
@@ -432,12 +505,23 @@ export def "jurisdictions get-detail" [
   let base = ($base_url | default $BASE_URL)
   if ($jurisdiction_id | is-empty) { error make --unspanned { msg: "path parameter 'jurisdiction_id' must be non-empty" } }
   let qp = [(serialize-qp "include" $include "multi") (serialize-qp "apikey" $apikey "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({jurisdiction_id: (encode-path-segment $jurisdiction_id)} | format pattern "/jurisdictions/{jurisdiction_id}") $qp)
+  let full_url = (build-url $base ({jurisdiction_id: (encode-path-segment $jurisdiction_id)} | format pattern "/jurisdictions/{jurisdiction_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"x-api-key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"include": $include, "apikey": $apikey} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"include": $include, "apikey": $apikey} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Metrics
@@ -457,10 +541,21 @@ export def "metrics get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/metrics")
+  let full_url = (build-url $base "/metrics" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # People Search
@@ -491,12 +586,23 @@ export def "people list-get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "jurisdiction" $jurisdiction "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "id" $id "multi") (serialize-qp "org_classification" $org_classification "scalar") (serialize-qp "district" $district "scalar") (serialize-qp "include" $include "multi") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "apikey" $apikey "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/people" $qp)
+  let full_url = (build-url $base "/people" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"x-api-key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"jurisdiction": $jurisdiction, "name": $name, "id": $id, "org_classification": $org_classification, "district": $district, "include": $include, "page": $page, "per_page": $per_page, "apikey": $apikey} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"jurisdiction": $jurisdiction, "name": $name, "id": $id, "org_classification": $org_classification, "district": $district, "include": $include, "page": $page, "per_page": $per_page, "apikey": $apikey} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # People Geo
@@ -522,10 +628,21 @@ export def "people-geo get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "lat" $lat "scalar") (serialize-qp "lng" $lng "scalar") (serialize-qp "include" $include "multi") (serialize-qp "apikey" $apikey "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/people.geo" $qp)
+  let full_url = (build-url $base "/people.geo" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"x-api-key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"lat": $lat, "lng": $lng, "include": $include, "apikey": $apikey} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"lat": $lat, "lng": $lng, "include": $include, "apikey": $apikey} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }

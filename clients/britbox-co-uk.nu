@@ -8,7 +8,7 @@ const BASE_URL = "http://localhost/api"
 # `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
 # where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o ROCKET_SERVICES_TOKEN | default "" }
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o ROCKET_SERVICES_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
@@ -41,14 +41,11 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
-# Trick: `url encode --all` over-encodes, then we decode the four unreserved
-# punctuation chars back. Pre-existing %XX sequences in the input survive
-# because `url encode --all` first turns their % into %25.
 def encode-path-segment [v: any]: nothing -> string {
   $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
-# Serialize an array-typed path parameter (issue 49.A). OpenAPI 3 `style: simple`
+# Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
 # (the default for path params) and Swagger 2 `collectionFormat: csv` both join
 # the elements with a literal comma WITHIN the single path segment, each element
 # RFC-3986-encoded individually (so a comma inside an element stays %2C). Without
@@ -59,51 +56,63 @@ def encode-path-array [v: any]: nothing -> string {
   if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
 }
 
-# Build URL from base, path, and optional query string
-def build-url [base: string, path: string, query?: string]: nothing -> string {
+# Build the request URL from base, path, and any number of pre-encoded query
+# fragments (param serializer output and/or the auth query). Each fragment is an
+# `&`-joinable `key=value` string already percent-encoded by its producer; empty
+# fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
+# delimiters are hand-spliced — and any query already on the base URL is merged in.
+def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
   let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
-  let result = ($parsed | upsert path $full_path)
-  if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
+  let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
+  $parsed | upsert path $full_path | upsert query $query | url join
 }
 
-# Build the dry-run record returned by --dry-run. Shape:
-#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
-#    auth: {scheme, location}}
-# `meta` carries logical-form data (the query record by spec name, the pre-serialization
-# body) that do-request itself cannot reconstruct from its wire-format args.
-def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
-  let m = ($meta | default {})
-  {
-    dry_run: true
-    method: $method
-    url: $url
-    query: ($m | get -o query | default {})
-    headers: $auth.headers
-    body: ($m | get -o body)
-    content_type: $content_type
-    timeout: $timeout
-    auth: {scheme: $auth.scheme, location: $auth.location}
-  }
+# Success policy: did this response succeed? Single source of truth, consulted by
+# handle-response and the HEAD header-unwrap. Empty ok_codes means the spec listed
+# none, so fall back to < 400. Otherwise: any 2xx, plus documented success codes.
+def status-ok [status: int, ok_codes: list<int>]: nothing -> bool {
+  if ($ok_codes | is-empty) { $status < 400 } else { ($status >= 200 and $status < 300) or ($status in $ok_codes) }
 }
 
-# Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
-  let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
-  let timeout = ($max_time | default 30min)
-  let ct = ($content_type | default "application/json")
-  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
-  let resp = match $method {
-    "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
-  }
-  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
-  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
+# Unwrap a `--full` HTTP response into the user-facing value. Response arrives
+# via pipeline; ok_codes gates the error throw (see status-ok).
+def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: record -> any {
+  let resp = $in
+  if $allow_errors { return $resp }
+  if not (status-ok $resp.status $ok_codes) { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } }
+  if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
+  if $resp.status == 204 { return null }
+  $resp.body
+}
+
+# GET — bodyless, honours --raw
+def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+}
+
+# POST — body + content-type
+def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# PUT — body + content-type
+def send-put [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http put --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http put --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# PATCH — body + content-type
+def send-patch [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http patch --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http patch --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# DELETE — body via --data
+def send-delete [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http delete --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url } else { http delete --headers $req.headers --content-type $req.content_type --data $body --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url }
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 def base-url-completer [] { ["http://localhost/api"] }
@@ -169,10 +178,21 @@ export def "account get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/account" $qp)
+  let full_url = (build-url $base "/account" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"ff": $ff, "lang": $lang} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"ff": $ff, "lang": $lang} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update the details of an account. With the exception of the address, this supports partial updates, so you can send just the properties you wish to update. When the address is provided any properties which are omitted from the address will be cleared.
@@ -205,12 +225,23 @@ export def "account update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/account" $qp)
+  let full_url = (build-url $base "/account" $qp $auth.query)
   let req_body = {"address": $address, "defaultPaymentInstrumentId": $default_payment_instrument_id, "defaultPaymentMethodId": $default_payment_method_id, "firstName": $first_name, "lastName": $last_name, "minRatingPlaybackGuard": $min_rating_playback_guard, "segments": $segments, "trackingEnabled": $tracking_enabled} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"ff": $ff, "lang": $lang} | compact), body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: ({"ff": $ff, "lang": $lang} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Get the available payment methods under an account.
@@ -233,10 +264,21 @@ export def "account-billing-methods list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/account/billing/methods" $qp)
+  let full_url = (build-url $base "/account/billing/methods" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"ff": $ff, "lang": $lang} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"ff": $ff, "lang": $lang} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Add a new payment method to an account.
@@ -263,12 +305,23 @@ export def "account-billing-methods create-payment" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/account/billing/methods" $qp)
+  let full_url = (build-url $base "/account/billing/methods" $qp $auth.query)
   let req_body = {"makeDefault": $make_default, "token": $body_token, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"ff": $ff, "lang": $lang} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"ff": $ff, "lang": $lang} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Remove a payment method from an account.
@@ -293,10 +346,21 @@ export def "account-billing-methods delete-payment" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/account/billing/methods/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/account/billing/methods/{id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"ff": $ff, "lang": $lang} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"ff": $ff, "lang": $lang} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Get a payment method under an account.
@@ -321,10 +385,21 @@ export def "account-billing-methods get-payment" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/account/billing/methods/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/account/billing/methods/{id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"ff": $ff, "lang": $lang} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"ff": $ff, "lang": $lang} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get a list of all purchases made under an account.
@@ -347,10 +422,21 @@ export def "account-billing-purchases get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/account/billing/purchases" $qp)
+  let full_url = (build-url $base "/account/billing/purchases" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"ff": $ff, "lang": $lang} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"ff": $ff, "lang": $lang} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Purchase a plan or item offer. The result of a successful transaction is a new entitlement.
@@ -378,12 +464,23 @@ export def "account-billing-purchases create-make" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/account/billing/purchases" $qp)
+  let full_url = (build-url $base "/account/billing/purchases" $qp $auth.query)
   let req_body = {"itemId": $item_id, "offerId": $offer_id, "paymentMethodId": $payment_method_id, "planId": $plan_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"ff": $ff, "lang": $lang} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"ff": $ff, "lang": $lang} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Cancel a plan subscription. A cancelled subscription will continue to be valid until the subscription expiry date or next renewal date.
@@ -408,10 +505,21 @@ export def "account-billing-subscriptions cancel" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/account/billing/subscriptions/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/account/billing/subscriptions/{id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"ff": $ff, "lang": $lang} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"ff": $ff, "lang": $lang} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Renew a cancelled subscription or switch subscription to a different plan. When renewing a cancelled subscription membership, hit this endpoint with the id of subscription to renew. To switch plans provide the id of the current active subscription membership of the account, and in the query specify the id of the plan to switch to.
@@ -437,10 +545,21 @@ export def "account-billing-subscriptions update" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "planId" $plan_id "scalar") (serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/account/billing/subscriptions/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/account/billing/subscriptions/{id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"planId": $plan_id, "ff": $ff, "lang": $lang} | compact), body: null}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"planId": $plan_id, "ff": $ff, "lang": $lang} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Get all devices registered under this account. Also includes information around device registration and deregistration limits.
@@ -463,10 +582,21 @@ export def "account-devices list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/account/devices" $qp)
+  let full_url = (build-url $base "/account/devices" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"ff": $ff, "lang": $lang} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"ff": $ff, "lang": $lang} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Register a playback device under an account. If a device with the same id already exists a `409` conflict will be returned.
@@ -493,12 +623,23 @@ export def "account-devices create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/account/devices" $qp)
+  let full_url = (build-url $base "/account/devices" $qp $auth.query)
   let req_body = {"id": $id, "name": $name, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"ff": $ff, "lang": $lang} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"ff": $ff, "lang": $lang} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Authorize a device from a generated device authorization code. This is the second step in the process of authorizing a device by pin code. Firstly the device must request a generated authorization code via the `/authorization/device/code` endpoint. This endpoint then authorizes the device associated with the code to sign in to a user account. Typically this endpoint will be called from a page presented in the web app under the account section. Once authorized, the device will then be able to sign in to that account via the `/authorization/device` endpoint, without needing to provide the credentials of the user.
@@ -523,12 +664,23 @@ export def "account-devices-authorization create-authorize" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/account/devices/authorization" $qp)
+  let full_url = (build-url $base "/account/devices/authorization" $qp $auth.query)
   let req_body = {"code": $code} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"ff": $ff, "lang": $lang} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"ff": $ff, "lang": $lang} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Deregister a playback device from an account.
@@ -553,10 +705,21 @@ export def "account-devices delete-deregister" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/account/devices/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/account/devices/{id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"ff": $ff, "lang": $lang} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"ff": $ff, "lang": $lang} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Get a registered device.
@@ -581,10 +744,21 @@ export def "account-devices get" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/account/devices/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/account/devices/{id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"ff": $ff, "lang": $lang} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"ff": $ff, "lang": $lang} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Rename a device
@@ -610,10 +784,21 @@ export def "account-devices-name rename" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/account/devices/{id}/name") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/account/devices/{id}/name") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"name": $name, "ff": $ff, "lang": $lang} | compact), body: null}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"name": $name, "ff": $ff, "lang": $lang} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Get all entitlements under the account. This list is returned under the call to get account information so a call here is only required when wishing to refresh a local copy of entitlements.
@@ -636,10 +821,21 @@ export def "account-entitlements get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/account/entitlements" $qp)
+  let full_url = (build-url $base "/account/entitlements" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"ff": $ff, "lang": $lang} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"ff": $ff, "lang": $lang} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get the video files associated with an item given maximum resolution, device type and one or more delivery types. This endpoint accepts an Account Catalog token, however if when requesting playback files you receive an *403 status code with error code 1* then the file you're requesting is classification restricted. This means you should switch to target the `/account/items/{id}/videos-guarded` endpoint, passing it an Account Playback token. If not already obtained, this token can be requested via the `/itv/pinauthorization` endpoint with an account level pin. For convenience you may also access free / public files through this endpoint instead of the /items/{id}/videos endpoint, when authenticated. Returns an array of video file objects which each include a url to a video. The first entry in the array contains what is predicted to be the best match. The remainder of the entries, if any, may contain resolutions below what was requests. For example if you request HD-720 the response may also contain SD entries. If you specify multiple delivery types, then the response array will insert types in the order you specify them in the query. For example `stream,progressive` would return an array with 0 or more stream files followed by 0 or more progressive files. If no files are found a 404 is returned.
@@ -670,10 +866,21 @@ export def "account-items-videos get-media-files" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "delivery" $delivery "csv") (serialize-qp "resolution" $resolution "scalar") (serialize-qp "formats" $formats "csv") (serialize-qp "device" $device "scalar") (serialize-qp "sub" $sub "scalar") (serialize-qp "segments" $segments "csv") (serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/account/items/{id}/videos") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/account/items/{id}/videos") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"delivery": $delivery, "resolution": $resolution, "formats": $formats, "device": $device, "sub": $sub, "segments": $segments, "ff": $ff, "lang": $lang} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"delivery": $delivery, "resolution": $resolution, "formats": $formats, "device": $device, "sub": $sub, "segments": $segments, "ff": $ff, "lang": $lang} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get the video files associated with an item given maximum resolution, device type and one or more delivery types. This endpoint is identical to the `/account/items/{id}/videos` however it expects an Account Playback token. This token, and in association this endpoint, is specifically for use when playback files are classification restricted and require an account level pin to access them. Returns an array of video file objects which each include a url to a video. The first entry in the array contains what is predicted to be the best match. The remainder of the entries, if any, may contain resolutions below what was requests. For example if you request HD-720 the response may also contain SD entries. If you specify multiple delivery types, then the response array will insert types in the order you specify them in the query. For example `stream,progressive` would return an array with 0 or more stream files followed by 0 or more progressive files. If no files are found a 404 is returned.
@@ -704,10 +911,21 @@ export def "account-items-videos-guarded get-media-files" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "delivery" $delivery "csv") (serialize-qp "resolution" $resolution "scalar") (serialize-qp "formats" $formats "csv") (serialize-qp "device" $device "scalar") (serialize-qp "sub" $sub "scalar") (serialize-qp "segments" $segments "csv") (serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/account/items/{id}/videos-guarded") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/account/items/{id}/videos-guarded") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"delivery": $delivery, "resolution": $resolution, "formats": $formats, "device": $device, "sub": $sub, "segments": $segments, "ff": $ff, "lang": $lang} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"delivery": $delivery, "resolution": $resolution, "formats": $formats, "device": $device, "sub": $sub, "segments": $segments, "ff": $ff, "lang": $lang} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Generate a new account nonce. A nonce may be required to help sign a response from a third party service which will be passed back to these services. For example a Facebook single-sign-on request initiated by a client application may first get a nonce from here to include in the request. Facebook will then include the nonce in the auth token it issues. This token can be passed back to our services and the nonce checked for validity.
@@ -730,10 +948,21 @@ export def "account-nonce generate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/account/nonce" $qp)
+  let full_url = (build-url $base "/account/nonce" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"ff": $ff, "lang": $lang} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"ff": $ff, "lang": $lang} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Change the password of an account. The expected token scope is Settings.
@@ -759,12 +988,23 @@ export def "account-password update-change" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/account/password" $qp)
+  let full_url = (build-url $base "/account/password" $qp $auth.query)
   let req_body = {"password": $password, "profileToken": $profile_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"ff": $ff, "lang": $lang} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"ff": $ff, "lang": $lang} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Change the pin of an account.
@@ -789,12 +1029,23 @@ export def "account-pin update-change" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/account/pin" $qp)
+  let full_url = (build-url $base "/account/pin" $qp $auth.query)
   let req_body = {"pin": $pin} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"ff": $ff, "lang": $lang} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"ff": $ff, "lang": $lang} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Get the details of the active profile, including watched, bookmarked and rated items.
@@ -817,10 +1068,21 @@ export def "account-profile get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/account/profile" $qp)
+  let full_url = (build-url $base "/account/profile" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"ff": $ff, "lang": $lang} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"ff": $ff, "lang": $lang} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get the map of bookmarked item ids (itemId => creationDate) under the active profile.
@@ -843,10 +1105,21 @@ export def "account-profile-bookmarks get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/account/profile/bookmarks" $qp)
+  let full_url = (build-url $base "/account/profile/bookmarks" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"ff": $ff, "lang": $lang} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"ff": $ff, "lang": $lang} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the list of bookmarked items under the active profile.
@@ -876,10 +1149,21 @@ export def "account-profile-bookmarks-list get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "item_type" $item_type "scalar") (serialize-qp "device" $device "scalar") (serialize-qp "sub" $sub "scalar") (serialize-qp "segments" $segments "csv") (serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/account/profile/bookmarks/list" $qp)
+  let full_url = (build-url $base "/account/profile/bookmarks/list" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "page_size": $page_size, "order": $order, "item_type": $item_type, "device": $device, "sub": $sub, "segments": $segments, "ff": $ff, "lang": $lang} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"page": $page, "page_size": $page_size, "order": $order, "item_type": $item_type, "device": $device, "sub": $sub, "segments": $segments, "ff": $ff, "lang": $lang} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Unbookmark an item under the active profile.
@@ -904,10 +1188,21 @@ export def "account-profile-bookmarks delete-item" [
   let base = ($base_url | default $BASE_URL)
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
   let qp = [(serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({item_id: (encode-path-segment $item_id)} | format pattern "/account/profile/bookmarks/{item_id}") $qp)
+  let full_url = (build-url $base ({item_id: (encode-path-segment $item_id)} | format pattern "/account/profile/bookmarks/{item_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"ff": $ff, "lang": $lang} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"ff": $ff, "lang": $lang} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Get the bookmark for an item under the active profile.
@@ -932,10 +1227,21 @@ export def "account-profile-bookmarks get-item" [
   let base = ($base_url | default $BASE_URL)
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
   let qp = [(serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({item_id: (encode-path-segment $item_id)} | format pattern "/account/profile/bookmarks/{item_id}") $qp)
+  let full_url = (build-url $base ({item_id: (encode-path-segment $item_id)} | format pattern "/account/profile/bookmarks/{item_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"ff": $ff, "lang": $lang} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"ff": $ff, "lang": $lang} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Bookmark an item under the active profile. Creates one if it doesn't exist, overwrites one if it does.
@@ -960,10 +1266,21 @@ export def "account-profile-bookmarks update-item" [
   let base = ($base_url | default $BASE_URL)
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
   let qp = [(serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({item_id: (encode-path-segment $item_id)} | format pattern "/account/profile/bookmarks/{item_id}") $qp)
+  let full_url = (build-url $base ({item_id: (encode-path-segment $item_id)} | format pattern "/account/profile/bookmarks/{item_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"ff": $ff, "lang": $lang} | compact), body: null}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"ff": $ff, "lang": $lang} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Returns a list of items which have been watched but not completed under the active profile. Multiple episodes under the same show may be watched or in progress, however only a single item belonging to a particular show will be included in the returned list. The next episode to continue watching for a particular show will be the most recent incompletely watched episode, or the next episode following the most recently completely watched episode. Based on the specified `show_item_type` type, either the next episode, the season of the next episode, or the show will be included in the list.
@@ -994,10 +1311,21 @@ export def "account-profile-continue-watching-list get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "show_item_type" $show_item_type "scalar") (serialize-qp "include" $include "csv") (serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "max_rating" $max_rating "scalar") (serialize-qp "device" $device "scalar") (serialize-qp "sub" $sub "scalar") (serialize-qp "segments" $segments "csv") (serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/account/profile/continue-watching/list" $qp)
+  let full_url = (build-url $base "/account/profile/continue-watching/list" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"show_item_type": $show_item_type, "include": $include, "page": $page, "page_size": $page_size, "max_rating": $max_rating, "device": $device, "sub": $sub, "segments": $segments, "ff": $ff, "lang": $lang} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"show_item_type": $show_item_type, "include": $include, "page": $page, "page_size": $page_size, "max_rating": $max_rating, "device": $device, "sub": $sub, "segments": $segments, "ff": $ff, "lang": $lang} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the next item to play given a source item id. For an unwatched show it returns the first episode available to the account. For a watched show it returns the last incompletely watched episode by the profile, or the episode that immediately follows the last completely watched episode or nothing. For an episode it always returns the immediately following episode, if available to the account, or nothing. If the response does not contain a `next` property then no item was found.
@@ -1027,10 +1355,21 @@ export def "account-profile-items-next get-playback" [
   let base = ($base_url | default $BASE_URL)
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
   let qp = [(serialize-qp "max_rating" $max_rating "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "device" $device "scalar") (serialize-qp "sub" $sub "scalar") (serialize-qp "segments" $segments "csv") (serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({item_id: (encode-path-segment $item_id)} | format pattern "/account/profile/items/{item_id}/next") $qp)
+  let full_url = (build-url $base ({item_id: (encode-path-segment $item_id)} | format pattern "/account/profile/items/{item_id}/next") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"max_rating": $max_rating, "expand": $expand, "device": $device, "sub": $sub, "segments": $segments, "ff": $ff, "lang": $lang} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"max_rating": $max_rating, "expand": $expand, "device": $device, "sub": $sub, "segments": $segments, "ff": $ff, "lang": $lang} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get the map of rated item ids (itemId => rating out of 10) under the active profile.
@@ -1053,10 +1392,21 @@ export def "account-profile-ratings get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/account/profile/ratings" $qp)
+  let full_url = (build-url $base "/account/profile/ratings" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"ff": $ff, "lang": $lang} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"ff": $ff, "lang": $lang} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the list of rated items under the active profile.
@@ -1087,10 +1437,21 @@ export def "account-profile-ratings-list get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "order_by" $order_by "scalar") (serialize-qp "item_type" $item_type "scalar") (serialize-qp "device" $device "scalar") (serialize-qp "sub" $sub "scalar") (serialize-qp "segments" $segments "csv") (serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/account/profile/ratings/list" $qp)
+  let full_url = (build-url $base "/account/profile/ratings/list" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "page_size": $page_size, "order": $order, "order_by": $order_by, "item_type": $item_type, "device": $device, "sub": $sub, "segments": $segments, "ff": $ff, "lang": $lang} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"page": $page, "page_size": $page_size, "order": $order, "order_by": $order_by, "item_type": $item_type, "device": $device, "sub": $sub, "segments": $segments, "ff": $ff, "lang": $lang} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get the rating info for an item under the active profile.
@@ -1115,10 +1476,21 @@ export def "account-profile-ratings get-item" [
   let base = ($base_url | default $BASE_URL)
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
   let qp = [(serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({item_id: (encode-path-segment $item_id)} | format pattern "/account/profile/ratings/{item_id}") $qp)
+  let full_url = (build-url $base ({item_id: (encode-path-segment $item_id)} | format pattern "/account/profile/ratings/{item_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"ff": $ff, "lang": $lang} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"ff": $ff, "lang": $lang} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Rate an item under the active profile. Creates one if it doesn't exist, overwrites one if it does.
@@ -1144,10 +1516,21 @@ export def "account-profile-ratings update-rate-item" [
   let base = ($base_url | default $BASE_URL)
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
   let qp = [(serialize-qp "rating" $rating "scalar") (serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({item_id: (encode-path-segment $item_id)} | format pattern "/account/profile/ratings/{item_id}") $qp)
+  let full_url = (build-url $base ({item_id: (encode-path-segment $item_id)} | format pattern "/account/profile/ratings/{item_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"rating": $rating, "ff": $ff, "lang": $lang} | compact), body: null}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"rating": $rating, "ff": $ff, "lang": $lang} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Remove the watched status of items under the active profile. Passing in specific `itemId`s to the `item_ids` query parameter will cause only these items to be removed. **If this list is missing all watched items will be removed**
@@ -1171,10 +1554,21 @@ export def "account-profile-watched delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "item_ids" $item_ids "csv") (serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/account/profile/watched" $qp)
+  let full_url = (build-url $base "/account/profile/watched" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"item_ids": $item_ids, "ff": $ff, "lang": $lang} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"item_ids": $item_ids, "ff": $ff, "lang": $lang} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Get the map of watched item ids (itemId => last playhead position) under the active profile.
@@ -1197,10 +1591,21 @@ export def "account-profile-watched get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/account/profile/watched" $qp)
+  let full_url = (build-url $base "/account/profile/watched" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"ff": $ff, "lang": $lang} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"ff": $ff, "lang": $lang} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the list of watched items under the active profile.
@@ -1232,10 +1637,21 @@ export def "account-profile-watched-list get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "completed" $completed "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "order_by" $order_by "scalar") (serialize-qp "item_type" $item_type "scalar") (serialize-qp "device" $device "scalar") (serialize-qp "sub" $sub "scalar") (serialize-qp "segments" $segments "csv") (serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/account/profile/watched/list" $qp)
+  let full_url = (build-url $base "/account/profile/watched/list" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "page_size": $page_size, "completed": $completed, "order": $order, "order_by": $order_by, "item_type": $item_type, "device": $device, "sub": $sub, "segments": $segments, "ff": $ff, "lang": $lang} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"page": $page, "page_size": $page_size, "completed": $completed, "order": $order, "order_by": $order_by, "item_type": $item_type, "device": $device, "sub": $sub, "segments": $segments, "ff": $ff, "lang": $lang} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get the watched status info for an item under the active profile.
@@ -1260,10 +1676,21 @@ export def "account-profile-watched get-item-status" [
   let base = ($base_url | default $BASE_URL)
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
   let qp = [(serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({item_id: (encode-path-segment $item_id)} | format pattern "/account/profile/watched/{item_id}") $qp)
+  let full_url = (build-url $base ({item_id: (encode-path-segment $item_id)} | format pattern "/account/profile/watched/{item_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"ff": $ff, "lang": $lang} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"ff": $ff, "lang": $lang} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Record the watched playhead position of a video under the active profile. Can be used later to resume a video from where it was last watched. Creates one if it doesn't exist, overwrites one if it does.
@@ -1289,10 +1716,21 @@ export def "account-profile-watched update-item-status" [
   let base = ($base_url | default $BASE_URL)
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
   let qp = [(serialize-qp "position" $position "scalar") (serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({item_id: (encode-path-segment $item_id)} | format pattern "/account/profile/watched/{item_id}") $qp)
+  let full_url = (build-url $base ({item_id: (encode-path-segment $item_id)} | format pattern "/account/profile/watched/{item_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"position": $position, "ff": $ff, "lang": $lang} | compact), body: null}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"position": $position, "ff": $ff, "lang": $lang} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req null $insecure $raw $allow_errors $full [200 204]
 }
 
 # Create a new profile under the active account.
@@ -1321,12 +1759,23 @@ export def "account-profiles create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/account/profiles" $qp)
+  let full_url = (build-url $base "/account/profiles" $qp $auth.query)
   let req_body = {"languageCode": $language_code, "name": $name, "pinEnabled": $pin_enabled, "purchaseEnabled": $purchase_enabled, "segments": $segments} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"ff": $ff, "lang": $lang} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"ff": $ff, "lang": $lang} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Delete a profile with a specific id under the active account. Note that you cannot delete the primary profile.
@@ -1351,10 +1800,21 @@ export def "account-profiles delete" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/account/profiles/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/account/profiles/{id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"ff": $ff, "lang": $lang} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"ff": $ff, "lang": $lang} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Get the summary of a profile with a specific id under the active account.
@@ -1379,10 +1839,21 @@ export def "account-profiles get" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/account/profiles/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/account/profiles/{id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"ff": $ff, "lang": $lang} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"ff": $ff, "lang": $lang} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update the summary of a profile with a specific id under the active account. This supports partial updates so you can send just the properties you wish to update.
@@ -1415,12 +1886,23 @@ export def "account-profiles update" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/account/profiles/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/account/profiles/{id}") $qp $auth.query)
   let req_body = {"heroAutoplay": $hero_autoplay, "heroWithAudio": $hero_with_audio, "languageCode": $language_code, "name": $name, "pinEnabled": $pin_enabled, "purchaseEnabled": $purchase_enabled, "segments": $segments} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"ff": $ff, "lang": $lang} | compact), body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: ({"ff": $ff, "lang": $lang} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Request that the email address tied to an account be verified. This will send a verification email to the email address of the primary profile containing a link which, once clicked, completes the verification process via the /verify-email endpoint. Note that when an account is created this email is sent automatically so there's no need to call this directly. If the user doesn't click the link before it expires then this endpoint can be called to request a new verification email. In the future it may also be used if we add support for changing an account email address.
@@ -1443,10 +1925,21 @@ export def "account-request-email-verification request" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/account/request-email-verification" $qp)
+  let full_url = (build-url $base "/account/request-email-verification" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"ff": $ff, "lang": $lang} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"ff": $ff, "lang": $lang} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [204]
 }
 
 # When a user signs out of an application we need to clear some basic cookies we assigned them during token authorization.
@@ -1469,10 +1962,21 @@ export def "authorization delete-sign-out" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/authorization" $qp)
+  let full_url = (build-url $base "/authorization" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"ff": $ff, "lang": $lang} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"ff": $ff, "lang": $lang} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Request one or more `Account` level authorization tokens each with a chosen scope. Tokens are used to access restricted service endpoints. These restricted endpoints will require a specific token type (e.g Account) with a specific scope (e.g. Catalog) before access is granted. For convenience, where a Profile level token with the same scope exists it will also be returned. Authorization with pin is not supported on this endpoint anymore. Use `/itv/pinauthorization` endpoint instead.
@@ -1500,12 +2004,23 @@ export def "authorization get-account-token" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/authorization" $qp)
+  let full_url = (build-url $base "/authorization" $qp $auth.query)
   let req_body = {"cookieType": $cookie_type, "email": $email, "password": $password, "scopes": $scopes} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"ff": $ff, "lang": $lang} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"ff": $ff, "lang": $lang} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get Catalog tokens for an account using a device authorization code. Where a Profile level token of Catalog scope exists it will also be returned. This is the final step in the process of authorizing a device by pin code. Firstly the device must request a generated authorization code via the `/authorization/device/code` endpoint. The code is subsequently used to authorize the device to sign in to a given account via the `/account/devices/authorization` endpoint. Typically this will be from a page presented in the web app under the account section. Once authorized, this endpoint will allow the device to sign in without needing to provide the credentials of the user.
@@ -1532,12 +2047,23 @@ export def "authorization-device get-account-token-by-code" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/authorization/device" $qp)
+  let full_url = (build-url $base "/authorization/device" $qp $auth.query)
   let req_body = {"code": $code, "id": $id, "scopes": $scopes} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"ff": $ff, "lang": $lang} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"ff": $ff, "lang": $lang} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get a generated device authorization code. This is the first step in the process of authorizing a device by pin code. The device will make a request to this endpoint providing a unique identifier for the device such as a serial number. This endpoint will then return a generated code which is tied to the given device. The code may subsequently be used to authorize the device to sign in to an account via the `/account/devices/authorization` endpoint. Typically this will be from a page presented in the web app under the account section. Once authorized, the device will then be able to sign in to that account via the `/authorization/device` endpoint, without needing to provide the credentials of the user.
@@ -1564,12 +2090,23 @@ export def "authorization-device-code generate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/authorization/device/code" $qp)
+  let full_url = (build-url $base "/authorization/device/code" $qp $auth.query)
   let req_body = {"id": $id, "name": $name, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"ff": $ff, "lang": $lang} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"ff": $ff, "lang": $lang} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Request one or more `Profile` level authorization tokens each with a chosen scope. Tokens are used to access restricted service endpoints. These restriced endpoints will require a specific token type (e.g Profile) with a specific scope (e.g. Catalog) before access is granted.
@@ -1597,12 +2134,23 @@ export def "authorization-profile get-token" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/authorization/profile" $qp)
+  let full_url = (build-url $base "/authorization/profile" $qp $auth.query)
   let req_body = {"cookieType": $cookie_type, "pin": $pin, "profileId": $profile_id, "scopes": $scopes} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"ff": $ff, "lang": $lang} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"ff": $ff, "lang": $lang} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Refresh an account or profile level authorization token which is marked as refreshable.
@@ -1628,12 +2176,23 @@ export def "authorization-refresh refresh-token" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/authorization/refresh" $qp)
+  let full_url = (build-url $base "/authorization/refresh" $qp $auth.query)
   let req_body = {"cookieType": $cookie_type, "token": $body_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"ff": $ff, "lang": $lang} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"ff": $ff, "lang": $lang} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Exchange a third party single-sign-on token for our own authorization tokens.
@@ -1662,12 +2221,23 @@ export def "authorization-sso create-single-sign" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/authorization/sso" $qp)
+  let full_url = (build-url $base "/authorization/sso" $qp $auth.query)
   let req_body = {"cookieType": $cookie_type, "linkAccounts": $link_accounts, "provider": $provider, "scopes": $scopes, "token": $body_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"ff": $ff, "lang": $lang} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"ff": $ff, "lang": $lang} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Returns all the plans available for BT flow including additional description data.
@@ -1691,10 +2261,21 @@ export def "bt-plan get" [
   let base = ($base_url | default $BASE_URL)
   if ($token_arg | is-empty) { error make --unspanned { msg: "path parameter 'token' must be non-empty" } }
   let qp = [(serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({token_arg: (encode-path-segment $token_arg)} | format pattern "/bt/plan/{token_arg}") $qp)
+  let full_url = (build-url $base ({token_arg: (encode-path-segment $token_arg)} | format pattern "/bt/plan/{token_arg}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"lang": $lang} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"lang": $lang} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns all the plans available for BT flow including additional description data.
@@ -1716,10 +2297,21 @@ export def "bt-plans get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/bt/plans" $qp)
+  let full_url = (build-url $base "/bt/plans" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"lang": $lang} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"lang": $lang} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Assigns an UserToken to a profile on the ITV side. Currently throws an exception.
@@ -1744,12 +2336,23 @@ export def "bt-token-assign assign" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/bt/token/assign" $qp)
+  let full_url = (build-url $base "/bt/token/assign" $qp $auth.query)
   let req_body = {"profileToken": $profile_token, "token": $body_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"lang": $lang} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"lang": $lang} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Checks a provided token for BT eligible user.
@@ -1773,10 +2376,21 @@ export def "bt-token-validate check-user" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/bt/token/validate" $qp)
+  let full_url = (build-url $base "/bt/token/validate" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"id": $id, "ff": $ff, "lang": $lang} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"id": $id, "ff": $ff, "lang": $lang} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the details of subscription data for a user with specified id.
@@ -1798,10 +2412,21 @@ export def "check-subscription get-data" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/check-subscription/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/check-subscription/{id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get the global configuration for an application. Should be called during app statup. This includes things like device and playback rules, classifications, sitemap and subscriptions. You have the option to select specific configuration objects using the 'include' parameter, or if unspecified, getting all configuration.
@@ -1829,10 +2454,21 @@ export def "config get-app" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "include" $include "csv") (serialize-qp "system" $system "scalar") (serialize-qp "device" $device "scalar") (serialize-qp "sub" $sub "scalar") (serialize-qp "segments" $segments "csv") (serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/config" $qp)
+  let full_url = (build-url $base "/config" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"include": $include, "system": $system, "device": $device, "sub": $sub, "segments": $segments, "ff": $ff, "lang": $lang} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"include": $include, "system": $system, "device": $device, "sub": $sub, "segments": $segments, "ff": $ff, "lang": $lang} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Check whether or not a user is eligible for switching to Bt or EE offers.
@@ -1854,10 +2490,21 @@ export def "ee-bt-eligibility check" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/ee-bt/eligibility" $qp)
+  let full_url = (build-url $base "/ee-bt/eligibility" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"lang": $lang} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"lang": $lang} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Assigns a msisdn to a profile on ITV side.
@@ -1884,12 +2531,23 @@ export def "ee-msisdn assign" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/ee/msisdn" $qp)
+  let full_url = (build-url $base "/ee/msisdn" $qp $auth.query)
   let req_body = {"eeProductId": $ee_product_id, "msisdn": $msisdn, "profileToken": $profile_token, "trackingHeader": $tracking_header} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"lang": $lang} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"lang": $lang} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Returns eligible partner specific offers for the querying partner for an EE MSISDN. This call is supposed to be called after we have MSISDN accired. This call should be followed by POST /ee/msisdn.
@@ -1916,12 +2574,23 @@ export def "ee-offers get-eligible" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/ee/offers" $qp)
+  let full_url = (build-url $base "/ee/offers" $qp $auth.query)
   let req_body = {"accessToken": $access_token, "msisdn": $msisdn, "trackingHeader": $tracking_header} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"ff": $ff, "lang": $lang} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"ff": $ff, "lang": $lang} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Validate PIN request created by calling POST /ee/pin This call is to validate MSISDN entered by a user not comming through EE network. This call should be called after PUT /ee/pin. This call should be followed by POST /ee/offers.
@@ -1949,12 +2618,23 @@ export def "ee-pin validate-request" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/ee/pin" $qp)
+  let full_url = (build-url $base "/ee/pin" $qp $auth.query)
   let req_body = {"accessToken": $access_token, "pin": $pin, "pinReference": $pin_reference, "trackingHeader": $tracking_header} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"ff": $ff, "lang": $lang} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"ff": $ff, "lang": $lang} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Creates a PIN request that will send an SMS to the given msisdn. This call is to validate MSISDN entered by a user not comming through EE network. This call should be followed by POST ee/pin.
@@ -1981,12 +2661,23 @@ export def "ee-pin create-request" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/ee/pin" $qp)
+  let full_url = (build-url $base "/ee/pin" $qp $auth.query)
   let req_body = {"accessToken": $access_token, "msisdn": $msisdn, "trackingHeader": $tracking_header} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"ff": $ff, "lang": $lang} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"ff": $ff, "lang": $lang} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Returns all the plans available for EE flow including additional description data.
@@ -2007,10 +2698,21 @@ export def "ee-plans list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/ee/plans" $qp)
+  let full_url = (build-url $base "/ee/plans" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"lang": $lang} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"lang": $lang} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the plan description for EE flow including additional description data.
@@ -2034,10 +2736,21 @@ export def "ee-plans get" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/ee/plans/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/ee/plans/{id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"lang": $lang} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"lang": $lang} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns a token for later calls to EE API. TTL is one hour. Recommended is FE refreshes this token before each call.
@@ -2057,10 +2770,21 @@ export def "ee-token-create create" [
 ]: nothing -> record<accessToken: string, expiresIn: float, tokenType: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/ee/token/create")
+  let full_url = (build-url $base "/ee/token/create" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the details of an item with the specified id.
@@ -2092,10 +2816,21 @@ export def "items get" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "max_rating" $max_rating "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "select_season" $select_season "scalar") (serialize-qp "use_custom_id" $use_custom_id "scalar") (serialize-qp "device" $device "scalar") (serialize-qp "sub" $sub "scalar") (serialize-qp "segments" $segments "csv") (serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/items/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/items/{id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"max_rating": $max_rating, "expand": $expand, "select_season": $select_season, "use_custom_id": $use_custom_id, "device": $device, "sub": $sub, "segments": $segments, "ff": $ff, "lang": $lang} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"max_rating": $max_rating, "expand": $expand, "select_season": $select_season, "use_custom_id": $use_custom_id, "device": $device, "sub": $sub, "segments": $segments, "ff": $ff, "lang": $lang} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the List of child summary items under an item. If the item is a Season then the children will be episodes and ordered by episode number. If the item is a Show then the children will be Seasons and ordered by season number. Returns 404 if no children found.
@@ -2127,10 +2862,21 @@ export def "items-children get-list" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "max_rating" $max_rating "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "device" $device "scalar") (serialize-qp "sub" $sub "scalar") (serialize-qp "segments" $segments "csv") (serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/items/{id}/children") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/items/{id}/children") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "page_size": $page_size, "max_rating": $max_rating, "order": $order, "device": $device, "sub": $sub, "segments": $segments, "ff": $ff, "lang": $lang} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"page": $page, "page_size": $page_size, "max_rating": $max_rating, "order": $order, "device": $device, "sub": $sub, "segments": $segments, "ff": $ff, "lang": $lang} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the list of items related to the parent item. Note for now, due to the size of the list being unknown, only a single page will be returned.
@@ -2161,10 +2907,21 @@ export def "items-related get-list" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "max_rating" $max_rating "scalar") (serialize-qp "device" $device "scalar") (serialize-qp "sub" $sub "scalar") (serialize-qp "segments" $segments "csv") (serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/items/{id}/related") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/items/{id}/related") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "page_size": $page_size, "max_rating": $max_rating, "device": $device, "sub": $sub, "segments": $segments, "ff": $ff, "lang": $lang} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"page": $page, "page_size": $page_size, "max_rating": $max_rating, "device": $device, "sub": $sub, "segments": $segments, "ff": $ff, "lang": $lang} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get the free / public video files associated with an item given maximum resolution, device type and one or more delivery types. Returns an array of video file objects which each include a url to a video. The first entry in the array contains what is predicted to be the best match. The remainder of the entries, if any, may contain resolutions below what was requests. For example if you request HD-720 the response may also contain SD entries. If you specify multiple delivery types, then the response array will insert types in the order you specify them in the query. For example `stream,progressive` would return an array with 0 or more stream files followed by 0 or more progressive files. If no files are found a 404 is returned.
@@ -2195,10 +2952,21 @@ export def "items-videos get-public-media-files" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "delivery" $delivery "csv") (serialize-qp "resolution" $resolution "scalar") (serialize-qp "formats" $formats "csv") (serialize-qp "device" $device "scalar") (serialize-qp "sub" $sub "scalar") (serialize-qp "segments" $segments "csv") (serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/items/{id}/videos") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/items/{id}/videos") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"delivery": $delivery, "resolution": $resolution, "formats": $formats, "device": $device, "sub": $sub, "segments": $segments, "ff": $ff, "lang": $lang} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"delivery": $delivery, "resolution": $resolution, "formats": $formats, "device": $device, "sub": $sub, "segments": $segments, "ff": $ff, "lang": $lang} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Identical to GET /account/profile/items/{itemId}/next route but for users that are not logged in i.e. this endpoint does not require authorisation
@@ -2227,10 +2995,21 @@ export def "items-next get-anon-playback" [
   let base = ($base_url | default $BASE_URL)
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
   let qp = [(serialize-qp "max_rating" $max_rating "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "device" $device "scalar") (serialize-qp "segments" $segments "csv") (serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({item_id: (encode-path-segment $item_id)} | format pattern "/items/{item_id}/next") $qp)
+  let full_url = (build-url $base ({item_id: (encode-path-segment $item_id)} | format pattern "/items/{item_id}/next") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"max_rating": $max_rating, "expand": $expand, "device": $device, "segments": $segments, "ff": $ff, "lang": $lang} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"max_rating": $max_rating, "expand": $expand, "device": $device, "segments": $segments, "ff": $ff, "lang": $lang} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the list of billing records for specified payment platform.
@@ -2256,12 +3035,23 @@ export def "itv-billinghistory get-billing-history" [
   let base = ($base_url | default $BASE_URL)
   if ($platform | is-empty) { error make --unspanned { msg: "path parameter 'platform' must be non-empty" } }
   let qp = [(serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({platform: (encode-path-segment $platform)} | format pattern "/itv/billinghistory/{platform}") $qp)
+  let full_url = (build-url $base ({platform: (encode-path-segment $platform)} | format pattern "/itv/billinghistory/{platform}") $qp $auth.query)
   let req_body = {"profileToken": $profile_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"lang": $lang} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"lang": $lang} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get payment card details.
@@ -2287,12 +3077,23 @@ export def "itv-cards get-details" [
   let base = ($base_url | default $BASE_URL)
   if ($platform | is-empty) { error make --unspanned { msg: "path parameter 'platform' must be non-empty" } }
   let qp = [(serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({platform: (encode-path-segment $platform)} | format pattern "/itv/cards/{platform}") $qp)
+  let full_url = (build-url $base ({platform: (encode-path-segment $platform)} | format pattern "/itv/cards/{platform}") $qp $auth.query)
   let req_body = {"profileToken": $profile_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"lang": $lang} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"lang": $lang} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Change payment card details.
@@ -2319,12 +3120,23 @@ export def "itv-cards update-change-details" [
   let base = ($base_url | default $BASE_URL)
   if ($platform | is-empty) { error make --unspanned { msg: "path parameter 'platform' must be non-empty" } }
   let qp = [(serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({platform: (encode-path-segment $platform)} | format pattern "/itv/cards/{platform}") $qp)
+  let full_url = (build-url $base ({platform: (encode-path-segment $platform)} | format pattern "/itv/cards/{platform}") $qp $auth.query)
   let req_body = {"cardToken": $card_token, "profileToken": $profile_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"lang": $lang} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"lang": $lang} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Change email address related to account/profile. The expected token scope is Settings.
@@ -2350,12 +3162,23 @@ export def "itv-changeemail create-change-email" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/itv/changeemail" $qp)
+  let full_url = (build-url $base "/itv/changeemail" $qp $auth.query)
   let req_body = {"email": $email, "profileToken": $profile_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"ff": $ff, "lang": $lang} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"ff": $ff, "lang": $lang} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Change marketing preferences related to account/profile. The expected token scope is Settings.
@@ -2381,12 +3204,23 @@ export def "itv-changemarketing create-change-marketing" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/itv/changemarketing" $qp)
+  let full_url = (build-url $base "/itv/changemarketing" $qp $auth.query)
   let req_body = {"emailOptIn": $email_opt_in, "profileToken": $profile_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"ff": $ff, "lang": $lang} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"ff": $ff, "lang": $lang} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Delete account in compliance with GDPR. The expected token scope is Settings.
@@ -2411,12 +3245,23 @@ export def "itv-delete-account delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/itv/deleteaccount" $qp)
+  let full_url = (build-url $base "/itv/deleteaccount" $qp $auth.query)
   let req_body = {"profileToken": $profile_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"ff": $ff, "lang": $lang} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"ff": $ff, "lang": $lang} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Returns current entitlement.
@@ -2438,10 +3283,21 @@ export def "itv-entitlements-current get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/itv/entitlements/current" $qp)
+  let full_url = (build-url $base "/itv/entitlements/current" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"lang": $lang} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"lang": $lang} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the state of subscription for any payment platform.
@@ -2463,10 +3319,21 @@ export def "itv-entitlements-history get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/itv/entitlements/history" $qp)
+  let full_url = (build-url $base "/itv/entitlements/history" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"lang": $lang} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"lang": $lang} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets info whether or not a feature is enabled or disabled using a feature flag. Feature flags are set as a custom field within PM. It also supports custom feature flag data if needed. Such data can be return as well.
@@ -2490,10 +3357,21 @@ export def "itv-feature-flag get" [
   let base = ($base_url | default $BASE_URL)
   if ($feature | is-empty) { error make --unspanned { msg: "path parameter 'feature' must be non-empty" } }
   let qp = [(serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({feature: (encode-path-segment $feature)} | format pattern "/itv/featureFlag/{feature}") $qp)
+  let full_url = (build-url $base ({feature: (encode-path-segment $feature)} | format pattern "/itv/featureFlag/{feature}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"lang": $lang} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"lang": $lang} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get the list of recommended items under the active profile.
@@ -2518,12 +3396,23 @@ export def "itv-googlepay-subscription create-google-pay" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/itv/googlepay/subscription" $qp)
+  let full_url = (build-url $base "/itv/googlepay/subscription" $qp $auth.query)
   let req_body = {"purchaseToken": $purchase_token, "subscriptionItem": $subscription_item} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"lang": $lang} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"lang": $lang} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Check whether the user has been previously entitled.
@@ -2545,10 +3434,21 @@ export def "itv-had-entitlements check-previous" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/itv/had/entitlements" $qp)
+  let full_url = (build-url $base "/itv/had/entitlements" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"lang": $lang} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"lang": $lang} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get the media clip files associated with items.
@@ -2573,12 +3473,23 @@ export def "itv-items-clips get-media-files" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/itv/items/clips" $qp)
+  let full_url = (build-url $base "/itv/items/clips" $qp $auth.query)
   let req_body = {"ids": $ids} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"ff": $ff, "lang": $lang} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"ff": $ff, "lang": $lang} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the details of an item with the specified id.
@@ -2603,12 +3514,23 @@ export def "itv-items-downloadable get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/itv/items/downloadable" $qp)
+  let full_url = (build-url $base "/itv/items/downloadable" $qp $auth.query)
   let req_body = {"ids": $ids} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"ff": $ff, "lang": $lang} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"ff": $ff, "lang": $lang} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Redirects to corresponding Axis Item details page.
@@ -2629,10 +3551,21 @@ export def "itv-itemsummary get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($external_id | is-empty) { error make --unspanned { msg: "path parameter 'externalId' must be non-empty" } }
-  let full_url = (build-url $base ({external_id: (encode-path-segment $external_id)} | format pattern "/itv/itemsummary/{external_id}"))
+  let full_url = (build-url $base ({external_id: (encode-path-segment $external_id)} | format pattern "/itv/itemsummary/{external_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [302]
 }
 
 # Returns a page with the specified id. This is a cut down version for low memory devices.123 If targeting the search page you must url encode the search term as a parameter using the `q` key. For example if your browser path looks like `/search?q=the` then what you pass to this endpoint would look like `/itv/page?path=/search%3Fq%3Dthe`.
@@ -2666,10 +3599,21 @@ export def "itv-page get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "path" $path "scalar") (serialize-qp "list_page_size" $list_page_size "scalar") (serialize-qp "list_page_size_large" $list_page_size_large "scalar") (serialize-qp "max_list_prefetch" $max_list_prefetch "scalar") (serialize-qp "item_detail_expand" $item_detail_expand "scalar") (serialize-qp "item_detail_select_season" $item_detail_select_season "scalar") (serialize-qp "text_entry_format" $text_entry_format "scalar") (serialize-qp "max_rating" $max_rating "scalar") (serialize-qp "device" $device "scalar") (serialize-qp "sub" $sub "scalar") (serialize-qp "segments" $segments "csv") (serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/itv/page" $qp)
+  let full_url = (build-url $base "/itv/page" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"path": $path, "list_page_size": $list_page_size, "list_page_size_large": $list_page_size_large, "max_list_prefetch": $max_list_prefetch, "item_detail_expand": $item_detail_expand, "item_detail_select_season": $item_detail_select_season, "text_entry_format": $text_entry_format, "max_rating": $max_rating, "device": $device, "sub": $sub, "segments": $segments, "ff": $ff, "lang": $lang} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"path": $path, "list_page_size": $list_page_size, "list_page_size_large": $list_page_size_large, "max_list_prefetch": $max_list_prefetch, "item_detail_expand": $item_detail_expand, "item_detail_select_season": $item_detail_select_season, "text_entry_format": $text_entry_format, "max_rating": $max_rating, "device": $device, "sub": $sub, "segments": $segments, "ff": $ff, "lang": $lang} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 301]
 }
 
 # Provides authorization with parental control pin. Returns an array containing account token with Playback scope. Requires access token with Catalog scope. Pin must be a 4-digit string
@@ -2696,12 +3640,23 @@ export def "itv-pinauthorization get-account-token-with-pin" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/itv/pinauthorization" $qp)
+  let full_url = (build-url $base "/itv/pinauthorization" $qp $auth.query)
   let req_body = {"cookieType": $cookie_type, "pin": $pin, "scopes": $scopes} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"ff": $ff, "lang": $lang} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"ff": $ff, "lang": $lang} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Upgrades the plan for the current user.
@@ -2727,12 +3682,23 @@ export def "itv-plan create-upgrade" [
   let base = ($base_url | default $BASE_URL)
   if ($platform | is-empty) { error make --unspanned { msg: "path parameter 'platform' must be non-empty" } }
   let qp = [(serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({platform: (encode-path-segment $platform)} | format pattern "/itv/plan/{platform}") $qp)
+  let full_url = (build-url $base ({platform: (encode-path-segment $platform)} | format pattern "/itv/plan/{platform}") $qp $auth.query)
   let req_body = {"planId": $plan_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"lang": $lang} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"lang": $lang} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the plans available for specified payment platform.
@@ -2755,10 +3721,21 @@ export def "itv-plans get" [
   let base = ($base_url | default $BASE_URL)
   if ($platform | is-empty) { error make --unspanned { msg: "path parameter 'platform' must be non-empty" } }
   let qp = [(serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({platform: (encode-path-segment $platform)} | format pattern "/itv/plans/{platform}") $qp)
+  let full_url = (build-url $base ({platform: (encode-path-segment $platform)} | format pattern "/itv/plans/{platform}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"lang": $lang} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"lang": $lang} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the ITV profile object.
@@ -2779,10 +3756,21 @@ export def "itv-profile get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/itv/profile" $qp)
+  let full_url = (build-url $base "/itv/profile" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"lang": $lang} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"lang": $lang} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update ITV profile. The expected token scope is Settings.
@@ -2813,12 +3801,23 @@ export def "itv-profile update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/itv/profile" $qp)
+  let full_url = (build-url $base "/itv/profile" $qp $auth.query)
   let req_body = {"dateOfBirth": $date_of_birth, "email": $email, "firstName": $first_name, "lastName": $last_name, "postcode": $postcode, "profileToken": $profile_token, "title": $title} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"ff": $ff, "lang": $lang} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"ff": $ff, "lang": $lang} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Get the list of recommended items under the active profile.
@@ -2847,10 +3846,21 @@ export def "itv-profile-recommendation-list get-recommended" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "item_types" $item_types "csv") (serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "device" $device "scalar") (serialize-qp "sub" $sub "scalar") (serialize-qp "segments" $segments "csv") (serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/itv/profile/recommendation/list" $qp)
+  let full_url = (build-url $base "/itv/profile/recommendation/list" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"item_types": $item_types, "page": $page, "page_size": $page_size, "device": $device, "sub": $sub, "segments": $segments, "ff": $ff, "lang": $lang} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"item_types": $item_types, "page": $page, "page_size": $page_size, "device": $device, "sub": $sub, "segments": $segments, "ff": $ff, "lang": $lang} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the ITV profile token.
@@ -2874,12 +3884,23 @@ export def "itv-profiletoken get-profile-token" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/itv/profiletoken" $qp)
+  let full_url = (build-url $base "/itv/profiletoken" $qp $auth.query)
   let req_body = {"password": $password} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"lang": $lang} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"lang": $lang} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Cancel a plan subscription. A cancelled subscription will continue to be valid until the subscription expiry date or next renewal date.
@@ -2904,12 +3925,23 @@ export def "itv-purchase delete" [
   let base = ($base_url | default $BASE_URL)
   if ($platform | is-empty) { error make --unspanned { msg: "path parameter 'platform' must be non-empty" } }
   let qp = [(serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({platform: (encode-path-segment $platform)} | format pattern "/itv/purchase/{platform}") $qp)
+  let full_url = (build-url $base ({platform: (encode-path-segment $platform)} | format pattern "/itv/purchase/{platform}") $qp $auth.query)
   let req_body = {"profileToken": $profile_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"lang": $lang} | compact), body: $req_body}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"lang": $lang} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Returns the details of current subscription for specified payment platform.
@@ -2933,10 +3965,21 @@ export def "itv-purchase get-subscription" [
   let base = ($base_url | default $BASE_URL)
   if ($platform | is-empty) { error make --unspanned { msg: "path parameter 'platform' must be non-empty" } }
   let qp = [(serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({platform: (encode-path-segment $platform)} | format pattern "/itv/purchase/{platform}") $qp)
+  let full_url = (build-url $base ({platform: (encode-path-segment $platform)} | format pattern "/itv/purchase/{platform}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"lang": $lang} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"lang": $lang} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Confirms purchase and returns the details of purchased subscription for specified payment platform.
@@ -2965,12 +4008,23 @@ export def "itv-purchase confirm" [
   let base = ($base_url | default $BASE_URL)
   if ($platform | is-empty) { error make --unspanned { msg: "path parameter 'platform' must be non-empty" } }
   let qp = [(serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({platform: (encode-path-segment $platform)} | format pattern "/itv/purchase/{platform}") $qp)
+  let full_url = (build-url $base ({platform: (encode-path-segment $platform)} | format pattern "/itv/purchase/{platform}") $qp $auth.query)
   let req_body = {"cardToken": $card_token, "planId": $plan_id, "profileToken": $profile_token, "voucher": $voucher} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"lang": $lang} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"lang": $lang} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Confirms purchase and returns the details of purchased subscription for specified payment platform.
@@ -3000,12 +4054,23 @@ export def "itv-purchase-strong confirm" [
   let base = ($base_url | default $BASE_URL)
   if ($platform | is-empty) { error make --unspanned { msg: "path parameter 'platform' must be non-empty" } }
   let qp = [(serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({platform: (encode-path-segment $platform)} | format pattern "/itv/purchase/{platform}/strong") $qp)
+  let full_url = (build-url $base ({platform: (encode-path-segment $platform)} | format pattern "/itv/purchase/{platform}/strong") $qp $auth.query)
   let req_body = {"paymentMethodFromToken": $payment_method_from_token, "paymentMethodId": $payment_method_id, "planId": $plan_id, "profileToken": $profile_token, "voucher": $voucher} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"lang": $lang} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"lang": $lang} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Confirms purchase and returns the details of purchased subscription for specified payment platform.
@@ -3035,12 +4100,23 @@ export def "itv-purchase-withoffer confirm-with-offer" [
   let base = ($base_url | default $BASE_URL)
   if ($platform | is-empty) { error make --unspanned { msg: "path parameter 'platform' must be non-empty" } }
   let qp = [(serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({platform: (encode-path-segment $platform)} | format pattern "/itv/purchase/{platform}/withoffer") $qp)
+  let full_url = (build-url $base ({platform: (encode-path-segment $platform)} | format pattern "/itv/purchase/{platform}/withoffer") $qp $auth.query)
   let req_body = {"couponId": $coupon_id, "paymentMethodFromToken": $payment_method_from_token, "paymentMethodId": $payment_method_id, "planId": $plan_id, "profileToken": $profile_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"lang": $lang} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"lang": $lang} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Resubscription for a user.
@@ -3065,10 +4141,21 @@ export def "itv-resubscribe create" [
   let base = ($base_url | default $BASE_URL)
   if ($platform | is-empty) { error make --unspanned { msg: "path parameter 'platform' must be non-empty" } }
   let qp = [(serialize-qp "planId" $plan_id "scalar") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({platform: (encode-path-segment $platform)} | format pattern "/itv/resubscribe/{platform}") $qp)
+  let full_url = (build-url $base ({platform: (encode-path-segment $platform)} | format pattern "/itv/resubscribe/{platform}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"planId": $plan_id, "lang": $lang} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"planId": $plan_id, "lang": $lang} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Gets available Roku plans.
@@ -3089,10 +4176,21 @@ export def "itv-roku-plans get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/itv/roku/plans" $qp)
+  let full_url = (build-url $base "/itv/roku/plans" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"lang": $lang} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"lang": $lang} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Sends request to execute specified transaction.
@@ -3118,12 +4216,23 @@ export def "itv-roku-transaction create-execute" [
   let base = ($base_url | default $BASE_URL)
   if ($transactionid | is-empty) { error make --unspanned { msg: "path parameter 'transactionid' must be non-empty" } }
   let qp = [(serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({transactionid: (encode-path-segment $transactionid)} | format pattern "/itv/roku/transaction/{transactionid}") $qp)
+  let full_url = (build-url $base ({transactionid: (encode-path-segment $transactionid)} | format pattern "/itv/roku/transaction/{transactionid}") $qp $auth.query)
   let req_body = {"profileToken": $profile_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"lang": $lang} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"lang": $lang} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Checks the provided coupon id for a user. Only Stripe platform is currently supported.
@@ -3145,10 +4254,21 @@ export def "itv-save-offer get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/itv/save-offer" $qp)
+  let full_url = (build-url $base "/itv/save-offer" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"lang": $lang} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"lang": $lang} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Activates the discount for a user. Only Stripe platform is currently supported.
@@ -3172,12 +4292,23 @@ export def "itv-save-offer create-activate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/itv/save-offer" $qp)
+  let full_url = (build-url $base "/itv/save-offer" $qp $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"lang": $lang} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"lang": $lang} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Returns full price renewal state and reason for specific user.
@@ -3199,10 +4330,21 @@ export def "itv-subscription-fullpricerenewal get-full-price-renewal" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/itv/subscription/fullpricerenewal" $qp)
+  let full_url = (build-url $base "/itv/subscription/fullpricerenewal" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"lang": $lang} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"lang": $lang} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns status of latest payment intent.
@@ -3226,10 +4368,21 @@ export def "itv-subscription-status get" [
   let base = ($base_url | default $BASE_URL)
   if ($platform | is-empty) { error make --unspanned { msg: "path parameter 'platform' must be non-empty" } }
   let qp = [(serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({platform: (encode-path-segment $platform)} | format pattern "/itv/subscription/status/{platform}") $qp)
+  let full_url = (build-url $base ({platform: (encode-path-segment $platform)} | format pattern "/itv/subscription/status/{platform}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"lang": $lang} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"lang": $lang} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the state of subscription for any payment platform.
@@ -3251,10 +4404,21 @@ export def "itv-subscriptionstate get-subscription-state" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/itv/subscriptionstate" $qp)
+  let full_url = (build-url $base "/itv/subscriptionstate" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"lang": $lang} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"lang": $lang} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns an upcoming invoice
@@ -3276,10 +4440,21 @@ export def "itv-upcominginvoice get-upcoming-invoice" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/itv/upcominginvoice" $qp)
+  let full_url = (build-url $base "/itv/upcominginvoice" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"lang": $lang} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"lang": $lang} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Change payment method details.
@@ -3307,12 +4482,23 @@ export def "itv-update-intent-strong update-payment" [
   let base = ($base_url | default $BASE_URL)
   if ($platform | is-empty) { error make --unspanned { msg: "path parameter 'platform' must be non-empty" } }
   let qp = [(serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({platform: (encode-path-segment $platform)} | format pattern "/itv/updateIntent/strong/{platform}") $qp)
+  let full_url = (build-url $base ({platform: (encode-path-segment $platform)} | format pattern "/itv/updateIntent/strong/{platform}") $qp $auth.query)
   let req_body = {"paymentMethodFromToken": $payment_method_from_token, "paymentMethodId": $payment_method_id, "profileToken": $profile_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"lang": $lang} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"lang": $lang} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Change payment method details.
@@ -3340,12 +4526,23 @@ export def "itv-update-payment-strong update-method" [
   let base = ($base_url | default $BASE_URL)
   if ($platform | is-empty) { error make --unspanned { msg: "path parameter 'platform' must be non-empty" } }
   let qp = [(serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({platform: (encode-path-segment $platform)} | format pattern "/itv/updatePayment/strong/{platform}") $qp)
+  let full_url = (build-url $base ({platform: (encode-path-segment $platform)} | format pattern "/itv/updatePayment/strong/{platform}") $qp $auth.query)
   let req_body = {"paymentMethodFromToken": $payment_method_from_token, "paymentMethodId": $payment_method_id, "profileToken": $profile_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"lang": $lang} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"lang": $lang} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Checks the provided coupon id for a user. Only Stripe platform is currently supported.
@@ -3371,10 +4568,21 @@ export def "itv-voucher get" [
   if ($plan_id | is-empty) { error make --unspanned { msg: "path parameter 'planId' must be non-empty" } }
   if ($voucher_id | is-empty) { error make --unspanned { msg: "path parameter 'voucherId' must be non-empty" } }
   let qp = [(serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({plan_id: (encode-path-segment $plan_id), voucher_id: (encode-path-segment $voucher_id)} | format pattern "/itv/voucher/{plan_id}/{voucher_id}") $qp)
+  let full_url = (build-url $base ({plan_id: (encode-path-segment $plan_id), voucher_id: (encode-path-segment $voucher_id)} | format pattern "/itv/voucher/{plan_id}/{voucher_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"lang": $lang} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"lang": $lang} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Validates the coupon/voucher for specified payment platform.
@@ -3400,12 +4608,23 @@ export def "itv-voucher check" [
   let base = ($base_url | default $BASE_URL)
   if ($platform | is-empty) { error make --unspanned { msg: "path parameter 'platform' must be non-empty" } }
   let qp = [(serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({platform: (encode-path-segment $platform)} | format pattern "/itv/voucher/{platform}") $qp)
+  let full_url = (build-url $base ({platform: (encode-path-segment $platform)} | format pattern "/itv/voucher/{platform}") $qp $auth.query)
   let req_body = {"voucher": $voucher} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"lang": $lang} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"lang": $lang} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Returns an array of item lists with their first page of content resolved.
@@ -3437,10 +4656,21 @@ export def "lists list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ids" $ids "csv") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "max_rating" $max_rating "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "order_by" $order_by "scalar") (serialize-qp "item_type" $item_type "scalar") (serialize-qp "device" $device "scalar") (serialize-qp "sub" $sub "scalar") (serialize-qp "segments" $segments "csv") (serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/lists" $qp)
+  let full_url = (build-url $base "/lists" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"ids": $ids, "page_size": $page_size, "max_rating": $max_rating, "order": $order, "order_by": $order_by, "item_type": $item_type, "device": $device, "sub": $sub, "segments": $segments, "ff": $ff, "lang": $lang} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"ids": $ids, "page_size": $page_size, "max_rating": $max_rating, "order": $order, "order_by": $order_by, "item_type": $item_type, "device": $device, "sub": $sub, "segments": $segments, "ff": $ff, "lang": $lang} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns a list of items under the specified item list
@@ -3475,10 +4705,21 @@ export def "lists get" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "max_rating" $max_rating "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "order_by" $order_by "scalar") (serialize-qp "param" $param "scalar") (serialize-qp "item_type" $item_type "scalar") (serialize-qp "device" $device "scalar") (serialize-qp "sub" $sub "scalar") (serialize-qp "segments" $segments "csv") (serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/lists/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/lists/{id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "page_size": $page_size, "max_rating": $max_rating, "order": $order, "order_by": $order_by, "param": $param, "item_type": $item_type, "device": $device, "sub": $sub, "segments": $segments, "ff": $ff, "lang": $lang} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"page": $page, "page_size": $page_size, "max_rating": $max_rating, "order": $order, "order_by": $order_by, "param": $param, "item_type": $item_type, "device": $device, "sub": $sub, "segments": $segments, "ff": $ff, "lang": $lang} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns a page with the specified id. If targeting the search page you must url encode the search term as a parameter using the `q` key. For example if your browser path looks like `/search?q=the` then what you pass to this endpoint would look like `/page?path=/search%3Fq%3Dthe`.
@@ -3512,10 +4753,21 @@ export def "page get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "path" $path "scalar") (serialize-qp "list_page_size" $list_page_size "scalar") (serialize-qp "list_page_size_large" $list_page_size_large "scalar") (serialize-qp "max_list_prefetch" $max_list_prefetch "scalar") (serialize-qp "item_detail_expand" $item_detail_expand "scalar") (serialize-qp "item_detail_select_season" $item_detail_select_season "scalar") (serialize-qp "text_entry_format" $text_entry_format "scalar") (serialize-qp "max_rating" $max_rating "scalar") (serialize-qp "device" $device "scalar") (serialize-qp "sub" $sub "scalar") (serialize-qp "segments" $segments "csv") (serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/page" $qp)
+  let full_url = (build-url $base "/page" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"path": $path, "list_page_size": $list_page_size, "list_page_size_large": $list_page_size_large, "max_list_prefetch": $max_list_prefetch, "item_detail_expand": $item_detail_expand, "item_detail_select_season": $item_detail_select_season, "text_entry_format": $text_entry_format, "max_rating": $max_rating, "device": $device, "sub": $sub, "segments": $segments, "ff": $ff, "lang": $lang} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"path": $path, "list_page_size": $list_page_size, "list_page_size_large": $list_page_size_large, "max_list_prefetch": $max_list_prefetch, "item_detail_expand": $item_detail_expand, "item_detail_select_season": $item_detail_select_season, "text_entry_format": $text_entry_format, "max_rating": $max_rating, "device": $device, "sub": $sub, "segments": $segments, "ff": $ff, "lang": $lang} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 301]
 }
 
 # Returns the details of a Plan with the specified id.
@@ -3542,10 +4794,21 @@ export def "plans get" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "device" $device "scalar") (serialize-qp "sub" $sub "scalar") (serialize-qp "segments" $segments "csv") (serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/plans/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/plans/{id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"device": $device, "sub": $sub, "segments": $segments, "ff": $ff, "lang": $lang} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"device": $device, "sub": $sub, "segments": $segments, "ff": $ff, "lang": $lang} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Register a new user, creating them an account. Registration, when successful, will return an array of access tokens so the user is immediately signed in. It returns Catalog and Commerce scoped tokens for both Account and Profile. The Commerce ones are intended to allow the purchase of a subscription plan in the step after registration, without the user being prompted to enter their username and password again. An email will also be sent with a link they need to click to confirm their email address. This confirmation is done via the /verify-email endpoint.
@@ -3577,12 +4840,23 @@ export def "register create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/register" $qp)
+  let full_url = (build-url $base "/register" $qp $auth.query)
   let req_body = {"email": $email, "firstName": $first_name, "languageCode": $language_code, "lastName": $last_name, "marketing": $marketing, "password": $password, "pin": $pin, "segments": $segments} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"ff": $ff, "lang": $lang} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"ff": $ff, "lang": $lang} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Request the password of an account's primary profile be reset. Should be called when a user has forgotten their password. This will send an email with a password reset link to the email address of the primary profile of an account. The link, once clicked, should take the user to the "reset-password" page of the website. Here they will enter their new password and submit to the /reset-password endpoint here, along with the password reset token provided in the original link.
@@ -3607,12 +4881,23 @@ export def "request-password-reset create-forgot" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/request-password-reset" $qp)
+  let full_url = (build-url $base "/request-password-reset" $qp $auth.query)
   let req_body = {"email": $email} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"ff": $ff, "lang": $lang} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"ff": $ff, "lang": $lang} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # When a user requests to reset their password via the /request-password-reset endpoint, an email is sent to the email address of the primary profile of the account. This email contains a link with a reset token as query parameter. The link should take the user to the "reset-password" page of the website. From the reset-password page a user should enter the new password they wish to use. It should then be submitted to this endpoint, along with the reset token from the email link. The token should be provided in the body as resetToken property.
@@ -3638,12 +4923,23 @@ export def "reset-password reset" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/reset-password" $qp)
+  let full_url = (build-url $base "/reset-password" $qp $auth.query)
   let req_body = {"password": $password, "resetToken": $reset_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"ff": $ff, "lang": $lang} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"ff": $ff, "lang": $lang} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Returns public preview for Samsung based on the page '/samsung-preview' configured in PresentationManager. There is a hard limit of max 40 items to be returned. It splits evenly items count into the page rows, remaining items are added into the first row.
@@ -3663,10 +4959,21 @@ export def "samsung-preview get-public" [
 ]: nothing -> record<expires: int, expires_only: bool, sections: table<position: int, tiles: list, title: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/samsung-preview")
+  let full_url = (build-url $base "/samsung-preview" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns schedules for a defined set of channels over a requested period. Schedules are requested in hour blocks and returned grouped by the channel they belong to. For example, to load 12 hours of schedules for channels `4343` and `5234`, on 21/2/2017 starting from 08:00. ``` channels=4343,5234 date=2017-02-21 hour=8 duration=12 ``` Please remember that `date` and `hour` combined represent a normal datetime, so they should be converted to UTC on the client - this will help to avoid issues with EPG schedules near midnight. If a channel id is passed which doesn't exist then this endpoint will return an empty schedule list for it. If instead we returned 404, this would invalidate all other channel schedules in the same request which would be unfriendly for clients presenting these channel schedules.
@@ -3697,10 +5004,21 @@ export def "schedules get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "channels" $channels "csv") (serialize-qp "date" $date "scalar") (serialize-qp "hour" $hour "scalar") (serialize-qp "duration" $duration "scalar") (serialize-qp "intersect" $intersect "scalar") (serialize-qp "device" $device "scalar") (serialize-qp "sub" $sub "scalar") (serialize-qp "segments" $segments "csv") (serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/schedules" $qp)
+  let full_url = (build-url $base "/schedules" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"channels": $channels, "date": $date, "hour": $hour, "duration": $duration, "intersect": $intersect, "device": $device, "sub": $sub, "segments": $segments, "ff": $ff, "lang": $lang} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"channels": $channels, "date": $date, "hour": $hour, "duration": $duration, "intersect": $intersect, "device": $device, "sub": $sub, "segments": $segments, "ff": $ff, "lang": $lang} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Search the catalog of items and people.
@@ -3731,10 +5049,21 @@ export def "search list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "term" $term "scalar") (serialize-qp "include" $include "csv") (serialize-qp "group" $group "scalar") (serialize-qp "max_results" $max_results "scalar") (serialize-qp "max_rating" $max_rating "scalar") (serialize-qp "device" $device "scalar") (serialize-qp "sub" $sub "scalar") (serialize-qp "segments" $segments "csv") (serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/search" $qp)
+  let full_url = (build-url $base "/search" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"term": $term, "include": $include, "group": $group, "max_results": $max_results, "max_rating": $max_rating, "device": $device, "sub": $sub, "segments": $segments, "ff": $ff, "lang": $lang} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"term": $term, "include": $include, "group": $group, "max_results": $max_results, "max_rating": $max_rating, "device": $device, "sub": $sub, "segments": $segments, "ff": $ff, "lang": $lang} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # When an account is created an email is sent to the email address of the new account. This contains a link, which once clicked, verifies the email address of the account is correct. The link contains a token as a query parameter which should be passed as the authorization bearer token to this endpoint to complete email verification. The token has en expiry, so if the link is not clicked before it expires, the account holder may need to request a new verification email be sent. This can be done via the endpoint /account/request-email-verification.
@@ -3757,8 +5086,19 @@ export def "verify-email verify" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/verify-email" $qp)
+  let full_url = (build-url $base "/verify-email" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"ff": $ff, "lang": $lang} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"ff": $ff, "lang": $lang} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [204]
 }

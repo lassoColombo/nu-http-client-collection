@@ -8,7 +8,7 @@ const BASE_URL = "https://api.cloud-elements.com/elements/api-v2"
 # `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
 # where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o ECWID_TOKEN | default "" }
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o ECWID_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
@@ -40,14 +40,11 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
-# Trick: `url encode --all` over-encodes, then we decode the four unreserved
-# punctuation chars back. Pre-existing %XX sequences in the input survive
-# because `url encode --all` first turns their % into %25.
 def encode-path-segment [v: any]: nothing -> string {
   $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
-# Serialize an array-typed path parameter (issue 49.A). OpenAPI 3 `style: simple`
+# Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
 # (the default for path params) and Swagger 2 `collectionFormat: csv` both join
 # the elements with a literal comma WITHIN the single path segment, each element
 # RFC-3986-encoded individually (so a comma inside an element stays %2C). Without
@@ -58,60 +55,72 @@ def encode-path-array [v: any]: nothing -> string {
   if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
 }
 
-# Build URL from base, path, and optional query string
-def build-url [base: string, path: string, query?: string]: nothing -> string {
+# Build the request URL from base, path, and any number of pre-encoded query
+# fragments (param serializer output and/or the auth query). Each fragment is an
+# `&`-joinable `key=value` string already percent-encoded by its producer; empty
+# fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
+# delimiters are hand-spliced — and any query already on the base URL is merged in.
+def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
   let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
-  let result = ($parsed | upsert path $full_path)
-  if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
+  let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
+  $parsed | upsert path $full_path | upsert query $query | url join
 }
 
-# Build the dry-run record returned by --dry-run. Shape:
-#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
-#    auth: {scheme, location}}
-# `meta` carries logical-form data (the query record by spec name, the pre-serialization
-# body) that do-request itself cannot reconstruct from its wire-format args.
-def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
-  let m = ($meta | default {})
-  {
-    dry_run: true
-    method: $method
-    url: $url
-    query: ($m | get -o query | default {})
-    headers: $auth.headers
-    body: ($m | get -o body)
-    content_type: $content_type
-    timeout: $timeout
-    auth: {scheme: $auth.scheme, location: $auth.location}
-  }
+# Success policy: did this response succeed? Single source of truth, consulted by
+# handle-response and the HEAD header-unwrap. Empty ok_codes means the spec listed
+# none, so fall back to < 400. Otherwise: any 2xx, plus documented success codes.
+def status-ok [status: int, ok_codes: list<int>]: nothing -> bool {
+  if ($ok_codes | is-empty) { $status < 400 } else { ($status >= 200 and $status < 300) or ($status in $ok_codes) }
 }
 
-# Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
-  let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
-  let timeout = ($max_time | default 30min)
-  let ct = ($content_type | default "application/json")
-  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
-  let resp = match $method {
-    "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
-  }
-  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
-  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
+# Unwrap a `--full` HTTP response into the user-facing value. Response arrives
+# via pipeline; ok_codes gates the error throw (see status-ok).
+def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: record -> any {
+  let resp = $in
+  if $allow_errors { return $resp }
+  if not (status-ok $resp.status $ok_codes) { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } }
+  if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
+  if $resp.status == 204 { return null }
+  $resp.body
+}
+
+# GET — bodyless, honours --raw
+def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+}
+
+# POST — body + content-type
+def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# PUT — body + content-type
+def send-put [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http put --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http put --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# PATCH — body + content-type
+def send-patch [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http patch --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http patch --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# DELETE — body via --data
+def send-delete [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http delete --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url } else { http delete --headers $req.headers --content-type $req.content_type --data $body --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url }
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # Build a `multipart/form-data` envelope per RFC 7578. `file_fields` lists
 # the field names whose value should be read from disk as bytes; every
 # other field is sent as a text part (records/lists JSON-stringified).
-# Returns {content_type, body} ready to pass to `do-request`.
+# Returns {content_type, body}.
 # When `$dry_run` is true, file fields are NOT read from disk — they emit
 # an empty-bytes placeholder so callers can inspect the request shape
-# without the file existing on disk (issue 11.B).
+# without the file existing on disk.
 def build-multipart-body [parts: record, file_fields: list<string>, dry_run: bool = false]: nothing -> record {
   let boundary = $"----nu-(random chars --length 24)"
   let crlf = "\r\n"
@@ -201,14 +210,25 @@ export def "bulk-download create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/bulk/download")
+  let full_url = (build-url $base "/bulk/download" $auth.query)
   let req_body = {"apiLimit": $api_limit, "continueFromJobId": $continue_from_job_id, "docsHubDetails": $docs_hub_details, "filterDateField": $filter_date_field, "filterNulls": $filter_nulls, "format": $format, "from": $body_from, "limit": $limit, "notificationUrl": $notification_url, "objectName": $object_name, "pageSize": $page_size, "query": $query, "selectFields": $select_fields, "to": $body_to, "where": $body_where} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Fetch all the bulk jobs for an instance
@@ -234,12 +254,23 @@ export def "bulk-jobs get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "where" $qp_where "scalar") (serialize-qp "nextPage" $next_page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/bulk/jobs" $qp)
+  let full_url = (build-url $base "/bulk/jobs" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"where": $qp_where, "nextPage": $next_page, "pageSize": $page_size, "fields": $fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"where": $qp_where, "nextPage": $next_page, "pageSize": $page_size, "fields": $fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create an asynchronous bulk query job.
@@ -268,7 +299,7 @@ export def "bulk-query create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "lastRunDate" $last_run_date "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/bulk/query" $qp)
+  let full_url = (build-url $base "/bulk/query" $qp $auth.query)
   let req_body = {"metaData": $meta_data} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
@@ -276,7 +307,18 @@ export def "bulk-query create" [
   let extra_headers = {"Authorization": $authorization, "Elements-Async-Callback-Url": $elements_async_callback_url} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: ({"q": $q, "lastRunDate": $last_run_date, "from": $qp_from, "to": $qp_to} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"q": $q, "lastRunDate": $last_run_date, "from": $qp_from, "to": $qp_to} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/x-www-form-urlencoded"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Cancel an asynchronous bulk query job.
@@ -299,12 +341,23 @@ export def "bulk-cancel update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bulk/{id}/cancel"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bulk/{id}/cancel") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve the errors of a bulk job.
@@ -331,12 +384,23 @@ export def "bulk-errors get" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "pageSize" $page_size "scalar") (serialize-qp "nextPage" $next_page "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bulk/{id}/errors") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bulk/{id}/errors") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"pageSize": $page_size, "nextPage": $next_page, "fields": $fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"pageSize": $page_size, "nextPage": $next_page, "fields": $fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve the status of a bulk job.
@@ -359,12 +423,23 @@ export def "bulk-status get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bulk/{id}/status"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bulk/{id}/status") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve the results of an asynchronous bulk query.
@@ -390,12 +465,23 @@ export def "bulk get-by-object-name" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($object_name | is-empty) { error make --unspanned { msg: "path parameter 'objectName' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), object_name: (encode-path-segment $object_name)} | format pattern "/bulk/{id}/{object_name}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), object_name: (encode-path-segment $object_name)} | format pattern "/bulk/{id}/{object_name}") $auth.query)
   let accept_val = ($accept | default "text/csv")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Upload a file of objects to be bulk uploaded to the provider.
@@ -422,7 +508,7 @@ export def "bulk create-by-object-name" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($object_name | is-empty) { error make --unspanned { msg: "path parameter 'objectName' must be non-empty" } }
-  let full_url = (build-url $base ({object_name: (encode-path-segment $object_name)} | format pattern "/bulk/{object_name}"))
+  let full_url = (build-url $base ({object_name: (encode-path-segment $object_name)} | format pattern "/bulk/{object_name}") $auth.query)
   let req_body = {"metaData": $meta_data, "file": $file} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
@@ -431,7 +517,18 @@ export def "bulk create-by-object-name" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body ["file"] $dry_run)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: $mp.content_type
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $mp.body $insecure $raw $allow_errors $full [200]
 }
 
 # Find customers in the eCommerce system, using the provided CEQL search expression. If no search expression is provided, all records will be retrieved
@@ -457,12 +554,23 @@ export def "customers list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "where" $qp_where "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "nextPage" $next_page "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/customers" $qp)
+  let full_url = (build-url $base "/customers" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"where": $qp_where, "pageSize": $page_size, "nextPage": $next_page, "fields": $fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"where": $qp_where, "pageSize": $page_size, "nextPage": $next_page, "fields": $fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a new customer in eCommerce system.With the exception of the 'id' field, the required fields indicated in the 'Customer' model are those required to create a new customer
@@ -494,14 +602,25 @@ export def "customers create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/customers")
+  let full_url = (build-url $base "/customers" $auth.query)
   let req_body = {"billingPerson": $billing_person, "customerGroupId": $customer_group_id, "email": $email, "password": $password, "shippingAddresses": $shipping_addresses, "taxExempt": $tax_exempt, "taxId": $tax_id, "taxIdValid": $tax_id_valid} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Delete a customer associated with a given ID from your eCommerce system. Specifying a customer associated with a given ID that does not exist will result in an error message
@@ -524,12 +643,23 @@ export def "customers delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/customers/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/customers/{id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve a customer associated with a given ID from the eCommerce system. Specifying a customer with an ID that does not exist will result in an error response
@@ -552,12 +682,23 @@ export def "customers get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/customers/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/customers/{id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update an customer associated with a given ID in the eCommerce system.The update API uses the PATCH HTTP verb, so only those fields provided in the customer object will be updated, and those fields not provided will be left alone. Updating a customer with a specified ID that does not exist will result in an error response
@@ -591,14 +732,25 @@ export def "customers update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/customers/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/customers/{id}") $auth.query)
   let req_body = {"billingPerson": $billing_person, "customerGroupId": $customer_group_id, "email": $email, "password": $password, "shippingAddresses": $shipping_addresses, "taxExempt": $tax_exempt, "taxId": $tax_id, "taxIdValid": $tax_id_valid} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Find orders in the customer associated with a given ID. If the customer does not exist, an error response will be returned. If no orders are found in the given customer then an empty array will be returned
@@ -625,12 +777,23 @@ export def "customers-orders get" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "pageSize" $page_size "scalar") (serialize-qp "nextPage" $next_page "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/customers/{id}/orders") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/customers/{id}/orders") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"pageSize": $page_size, "nextPage": $next_page, "fields": $fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"pageSize": $page_size, "nextPage": $next_page, "fields": $fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get a list of all the available objects.
@@ -652,12 +815,23 @@ export def "objects get" [
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/objects")
+  let full_url = (build-url $base "/objects" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Elements-Version": $elements_version} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get swagger docs for an object.
@@ -685,12 +859,23 @@ export def "objects-docs get-name" [
   let base = ($base_url | default $BASE_URL)
   if ($object_name | is-empty) { error make --unspanned { msg: "path parameter 'objectName' must be non-empty" } }
   let qp = [(serialize-qp "discovery" $discovery "scalar") (serialize-qp "resolveReferences" $resolve_references "scalar") (serialize-qp "basic" $basic "scalar") (serialize-qp "version" $version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({object_name: (encode-path-segment $object_name)} | format pattern "/objects/{object_name}/docs") $qp)
+  let full_url = (build-url $base ({object_name: (encode-path-segment $object_name)} | format pattern "/objects/{object_name}/docs") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"discovery": $discovery, "resolveReferences": $resolve_references, "basic": $basic, "version": $version} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"discovery": $discovery, "resolveReferences": $resolve_references, "basic": $basic, "version": $version} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get a list of all the field for an object.
@@ -714,12 +899,23 @@ export def "objects-metadata get-name" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($object_name | is-empty) { error make --unspanned { msg: "path parameter 'objectName' must be non-empty" } }
-  let full_url = (build-url $base ({object_name: (encode-path-segment $object_name)} | format pattern "/objects/{object_name}/metadata"))
+  let full_url = (build-url $base ({object_name: (encode-path-segment $object_name)} | format pattern "/objects/{object_name}/metadata") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Elements-Version": $elements_version} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Find orders in the eCommerce system, using the provided CEQL search expression. If no search expression is provided, all records will be retrieved
@@ -745,12 +941,23 @@ export def "orders list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "where" $qp_where "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "nextPage" $next_page "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/orders" $qp)
+  let full_url = (build-url $base "/orders" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"where": $qp_where, "pageSize": $page_size, "nextPage": $next_page, "fields": $fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"where": $qp_where, "pageSize": $page_size, "nextPage": $next_page, "fields": $fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create an order in the eCommerce system.With the exception of the 'id' field, the required fields indicated in the 'Order' model are those required to create a new order.The paymentStatus can only be AWAITING_PAYMENT or INCOMPLETE.The fulfillmentStatus can only be AWAITING_PROCESSING
@@ -805,14 +1012,25 @@ export def "orders create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/orders")
+  let full_url = (build-url $base "/orders" $auth.query)
   let req_body = {"billingPerson": $billing_person, "couponDiscount": $coupon_discount, "customerId": $customer_id, "customerTaxExempt": $customer_tax_exempt, "customerTaxId": $customer_tax_id, "customerTaxIdValid": $customer_tax_id_valid, "discount": $discount, "email": $email, "fulfillmentStatus": $fulfillment_status, "globalReferer": $global_referer, "hidden": $hidden, "items": $items, "membershipBasedDiscount": $membership_based_discount, "orderComments": $order_comments, "paymentMethod": $payment_method, "paymentModule": $payment_module, "paymentStatus": $payment_status, "privateAdminNotes": $private_admin_notes, "refererUrl": $referer_url, "reversedTaxApplied": $reversed_tax_applied, "sample": $sample, "shippingMethod": $shipping_method, "shippingOption": $shipping_option, "shippingPerson": $shipping_person, "subtotal": $subtotal, "tax": $tax, "total": $total, "totalAndMembershipBasedDiscount": $total_and_membership_based_discount, "volumeDiscount": $volume_discount} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Delete an order associated with a given ID from your eCommerce system. Specifying an order associated with a given ID that does not exist will result in an error message
@@ -835,12 +1053,23 @@ export def "orders delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/orders/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/orders/{id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve an order associated with a given ID from the eCommerce system. Specifying an order with an ID that does not exist will result in an error response
@@ -863,12 +1092,23 @@ export def "orders get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/orders/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/orders/{id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update an order associated with a given ID in the eCommerce system. The update API uses the PATCH HTTP verb, so only those fields provided in the order object will be updated, and those fields not provided will be left alone. Updating an order with a specified ID that does not exist will result in an error response
@@ -928,14 +1168,25 @@ export def "orders update" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "action" $action "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/orders/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/orders/{id}") $qp $auth.query)
   let req_body = {"billingPerson": $billing_person, "couponDiscount": $coupon_discount, "customerId": $customer_id, "customerTaxExempt": $customer_tax_exempt, "customerTaxId": $customer_tax_id, "customerTaxIdValid": $customer_tax_id_valid, "discount": $discount, "email": $email, "fulfillmentStatus": $fulfillment_status, "globalReferer": $global_referer, "hidden": $hidden, "items": $items, "membershipBasedDiscount": $membership_based_discount, "orderComments": $order_comments, "paymentModule": $payment_module, "paymentStatus": $payment_status, "privateAdminNotes": $private_admin_notes, "refererUrl": $referer_url, "reversedTaxApplied": $reversed_tax_applied, "sample": $sample, "shippingMethod": $shipping_method, "shippingOption": $shipping_option, "shippingPerson": $shipping_person, "subtotal": $subtotal, "tax": $tax, "taxesOnShipping": $taxes_on_shipping, "total": $total, "totalAndMembershipBasedDiscount": $total_and_membership_based_discount, "volumeDiscount": $volume_discount} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"action": $action} | compact), body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: ({"action": $action} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve the payments in the eCommerce system for the specified order
@@ -962,12 +1213,23 @@ export def "orders-payments get" [
   let base = ($base_url | default $BASE_URL)
   if ($order_id | is-empty) { error make --unspanned { msg: "path parameter 'orderId' must be non-empty" } }
   let qp = [(serialize-qp "pageSize" $page_size "scalar") (serialize-qp "nextPage" $next_page "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({order_id: (encode-path-segment $order_id)} | format pattern "/orders/{order_id}/payments") $qp)
+  let full_url = (build-url $base ({order_id: (encode-path-segment $order_id)} | format pattern "/orders/{order_id}/payments") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"pageSize": $page_size, "nextPage": $next_page, "fields": $fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"pageSize": $page_size, "nextPage": $next_page, "fields": $fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve the refunds in the eCommerce system for the specified order
@@ -994,12 +1256,23 @@ export def "orders-refunds get" [
   let base = ($base_url | default $BASE_URL)
   if ($order_id | is-empty) { error make --unspanned { msg: "path parameter 'orderId' must be non-empty" } }
   let qp = [(serialize-qp "pageSize" $page_size "scalar") (serialize-qp "nextPage" $next_page "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({order_id: (encode-path-segment $order_id)} | format pattern "/orders/{order_id}/refunds") $qp)
+  let full_url = (build-url $base ({order_id: (encode-path-segment $order_id)} | format pattern "/orders/{order_id}/refunds") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"pageSize": $page_size, "nextPage": $next_page, "fields": $fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"pageSize": $page_size, "nextPage": $next_page, "fields": $fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Ping the Element to confirm that the Hub Element has a heartbeat. If the Element does not have a heartbeat, an error message will be returned.
@@ -1020,12 +1293,23 @@ export def "ping get" [
 ]: nothing -> record<dateTime: string, endpoint: string, valid: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/ping")
+  let full_url = (build-url $base "/ping" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Find products in the eCommerce system, using the provided CEQL search expression. The search expression in CEQL is the WHERE clause in a typical SQL query, but without the WHERE keyword. If no search expression is provided, all records will be retrieved
@@ -1051,12 +1335,23 @@ export def "products list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "where" $qp_where "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "nextPage" $next_page "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/products" $qp)
+  let full_url = (build-url $base "/products" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"where": $qp_where, "pageSize": $page_size, "nextPage": $next_page, "fields": $fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"where": $qp_where, "pageSize": $page_size, "nextPage": $next_page, "fields": $fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a new product in eCommerce system.With the exception of the 'id' field, the required fields indicated in the 'Product' model are those required to create a new product
@@ -1119,14 +1414,25 @@ export def "products create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/products")
+  let full_url = (build-url $base "/products" $auth.query)
   let req_body = {"attributes": $attributes, "categoryIds": $category_ids, "compareAtPrice": $compare_at_price, "compareToPrice": $compare_to_price, "created": $created, "defaultCategoryId": $default_category_id, "description": $description, "dimensions": $dimensions, "enabled": $enabled, "favorites": $favorites, "fixedShippingRate": $fixed_shipping_rate, "fixedShippingRateOnly": $fixed_shipping_rate_only, "galleryImages": $gallery_images, "googleItemCondition": $google_item_condition, "isShippingRequired": $is_shipping_required, "name": $name, "options": $options, "price": $price, "productClassId": $product_class_id, "quantity": $quantity, "relatedProducts": $related_products, "seoDescription": $seo_description, "seoTitle": $seo_title, "shipping": $shipping, "showOnFrontpage": $show_on_frontpage, "sku": $sku, "tax": $tax, "taxes": $taxes, "warningLimit": $warning_limit, "weight": $weight, "wholesalePrices": $wholesale_prices} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Delete a product associated with a given ID from your eCommerce system. Specifying a product associated with a given ID that does not exist will result in an error message
@@ -1149,12 +1455,23 @@ export def "products delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/products/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/products/{id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve a product associated with a given ID from the eCommerce system. Specifying a product with an ID that does not exist will result in an error response
@@ -1177,12 +1494,23 @@ export def "products get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/products/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/products/{id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update a product associated with a given ID in the eCommerce system. The update API uses the PATCH HTTP verb, so only those fields provided in the product object will be updated, and those fields not provided will be left alone. Updating a product with a specified ID that does not exist will result in an error response. Update supports the following fields: sku, quantity, trackQuantity, quantityDelta, warningLimit, name, price, weight, tangible, enabled, fixedShippingRateOnly, fixedShippingRate, description, wholesalePrices, compareAtPrice, productClassId
@@ -1244,14 +1572,25 @@ export def "products update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/products/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/products/{id}") $auth.query)
   let req_body = {"attributes": $attributes, "categoryIds": $category_ids, "compareAtPrice": $compare_at_price, "compareToPrice": $compare_to_price, "defaultCategoryId": $default_category_id, "description": $description, "dimensions": $dimensions, "enabled": $enabled, "fixedShippingRate": $fixed_shipping_rate, "fixedShippingRateOnly": $fixed_shipping_rate_only, "galleryImages": $gallery_images, "googleItemCondition": $google_item_condition, "isShippingRequired": $is_shipping_required, "name": $name, "options": $options, "price": $price, "productClassId": $product_class_id, "quantity": $quantity, "relatedProducts": $related_products, "seoDescription": $seo_description, "seoTitle": $seo_title, "shipping": $shipping, "showOnFrontpage": $show_on_frontpage, "sku": $sku, "tax": $tax, "taxes": $taxes, "warningLimit": $warning_limit, "weight": $weight, "wholesalePrices": $wholesale_prices} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Search for {objectName}
@@ -1279,12 +1618,23 @@ export def "object-name list" [
   let base = ($base_url | default $BASE_URL)
   if ($object_name | is-empty) { error make --unspanned { msg: "path parameter 'objectName' must be non-empty" } }
   let qp = [(serialize-qp "where" $qp_where "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "nextPage" $next_page "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({object_name: (encode-path-segment $object_name)} | format pattern "/{object_name}") $qp)
+  let full_url = (build-url $base ({object_name: (encode-path-segment $object_name)} | format pattern "/{object_name}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"where": $qp_where, "pageSize": $page_size, "nextPage": $next_page, "fields": $fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"where": $qp_where, "pageSize": $page_size, "nextPage": $next_page, "fields": $fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create an {objectName}
@@ -1309,14 +1659,25 @@ export def "object-name create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($object_name | is-empty) { error make --unspanned { msg: "path parameter 'objectName' must be non-empty" } }
-  let full_url = (build-url $base ({object_name: (encode-path-segment $object_name)} | format pattern "/{object_name}"))
+  let full_url = (build-url $base ({object_name: (encode-path-segment $object_name)} | format pattern "/{object_name}") $auth.query)
   let req_body = {"objectField": $object_field} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Delete an {objectName}
@@ -1341,12 +1702,23 @@ export def "object-name delete" [
   let base = ($base_url | default $BASE_URL)
   if ($object_name | is-empty) { error make --unspanned { msg: "path parameter 'objectName' must be non-empty" } }
   if ($object_id | is-empty) { error make --unspanned { msg: "path parameter 'objectId' must be non-empty" } }
-  let full_url = (build-url $base ({object_name: (encode-path-segment $object_name), object_id: (encode-path-segment $object_id)} | format pattern "/{object_name}/{object_id}"))
+  let full_url = (build-url $base ({object_name: (encode-path-segment $object_name), object_id: (encode-path-segment $object_id)} | format pattern "/{object_name}/{object_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve an {objectName}
@@ -1372,12 +1744,23 @@ export def "object-name get" [
   let base = ($base_url | default $BASE_URL)
   if ($object_name | is-empty) { error make --unspanned { msg: "path parameter 'objectName' must be non-empty" } }
   if ($object_id | is-empty) { error make --unspanned { msg: "path parameter 'objectId' must be non-empty" } }
-  let full_url = (build-url $base ({object_name: (encode-path-segment $object_name), object_id: (encode-path-segment $object_id)} | format pattern "/{object_name}/{object_id}"))
+  let full_url = (build-url $base ({object_name: (encode-path-segment $object_name), object_id: (encode-path-segment $object_id)} | format pattern "/{object_name}/{object_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update an {objectName}
@@ -1404,14 +1787,25 @@ export def "object-name update-by-object-name-object-id" [
   let base = ($base_url | default $BASE_URL)
   if ($object_name | is-empty) { error make --unspanned { msg: "path parameter 'objectName' must be non-empty" } }
   if ($object_id | is-empty) { error make --unspanned { msg: "path parameter 'objectId' must be non-empty" } }
-  let full_url = (build-url $base ({object_name: (encode-path-segment $object_name), object_id: (encode-path-segment $object_id)} | format pattern "/{object_name}/{object_id}"))
+  let full_url = (build-url $base ({object_name: (encode-path-segment $object_name), object_id: (encode-path-segment $object_id)} | format pattern "/{object_name}/{object_id}") $auth.query)
   let req_body = {"objectField": $object_field} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Update an {objectName}
@@ -1438,14 +1832,25 @@ export def "object-name update-by-object-name-object-id-1" [
   let base = ($base_url | default $BASE_URL)
   if ($object_name | is-empty) { error make --unspanned { msg: "path parameter 'objectName' must be non-empty" } }
   if ($object_id | is-empty) { error make --unspanned { msg: "path parameter 'objectId' must be non-empty" } }
-  let full_url = (build-url $base ({object_name: (encode-path-segment $object_name), object_id: (encode-path-segment $object_id)} | format pattern "/{object_name}/{object_id}"))
+  let full_url = (build-url $base ({object_name: (encode-path-segment $object_name), object_id: (encode-path-segment $object_id)} | format pattern "/{object_name}/{object_id}") $auth.query)
   let req_body = {"objectField": $object_field} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Search for {childObjectName}
@@ -1477,12 +1882,23 @@ export def "object-name list-1" [
   if ($object_id | is-empty) { error make --unspanned { msg: "path parameter 'objectId' must be non-empty" } }
   if ($child_object_name | is-empty) { error make --unspanned { msg: "path parameter 'childObjectName' must be non-empty" } }
   let qp = [(serialize-qp "where" $qp_where "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "nextPage" $next_page "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({object_name: (encode-path-segment $object_name), object_id: (encode-path-segment $object_id), child_object_name: (encode-path-segment $child_object_name)} | format pattern "/{object_name}/{object_id}/{child_object_name}") $qp)
+  let full_url = (build-url $base ({object_name: (encode-path-segment $object_name), object_id: (encode-path-segment $object_id), child_object_name: (encode-path-segment $child_object_name)} | format pattern "/{object_name}/{object_id}/{child_object_name}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"where": $qp_where, "pageSize": $page_size, "nextPage": $next_page, "fields": $fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"where": $qp_where, "pageSize": $page_size, "nextPage": $next_page, "fields": $fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create an {objectName}
@@ -1511,14 +1927,25 @@ export def "object-name create-by-child" [
   if ($object_name | is-empty) { error make --unspanned { msg: "path parameter 'objectName' must be non-empty" } }
   if ($object_id | is-empty) { error make --unspanned { msg: "path parameter 'objectId' must be non-empty" } }
   if ($child_object_name | is-empty) { error make --unspanned { msg: "path parameter 'childObjectName' must be non-empty" } }
-  let full_url = (build-url $base ({object_name: (encode-path-segment $object_name), object_id: (encode-path-segment $object_id), child_object_name: (encode-path-segment $child_object_name)} | format pattern "/{object_name}/{object_id}/{child_object_name}"))
+  let full_url = (build-url $base ({object_name: (encode-path-segment $object_name), object_id: (encode-path-segment $object_id), child_object_name: (encode-path-segment $child_object_name)} | format pattern "/{object_name}/{object_id}/{child_object_name}") $auth.query)
   let req_body = {"objectField": $object_field} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Delete an {childObjectName}
@@ -1547,12 +1974,23 @@ export def "object-name delete-by-child" [
   if ($object_id | is-empty) { error make --unspanned { msg: "path parameter 'objectId' must be non-empty" } }
   if ($child_object_name | is-empty) { error make --unspanned { msg: "path parameter 'childObjectName' must be non-empty" } }
   if ($child_object_id | is-empty) { error make --unspanned { msg: "path parameter 'childObjectId' must be non-empty" } }
-  let full_url = (build-url $base ({object_name: (encode-path-segment $object_name), object_id: (encode-path-segment $object_id), child_object_name: (encode-path-segment $child_object_name), child_object_id: (encode-path-segment $child_object_id)} | format pattern "/{object_name}/{object_id}/{child_object_name}/{child_object_id}"))
+  let full_url = (build-url $base ({object_name: (encode-path-segment $object_name), object_id: (encode-path-segment $object_id), child_object_name: (encode-path-segment $child_object_name), child_object_id: (encode-path-segment $child_object_id)} | format pattern "/{object_name}/{object_id}/{child_object_name}/{child_object_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve an {childObjectName}
@@ -1581,12 +2019,23 @@ export def "object-name get-by-child" [
   if ($object_id | is-empty) { error make --unspanned { msg: "path parameter 'objectId' must be non-empty" } }
   if ($child_object_name | is-empty) { error make --unspanned { msg: "path parameter 'childObjectName' must be non-empty" } }
   if ($child_object_id | is-empty) { error make --unspanned { msg: "path parameter 'childObjectId' must be non-empty" } }
-  let full_url = (build-url $base ({object_name: (encode-path-segment $object_name), object_id: (encode-path-segment $object_id), child_object_name: (encode-path-segment $child_object_name), child_object_id: (encode-path-segment $child_object_id)} | format pattern "/{object_name}/{object_id}/{child_object_name}/{child_object_id}"))
+  let full_url = (build-url $base ({object_name: (encode-path-segment $object_name), object_id: (encode-path-segment $object_id), child_object_name: (encode-path-segment $child_object_name), child_object_id: (encode-path-segment $child_object_id)} | format pattern "/{object_name}/{object_id}/{child_object_name}/{child_object_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update an {childObjectName}
@@ -1617,14 +2066,25 @@ export def "object-name update-by-child-by-object-name-object-id-child-object-na
   if ($object_id | is-empty) { error make --unspanned { msg: "path parameter 'objectId' must be non-empty" } }
   if ($child_object_name | is-empty) { error make --unspanned { msg: "path parameter 'childObjectName' must be non-empty" } }
   if ($child_object_id | is-empty) { error make --unspanned { msg: "path parameter 'childObjectId' must be non-empty" } }
-  let full_url = (build-url $base ({object_name: (encode-path-segment $object_name), object_id: (encode-path-segment $object_id), child_object_name: (encode-path-segment $child_object_name), child_object_id: (encode-path-segment $child_object_id)} | format pattern "/{object_name}/{object_id}/{child_object_name}/{child_object_id}"))
+  let full_url = (build-url $base ({object_name: (encode-path-segment $object_name), object_id: (encode-path-segment $object_id), child_object_name: (encode-path-segment $child_object_name), child_object_id: (encode-path-segment $child_object_id)} | format pattern "/{object_name}/{object_id}/{child_object_name}/{child_object_id}") $auth.query)
   let req_body = {"objectField": $object_field} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Update an {childObjectName}
@@ -1655,12 +2115,23 @@ export def "object-name update-by-child-by-object-name-object-id-child-object-na
   if ($object_id | is-empty) { error make --unspanned { msg: "path parameter 'objectId' must be non-empty" } }
   if ($child_object_name | is-empty) { error make --unspanned { msg: "path parameter 'childObjectName' must be non-empty" } }
   if ($child_object_id | is-empty) { error make --unspanned { msg: "path parameter 'childObjectId' must be non-empty" } }
-  let full_url = (build-url $base ({object_name: (encode-path-segment $object_name), object_id: (encode-path-segment $object_id), child_object_name: (encode-path-segment $child_object_name), child_object_id: (encode-path-segment $child_object_id)} | format pattern "/{object_name}/{object_id}/{child_object_name}/{child_object_id}"))
+  let full_url = (build-url $base ({object_name: (encode-path-segment $object_name), object_id: (encode-path-segment $object_id), child_object_name: (encode-path-segment $child_object_name), child_object_id: (encode-path-segment $child_object_id)} | format pattern "/{object_name}/{object_id}/{child_object_name}/{child_object_id}") $auth.query)
   let req_body = {"objectField": $object_field} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }

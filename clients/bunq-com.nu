@@ -8,7 +8,7 @@ const BASE_URL = "https://public-api.sandbox.bunq.com/v1"
 # `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
 # where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o BUNQ_API_TOKEN | default "" }
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o BUNQ_API_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
@@ -40,14 +40,11 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
-# Trick: `url encode --all` over-encodes, then we decode the four unreserved
-# punctuation chars back. Pre-existing %XX sequences in the input survive
-# because `url encode --all` first turns their % into %25.
 def encode-path-segment [v: any]: nothing -> string {
   $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
-# Serialize an array-typed path parameter (issue 49.A). OpenAPI 3 `style: simple`
+# Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
 # (the default for path params) and Swagger 2 `collectionFormat: csv` both join
 # the elements with a literal comma WITHIN the single path segment, each element
 # RFC-3986-encoded individually (so a comma inside an element stays %2C). Without
@@ -58,51 +55,57 @@ def encode-path-array [v: any]: nothing -> string {
   if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
 }
 
-# Build URL from base, path, and optional query string
-def build-url [base: string, path: string, query?: string]: nothing -> string {
+# Build the request URL from base, path, and any number of pre-encoded query
+# fragments (param serializer output and/or the auth query). Each fragment is an
+# `&`-joinable `key=value` string already percent-encoded by its producer; empty
+# fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
+# delimiters are hand-spliced — and any query already on the base URL is merged in.
+def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
   let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
-  let result = ($parsed | upsert path $full_path)
-  if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
+  let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
+  $parsed | upsert path $full_path | upsert query $query | url join
 }
 
-# Build the dry-run record returned by --dry-run. Shape:
-#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
-#    auth: {scheme, location}}
-# `meta` carries logical-form data (the query record by spec name, the pre-serialization
-# body) that do-request itself cannot reconstruct from its wire-format args.
-def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
-  let m = ($meta | default {})
-  {
-    dry_run: true
-    method: $method
-    url: $url
-    query: ($m | get -o query | default {})
-    headers: $auth.headers
-    body: ($m | get -o body)
-    content_type: $content_type
-    timeout: $timeout
-    auth: {scheme: $auth.scheme, location: $auth.location}
-  }
+# Success policy: did this response succeed? Single source of truth, consulted by
+# handle-response and the HEAD header-unwrap. Empty ok_codes means the spec listed
+# none, so fall back to < 400. Otherwise: any 2xx, plus documented success codes.
+def status-ok [status: int, ok_codes: list<int>]: nothing -> bool {
+  if ($ok_codes | is-empty) { $status < 400 } else { ($status >= 200 and $status < 300) or ($status in $ok_codes) }
 }
 
-# Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
-  let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
-  let timeout = ($max_time | default 30min)
-  let ct = ($content_type | default "application/json")
-  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
-  let resp = match $method {
-    "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
-  }
-  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
-  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
+# Unwrap a `--full` HTTP response into the user-facing value. Response arrives
+# via pipeline; ok_codes gates the error throw (see status-ok).
+def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: record -> any {
+  let resp = $in
+  if $allow_errors { return $resp }
+  if not (status-ok $resp.status $ok_codes) { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } }
+  if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
+  if $resp.status == 204 { return null }
+  $resp.body
+}
+
+# GET — bodyless, honours --raw
+def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+}
+
+# POST — body + content-type
+def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# PUT — body + content-type
+def send-put [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http put --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http put --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# DELETE — body via --data
+def send-delete [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http delete --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url } else { http delete --headers $req.headers --content-type $req.content_type --data $body --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url }
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 def base-url-completer [] { ["https://public-api.sandbox.bunq.com/v1" "https://api.bunq.com/v1"] }
@@ -158,14 +161,25 @@ export def "attachment-public create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/attachment-public")
+  let full_url = (build-url $base "/attachment-public" $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get the raw content of a specific attachment.
@@ -194,12 +208,23 @@ export def "attachment-public-content list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($attachment_public_uuid | is-empty) { error make --unspanned { msg: "path parameter 'attachment-publicUUID' must be non-empty" } }
-  let full_url = (build-url $base ({attachment_public_uuid: (encode-path-segment $attachment_public_uuid)} | format pattern "/attachment-public/{attachment_public_uuid}/content"))
+  let full_url = (build-url $base ({attachment_public_uuid: (encode-path-segment $attachment_public_uuid)} | format pattern "/attachment-public/{attachment_public_uuid}/content") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get a specific attachment's metadata through its UUID. The Content-Type header of the response will describe the MIME type of the attachment file.
@@ -228,12 +253,23 @@ export def "attachment-public get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({item_id: (encode-path-segment $item_id)} | format pattern "/attachment-public/{item_id}"))
+  let full_url = (build-url $base ({item_id: (encode-path-segment $item_id)} | format pattern "/attachment-public/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Avatars are public images used to represent you or your company. Avatars are used to represent users, monetary accounts and cash registers. Avatars cannot be deleted, only replaced. Avatars can be updated after uploading the image you would like to use through AttachmentPublic. Using the attachment_public_uuid which is returned you can update your Avatar. Avatars used for cash registers and company accounts will be reviewed by bunq.
@@ -262,14 +298,25 @@ export def "avatar create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/avatar")
+  let full_url = (build-url $base "/avatar" $auth.query)
   let req_body = {"uuid": $uuid} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Avatars are public images used to represent you or your company. Avatars are used to represent users, monetary accounts and cash registers. Avatars cannot be deleted, only replaced. Avatars can be updated after uploading the image you would like to use through AttachmentPublic. Using the attachment_public_uuid which is returned you can update your Avatar. Avatars used for cash registers and company accounts will be reviewed by bunq.
@@ -298,12 +345,23 @@ export def "avatar get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({item_id: (encode-path-segment $item_id)} | format pattern "/avatar/{item_id}"))
+  let full_url = (build-url $base ({item_id: (encode-path-segment $item_id)} | format pattern "/avatar/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get a collection of Devices. A Device is either a DevicePhone or a DeviceServer.
@@ -330,12 +388,23 @@ export def "device list" [
 ]: nothing -> table<DeviceServer: record<description: string, permitted_ips: list, secret: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/device")
+  let full_url = (build-url $base "/device" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get a collection of all the DeviceServers you have created.
@@ -362,12 +431,23 @@ export def "device-server list" [
 ]: nothing -> table<created: string, description: string, id: int, ip: string, status: string, updated: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/device-server")
+  let full_url = (build-url $base "/device-server" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a new DeviceServer providing the installation token in the header and signing the request with the private part of the key you used to create the installation. The API Key that you are using will be bound to the IP address of the DeviceServer which you have created.Using a Wildcard API Key gives you the freedom to make API calls even if the IP address has changed after the POST device-server.Find out more at this link https:/bunq.com/en/apikey-dynamic-ip (https:/bunq.com/en/apikey-dynamic-ip).
@@ -398,14 +478,25 @@ export def "device-server create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/device-server")
+  let full_url = (build-url $base "/device-server" $auth.query)
   let req_body = {"description": $description, "permitted_ips": $permitted_ips, "secret": $secret} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get one of your DeviceServers.
@@ -434,12 +525,23 @@ export def "device-server get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({item_id: (encode-path-segment $item_id)} | format pattern "/device-server/{item_id}"))
+  let full_url = (build-url $base ({item_id: (encode-path-segment $item_id)} | format pattern "/device-server/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get a single Device. A Device is either a DevicePhone or a DeviceServer.
@@ -468,12 +570,23 @@ export def "device get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({item_id: (encode-path-segment $item_id)} | format pattern "/device/{item_id}"))
+  let full_url = (build-url $base ({item_id: (encode-path-segment $item_id)} | format pattern "/device/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # You must have an active session to make this call. This call returns the Id of the the Installation you are using in your session.
@@ -500,12 +613,23 @@ export def "installation list" [
 ]: nothing -> table<id: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/installation")
+  let full_url = (build-url $base "/installation" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # This is the only API call that does not require you to use the "X-Bunq-Client-Authentication" and "X-Bunq-Client-Signature" headers. You provide the server with the public part of the key pair that you are going to use to create the value of the signature header for all future API calls. The server creates an installation for you. Store the Installation Token and ServerPublicKey from the response. This token is used in the "X-Bunq-Client-Authentication" header for the creation of a DeviceServer and SessionServer.
@@ -534,14 +658,25 @@ export def "installation create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/installation")
+  let full_url = (build-url $base "/installation" $auth.query)
   let req_body = {"client_public_key": $client_public_key} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Show the ServerPublicKey for this Installation.
@@ -570,12 +705,23 @@ export def "installation-server-public-key list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($installation_id | is-empty) { error make --unspanned { msg: "path parameter 'installationID' must be non-empty" } }
-  let full_url = (build-url $base ({installation_id: (encode-path-segment $installation_id)} | format pattern "/installation/{installation_id}/server-public-key"))
+  let full_url = (build-url $base ({installation_id: (encode-path-segment $installation_id)} | format pattern "/installation/{installation_id}/server-public-key") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # You must have an active session to make this call. This call is used to check whether the Id you provide is the Id of your current installation or not.
@@ -604,12 +750,23 @@ export def "installation get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({item_id: (encode-path-segment $item_id)} | format pattern "/installation/{item_id}"))
+  let full_url = (build-url $base ({item_id: (encode-path-segment $item_id)} | format pattern "/installation/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Register a Payment Service Provider and provide credentials
@@ -640,14 +797,25 @@ export def "payment-service-provider-credential create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/payment-service-provider-credential")
+  let full_url = (build-url $base "/payment-service-provider-credential" $auth.query)
   let req_body = {"client_payment_service_provider_certificate": $client_payment_service_provider_certificate, "client_payment_service_provider_certificate_chain": $client_payment_service_provider_certificate_chain, "client_public_key_signature": $client_public_key_signature} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Register a Payment Service Provider and provide credentials
@@ -676,12 +844,23 @@ export def "payment-service-provider-credential get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({item_id: (encode-path-segment $item_id)} | format pattern "/payment-service-provider-credential/{item_id}"))
+  let full_url = (build-url $base ({item_id: (encode-path-segment $item_id)} | format pattern "/payment-service-provider-credential/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # View endpoint for place opening periods.
@@ -712,12 +891,23 @@ export def "place-lookup-photo-content list" [
   let base = ($base_url | default $BASE_URL)
   if ($place_lookup_id | is-empty) { error make --unspanned { msg: "path parameter 'place-lookupID' must be non-empty" } }
   if ($photo_id | is-empty) { error make --unspanned { msg: "path parameter 'photoID' must be non-empty" } }
-  let full_url = (build-url $base ({place_lookup_id: (encode-path-segment $place_lookup_id), photo_id: (encode-path-segment $photo_id)} | format pattern "/place-lookup/{place_lookup_id}/photo/{photo_id}/content"))
+  let full_url = (build-url $base ({place_lookup_id: (encode-path-segment $place_lookup_id), photo_id: (encode-path-segment $photo_id)} | format pattern "/place-lookup/{place_lookup_id}/photo/{photo_id}/content") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Used to create a sandbox userCompany.
@@ -746,14 +936,25 @@ export def "sandbox-user-company create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/sandbox-user-company")
+  let full_url = (build-url $base "/sandbox-user-company" $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Used to create a sandbox userPerson.
@@ -782,14 +983,25 @@ export def "sandbox-user-person create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/sandbox-user-person")
+  let full_url = (build-url $base "/sandbox-user-person" $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # An endpoint that will always throw an error.
@@ -818,14 +1030,25 @@ export def "server-error create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/server-error")
+  let full_url = (build-url $base "/server-error" $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Create a new session for a DeviceServer. Provide the Installation token in the "X-Bunq-Client-Authentication" header. And don't forget to create the "X-Bunq-Client-Signature" header. The response contains a Session token that should be used for as the "X-Bunq-Client-Authentication" header for all future API calls. The ip address making this call needs to match the ip address bound to your API key.
@@ -854,14 +1077,25 @@ export def "session-server create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/session-server")
+  let full_url = (build-url $base "/session-server" $auth.query)
   let req_body = {"secret": $secret} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes the current session.
@@ -890,12 +1124,23 @@ export def "session delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({item_id: (encode-path-segment $item_id)} | format pattern "/session/{item_id}"))
+  let full_url = (build-url $base ({item_id: (encode-path-segment $item_id)} | format pattern "/session/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Get a collection of all available users.
@@ -922,12 +1167,23 @@ export def "user list" [
 ]: nothing -> table<UserApiKey: record<created: string, granted_by_user: record, id: int, requested_by_user: record, updated: string>, UserCompany: record<address_main: record, address_postal: record, alias: list, avatar: record, avatar_uuid: string, billing_contract: list, chamber_of_commerce_number: string, counter_bank_iban: string, country: string, created: string, customer: record, customer_limit: record, daily_limit_without_confirmation_login: record, deny_reason: string, directors: list, display_name: string, id: int, language: string, legal_form: string, name: string, notification_filters: list, public_nick_name: string, public_uuid: string, region: string, relations: list, sector_of_industry: string, session_timeout: int, status: string, sub_status: string, tax_resident: list, type_of_business_entity: string, ubo: list, updated: string, version_terms_of_service: string>, UserPaymentServiceProvider: record<alias: list, avatar: record, certificate_distinguished_name: string, created: string, display_name: string, id: int, language: string, public_nick_name: string, public_uuid: string, region: string, session_timeout: int, status: string, sub_status: string, updated: string>, UserPerson: record<address_main: record, address_postal: record, alias: list, avatar: record, avatar_uuid: string, country_of_birth: string, created: string, daily_limit_without_confirmation_login: record, date_of_birth: string, display_name: string, document_back_attachment_id: int, document_country_of_issuance: string, document_front_attachment_id: int, document_number: string, document_type: string, first_name: string, gender: string, id: int, language: string, last_name: string, legal_guardian_alias: record, legal_name: string, middle_name: string, nationality: string, notification_filters: list, place_of_birth: string, public_nick_name: string, public_uuid: string, region: string, relations: list, session_timeout: int, signup_track_type: string, status: string, sub_status: string, subscription_type: string, tax_resident: list, updated: string, version_terms_of_service: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/user")
+  let full_url = (build-url $base "/user" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get a specific company.
@@ -956,12 +1212,23 @@ export def "user-company list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({item_id: (encode-path-segment $item_id)} | format pattern "/user-company/{item_id}"))
+  let full_url = (build-url $base ({item_id: (encode-path-segment $item_id)} | format pattern "/user-company/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Modify a specific company's data.
@@ -1022,14 +1289,25 @@ export def "user-company update-by-item-id" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({item_id: (encode-path-segment $item_id)} | format pattern "/user-company/{item_id}"))
+  let full_url = (build-url $base ({item_id: (encode-path-segment $item_id)} | format pattern "/user-company/{item_id}") $auth.query)
   let req_body = {"address_main": $address_main, "address_postal": $address_postal, "avatar": $avatar, "avatar_uuid": $avatar_uuid, "chamber_of_commerce_number": $chamber_of_commerce_number, "country": $country, "customer": $customer, "customer_limit": $customer_limit, "daily_limit_without_confirmation_login": $daily_limit_without_confirmation_login, "language": $language, "legal_form": $legal_form, "name": $name, "public_nick_name": $public_nick_name, "region": $region, "session_timeout": $session_timeout, "status": $status, "sub_status": $sub_status, "ubo": $ubo} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Return all the known (trade) names for a specific user company.
@@ -1058,12 +1336,23 @@ export def "user-company-name list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_company_id | is-empty) { error make --unspanned { msg: "path parameter 'user-companyID' must be non-empty" } }
-  let full_url = (build-url $base ({user_company_id: (encode-path-segment $user_company_id)} | format pattern "/user-company/{user_company_id}/name"))
+  let full_url = (build-url $base ({user_company_id: (encode-path-segment $user_company_id)} | format pattern "/user-company/{user_company_id}/name") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Used to view UserPaymentServiceProvider for session creation.
@@ -1092,12 +1381,23 @@ export def "user-payment-service-provider get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({item_id: (encode-path-segment $item_id)} | format pattern "/user-payment-service-provider/{item_id}"))
+  let full_url = (build-url $base ({item_id: (encode-path-segment $item_id)} | format pattern "/user-payment-service-provider/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get a specific person.
@@ -1126,12 +1426,23 @@ export def "user-person get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({item_id: (encode-path-segment $item_id)} | format pattern "/user-person/{item_id}"))
+  let full_url = (build-url $base ({item_id: (encode-path-segment $item_id)} | format pattern "/user-person/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Modify a specific person object's data.
@@ -1197,14 +1508,25 @@ export def "user-person update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({item_id: (encode-path-segment $item_id)} | format pattern "/user-person/{item_id}"))
+  let full_url = (build-url $base ({item_id: (encode-path-segment $item_id)} | format pattern "/user-person/{item_id}") $auth.query)
   let req_body = {"address_main": $address_main, "address_postal": $address_postal, "avatar": $avatar, "avatar_uuid": $avatar_uuid, "daily_limit_without_confirmation_login": $daily_limit_without_confirmation_login, "date_of_birth": $date_of_birth, "display_name": $display_name, "document_back_attachment_id": $document_back_attachment_id, "document_country_of_issuance": $document_country_of_issuance, "document_front_attachment_id": $document_front_attachment_id, "document_number": $document_number, "document_type": $document_type, "first_name": $first_name, "gender": $gender, "language": $language, "last_name": $last_name, "legal_guardian_alias": $legal_guardian_alias, "middle_name": $middle_name, "nationality": $nationality, "public_nick_name": $public_nick_name, "region": $region, "session_timeout": $session_timeout, "signup_track_type": $signup_track_type, "status": $status, "sub_status": $sub_status, "subscription_type": $subscription_type, "tax_resident": $tax_resident} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get a specific user.
@@ -1233,12 +1555,23 @@ export def "user get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({item_id: (encode-path-segment $item_id)} | format pattern "/user/{item_id}"))
+  let full_url = (build-url $base ({item_id: (encode-path-segment $item_id)} | format pattern "/user/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get the raw content of a specific attachment.
@@ -1269,12 +1602,23 @@ export def "user-attachment-content list" [
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($attachment_id | is-empty) { error make --unspanned { msg: "path parameter 'attachmentID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), attachment_id: (encode-path-segment $attachment_id)} | format pattern "/user/{user_id}/attachment/{attachment_id}/content"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), attachment_id: (encode-path-segment $attachment_id)} | format pattern "/user/{user_id}/attachment/{attachment_id}/content") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get a specific attachment. The header of the response contains the content-type of the attachment.
@@ -1305,12 +1649,23 @@ export def "user-attachment get" [
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/attachment/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/attachment/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get all subscription billing contract for the authenticated user.
@@ -1339,12 +1694,23 @@ export def "user-billing-contract-subscription list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/billing-contract-subscription"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/billing-contract-subscription") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # bunq.me public profile of the user.
@@ -1373,12 +1739,23 @@ export def "user-bunqme-fundraiser-profile list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/bunqme-fundraiser-profile"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/bunqme-fundraiser-profile") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # bunq.me public profile of the user.
@@ -1409,12 +1786,23 @@ export def "user-bunqme-fundraiser-profile get" [
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/bunqme-fundraiser-profile/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/bunqme-fundraiser-profile/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Return all the cards available to the user.
@@ -1443,12 +1831,23 @@ export def "user-card list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/card"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/card") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Used to update multiple cards in a batch.
@@ -1480,14 +1879,25 @@ export def "user-card-batch create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/card-batch"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/card-batch") $auth.query)
   let req_body = {"cards": $cards} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Used to replace multiple cards in a batch.
@@ -1519,14 +1929,25 @@ export def "user-card-batch-replace create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/card-batch-replace"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/card-batch-replace") $auth.query)
   let req_body = {"cards": $cards} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Create a new credit card request.
@@ -1567,14 +1988,25 @@ export def "user-card-credit create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/card-credit"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/card-credit") $auth.query)
   let req_body = {"alias": $alias, "monetary_account_id_fallback": $monetary_account_id_fallback, "name_on_card": $name_on_card, "order_status": $order_status, "pin_code_assignment": $pin_code_assignment, "preferred_name_on_card": $preferred_name_on_card, "product_type": $product_type, "second_line": $second_line, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Create a new debit card request.
@@ -1615,14 +2047,25 @@ export def "user-card-debit create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/card-debit"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/card-debit") $auth.query)
   let req_body = {"alias": $alias, "monetary_account_id_fallback": $monetary_account_id_fallback, "name_on_card": $name_on_card, "order_status": $order_status, "pin_code_assignment": $pin_code_assignment, "preferred_name_on_card": $preferred_name_on_card, "product_type": $product_type, "second_line": $second_line, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Return all the accepted card names for a specific user.
@@ -1651,12 +2094,23 @@ export def "user-card-name list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/card-name"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/card-name") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Used to create new and read existing card statement exports. Statement exports can be created in either CSV or PDF file format.
@@ -1687,12 +2141,23 @@ export def "user-card-export-statement-card list" [
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($card_id | is-empty) { error make --unspanned { msg: "path parameter 'cardID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), card_id: (encode-path-segment $card_id)} | format pattern "/user/{user_id}/card/{card_id}/export-statement-card"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), card_id: (encode-path-segment $card_id)} | format pattern "/user/{user_id}/card/{card_id}/export-statement-card") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Used to serialize ExportStatementCardCsv
@@ -1723,12 +2188,23 @@ export def "user-card-export-statement-card-csv list" [
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($card_id | is-empty) { error make --unspanned { msg: "path parameter 'cardID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), card_id: (encode-path-segment $card_id)} | format pattern "/user/{user_id}/card/{card_id}/export-statement-card-csv"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), card_id: (encode-path-segment $card_id)} | format pattern "/user/{user_id}/card/{card_id}/export-statement-card-csv") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Used to serialize ExportStatementCardCsv
@@ -1763,14 +2239,25 @@ export def "user-card-export-statement-card-csv create" [
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($card_id | is-empty) { error make --unspanned { msg: "path parameter 'cardID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), card_id: (encode-path-segment $card_id)} | format pattern "/user/{user_id}/card/{card_id}/export-statement-card-csv"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), card_id: (encode-path-segment $card_id)} | format pattern "/user/{user_id}/card/{card_id}/export-statement-card-csv") $auth.query)
   let req_body = {"date_end": $date_end, "date_start": $date_start, "regional_format": $regional_format} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Used to serialize ExportStatementCardCsv
@@ -1803,12 +2290,23 @@ export def "user-card-export-statement-card-csv delete" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($card_id | is-empty) { error make --unspanned { msg: "path parameter 'cardID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), card_id: (encode-path-segment $card_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/card/{card_id}/export-statement-card-csv/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), card_id: (encode-path-segment $card_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/card/{card_id}/export-statement-card-csv/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Used to serialize ExportStatementCardCsv
@@ -1841,12 +2339,23 @@ export def "user-card-export-statement-card-csv get" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($card_id | is-empty) { error make --unspanned { msg: "path parameter 'cardID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), card_id: (encode-path-segment $card_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/card/{card_id}/export-statement-card-csv/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), card_id: (encode-path-segment $card_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/card/{card_id}/export-statement-card-csv/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Used to serialize ExportStatementCardPdf
@@ -1877,12 +2386,23 @@ export def "user-card-export-statement-card-pdf list" [
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($card_id | is-empty) { error make --unspanned { msg: "path parameter 'cardID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), card_id: (encode-path-segment $card_id)} | format pattern "/user/{user_id}/card/{card_id}/export-statement-card-pdf"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), card_id: (encode-path-segment $card_id)} | format pattern "/user/{user_id}/card/{card_id}/export-statement-card-pdf") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Used to serialize ExportStatementCardPdf
@@ -1916,14 +2436,25 @@ export def "user-card-export-statement-card-pdf create" [
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($card_id | is-empty) { error make --unspanned { msg: "path parameter 'cardID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), card_id: (encode-path-segment $card_id)} | format pattern "/user/{user_id}/card/{card_id}/export-statement-card-pdf"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), card_id: (encode-path-segment $card_id)} | format pattern "/user/{user_id}/card/{card_id}/export-statement-card-pdf") $auth.query)
   let req_body = {"date_end": $date_end, "date_start": $date_start} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Used to serialize ExportStatementCardPdf
@@ -1956,12 +2487,23 @@ export def "user-card-export-statement-card-pdf delete" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($card_id | is-empty) { error make --unspanned { msg: "path parameter 'cardID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), card_id: (encode-path-segment $card_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/card/{card_id}/export-statement-card-pdf/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), card_id: (encode-path-segment $card_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/card/{card_id}/export-statement-card-pdf/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Used to serialize ExportStatementCardPdf
@@ -1994,12 +2536,23 @@ export def "user-card-export-statement-card-pdf get" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($card_id | is-empty) { error make --unspanned { msg: "path parameter 'cardID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), card_id: (encode-path-segment $card_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/card/{card_id}/export-statement-card-pdf/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), card_id: (encode-path-segment $card_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/card/{card_id}/export-statement-card-pdf/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Fetch the raw content of a card statement export. The returned file format could be CSV or PDF depending on the statement format specified during the statement creation. The doc won't display the response of a request to get the content of a statement export.
@@ -2032,12 +2585,23 @@ export def "user-card-export-statement-card-content list" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($card_id | is-empty) { error make --unspanned { msg: "path parameter 'cardID' must be non-empty" } }
   if ($export_statement_card_id | is-empty) { error make --unspanned { msg: "path parameter 'export-statement-cardID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), card_id: (encode-path-segment $card_id), export_statement_card_id: (encode-path-segment $export_statement_card_id)} | format pattern "/user/{user_id}/card/{card_id}/export-statement-card/{export_statement_card_id}/content"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), card_id: (encode-path-segment $card_id), export_statement_card_id: (encode-path-segment $export_statement_card_id)} | format pattern "/user/{user_id}/card/{card_id}/export-statement-card/{export_statement_card_id}/content") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Used to create new and read existing card statement exports. Statement exports can be created in either CSV or PDF file format.
@@ -2070,12 +2634,23 @@ export def "user-card-export-statement-card get" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($card_id | is-empty) { error make --unspanned { msg: "path parameter 'cardID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), card_id: (encode-path-segment $card_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/card/{card_id}/export-statement-card/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), card_id: (encode-path-segment $card_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/card/{card_id}/export-statement-card/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get all generated CVC2 codes for a card.
@@ -2106,12 +2681,23 @@ export def "user-card-generated-cvc2 list" [
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($card_id | is-empty) { error make --unspanned { msg: "path parameter 'cardID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), card_id: (encode-path-segment $card_id)} | format pattern "/user/{user_id}/card/{card_id}/generated-cvc2"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), card_id: (encode-path-segment $card_id)} | format pattern "/user/{user_id}/card/{card_id}/generated-cvc2") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Generate a new CVC2 code for a card.
@@ -2144,14 +2730,25 @@ export def "user-card-generated-cvc2 create" [
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($card_id | is-empty) { error make --unspanned { msg: "path parameter 'cardID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), card_id: (encode-path-segment $card_id)} | format pattern "/user/{user_id}/card/{card_id}/generated-cvc2"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), card_id: (encode-path-segment $card_id)} | format pattern "/user/{user_id}/card/{card_id}/generated-cvc2") $auth.query)
   let req_body = {"type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get the details for a specific generated CVC2 code.
@@ -2184,12 +2781,23 @@ export def "user-card-generated-cvc2 get" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($card_id | is-empty) { error make --unspanned { msg: "path parameter 'cardID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), card_id: (encode-path-segment $card_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/card/{card_id}/generated-cvc2/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), card_id: (encode-path-segment $card_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/card/{card_id}/generated-cvc2/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Endpoint for generating and retrieving a new CVC2 code.
@@ -2224,14 +2832,25 @@ export def "user-card-generated-cvc2 update" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($card_id | is-empty) { error make --unspanned { msg: "path parameter 'cardID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), card_id: (encode-path-segment $card_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/card/{card_id}/generated-cvc2/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), card_id: (encode-path-segment $card_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/card/{card_id}/generated-cvc2/{item_id}") $auth.query)
   let req_body = {"type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Request a card replacement.
@@ -2268,14 +2887,25 @@ export def "user-card-replace create" [
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($card_id | is-empty) { error make --unspanned { msg: "path parameter 'cardID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), card_id: (encode-path-segment $card_id)} | format pattern "/user/{user_id}/card/{card_id}/replace"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), card_id: (encode-path-segment $card_id)} | format pattern "/user/{user_id}/card/{card_id}/replace") $auth.query)
   let req_body = {"name_on_card": $name_on_card, "pin_code_assignment": $pin_code_assignment, "preferred_name_on_card": $preferred_name_on_card, "second_line": $second_line} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Return the details of a specific card.
@@ -2306,12 +2936,23 @@ export def "user-card get" [
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/card/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/card/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update the card details. Allow to change pin code, status, limits, country permissions and the monetary account connected to the card. When the card has been received, it can be also activated through this endpoint.
@@ -2358,14 +2999,25 @@ export def "user-card update" [
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/card/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/card/{item_id}") $auth.query)
   let req_body = {"activation_code": $activation_code, "card_limit": $card_limit, "card_limit_atm": $card_limit_atm, "country_permission": $country_permission, "monetary_account_id_fallback": $monetary_account_id_fallback, "order_status": $order_status, "pin_code": $pin_code, "pin_code_assignment": $pin_code_assignment, "primary_account_numbers": $primary_account_numbers, "status": $status} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # List all the pinned certificate chain for the given user.
@@ -2394,12 +3046,23 @@ export def "user-certificate-pinned list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/certificate-pinned"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/certificate-pinned") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Pin the certificate chain.
@@ -2431,14 +3094,25 @@ export def "user-certificate-pinned create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/certificate-pinned"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/certificate-pinned") $auth.query)
   let req_body = {"certificate_chain": $certificate_chain} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Remove the pinned certificate chain with the specific ID.
@@ -2469,12 +3143,23 @@ export def "user-certificate-pinned delete" [
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/certificate-pinned/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/certificate-pinned/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Get the pinned certificate chain with the specified ID.
@@ -2505,12 +3190,23 @@ export def "user-certificate-pinned get" [
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/certificate-pinned/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/certificate-pinned/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Endpoint for apps to fetch a challenge request.
@@ -2541,12 +3237,23 @@ export def "user-challenge-request get" [
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/challenge-request/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/challenge-request/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Endpoint for apps to fetch a challenge request.
@@ -2579,14 +3286,25 @@ export def "user-challenge-request update" [
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/challenge-request/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/challenge-request/{item_id}") $auth.query)
   let req_body = {"status": $status} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get the raw content of a specific attachment.
@@ -2619,12 +3337,23 @@ export def "user-chat-conversation-attachment-content list" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($chat_conversation_id | is-empty) { error make --unspanned { msg: "path parameter 'chat-conversationID' must be non-empty" } }
   if ($attachment_id | is-empty) { error make --unspanned { msg: "path parameter 'attachmentID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), chat_conversation_id: (encode-path-segment $chat_conversation_id), attachment_id: (encode-path-segment $attachment_id)} | format pattern "/user/{user_id}/chat-conversation/{chat_conversation_id}/attachment/{attachment_id}/content"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), chat_conversation_id: (encode-path-segment $chat_conversation_id), attachment_id: (encode-path-segment $attachment_id)} | format pattern "/user/{user_id}/chat-conversation/{chat_conversation_id}/attachment/{attachment_id}/content") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create and manage companies.
@@ -2653,12 +3382,23 @@ export def "user-company list-1" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/company"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/company") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create and manage companies.
@@ -2703,14 +3443,25 @@ export def "user-company create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/company"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/company") $auth.query)
   let req_body = {"address_main": $address_main, "address_postal": $address_postal, "avatar_uuid": $avatar_uuid, "chamber_of_commerce_number": $chamber_of_commerce_number, "country": $country, "legal_form": $legal_form, "name": $name, "signup_track_type": $signup_track_type, "subscription_type": $subscription_type, "ubo": $ubo, "vat_number": $vat_number} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Create and manage companies.
@@ -2741,12 +3492,23 @@ export def "user-company get" [
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/company/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/company/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create and manage companies.
@@ -2793,14 +3555,25 @@ export def "user-company update-by-user-id-item-id" [
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/company/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/company/{item_id}") $auth.query)
   let req_body = {"address_main": $address_main, "address_postal": $address_postal, "avatar_uuid": $avatar_uuid, "chamber_of_commerce_number": $chamber_of_commerce_number, "country": $country, "legal_form": $legal_form, "name": $name, "signup_track_type": $signup_track_type, "subscription_type": $subscription_type, "ubo": $ubo, "vat_number": $vat_number} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Used to confirm availability of funds on an account.
@@ -2834,14 +3607,25 @@ export def "user-confirmation-of-funds create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/confirmation-of-funds"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/confirmation-of-funds") $auth.query)
   let req_body = {"amount": $amount, "pointer_iban": $pointer_iban} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Create a credential of a user for server authentication, or delete the credential of a user for server authentication.
@@ -2870,12 +3654,23 @@ export def "user-credential-password-ip list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/credential-password-ip"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/credential-password-ip") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Manage the IPs which may be used for a credential of a user for server authentication.
@@ -2906,12 +3701,23 @@ export def "user-credential-password-ip-ip list" [
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($credential_password_ip_id | is-empty) { error make --unspanned { msg: "path parameter 'credential-password-ipID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), credential_password_ip_id: (encode-path-segment $credential_password_ip_id)} | format pattern "/user/{user_id}/credential-password-ip/{credential_password_ip_id}/ip"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), credential_password_ip_id: (encode-path-segment $credential_password_ip_id)} | format pattern "/user/{user_id}/credential-password-ip/{credential_password_ip_id}/ip") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Manage the IPs which may be used for a credential of a user for server authentication.
@@ -2945,14 +3751,25 @@ export def "user-credential-password-ip-ip create" [
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($credential_password_ip_id | is-empty) { error make --unspanned { msg: "path parameter 'credential-password-ipID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), credential_password_ip_id: (encode-path-segment $credential_password_ip_id)} | format pattern "/user/{user_id}/credential-password-ip/{credential_password_ip_id}/ip"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), credential_password_ip_id: (encode-path-segment $credential_password_ip_id)} | format pattern "/user/{user_id}/credential-password-ip/{credential_password_ip_id}/ip") $auth.query)
   let req_body = {"ip": $ip, "status": $status} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Manage the IPs which may be used for a credential of a user for server authentication.
@@ -2985,12 +3802,23 @@ export def "user-credential-password-ip-ip get" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($credential_password_ip_id | is-empty) { error make --unspanned { msg: "path parameter 'credential-password-ipID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), credential_password_ip_id: (encode-path-segment $credential_password_ip_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/credential-password-ip/{credential_password_ip_id}/ip/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), credential_password_ip_id: (encode-path-segment $credential_password_ip_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/credential-password-ip/{credential_password_ip_id}/ip/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Manage the IPs which may be used for a credential of a user for server authentication.
@@ -3026,14 +3854,25 @@ export def "user-credential-password-ip-ip update" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($credential_password_ip_id | is-empty) { error make --unspanned { msg: "path parameter 'credential-password-ipID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), credential_password_ip_id: (encode-path-segment $credential_password_ip_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/credential-password-ip/{credential_password_ip_id}/ip/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), credential_password_ip_id: (encode-path-segment $credential_password_ip_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/credential-password-ip/{credential_password_ip_id}/ip/{item_id}") $auth.query)
   let req_body = {"ip": $ip, "status": $status} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Create a credential of a user for server authentication, or delete the credential of a user for server authentication.
@@ -3064,12 +3903,23 @@ export def "user-credential-password-ip get" [
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/credential-password-ip/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/credential-password-ip/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Endpoint to manage CurrencyCloud beneficiaries.
@@ -3098,12 +3948,23 @@ export def "user-currency-cloud-beneficiary list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/currency-cloud-beneficiary"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/currency-cloud-beneficiary") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Endpoint to manage CurrencyCloud beneficiaries.
@@ -3139,14 +4000,25 @@ export def "user-currency-cloud-beneficiary create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/currency-cloud-beneficiary"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/currency-cloud-beneficiary") $auth.query)
   let req_body = {"all_field": $all_field, "country": $country, "currency": $currency, "legal_entity_type": $legal_entity_type, "name": $name, "payment_type": $payment_type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Endpoint to list requirements for CurrencyCloud beneficiaries.
@@ -3175,12 +4047,23 @@ export def "user-currency-cloud-beneficiary-requirement list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/currency-cloud-beneficiary-requirement"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/currency-cloud-beneficiary-requirement") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Endpoint to manage CurrencyCloud beneficiaries.
@@ -3211,12 +4094,23 @@ export def "user-currency-cloud-beneficiary get" [
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/currency-cloud-beneficiary/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/currency-cloud-beneficiary/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get a collection of events for a given user. You can add query the parameters monetary_account_id, status and/or display_user_event to filter the response. When monetary_account_id={id,id} is provided only events that relate to these monetary account ids are returned. When status={AWAITING_REPLY/FINALIZED} is provided the response only contains events with the status AWAITING_REPLY or FINALIZED. When display_user_event={true/false} is set to false user events are excluded from the response, when not provided user events are displayed. User events are events that are not related to a monetary account (for example: connect invites).
@@ -3245,12 +4139,23 @@ export def "user-event list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/event"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/event") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get a specific event for a given user.
@@ -3281,12 +4186,23 @@ export def "user-event get" [
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/event/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/event/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List all the annual overviews for a user.
@@ -3315,12 +4231,23 @@ export def "user-export-annual-overview list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/export-annual-overview"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/export-annual-overview") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a new annual overview for a specific year. An overview can be generated only for a past year.
@@ -3351,14 +4278,25 @@ export def "user-export-annual-overview create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/export-annual-overview"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/export-annual-overview") $auth.query)
   let req_body = {"year": $year} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Used to retrieve the raw content of an annual overview.
@@ -3389,12 +4327,23 @@ export def "user-export-annual-overview-content list" [
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($export_annual_overview_id | is-empty) { error make --unspanned { msg: "path parameter 'export-annual-overviewID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), export_annual_overview_id: (encode-path-segment $export_annual_overview_id)} | format pattern "/user/{user_id}/export-annual-overview/{export_annual_overview_id}/content"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), export_annual_overview_id: (encode-path-segment $export_annual_overview_id)} | format pattern "/user/{user_id}/export-annual-overview/{export_annual_overview_id}/content") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Used to create new and read existing annual overviews of all the user's monetary accounts. Once created, annual overviews can be downloaded in PDF format via the 'export-annual-overview/{id}/content' endpoint.
@@ -3425,12 +4374,23 @@ export def "user-export-annual-overview delete" [
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/export-annual-overview/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/export-annual-overview/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Get an annual overview for a user by its id.
@@ -3461,12 +4421,23 @@ export def "user-export-annual-overview get" [
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/export-annual-overview/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/export-annual-overview/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # view for updating the feature display.
@@ -3497,12 +4468,23 @@ export def "user-feature-announcement get" [
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/feature-announcement/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/feature-announcement/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Used to allow users to set insight/budget preferences.
@@ -3531,12 +4513,23 @@ export def "user-insight-preference-date list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/insight-preference-date"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/insight-preference-date") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Used to get insights about transactions between given time range.
@@ -3565,12 +4558,23 @@ export def "user-insights list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/insights"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/insights") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Used to get events based on time and insight category.
@@ -3599,12 +4603,23 @@ export def "user-insights-search list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/insights-search"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/insights-search") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Used to list bunq invoices by user.
@@ -3633,12 +4648,23 @@ export def "user-invoice list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/invoice"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/invoice") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get a PDF export of an invoice.
@@ -3669,12 +4695,23 @@ export def "user-invoice-pdf-content list" [
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($invoice_id | is-empty) { error make --unspanned { msg: "path parameter 'invoiceID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), invoice_id: (encode-path-segment $invoice_id)} | format pattern "/user/{user_id}/invoice/{invoice_id}/pdf-content"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), invoice_id: (encode-path-segment $invoice_id)} | format pattern "/user/{user_id}/invoice/{invoice_id}/pdf-content") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Used to list bunq invoices by user.
@@ -3705,12 +4742,23 @@ export def "user-invoice get" [
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/invoice/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/invoice/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Endpoint for getting available legal names that can be used by the user.
@@ -3739,12 +4787,23 @@ export def "user-legal-name list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/legal-name"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/legal-name") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get all limits for the authenticated user.
@@ -3773,12 +4832,23 @@ export def "user-limit list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/limit"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/limit") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get a collection of all your MonetaryAccounts.
@@ -3807,12 +4877,23 @@ export def "user-monetary-account list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/monetary-account"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/monetary-account") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets a listing of all MonetaryAccountBanks of a given user.
@@ -3841,12 +4922,23 @@ export def "user-monetary-account-bank list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/monetary-account-bank"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/monetary-account-bank") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create new MonetaryAccountBank.
@@ -3889,14 +4981,25 @@ export def "user-monetary-account-bank create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/monetary-account-bank"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/monetary-account-bank") $auth.query)
   let req_body = {"avatar_uuid": $avatar_uuid, "country_iban": $country_iban, "currency": $currency, "daily_limit": $daily_limit, "description": $description, "display_name": $display_name, "reason": $reason, "reason_description": $reason_description, "setting": $setting, "status": $status, "sub_status": $sub_status} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get a specific MonetaryAccountBank.
@@ -3927,12 +5030,23 @@ export def "user-monetary-account-bank get" [
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account-bank/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account-bank/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update a specific existing MonetaryAccountBank.
@@ -3977,14 +5091,25 @@ export def "user-monetary-account-bank update" [
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account-bank/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account-bank/{item_id}") $auth.query)
   let req_body = {"avatar_uuid": $avatar_uuid, "country_iban": $country_iban, "currency": $currency, "daily_limit": $daily_limit, "description": $description, "display_name": $display_name, "reason": $reason, "reason_description": $reason_description, "setting": $setting, "status": $status, "sub_status": $sub_status} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Endpoint for managing monetary accounts which are connected to external services.
@@ -4013,12 +5138,23 @@ export def "user-monetary-account-external list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/monetary-account-external"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/monetary-account-external") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Endpoint for managing monetary accounts which are connected to external services.
@@ -4049,12 +5185,23 @@ export def "user-monetary-account-external get" [
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account-external/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account-external/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # The endpoint for joint monetary accounts.
@@ -4083,12 +5230,23 @@ export def "user-monetary-account-joint list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/monetary-account-joint"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/monetary-account-joint") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # The endpoint for joint monetary accounts.
@@ -4135,14 +5293,25 @@ export def "user-monetary-account-joint create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/monetary-account-joint"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/monetary-account-joint") $auth.query)
   let req_body = {"alias": $alias, "all_co_owner": $all_co_owner, "avatar_uuid": $avatar_uuid, "currency": $currency, "daily_limit": $daily_limit, "description": $description, "overdraft_limit": $overdraft_limit, "reason": $reason, "reason_description": $reason_description, "setting": $setting, "status": $status, "sub_status": $sub_status} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # The endpoint for joint monetary accounts.
@@ -4173,12 +5342,23 @@ export def "user-monetary-account-joint get" [
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account-joint/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account-joint/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # The endpoint for joint monetary accounts.
@@ -4227,14 +5407,25 @@ export def "user-monetary-account-joint update" [
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account-joint/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account-joint/{item_id}") $auth.query)
   let req_body = {"alias": $alias, "all_co_owner": $all_co_owner, "avatar_uuid": $avatar_uuid, "currency": $currency, "daily_limit": $daily_limit, "description": $description, "overdraft_limit": $overdraft_limit, "reason": $reason, "reason_description": $reason_description, "setting": $setting, "status": $status, "sub_status": $sub_status} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Gets a listing of all MonetaryAccountSavingss of a given user.
@@ -4263,12 +5454,23 @@ export def "user-monetary-account-savings list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/monetary-account-savings"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/monetary-account-savings") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create new MonetaryAccountSavings.
@@ -4313,14 +5515,25 @@ export def "user-monetary-account-savings create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/monetary-account-savings"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/monetary-account-savings") $auth.query)
   let req_body = {"all_co_owner": $all_co_owner, "avatar_uuid": $avatar_uuid, "currency": $currency, "daily_limit": $daily_limit, "description": $description, "reason": $reason, "reason_description": $reason_description, "savings_goal": $savings_goal, "setting": $setting, "status": $status, "sub_status": $sub_status} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get a specific MonetaryAccountSavings.
@@ -4351,12 +5564,23 @@ export def "user-monetary-account-savings get" [
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account-savings/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account-savings/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update a specific existing MonetaryAccountSavings.
@@ -4403,14 +5627,25 @@ export def "user-monetary-account-savings update" [
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account-savings/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account-savings/{item_id}") $auth.query)
   let req_body = {"all_co_owner": $all_co_owner, "avatar_uuid": $avatar_uuid, "currency": $currency, "daily_limit": $daily_limit, "description": $description, "reason": $reason, "reason_description": $reason_description, "savings_goal": $savings_goal, "setting": $setting, "status": $status, "sub_status": $sub_status} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get a specific MonetaryAccount.
@@ -4441,12 +5676,23 @@ export def "user-monetary-account get" [
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a new monetary account attachment. Create a POST request with a payload that contains the binary representation of the file, without any JSON wrapping. Make sure you define the MIME type (i.e. image/jpeg) in the Content-Type header. You are required to provide a description of the attachment using the X-Bunq-Attachment-Description header.
@@ -4479,14 +5725,25 @@ export def "user-monetary-account-attachment create" [
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/attachment"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/attachment") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get the raw content of a specific attachment.
@@ -4519,12 +5776,23 @@ export def "user-monetary-account-attachment-content list" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($attachment_id | is-empty) { error make --unspanned { msg: "path parameter 'attachmentID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), attachment_id: (encode-path-segment $attachment_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/attachment/{attachment_id}/content"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), attachment_id: (encode-path-segment $attachment_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/attachment/{attachment_id}/content") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Manage the notes for a given user.
@@ -4557,12 +5825,23 @@ export def "user-monetary-account-bunqme-fundraiser-result-note-attachment list"
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($bunqme_fundraiser_result_id | is-empty) { error make --unspanned { msg: "path parameter 'bunqme-fundraiser-resultID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), bunqme_fundraiser_result_id: (encode-path-segment $bunqme_fundraiser_result_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/bunqme-fundraiser-result/{bunqme_fundraiser_result_id}/note-attachment"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), bunqme_fundraiser_result_id: (encode-path-segment $bunqme_fundraiser_result_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/bunqme-fundraiser-result/{bunqme_fundraiser_result_id}/note-attachment") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Used to manage attachment notes.
@@ -4598,14 +5877,25 @@ export def "user-monetary-account-bunqme-fundraiser-result-note-attachment creat
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($bunqme_fundraiser_result_id | is-empty) { error make --unspanned { msg: "path parameter 'bunqme-fundraiser-resultID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), bunqme_fundraiser_result_id: (encode-path-segment $bunqme_fundraiser_result_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/bunqme-fundraiser-result/{bunqme_fundraiser_result_id}/note-attachment"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), bunqme_fundraiser_result_id: (encode-path-segment $bunqme_fundraiser_result_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/bunqme-fundraiser-result/{bunqme_fundraiser_result_id}/note-attachment") $auth.query)
   let req_body = {"attachment_id": $attachment_id, "description": $description} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Used to manage attachment notes.
@@ -4640,12 +5930,23 @@ export def "user-monetary-account-bunqme-fundraiser-result-note-attachment delet
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($bunqme_fundraiser_result_id | is-empty) { error make --unspanned { msg: "path parameter 'bunqme-fundraiser-resultID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), bunqme_fundraiser_result_id: (encode-path-segment $bunqme_fundraiser_result_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/bunqme-fundraiser-result/{bunqme_fundraiser_result_id}/note-attachment/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), bunqme_fundraiser_result_id: (encode-path-segment $bunqme_fundraiser_result_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/bunqme-fundraiser-result/{bunqme_fundraiser_result_id}/note-attachment/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Used to manage attachment notes.
@@ -4680,12 +5981,23 @@ export def "user-monetary-account-bunqme-fundraiser-result-note-attachment get" 
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($bunqme_fundraiser_result_id | is-empty) { error make --unspanned { msg: "path parameter 'bunqme-fundraiser-resultID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), bunqme_fundraiser_result_id: (encode-path-segment $bunqme_fundraiser_result_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/bunqme-fundraiser-result/{bunqme_fundraiser_result_id}/note-attachment/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), bunqme_fundraiser_result_id: (encode-path-segment $bunqme_fundraiser_result_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/bunqme-fundraiser-result/{bunqme_fundraiser_result_id}/note-attachment/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Used to manage attachment notes.
@@ -4723,14 +6035,25 @@ export def "user-monetary-account-bunqme-fundraiser-result-note-attachment updat
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($bunqme_fundraiser_result_id | is-empty) { error make --unspanned { msg: "path parameter 'bunqme-fundraiser-resultID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), bunqme_fundraiser_result_id: (encode-path-segment $bunqme_fundraiser_result_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/bunqme-fundraiser-result/{bunqme_fundraiser_result_id}/note-attachment/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), bunqme_fundraiser_result_id: (encode-path-segment $bunqme_fundraiser_result_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/bunqme-fundraiser-result/{bunqme_fundraiser_result_id}/note-attachment/{item_id}") $auth.query)
   let req_body = {"attachment_id": $attachment_id, "description": $description} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Manage the notes for a given user.
@@ -4763,12 +6086,23 @@ export def "user-monetary-account-bunqme-fundraiser-result-note-text list" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($bunqme_fundraiser_result_id | is-empty) { error make --unspanned { msg: "path parameter 'bunqme-fundraiser-resultID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), bunqme_fundraiser_result_id: (encode-path-segment $bunqme_fundraiser_result_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/bunqme-fundraiser-result/{bunqme_fundraiser_result_id}/note-text"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), bunqme_fundraiser_result_id: (encode-path-segment $bunqme_fundraiser_result_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/bunqme-fundraiser-result/{bunqme_fundraiser_result_id}/note-text") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Used to manage text notes.
@@ -4803,14 +6137,25 @@ export def "user-monetary-account-bunqme-fundraiser-result-note-text create" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($bunqme_fundraiser_result_id | is-empty) { error make --unspanned { msg: "path parameter 'bunqme-fundraiser-resultID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), bunqme_fundraiser_result_id: (encode-path-segment $bunqme_fundraiser_result_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/bunqme-fundraiser-result/{bunqme_fundraiser_result_id}/note-text"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), bunqme_fundraiser_result_id: (encode-path-segment $bunqme_fundraiser_result_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/bunqme-fundraiser-result/{bunqme_fundraiser_result_id}/note-text") $auth.query)
   let req_body = {"content": $content} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Used to manage text notes.
@@ -4845,12 +6190,23 @@ export def "user-monetary-account-bunqme-fundraiser-result-note-text delete" [
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($bunqme_fundraiser_result_id | is-empty) { error make --unspanned { msg: "path parameter 'bunqme-fundraiser-resultID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), bunqme_fundraiser_result_id: (encode-path-segment $bunqme_fundraiser_result_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/bunqme-fundraiser-result/{bunqme_fundraiser_result_id}/note-text/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), bunqme_fundraiser_result_id: (encode-path-segment $bunqme_fundraiser_result_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/bunqme-fundraiser-result/{bunqme_fundraiser_result_id}/note-text/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Used to manage text notes.
@@ -4885,12 +6241,23 @@ export def "user-monetary-account-bunqme-fundraiser-result-note-text get" [
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($bunqme_fundraiser_result_id | is-empty) { error make --unspanned { msg: "path parameter 'bunqme-fundraiser-resultID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), bunqme_fundraiser_result_id: (encode-path-segment $bunqme_fundraiser_result_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/bunqme-fundraiser-result/{bunqme_fundraiser_result_id}/note-text/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), bunqme_fundraiser_result_id: (encode-path-segment $bunqme_fundraiser_result_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/bunqme-fundraiser-result/{bunqme_fundraiser_result_id}/note-text/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Used to manage text notes.
@@ -4927,14 +6294,25 @@ export def "user-monetary-account-bunqme-fundraiser-result-note-text update" [
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($bunqme_fundraiser_result_id | is-empty) { error make --unspanned { msg: "path parameter 'bunqme-fundraiser-resultID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), bunqme_fundraiser_result_id: (encode-path-segment $bunqme_fundraiser_result_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/bunqme-fundraiser-result/{bunqme_fundraiser_result_id}/note-text/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), bunqme_fundraiser_result_id: (encode-path-segment $bunqme_fundraiser_result_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/bunqme-fundraiser-result/{bunqme_fundraiser_result_id}/note-text/{item_id}") $auth.query)
   let req_body = {"content": $content} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # bunq.me fundraiser result containing all payments.
@@ -4967,12 +6345,23 @@ export def "user-monetary-account-bunqme-fundraiser-result get" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/bunqme-fundraiser-result/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/bunqme-fundraiser-result/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # bunq.me tabs allows you to create a payment request and share the link through e-mail, chat, etc. Multiple persons are able to respond to the payment request and pay through bunq, iDeal or SOFORT.
@@ -5003,12 +6392,23 @@ export def "user-monetary-account-bunqme-tab list" [
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/bunqme-tab"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/bunqme-tab") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # bunq.me tabs allows you to create a payment request and share the link through e-mail, chat, etc. Multiple persons are able to respond to the payment request and pay through bunq, iDeal or SOFORT.
@@ -5043,14 +6443,25 @@ export def "user-monetary-account-bunqme-tab create" [
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/bunqme-tab"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/bunqme-tab") $auth.query)
   let req_body = {"bunqme_tab_entry": $bunqme_tab_entry, "status": $status} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Used to view bunq.me TabResultResponse objects belonging to a tab. A TabResultResponse is an object that holds details on a tab which has been paid from the provided monetary account.
@@ -5083,12 +6494,23 @@ export def "user-monetary-account-bunqme-tab-result-response get" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/bunqme-tab-result-response/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/bunqme-tab-result-response/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # bunq.me tabs allows you to create a payment request and share the link through e-mail, chat, etc. Multiple persons are able to respond to the payment request and pay through bunq, iDeal or SOFORT.
@@ -5121,12 +6543,23 @@ export def "user-monetary-account-bunqme-tab get" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/bunqme-tab/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/bunqme-tab/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # bunq.me tabs allows you to create a payment request and share the link through e-mail, chat, etc. Multiple persons are able to respond to the payment request and pay through bunq, iDeal or SOFORT.
@@ -5163,14 +6596,25 @@ export def "user-monetary-account-bunqme-tab update" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/bunqme-tab/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/bunqme-tab/{item_id}") $auth.query)
   let req_body = {"bunqme_tab_entry": $bunqme_tab_entry, "status": $status} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Endpoint for managing currency conversions.
@@ -5204,14 +6648,25 @@ export def "user-monetary-account-currency-cloud-payment-quote create" [
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/currency-cloud-payment-quote"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/currency-cloud-payment-quote") $auth.query)
   let req_body = {"pointers": $pointers} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Endpoint for managing currency conversions.
@@ -5242,12 +6697,23 @@ export def "user-monetary-account-currency-conversion list" [
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/currency-conversion"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/currency-conversion") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Endpoint to create a quote for currency conversions.
@@ -5286,14 +6752,25 @@ export def "user-monetary-account-currency-conversion-quote create" [
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/currency-conversion-quote"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/currency-conversion-quote") $auth.query)
   let req_body = {"amount": $amount, "counterparty_alias": $counterparty_alias, "currency_source": $currency_source, "currency_target": $currency_target, "status": $status} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Endpoint to create a quote for currency conversions.
@@ -5326,12 +6803,23 @@ export def "user-monetary-account-currency-conversion-quote get" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/currency-conversion-quote/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/currency-conversion-quote/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Endpoint to create a quote for currency conversions.
@@ -5372,14 +6860,25 @@ export def "user-monetary-account-currency-conversion-quote update" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/currency-conversion-quote/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/currency-conversion-quote/{item_id}") $auth.query)
   let req_body = {"amount": $amount, "counterparty_alias": $counterparty_alias, "currency_source": $currency_source, "currency_target": $currency_target, "status": $status} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Endpoint for managing currency conversions.
@@ -5412,12 +6911,23 @@ export def "user-monetary-account-currency-conversion get" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/currency-conversion/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/currency-conversion/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Used to create new and read existing statement exports. Statement exports can be created in either CSV, MT940 or PDF file format.
@@ -5448,12 +6958,23 @@ export def "user-monetary-account-customer-statement list" [
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/customer-statement"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/customer-statement") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Used to create new and read existing statement exports. Statement exports can be created in either CSV, MT940 or PDF file format.
@@ -5490,14 +7011,25 @@ export def "user-monetary-account-customer-statement create" [
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/customer-statement"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/customer-statement") $auth.query)
   let req_body = {"date_end": $date_end, "date_start": $date_start, "include_attachment": $include_attachment, "regional_format": $regional_format, "statement_format": $statement_format} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Fetch the raw content of a statement export. The returned file format could be MT940, CSV or PDF depending on the statement format specified during the statement creation. The doc won't display the response of a request to get the content of a statement export.
@@ -5530,12 +7062,23 @@ export def "user-monetary-account-customer-statement-content list" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($customer_statement_id | is-empty) { error make --unspanned { msg: "path parameter 'customer-statementID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), customer_statement_id: (encode-path-segment $customer_statement_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/customer-statement/{customer_statement_id}/content"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), customer_statement_id: (encode-path-segment $customer_statement_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/customer-statement/{customer_statement_id}/content") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Used to create new and read existing statement exports. Statement exports can be created in either CSV, MT940 or PDF file format.
@@ -5568,12 +7111,23 @@ export def "user-monetary-account-customer-statement delete" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/customer-statement/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/customer-statement/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Used to create new and read existing statement exports. Statement exports can be created in either CSV, MT940 or PDF file format.
@@ -5606,12 +7160,23 @@ export def "user-monetary-account-customer-statement get" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/customer-statement/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/customer-statement/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get a listing of all DraftPayments from a given MonetaryAccount.
@@ -5642,12 +7207,23 @@ export def "user-monetary-account-draft-payment list" [
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/draft-payment"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/draft-payment") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a new DraftPayment.
@@ -5686,14 +7262,25 @@ export def "user-monetary-account-draft-payment create" [
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/draft-payment"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/draft-payment") $auth.query)
   let req_body = {"entries": $entries, "number_of_required_accepts": $number_of_required_accepts, "previous_updated_timestamp": $previous_updated_timestamp, "schedule": $schedule, "status": $status} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Manage the notes for a given user.
@@ -5726,12 +7313,23 @@ export def "user-monetary-account-draft-payment-note-attachment list" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($draft_payment_id | is-empty) { error make --unspanned { msg: "path parameter 'draft-paymentID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), draft_payment_id: (encode-path-segment $draft_payment_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/draft-payment/{draft_payment_id}/note-attachment"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), draft_payment_id: (encode-path-segment $draft_payment_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/draft-payment/{draft_payment_id}/note-attachment") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Used to manage attachment notes.
@@ -5767,14 +7365,25 @@ export def "user-monetary-account-draft-payment-note-attachment create" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($draft_payment_id | is-empty) { error make --unspanned { msg: "path parameter 'draft-paymentID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), draft_payment_id: (encode-path-segment $draft_payment_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/draft-payment/{draft_payment_id}/note-attachment"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), draft_payment_id: (encode-path-segment $draft_payment_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/draft-payment/{draft_payment_id}/note-attachment") $auth.query)
   let req_body = {"attachment_id": $attachment_id, "description": $description} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Used to manage attachment notes.
@@ -5809,12 +7418,23 @@ export def "user-monetary-account-draft-payment-note-attachment delete" [
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($draft_payment_id | is-empty) { error make --unspanned { msg: "path parameter 'draft-paymentID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), draft_payment_id: (encode-path-segment $draft_payment_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/draft-payment/{draft_payment_id}/note-attachment/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), draft_payment_id: (encode-path-segment $draft_payment_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/draft-payment/{draft_payment_id}/note-attachment/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Used to manage attachment notes.
@@ -5849,12 +7469,23 @@ export def "user-monetary-account-draft-payment-note-attachment get" [
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($draft_payment_id | is-empty) { error make --unspanned { msg: "path parameter 'draft-paymentID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), draft_payment_id: (encode-path-segment $draft_payment_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/draft-payment/{draft_payment_id}/note-attachment/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), draft_payment_id: (encode-path-segment $draft_payment_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/draft-payment/{draft_payment_id}/note-attachment/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Used to manage attachment notes.
@@ -5892,14 +7523,25 @@ export def "user-monetary-account-draft-payment-note-attachment update" [
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($draft_payment_id | is-empty) { error make --unspanned { msg: "path parameter 'draft-paymentID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), draft_payment_id: (encode-path-segment $draft_payment_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/draft-payment/{draft_payment_id}/note-attachment/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), draft_payment_id: (encode-path-segment $draft_payment_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/draft-payment/{draft_payment_id}/note-attachment/{item_id}") $auth.query)
   let req_body = {"attachment_id": $attachment_id, "description": $description} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Manage the notes for a given user.
@@ -5932,12 +7574,23 @@ export def "user-monetary-account-draft-payment-note-text list" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($draft_payment_id | is-empty) { error make --unspanned { msg: "path parameter 'draft-paymentID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), draft_payment_id: (encode-path-segment $draft_payment_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/draft-payment/{draft_payment_id}/note-text"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), draft_payment_id: (encode-path-segment $draft_payment_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/draft-payment/{draft_payment_id}/note-text") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Used to manage text notes.
@@ -5972,14 +7625,25 @@ export def "user-monetary-account-draft-payment-note-text create" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($draft_payment_id | is-empty) { error make --unspanned { msg: "path parameter 'draft-paymentID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), draft_payment_id: (encode-path-segment $draft_payment_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/draft-payment/{draft_payment_id}/note-text"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), draft_payment_id: (encode-path-segment $draft_payment_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/draft-payment/{draft_payment_id}/note-text") $auth.query)
   let req_body = {"content": $content} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Used to manage text notes.
@@ -6014,12 +7678,23 @@ export def "user-monetary-account-draft-payment-note-text delete" [
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($draft_payment_id | is-empty) { error make --unspanned { msg: "path parameter 'draft-paymentID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), draft_payment_id: (encode-path-segment $draft_payment_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/draft-payment/{draft_payment_id}/note-text/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), draft_payment_id: (encode-path-segment $draft_payment_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/draft-payment/{draft_payment_id}/note-text/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Used to manage text notes.
@@ -6054,12 +7729,23 @@ export def "user-monetary-account-draft-payment-note-text get" [
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($draft_payment_id | is-empty) { error make --unspanned { msg: "path parameter 'draft-paymentID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), draft_payment_id: (encode-path-segment $draft_payment_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/draft-payment/{draft_payment_id}/note-text/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), draft_payment_id: (encode-path-segment $draft_payment_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/draft-payment/{draft_payment_id}/note-text/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Used to manage text notes.
@@ -6096,14 +7782,25 @@ export def "user-monetary-account-draft-payment-note-text update" [
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($draft_payment_id | is-empty) { error make --unspanned { msg: "path parameter 'draft-paymentID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), draft_payment_id: (encode-path-segment $draft_payment_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/draft-payment/{draft_payment_id}/note-text/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), draft_payment_id: (encode-path-segment $draft_payment_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/draft-payment/{draft_payment_id}/note-text/{item_id}") $auth.query)
   let req_body = {"content": $content} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get a specific DraftPayment.
@@ -6136,12 +7833,23 @@ export def "user-monetary-account-draft-payment get" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/draft-payment/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/draft-payment/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update a DraftPayment.
@@ -6182,14 +7890,25 @@ export def "user-monetary-account-draft-payment update" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/draft-payment/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/draft-payment/{item_id}") $auth.query)
   let req_body = {"entries": $entries, "number_of_required_accepts": $number_of_required_accepts, "previous_updated_timestamp": $previous_updated_timestamp, "schedule": $schedule, "status": $status} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Used to create a statement export of a single payment.
@@ -6224,14 +7943,25 @@ export def "user-monetary-account-event-statement create" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($event_id | is-empty) { error make --unspanned { msg: "path parameter 'eventID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), event_id: (encode-path-segment $event_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/event/{event_id}/statement"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), event_id: (encode-path-segment $event_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/event/{event_id}/statement") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Used to create a statement export of a single payment.
@@ -6266,12 +7996,23 @@ export def "user-monetary-account-event-statement get" [
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($event_id | is-empty) { error make --unspanned { msg: "path parameter 'eventID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), event_id: (encode-path-segment $event_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/event/{event_id}/statement/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), event_id: (encode-path-segment $event_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/event/{event_id}/statement/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Fetch the raw content of a payment statement export.
@@ -6306,12 +8047,23 @@ export def "user-monetary-account-event-statement-content list" [
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($event_id | is-empty) { error make --unspanned { msg: "path parameter 'eventID' must be non-empty" } }
   if ($statement_id | is-empty) { error make --unspanned { msg: "path parameter 'statementID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), event_id: (encode-path-segment $event_id), statement_id: (encode-path-segment $statement_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/event/{event_id}/statement/{statement_id}/content"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), event_id: (encode-path-segment $event_id), statement_id: (encode-path-segment $statement_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/event/{event_id}/statement/{statement_id}/content") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List all the RIBs for a monetary account.
@@ -6342,12 +8094,23 @@ export def "user-monetary-account-export-rib list" [
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/export-rib"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/export-rib") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a new RIB.
@@ -6380,14 +8143,25 @@ export def "user-monetary-account-export-rib create" [
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/export-rib"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/export-rib") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Used to retrieve the raw content of an RIB.
@@ -6420,12 +8194,23 @@ export def "user-monetary-account-export-rib-content list" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($export_rib_id | is-empty) { error make --unspanned { msg: "path parameter 'export-ribID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), export_rib_id: (encode-path-segment $export_rib_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/export-rib/{export_rib_id}/content"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), export_rib_id: (encode-path-segment $export_rib_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/export-rib/{export_rib_id}/content") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Used to create new and read existing RIBs of a monetary account
@@ -6458,12 +8243,23 @@ export def "user-monetary-account-export-rib delete" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/export-rib/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/export-rib/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Get a RIB for a monetary account by its id.
@@ -6496,12 +8292,23 @@ export def "user-monetary-account-export-rib get" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/export-rib/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/export-rib/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # View for requesting iDEAL transactions and polling their status.
@@ -6532,12 +8339,23 @@ export def "user-monetary-account-ideal-merchant-transaction list" [
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/ideal-merchant-transaction"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/ideal-merchant-transaction") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # View for requesting iDEAL transactions and polling their status.
@@ -6578,14 +8396,25 @@ export def "user-monetary-account-ideal-merchant-transaction create" [
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/ideal-merchant-transaction"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/ideal-merchant-transaction") $auth.query)
   let req_body = {"alias": $alias, "amount_guaranteed": $amount_guaranteed, "amount_requested": $amount_requested, "counterparty_alias": $counterparty_alias, "issuer": $issuer} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Manage the notes for a given user.
@@ -6618,12 +8447,23 @@ export def "user-monetary-account-ideal-merchant-transaction-note-attachment lis
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($ideal_merchant_transaction_id | is-empty) { error make --unspanned { msg: "path parameter 'ideal-merchant-transactionID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), ideal_merchant_transaction_id: (encode-path-segment $ideal_merchant_transaction_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/ideal-merchant-transaction/{ideal_merchant_transaction_id}/note-attachment"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), ideal_merchant_transaction_id: (encode-path-segment $ideal_merchant_transaction_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/ideal-merchant-transaction/{ideal_merchant_transaction_id}/note-attachment") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Used to manage attachment notes.
@@ -6659,14 +8499,25 @@ export def "user-monetary-account-ideal-merchant-transaction-note-attachment cre
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($ideal_merchant_transaction_id | is-empty) { error make --unspanned { msg: "path parameter 'ideal-merchant-transactionID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), ideal_merchant_transaction_id: (encode-path-segment $ideal_merchant_transaction_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/ideal-merchant-transaction/{ideal_merchant_transaction_id}/note-attachment"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), ideal_merchant_transaction_id: (encode-path-segment $ideal_merchant_transaction_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/ideal-merchant-transaction/{ideal_merchant_transaction_id}/note-attachment") $auth.query)
   let req_body = {"attachment_id": $attachment_id, "description": $description} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Used to manage attachment notes.
@@ -6701,12 +8552,23 @@ export def "user-monetary-account-ideal-merchant-transaction-note-attachment del
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($ideal_merchant_transaction_id | is-empty) { error make --unspanned { msg: "path parameter 'ideal-merchant-transactionID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), ideal_merchant_transaction_id: (encode-path-segment $ideal_merchant_transaction_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/ideal-merchant-transaction/{ideal_merchant_transaction_id}/note-attachment/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), ideal_merchant_transaction_id: (encode-path-segment $ideal_merchant_transaction_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/ideal-merchant-transaction/{ideal_merchant_transaction_id}/note-attachment/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Used to manage attachment notes.
@@ -6741,12 +8603,23 @@ export def "user-monetary-account-ideal-merchant-transaction-note-attachment get
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($ideal_merchant_transaction_id | is-empty) { error make --unspanned { msg: "path parameter 'ideal-merchant-transactionID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), ideal_merchant_transaction_id: (encode-path-segment $ideal_merchant_transaction_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/ideal-merchant-transaction/{ideal_merchant_transaction_id}/note-attachment/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), ideal_merchant_transaction_id: (encode-path-segment $ideal_merchant_transaction_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/ideal-merchant-transaction/{ideal_merchant_transaction_id}/note-attachment/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Used to manage attachment notes.
@@ -6784,14 +8657,25 @@ export def "user-monetary-account-ideal-merchant-transaction-note-attachment upd
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($ideal_merchant_transaction_id | is-empty) { error make --unspanned { msg: "path parameter 'ideal-merchant-transactionID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), ideal_merchant_transaction_id: (encode-path-segment $ideal_merchant_transaction_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/ideal-merchant-transaction/{ideal_merchant_transaction_id}/note-attachment/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), ideal_merchant_transaction_id: (encode-path-segment $ideal_merchant_transaction_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/ideal-merchant-transaction/{ideal_merchant_transaction_id}/note-attachment/{item_id}") $auth.query)
   let req_body = {"attachment_id": $attachment_id, "description": $description} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Manage the notes for a given user.
@@ -6824,12 +8708,23 @@ export def "user-monetary-account-ideal-merchant-transaction-note-text list" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($ideal_merchant_transaction_id | is-empty) { error make --unspanned { msg: "path parameter 'ideal-merchant-transactionID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), ideal_merchant_transaction_id: (encode-path-segment $ideal_merchant_transaction_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/ideal-merchant-transaction/{ideal_merchant_transaction_id}/note-text"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), ideal_merchant_transaction_id: (encode-path-segment $ideal_merchant_transaction_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/ideal-merchant-transaction/{ideal_merchant_transaction_id}/note-text") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Used to manage text notes.
@@ -6864,14 +8759,25 @@ export def "user-monetary-account-ideal-merchant-transaction-note-text create" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($ideal_merchant_transaction_id | is-empty) { error make --unspanned { msg: "path parameter 'ideal-merchant-transactionID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), ideal_merchant_transaction_id: (encode-path-segment $ideal_merchant_transaction_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/ideal-merchant-transaction/{ideal_merchant_transaction_id}/note-text"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), ideal_merchant_transaction_id: (encode-path-segment $ideal_merchant_transaction_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/ideal-merchant-transaction/{ideal_merchant_transaction_id}/note-text") $auth.query)
   let req_body = {"content": $content} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Used to manage text notes.
@@ -6906,12 +8812,23 @@ export def "user-monetary-account-ideal-merchant-transaction-note-text delete" [
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($ideal_merchant_transaction_id | is-empty) { error make --unspanned { msg: "path parameter 'ideal-merchant-transactionID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), ideal_merchant_transaction_id: (encode-path-segment $ideal_merchant_transaction_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/ideal-merchant-transaction/{ideal_merchant_transaction_id}/note-text/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), ideal_merchant_transaction_id: (encode-path-segment $ideal_merchant_transaction_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/ideal-merchant-transaction/{ideal_merchant_transaction_id}/note-text/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Used to manage text notes.
@@ -6946,12 +8863,23 @@ export def "user-monetary-account-ideal-merchant-transaction-note-text get" [
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($ideal_merchant_transaction_id | is-empty) { error make --unspanned { msg: "path parameter 'ideal-merchant-transactionID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), ideal_merchant_transaction_id: (encode-path-segment $ideal_merchant_transaction_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/ideal-merchant-transaction/{ideal_merchant_transaction_id}/note-text/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), ideal_merchant_transaction_id: (encode-path-segment $ideal_merchant_transaction_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/ideal-merchant-transaction/{ideal_merchant_transaction_id}/note-text/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Used to manage text notes.
@@ -6988,14 +8916,25 @@ export def "user-monetary-account-ideal-merchant-transaction-note-text update" [
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($ideal_merchant_transaction_id | is-empty) { error make --unspanned { msg: "path parameter 'ideal-merchant-transactionID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), ideal_merchant_transaction_id: (encode-path-segment $ideal_merchant_transaction_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/ideal-merchant-transaction/{ideal_merchant_transaction_id}/note-text/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), ideal_merchant_transaction_id: (encode-path-segment $ideal_merchant_transaction_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/ideal-merchant-transaction/{ideal_merchant_transaction_id}/note-text/{item_id}") $auth.query)
   let req_body = {"content": $content} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # View for requesting iDEAL transactions and polling their status.
@@ -7028,12 +8967,23 @@ export def "user-monetary-account-ideal-merchant-transaction get" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/ideal-merchant-transaction/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/ideal-merchant-transaction/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Used to view a bunq invoice.
@@ -7064,12 +9014,23 @@ export def "user-monetary-account-invoice list" [
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/invoice"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/invoice") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Used to view a bunq invoice.
@@ -7102,12 +9063,23 @@ export def "user-monetary-account-invoice get" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/invoice/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/invoice/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # MasterCard transaction view.
@@ -7138,12 +9110,23 @@ export def "user-monetary-account-mastercard-action list" [
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/mastercard-action"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/mastercard-action") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # MasterCard transaction view.
@@ -7176,12 +9159,23 @@ export def "user-monetary-account-mastercard-action get" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/mastercard-action/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/mastercard-action/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Manage the notes for a given user.
@@ -7214,12 +9208,23 @@ export def "user-monetary-account-mastercard-action-note-attachment list" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($mastercard_action_id | is-empty) { error make --unspanned { msg: "path parameter 'mastercard-actionID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), mastercard_action_id: (encode-path-segment $mastercard_action_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/mastercard-action/{mastercard_action_id}/note-attachment"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), mastercard_action_id: (encode-path-segment $mastercard_action_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/mastercard-action/{mastercard_action_id}/note-attachment") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Used to manage attachment notes.
@@ -7255,14 +9260,25 @@ export def "user-monetary-account-mastercard-action-note-attachment create" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($mastercard_action_id | is-empty) { error make --unspanned { msg: "path parameter 'mastercard-actionID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), mastercard_action_id: (encode-path-segment $mastercard_action_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/mastercard-action/{mastercard_action_id}/note-attachment"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), mastercard_action_id: (encode-path-segment $mastercard_action_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/mastercard-action/{mastercard_action_id}/note-attachment") $auth.query)
   let req_body = {"attachment_id": $attachment_id, "description": $description} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Used to manage attachment notes.
@@ -7297,12 +9313,23 @@ export def "user-monetary-account-mastercard-action-note-attachment delete" [
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($mastercard_action_id | is-empty) { error make --unspanned { msg: "path parameter 'mastercard-actionID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), mastercard_action_id: (encode-path-segment $mastercard_action_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/mastercard-action/{mastercard_action_id}/note-attachment/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), mastercard_action_id: (encode-path-segment $mastercard_action_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/mastercard-action/{mastercard_action_id}/note-attachment/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Used to manage attachment notes.
@@ -7337,12 +9364,23 @@ export def "user-monetary-account-mastercard-action-note-attachment get" [
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($mastercard_action_id | is-empty) { error make --unspanned { msg: "path parameter 'mastercard-actionID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), mastercard_action_id: (encode-path-segment $mastercard_action_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/mastercard-action/{mastercard_action_id}/note-attachment/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), mastercard_action_id: (encode-path-segment $mastercard_action_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/mastercard-action/{mastercard_action_id}/note-attachment/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Used to manage attachment notes.
@@ -7380,14 +9418,25 @@ export def "user-monetary-account-mastercard-action-note-attachment update" [
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($mastercard_action_id | is-empty) { error make --unspanned { msg: "path parameter 'mastercard-actionID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), mastercard_action_id: (encode-path-segment $mastercard_action_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/mastercard-action/{mastercard_action_id}/note-attachment/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), mastercard_action_id: (encode-path-segment $mastercard_action_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/mastercard-action/{mastercard_action_id}/note-attachment/{item_id}") $auth.query)
   let req_body = {"attachment_id": $attachment_id, "description": $description} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Manage the notes for a given user.
@@ -7420,12 +9469,23 @@ export def "user-monetary-account-mastercard-action-note-text list" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($mastercard_action_id | is-empty) { error make --unspanned { msg: "path parameter 'mastercard-actionID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), mastercard_action_id: (encode-path-segment $mastercard_action_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/mastercard-action/{mastercard_action_id}/note-text"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), mastercard_action_id: (encode-path-segment $mastercard_action_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/mastercard-action/{mastercard_action_id}/note-text") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Used to manage text notes.
@@ -7460,14 +9520,25 @@ export def "user-monetary-account-mastercard-action-note-text create" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($mastercard_action_id | is-empty) { error make --unspanned { msg: "path parameter 'mastercard-actionID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), mastercard_action_id: (encode-path-segment $mastercard_action_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/mastercard-action/{mastercard_action_id}/note-text"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), mastercard_action_id: (encode-path-segment $mastercard_action_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/mastercard-action/{mastercard_action_id}/note-text") $auth.query)
   let req_body = {"content": $content} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Used to manage text notes.
@@ -7502,12 +9573,23 @@ export def "user-monetary-account-mastercard-action-note-text delete" [
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($mastercard_action_id | is-empty) { error make --unspanned { msg: "path parameter 'mastercard-actionID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), mastercard_action_id: (encode-path-segment $mastercard_action_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/mastercard-action/{mastercard_action_id}/note-text/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), mastercard_action_id: (encode-path-segment $mastercard_action_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/mastercard-action/{mastercard_action_id}/note-text/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Used to manage text notes.
@@ -7542,12 +9624,23 @@ export def "user-monetary-account-mastercard-action-note-text get" [
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($mastercard_action_id | is-empty) { error make --unspanned { msg: "path parameter 'mastercard-actionID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), mastercard_action_id: (encode-path-segment $mastercard_action_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/mastercard-action/{mastercard_action_id}/note-text/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), mastercard_action_id: (encode-path-segment $mastercard_action_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/mastercard-action/{mastercard_action_id}/note-text/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Used to manage text notes.
@@ -7584,14 +9677,25 @@ export def "user-monetary-account-mastercard-action-note-text update" [
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($mastercard_action_id | is-empty) { error make --unspanned { msg: "path parameter 'mastercard-actionID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), mastercard_action_id: (encode-path-segment $mastercard_action_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/mastercard-action/{mastercard_action_id}/note-text/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), mastercard_action_id: (encode-path-segment $mastercard_action_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/mastercard-action/{mastercard_action_id}/note-text/{item_id}") $auth.query)
   let req_body = {"content": $content} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # MasterCard transaction view.
@@ -7624,12 +9728,23 @@ export def "user-monetary-account-mastercard-action-payment list" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($mastercard_action_id | is-empty) { error make --unspanned { msg: "path parameter 'mastercard-actionID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), mastercard_action_id: (encode-path-segment $mastercard_action_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/mastercard-action/{mastercard_action_id}/payment"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), mastercard_action_id: (encode-path-segment $mastercard_action_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/mastercard-action/{mastercard_action_id}/payment") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Manage the url notification filters for a user.
@@ -7660,12 +9775,23 @@ export def "user-monetary-account-notification-filter-url list" [
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/notification-filter-url"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/notification-filter-url") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Manage the url notification filters for a user.
@@ -7699,14 +9825,25 @@ export def "user-monetary-account-notification-filter-url create" [
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/notification-filter-url"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/notification-filter-url") $auth.query)
   let req_body = {"notification_filters": $notification_filters} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get a listing of all Payments performed on a given MonetaryAccount (incoming and outgoing).
@@ -7737,12 +9874,23 @@ export def "user-monetary-account-payment list" [
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/payment"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/payment") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a new Payment.
@@ -7795,14 +9943,25 @@ export def "user-monetary-account-payment create" [
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/payment"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/payment") $auth.query)
   let req_body = {"address_billing": $address_billing, "address_shipping": $address_shipping, "alias": $alias, "allow_bunqto": $allow_bunqto, "amount": $amount, "attachment": $attachment, "balance_after_mutation": $balance_after_mutation, "counterparty_alias": $counterparty_alias, "description": $description, "geolocation": $geolocation, "merchant_reference": $merchant_reference, "payment_auto_allocate_instance": $payment_auto_allocate_instance} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Manage a users automatic payment auto allocated settings.
@@ -7833,12 +9992,23 @@ export def "user-monetary-account-payment-auto-allocate list" [
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/payment-auto-allocate"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/payment-auto-allocate") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Manage a users automatic payment auto allocated settings.
@@ -7874,14 +10044,25 @@ export def "user-monetary-account-payment-auto-allocate create" [
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/payment-auto-allocate"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/payment-auto-allocate") $auth.query)
   let req_body = {"definition": $definition, "payment_id": $payment_id, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Manage a users automatic payment auto allocated settings.
@@ -7914,12 +10095,23 @@ export def "user-monetary-account-payment-auto-allocate delete" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/payment-auto-allocate/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/payment-auto-allocate/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Manage a users automatic payment auto allocated settings.
@@ -7952,12 +10144,23 @@ export def "user-monetary-account-payment-auto-allocate get" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/payment-auto-allocate/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/payment-auto-allocate/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Manage a users automatic payment auto allocated settings.
@@ -7995,14 +10198,25 @@ export def "user-monetary-account-payment-auto-allocate update" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/payment-auto-allocate/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/payment-auto-allocate/{item_id}") $auth.query)
   let req_body = {"definition": $definition, "payment_id": $payment_id, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # List all the definitions in a payment auto allocate.
@@ -8035,12 +10249,23 @@ export def "user-monetary-account-payment-auto-allocate-definition list" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($payment_auto_allocate_id | is-empty) { error make --unspanned { msg: "path parameter 'payment-auto-allocateID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), payment_auto_allocate_id: (encode-path-segment $payment_auto_allocate_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/payment-auto-allocate/{payment_auto_allocate_id}/definition"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), payment_auto_allocate_id: (encode-path-segment $payment_auto_allocate_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/payment-auto-allocate/{payment_auto_allocate_id}/definition") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List all the times a users payment was automatically allocated.
@@ -8073,12 +10298,23 @@ export def "user-monetary-account-payment-auto-allocate-instance list" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($payment_auto_allocate_id | is-empty) { error make --unspanned { msg: "path parameter 'payment-auto-allocateID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), payment_auto_allocate_id: (encode-path-segment $payment_auto_allocate_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/payment-auto-allocate/{payment_auto_allocate_id}/instance"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), payment_auto_allocate_id: (encode-path-segment $payment_auto_allocate_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/payment-auto-allocate/{payment_auto_allocate_id}/instance") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List all the times a users payment was automatically allocated.
@@ -8113,12 +10349,23 @@ export def "user-monetary-account-payment-auto-allocate-instance get" [
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($payment_auto_allocate_id | is-empty) { error make --unspanned { msg: "path parameter 'payment-auto-allocateID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), payment_auto_allocate_id: (encode-path-segment $payment_auto_allocate_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/payment-auto-allocate/{payment_auto_allocate_id}/instance/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), payment_auto_allocate_id: (encode-path-segment $payment_auto_allocate_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/payment-auto-allocate/{payment_auto_allocate_id}/instance/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Return all the payment batches for a monetary account.
@@ -8149,12 +10396,23 @@ export def "user-monetary-account-payment-batch list" [
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/payment-batch"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/payment-batch") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a payment batch by sending an array of single payment objects, that will become part of the batch.
@@ -8187,14 +10445,25 @@ export def "user-monetary-account-payment-batch create" [
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/payment-batch"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/payment-batch") $auth.query)
   let req_body = {"payments": $payments} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Return the details of a specific payment batch.
@@ -8227,12 +10496,23 @@ export def "user-monetary-account-payment-batch get" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/payment-batch/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/payment-batch/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Revoke a bunq.to payment batch. The status of all the payments will be set to REVOKED.
@@ -8267,14 +10547,25 @@ export def "user-monetary-account-payment-batch update" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/payment-batch/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/payment-batch/{item_id}") $auth.query)
   let req_body = {"payments": $payments} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Manage the notes for a given user.
@@ -8307,12 +10598,23 @@ export def "user-monetary-account-payment-batch-note-attachment list" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($payment_batch_id | is-empty) { error make --unspanned { msg: "path parameter 'payment-batchID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), payment_batch_id: (encode-path-segment $payment_batch_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/payment-batch/{payment_batch_id}/note-attachment"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), payment_batch_id: (encode-path-segment $payment_batch_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/payment-batch/{payment_batch_id}/note-attachment") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Used to manage attachment notes.
@@ -8348,14 +10650,25 @@ export def "user-monetary-account-payment-batch-note-attachment create" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($payment_batch_id | is-empty) { error make --unspanned { msg: "path parameter 'payment-batchID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), payment_batch_id: (encode-path-segment $payment_batch_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/payment-batch/{payment_batch_id}/note-attachment"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), payment_batch_id: (encode-path-segment $payment_batch_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/payment-batch/{payment_batch_id}/note-attachment") $auth.query)
   let req_body = {"attachment_id": $attachment_id, "description": $description} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Used to manage attachment notes.
@@ -8390,12 +10703,23 @@ export def "user-monetary-account-payment-batch-note-attachment delete" [
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($payment_batch_id | is-empty) { error make --unspanned { msg: "path parameter 'payment-batchID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), payment_batch_id: (encode-path-segment $payment_batch_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/payment-batch/{payment_batch_id}/note-attachment/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), payment_batch_id: (encode-path-segment $payment_batch_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/payment-batch/{payment_batch_id}/note-attachment/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Used to manage attachment notes.
@@ -8430,12 +10754,23 @@ export def "user-monetary-account-payment-batch-note-attachment get" [
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($payment_batch_id | is-empty) { error make --unspanned { msg: "path parameter 'payment-batchID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), payment_batch_id: (encode-path-segment $payment_batch_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/payment-batch/{payment_batch_id}/note-attachment/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), payment_batch_id: (encode-path-segment $payment_batch_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/payment-batch/{payment_batch_id}/note-attachment/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Used to manage attachment notes.
@@ -8473,14 +10808,25 @@ export def "user-monetary-account-payment-batch-note-attachment update" [
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($payment_batch_id | is-empty) { error make --unspanned { msg: "path parameter 'payment-batchID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), payment_batch_id: (encode-path-segment $payment_batch_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/payment-batch/{payment_batch_id}/note-attachment/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), payment_batch_id: (encode-path-segment $payment_batch_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/payment-batch/{payment_batch_id}/note-attachment/{item_id}") $auth.query)
   let req_body = {"attachment_id": $attachment_id, "description": $description} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Manage the notes for a given user.
@@ -8513,12 +10859,23 @@ export def "user-monetary-account-payment-batch-note-text list" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($payment_batch_id | is-empty) { error make --unspanned { msg: "path parameter 'payment-batchID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), payment_batch_id: (encode-path-segment $payment_batch_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/payment-batch/{payment_batch_id}/note-text"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), payment_batch_id: (encode-path-segment $payment_batch_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/payment-batch/{payment_batch_id}/note-text") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Used to manage text notes.
@@ -8553,14 +10910,25 @@ export def "user-monetary-account-payment-batch-note-text create" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($payment_batch_id | is-empty) { error make --unspanned { msg: "path parameter 'payment-batchID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), payment_batch_id: (encode-path-segment $payment_batch_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/payment-batch/{payment_batch_id}/note-text"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), payment_batch_id: (encode-path-segment $payment_batch_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/payment-batch/{payment_batch_id}/note-text") $auth.query)
   let req_body = {"content": $content} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Used to manage text notes.
@@ -8595,12 +10963,23 @@ export def "user-monetary-account-payment-batch-note-text delete" [
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($payment_batch_id | is-empty) { error make --unspanned { msg: "path parameter 'payment-batchID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), payment_batch_id: (encode-path-segment $payment_batch_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/payment-batch/{payment_batch_id}/note-text/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), payment_batch_id: (encode-path-segment $payment_batch_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/payment-batch/{payment_batch_id}/note-text/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Used to manage text notes.
@@ -8635,12 +11014,23 @@ export def "user-monetary-account-payment-batch-note-text get" [
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($payment_batch_id | is-empty) { error make --unspanned { msg: "path parameter 'payment-batchID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), payment_batch_id: (encode-path-segment $payment_batch_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/payment-batch/{payment_batch_id}/note-text/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), payment_batch_id: (encode-path-segment $payment_batch_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/payment-batch/{payment_batch_id}/note-text/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Used to manage text notes.
@@ -8677,14 +11067,25 @@ export def "user-monetary-account-payment-batch-note-text update" [
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($payment_batch_id | is-empty) { error make --unspanned { msg: "path parameter 'payment-batchID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), payment_batch_id: (encode-path-segment $payment_batch_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/payment-batch/{payment_batch_id}/note-text/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), payment_batch_id: (encode-path-segment $payment_batch_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/payment-batch/{payment_batch_id}/note-text/{item_id}") $auth.query)
   let req_body = {"content": $content} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get a specific previous Payment.
@@ -8717,12 +11118,23 @@ export def "user-monetary-account-payment get" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/payment/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/payment/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Manage the notes for a given user.
@@ -8755,12 +11167,23 @@ export def "user-monetary-account-payment-note-attachment list" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($payment_id | is-empty) { error make --unspanned { msg: "path parameter 'paymentID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), payment_id: (encode-path-segment $payment_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/payment/{payment_id}/note-attachment"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), payment_id: (encode-path-segment $payment_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/payment/{payment_id}/note-attachment") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Used to manage attachment notes.
@@ -8796,14 +11219,25 @@ export def "user-monetary-account-payment-note-attachment create" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($payment_id | is-empty) { error make --unspanned { msg: "path parameter 'paymentID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), payment_id: (encode-path-segment $payment_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/payment/{payment_id}/note-attachment"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), payment_id: (encode-path-segment $payment_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/payment/{payment_id}/note-attachment") $auth.query)
   let req_body = {"attachment_id": $attachment_id, "description": $description} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Used to manage attachment notes.
@@ -8838,12 +11272,23 @@ export def "user-monetary-account-payment-note-attachment delete" [
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($payment_id | is-empty) { error make --unspanned { msg: "path parameter 'paymentID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), payment_id: (encode-path-segment $payment_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/payment/{payment_id}/note-attachment/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), payment_id: (encode-path-segment $payment_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/payment/{payment_id}/note-attachment/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Used to manage attachment notes.
@@ -8878,12 +11323,23 @@ export def "user-monetary-account-payment-note-attachment get" [
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($payment_id | is-empty) { error make --unspanned { msg: "path parameter 'paymentID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), payment_id: (encode-path-segment $payment_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/payment/{payment_id}/note-attachment/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), payment_id: (encode-path-segment $payment_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/payment/{payment_id}/note-attachment/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Used to manage attachment notes.
@@ -8921,14 +11377,25 @@ export def "user-monetary-account-payment-note-attachment update" [
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($payment_id | is-empty) { error make --unspanned { msg: "path parameter 'paymentID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), payment_id: (encode-path-segment $payment_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/payment/{payment_id}/note-attachment/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), payment_id: (encode-path-segment $payment_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/payment/{payment_id}/note-attachment/{item_id}") $auth.query)
   let req_body = {"attachment_id": $attachment_id, "description": $description} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Manage the notes for a given user.
@@ -8961,12 +11428,23 @@ export def "user-monetary-account-payment-note-text list" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($payment_id | is-empty) { error make --unspanned { msg: "path parameter 'paymentID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), payment_id: (encode-path-segment $payment_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/payment/{payment_id}/note-text"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), payment_id: (encode-path-segment $payment_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/payment/{payment_id}/note-text") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Used to manage text notes.
@@ -9001,14 +11479,25 @@ export def "user-monetary-account-payment-note-text create" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($payment_id | is-empty) { error make --unspanned { msg: "path parameter 'paymentID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), payment_id: (encode-path-segment $payment_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/payment/{payment_id}/note-text"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), payment_id: (encode-path-segment $payment_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/payment/{payment_id}/note-text") $auth.query)
   let req_body = {"content": $content} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Used to manage text notes.
@@ -9043,12 +11532,23 @@ export def "user-monetary-account-payment-note-text delete" [
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($payment_id | is-empty) { error make --unspanned { msg: "path parameter 'paymentID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), payment_id: (encode-path-segment $payment_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/payment/{payment_id}/note-text/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), payment_id: (encode-path-segment $payment_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/payment/{payment_id}/note-text/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Used to manage text notes.
@@ -9083,12 +11583,23 @@ export def "user-monetary-account-payment-note-text get" [
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($payment_id | is-empty) { error make --unspanned { msg: "path parameter 'paymentID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), payment_id: (encode-path-segment $payment_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/payment/{payment_id}/note-text/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), payment_id: (encode-path-segment $payment_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/payment/{payment_id}/note-text/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Used to manage text notes.
@@ -9125,14 +11636,25 @@ export def "user-monetary-account-payment-note-text update" [
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($payment_id | is-empty) { error make --unspanned { msg: "path parameter 'paymentID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), payment_id: (encode-path-segment $payment_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/payment/{payment_id}/note-text/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), payment_id: (encode-path-segment $payment_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/payment/{payment_id}/note-text/{item_id}") $auth.query)
   let req_body = {"content": $content} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get all payment requests for a user's monetary account. bunqme_share_url is always null if the counterparty is a bunq user.
@@ -9163,12 +11685,23 @@ export def "user-monetary-account-request-inquiry list" [
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/request-inquiry"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/request-inquiry") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a new payment request.
@@ -9231,14 +11764,25 @@ export def "user-monetary-account-request-inquiry create" [
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/request-inquiry"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/request-inquiry") $auth.query)
   let req_body = {"address_billing": $address_billing, "address_shipping": $address_shipping, "allow_amount_higher": $allow_amount_higher, "allow_amount_lower": $allow_amount_lower, "allow_bunqme": $allow_bunqme, "amount_inquired": $amount_inquired, "amount_responded": $amount_responded, "attachment": $attachment, "counterparty_alias": $counterparty_alias, "description": $description, "event_id": $event_id, "geolocation": $geolocation, "merchant_reference": $merchant_reference, "minimum_age": $minimum_age, "redirect_url": $redirect_url, "reference_split_the_bill": $reference_split_the_bill, "require_address": $require_address, "status": $status, "user_alias_created": $user_alias_created, "user_alias_revoked": $user_alias_revoked, "want_tip": $want_tip} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Return all the request batches for a monetary account.
@@ -9269,12 +11813,23 @@ export def "user-monetary-account-request-inquiry-batch list" [
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/request-inquiry-batch"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/request-inquiry-batch") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a request batch by sending an array of single request objects, that will become part of the batch.
@@ -9314,14 +11869,25 @@ export def "user-monetary-account-request-inquiry-batch create" [
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/request-inquiry-batch"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/request-inquiry-batch") $auth.query)
   let req_body = {"event_id": $event_id, "reference_split_the_bill": $reference_split_the_bill, "request_inquiries": $request_inquiries, "status": $status, "total_amount_inquired": $total_amount_inquired} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Return the details of a specific request batch.
@@ -9354,12 +11920,23 @@ export def "user-monetary-account-request-inquiry-batch get" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/request-inquiry-batch/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/request-inquiry-batch/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Revoke a request batch. The status of all the requests will be set to REVOKED.
@@ -9401,14 +11978,25 @@ export def "user-monetary-account-request-inquiry-batch update" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/request-inquiry-batch/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/request-inquiry-batch/{item_id}") $auth.query)
   let req_body = {"event_id": $event_id, "reference_split_the_bill": $reference_split_the_bill, "request_inquiries": $request_inquiries, "status": $status, "total_amount_inquired": $total_amount_inquired} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Manage the notes for a given user.
@@ -9441,12 +12029,23 @@ export def "user-monetary-account-request-inquiry-batch-note-attachment list" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($request_inquiry_batch_id | is-empty) { error make --unspanned { msg: "path parameter 'request-inquiry-batchID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), request_inquiry_batch_id: (encode-path-segment $request_inquiry_batch_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/request-inquiry-batch/{request_inquiry_batch_id}/note-attachment"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), request_inquiry_batch_id: (encode-path-segment $request_inquiry_batch_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/request-inquiry-batch/{request_inquiry_batch_id}/note-attachment") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Used to manage attachment notes.
@@ -9482,14 +12081,25 @@ export def "user-monetary-account-request-inquiry-batch-note-attachment create" 
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($request_inquiry_batch_id | is-empty) { error make --unspanned { msg: "path parameter 'request-inquiry-batchID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), request_inquiry_batch_id: (encode-path-segment $request_inquiry_batch_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/request-inquiry-batch/{request_inquiry_batch_id}/note-attachment"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), request_inquiry_batch_id: (encode-path-segment $request_inquiry_batch_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/request-inquiry-batch/{request_inquiry_batch_id}/note-attachment") $auth.query)
   let req_body = {"attachment_id": $attachment_id, "description": $description} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Used to manage attachment notes.
@@ -9524,12 +12134,23 @@ export def "user-monetary-account-request-inquiry-batch-note-attachment delete" 
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($request_inquiry_batch_id | is-empty) { error make --unspanned { msg: "path parameter 'request-inquiry-batchID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), request_inquiry_batch_id: (encode-path-segment $request_inquiry_batch_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/request-inquiry-batch/{request_inquiry_batch_id}/note-attachment/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), request_inquiry_batch_id: (encode-path-segment $request_inquiry_batch_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/request-inquiry-batch/{request_inquiry_batch_id}/note-attachment/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Used to manage attachment notes.
@@ -9564,12 +12185,23 @@ export def "user-monetary-account-request-inquiry-batch-note-attachment get" [
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($request_inquiry_batch_id | is-empty) { error make --unspanned { msg: "path parameter 'request-inquiry-batchID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), request_inquiry_batch_id: (encode-path-segment $request_inquiry_batch_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/request-inquiry-batch/{request_inquiry_batch_id}/note-attachment/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), request_inquiry_batch_id: (encode-path-segment $request_inquiry_batch_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/request-inquiry-batch/{request_inquiry_batch_id}/note-attachment/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Used to manage attachment notes.
@@ -9607,14 +12239,25 @@ export def "user-monetary-account-request-inquiry-batch-note-attachment update" 
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($request_inquiry_batch_id | is-empty) { error make --unspanned { msg: "path parameter 'request-inquiry-batchID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), request_inquiry_batch_id: (encode-path-segment $request_inquiry_batch_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/request-inquiry-batch/{request_inquiry_batch_id}/note-attachment/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), request_inquiry_batch_id: (encode-path-segment $request_inquiry_batch_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/request-inquiry-batch/{request_inquiry_batch_id}/note-attachment/{item_id}") $auth.query)
   let req_body = {"attachment_id": $attachment_id, "description": $description} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Manage the notes for a given user.
@@ -9647,12 +12290,23 @@ export def "user-monetary-account-request-inquiry-batch-note-text list" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($request_inquiry_batch_id | is-empty) { error make --unspanned { msg: "path parameter 'request-inquiry-batchID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), request_inquiry_batch_id: (encode-path-segment $request_inquiry_batch_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/request-inquiry-batch/{request_inquiry_batch_id}/note-text"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), request_inquiry_batch_id: (encode-path-segment $request_inquiry_batch_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/request-inquiry-batch/{request_inquiry_batch_id}/note-text") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Used to manage text notes.
@@ -9687,14 +12341,25 @@ export def "user-monetary-account-request-inquiry-batch-note-text create" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($request_inquiry_batch_id | is-empty) { error make --unspanned { msg: "path parameter 'request-inquiry-batchID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), request_inquiry_batch_id: (encode-path-segment $request_inquiry_batch_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/request-inquiry-batch/{request_inquiry_batch_id}/note-text"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), request_inquiry_batch_id: (encode-path-segment $request_inquiry_batch_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/request-inquiry-batch/{request_inquiry_batch_id}/note-text") $auth.query)
   let req_body = {"content": $content} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Used to manage text notes.
@@ -9729,12 +12394,23 @@ export def "user-monetary-account-request-inquiry-batch-note-text delete" [
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($request_inquiry_batch_id | is-empty) { error make --unspanned { msg: "path parameter 'request-inquiry-batchID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), request_inquiry_batch_id: (encode-path-segment $request_inquiry_batch_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/request-inquiry-batch/{request_inquiry_batch_id}/note-text/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), request_inquiry_batch_id: (encode-path-segment $request_inquiry_batch_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/request-inquiry-batch/{request_inquiry_batch_id}/note-text/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Used to manage text notes.
@@ -9769,12 +12445,23 @@ export def "user-monetary-account-request-inquiry-batch-note-text get" [
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($request_inquiry_batch_id | is-empty) { error make --unspanned { msg: "path parameter 'request-inquiry-batchID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), request_inquiry_batch_id: (encode-path-segment $request_inquiry_batch_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/request-inquiry-batch/{request_inquiry_batch_id}/note-text/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), request_inquiry_batch_id: (encode-path-segment $request_inquiry_batch_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/request-inquiry-batch/{request_inquiry_batch_id}/note-text/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Used to manage text notes.
@@ -9811,14 +12498,25 @@ export def "user-monetary-account-request-inquiry-batch-note-text update" [
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($request_inquiry_batch_id | is-empty) { error make --unspanned { msg: "path parameter 'request-inquiry-batchID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), request_inquiry_batch_id: (encode-path-segment $request_inquiry_batch_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/request-inquiry-batch/{request_inquiry_batch_id}/note-text/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), request_inquiry_batch_id: (encode-path-segment $request_inquiry_batch_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/request-inquiry-batch/{request_inquiry_batch_id}/note-text/{item_id}") $auth.query)
   let req_body = {"content": $content} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get the details of a specific payment request, including its status. bunqme_share_url is always null if the counterparty is a bunq user.
@@ -9851,12 +12549,23 @@ export def "user-monetary-account-request-inquiry get" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/request-inquiry/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/request-inquiry/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Revoke a request for payment, by updating the status to REVOKED.
@@ -9921,14 +12630,25 @@ export def "user-monetary-account-request-inquiry update" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/request-inquiry/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/request-inquiry/{item_id}") $auth.query)
   let req_body = {"address_billing": $address_billing, "address_shipping": $address_shipping, "allow_amount_higher": $allow_amount_higher, "allow_amount_lower": $allow_amount_lower, "allow_bunqme": $allow_bunqme, "amount_inquired": $amount_inquired, "amount_responded": $amount_responded, "attachment": $attachment, "counterparty_alias": $counterparty_alias, "description": $description, "event_id": $event_id, "geolocation": $geolocation, "merchant_reference": $merchant_reference, "minimum_age": $minimum_age, "redirect_url": $redirect_url, "reference_split_the_bill": $reference_split_the_bill, "require_address": $require_address, "status": $status, "user_alias_created": $user_alias_created, "user_alias_revoked": $user_alias_revoked, "want_tip": $want_tip} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Manage the notes for a given user.
@@ -9961,12 +12681,23 @@ export def "user-monetary-account-request-inquiry-note-attachment list" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($request_inquiry_id | is-empty) { error make --unspanned { msg: "path parameter 'request-inquiryID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), request_inquiry_id: (encode-path-segment $request_inquiry_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/request-inquiry/{request_inquiry_id}/note-attachment"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), request_inquiry_id: (encode-path-segment $request_inquiry_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/request-inquiry/{request_inquiry_id}/note-attachment") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Used to manage attachment notes.
@@ -10002,14 +12733,25 @@ export def "user-monetary-account-request-inquiry-note-attachment create" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($request_inquiry_id | is-empty) { error make --unspanned { msg: "path parameter 'request-inquiryID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), request_inquiry_id: (encode-path-segment $request_inquiry_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/request-inquiry/{request_inquiry_id}/note-attachment"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), request_inquiry_id: (encode-path-segment $request_inquiry_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/request-inquiry/{request_inquiry_id}/note-attachment") $auth.query)
   let req_body = {"attachment_id": $attachment_id, "description": $description} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Used to manage attachment notes.
@@ -10044,12 +12786,23 @@ export def "user-monetary-account-request-inquiry-note-attachment delete" [
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($request_inquiry_id | is-empty) { error make --unspanned { msg: "path parameter 'request-inquiryID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), request_inquiry_id: (encode-path-segment $request_inquiry_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/request-inquiry/{request_inquiry_id}/note-attachment/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), request_inquiry_id: (encode-path-segment $request_inquiry_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/request-inquiry/{request_inquiry_id}/note-attachment/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Used to manage attachment notes.
@@ -10084,12 +12837,23 @@ export def "user-monetary-account-request-inquiry-note-attachment get" [
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($request_inquiry_id | is-empty) { error make --unspanned { msg: "path parameter 'request-inquiryID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), request_inquiry_id: (encode-path-segment $request_inquiry_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/request-inquiry/{request_inquiry_id}/note-attachment/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), request_inquiry_id: (encode-path-segment $request_inquiry_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/request-inquiry/{request_inquiry_id}/note-attachment/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Used to manage attachment notes.
@@ -10127,14 +12891,25 @@ export def "user-monetary-account-request-inquiry-note-attachment update" [
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($request_inquiry_id | is-empty) { error make --unspanned { msg: "path parameter 'request-inquiryID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), request_inquiry_id: (encode-path-segment $request_inquiry_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/request-inquiry/{request_inquiry_id}/note-attachment/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), request_inquiry_id: (encode-path-segment $request_inquiry_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/request-inquiry/{request_inquiry_id}/note-attachment/{item_id}") $auth.query)
   let req_body = {"attachment_id": $attachment_id, "description": $description} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Manage the notes for a given user.
@@ -10167,12 +12942,23 @@ export def "user-monetary-account-request-inquiry-note-text list" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($request_inquiry_id | is-empty) { error make --unspanned { msg: "path parameter 'request-inquiryID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), request_inquiry_id: (encode-path-segment $request_inquiry_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/request-inquiry/{request_inquiry_id}/note-text"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), request_inquiry_id: (encode-path-segment $request_inquiry_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/request-inquiry/{request_inquiry_id}/note-text") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Used to manage text notes.
@@ -10207,14 +12993,25 @@ export def "user-monetary-account-request-inquiry-note-text create" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($request_inquiry_id | is-empty) { error make --unspanned { msg: "path parameter 'request-inquiryID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), request_inquiry_id: (encode-path-segment $request_inquiry_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/request-inquiry/{request_inquiry_id}/note-text"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), request_inquiry_id: (encode-path-segment $request_inquiry_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/request-inquiry/{request_inquiry_id}/note-text") $auth.query)
   let req_body = {"content": $content} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Used to manage text notes.
@@ -10249,12 +13046,23 @@ export def "user-monetary-account-request-inquiry-note-text delete" [
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($request_inquiry_id | is-empty) { error make --unspanned { msg: "path parameter 'request-inquiryID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), request_inquiry_id: (encode-path-segment $request_inquiry_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/request-inquiry/{request_inquiry_id}/note-text/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), request_inquiry_id: (encode-path-segment $request_inquiry_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/request-inquiry/{request_inquiry_id}/note-text/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Used to manage text notes.
@@ -10289,12 +13097,23 @@ export def "user-monetary-account-request-inquiry-note-text get" [
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($request_inquiry_id | is-empty) { error make --unspanned { msg: "path parameter 'request-inquiryID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), request_inquiry_id: (encode-path-segment $request_inquiry_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/request-inquiry/{request_inquiry_id}/note-text/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), request_inquiry_id: (encode-path-segment $request_inquiry_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/request-inquiry/{request_inquiry_id}/note-text/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Used to manage text notes.
@@ -10331,14 +13150,25 @@ export def "user-monetary-account-request-inquiry-note-text update" [
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($request_inquiry_id | is-empty) { error make --unspanned { msg: "path parameter 'request-inquiryID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), request_inquiry_id: (encode-path-segment $request_inquiry_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/request-inquiry/{request_inquiry_id}/note-text/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), request_inquiry_id: (encode-path-segment $request_inquiry_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/request-inquiry/{request_inquiry_id}/note-text/{item_id}") $auth.query)
   let req_body = {"content": $content} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get all RequestResponses for a MonetaryAccount.
@@ -10369,12 +13199,23 @@ export def "user-monetary-account-request-response list" [
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/request-response"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/request-response") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get the details for a specific existing RequestResponse.
@@ -10407,12 +13248,23 @@ export def "user-monetary-account-request-response get" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/request-response/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/request-response/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update the status to accept or reject the RequestResponse.
@@ -10463,14 +13315,25 @@ export def "user-monetary-account-request-response update" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/request-response/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/request-response/{item_id}") $auth.query)
   let req_body = {"address_billing": $address_billing, "address_shipping": $address_shipping, "alias": $alias, "amount_inquired": $amount_inquired, "amount_responded": $amount_responded, "counterparty_alias": $counterparty_alias, "geolocation": $geolocation, "status": $status, "user_refund_requested": $user_refund_requested} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Manage the notes for a given user.
@@ -10503,12 +13366,23 @@ export def "user-monetary-account-request-response-note-attachment list" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($request_response_id | is-empty) { error make --unspanned { msg: "path parameter 'request-responseID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), request_response_id: (encode-path-segment $request_response_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/request-response/{request_response_id}/note-attachment"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), request_response_id: (encode-path-segment $request_response_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/request-response/{request_response_id}/note-attachment") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Used to manage attachment notes.
@@ -10544,14 +13418,25 @@ export def "user-monetary-account-request-response-note-attachment create" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($request_response_id | is-empty) { error make --unspanned { msg: "path parameter 'request-responseID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), request_response_id: (encode-path-segment $request_response_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/request-response/{request_response_id}/note-attachment"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), request_response_id: (encode-path-segment $request_response_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/request-response/{request_response_id}/note-attachment") $auth.query)
   let req_body = {"attachment_id": $attachment_id, "description": $description} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Used to manage attachment notes.
@@ -10586,12 +13471,23 @@ export def "user-monetary-account-request-response-note-attachment delete" [
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($request_response_id | is-empty) { error make --unspanned { msg: "path parameter 'request-responseID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), request_response_id: (encode-path-segment $request_response_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/request-response/{request_response_id}/note-attachment/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), request_response_id: (encode-path-segment $request_response_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/request-response/{request_response_id}/note-attachment/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Used to manage attachment notes.
@@ -10626,12 +13522,23 @@ export def "user-monetary-account-request-response-note-attachment get" [
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($request_response_id | is-empty) { error make --unspanned { msg: "path parameter 'request-responseID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), request_response_id: (encode-path-segment $request_response_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/request-response/{request_response_id}/note-attachment/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), request_response_id: (encode-path-segment $request_response_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/request-response/{request_response_id}/note-attachment/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Used to manage attachment notes.
@@ -10669,14 +13576,25 @@ export def "user-monetary-account-request-response-note-attachment update" [
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($request_response_id | is-empty) { error make --unspanned { msg: "path parameter 'request-responseID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), request_response_id: (encode-path-segment $request_response_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/request-response/{request_response_id}/note-attachment/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), request_response_id: (encode-path-segment $request_response_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/request-response/{request_response_id}/note-attachment/{item_id}") $auth.query)
   let req_body = {"attachment_id": $attachment_id, "description": $description} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Manage the notes for a given user.
@@ -10709,12 +13627,23 @@ export def "user-monetary-account-request-response-note-text list" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($request_response_id | is-empty) { error make --unspanned { msg: "path parameter 'request-responseID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), request_response_id: (encode-path-segment $request_response_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/request-response/{request_response_id}/note-text"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), request_response_id: (encode-path-segment $request_response_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/request-response/{request_response_id}/note-text") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Used to manage text notes.
@@ -10749,14 +13678,25 @@ export def "user-monetary-account-request-response-note-text create" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($request_response_id | is-empty) { error make --unspanned { msg: "path parameter 'request-responseID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), request_response_id: (encode-path-segment $request_response_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/request-response/{request_response_id}/note-text"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), request_response_id: (encode-path-segment $request_response_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/request-response/{request_response_id}/note-text") $auth.query)
   let req_body = {"content": $content} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Used to manage text notes.
@@ -10791,12 +13731,23 @@ export def "user-monetary-account-request-response-note-text delete" [
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($request_response_id | is-empty) { error make --unspanned { msg: "path parameter 'request-responseID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), request_response_id: (encode-path-segment $request_response_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/request-response/{request_response_id}/note-text/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), request_response_id: (encode-path-segment $request_response_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/request-response/{request_response_id}/note-text/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Used to manage text notes.
@@ -10831,12 +13782,23 @@ export def "user-monetary-account-request-response-note-text get" [
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($request_response_id | is-empty) { error make --unspanned { msg: "path parameter 'request-responseID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), request_response_id: (encode-path-segment $request_response_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/request-response/{request_response_id}/note-text/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), request_response_id: (encode-path-segment $request_response_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/request-response/{request_response_id}/note-text/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Used to manage text notes.
@@ -10873,14 +13835,25 @@ export def "user-monetary-account-request-response-note-text update" [
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($request_response_id | is-empty) { error make --unspanned { msg: "path parameter 'request-responseID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), request_response_id: (encode-path-segment $request_response_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/request-response/{request_response_id}/note-text/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), request_response_id: (encode-path-segment $request_response_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/request-response/{request_response_id}/note-text/{item_id}") $auth.query)
   let req_body = {"content": $content} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get a collection of scheduled definition for a given monetary account. You can add the parameter type to filter the response. When type={SCHEDULE_DEFINITION_PAYMENT,SCHEDULE_DEFINITION_PAYMENT_BATCH} is provided only schedule definition object that relate to these definitions are returned.
@@ -10911,12 +13884,23 @@ export def "user-monetary-account-schedule list" [
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/schedule"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/schedule") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Endpoint for schedule payments.
@@ -10947,12 +13931,23 @@ export def "user-monetary-account-schedule-payment list" [
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/schedule-payment"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/schedule-payment") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Endpoint for schedule payments.
@@ -10988,14 +13983,25 @@ export def "user-monetary-account-schedule-payment create" [
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/schedule-payment"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/schedule-payment") $auth.query)
   let req_body = {"payment": $payment, "schedule": $schedule} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Endpoint for schedule payment batches.
@@ -11031,14 +14037,25 @@ export def "user-monetary-account-schedule-payment-batch create" [
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/schedule-payment-batch"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/schedule-payment-batch") $auth.query)
   let req_body = {"payments": $payments, "schedule": $schedule} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Endpoint for schedule payment batches.
@@ -11071,12 +14088,23 @@ export def "user-monetary-account-schedule-payment-batch delete" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/schedule-payment-batch/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/schedule-payment-batch/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Endpoint for schedule payment batches.
@@ -11109,12 +14137,23 @@ export def "user-monetary-account-schedule-payment-batch get" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/schedule-payment-batch/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/schedule-payment-batch/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Endpoint for schedule payment batches.
@@ -11152,14 +14191,25 @@ export def "user-monetary-account-schedule-payment-batch update" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/schedule-payment-batch/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/schedule-payment-batch/{item_id}") $auth.query)
   let req_body = {"payments": $payments, "schedule": $schedule} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Manage the notes for a given user.
@@ -11192,12 +14242,23 @@ export def "user-monetary-account-schedule-payment-batch-note-attachment list" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($schedule_payment_batch_id | is-empty) { error make --unspanned { msg: "path parameter 'schedule-payment-batchID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), schedule_payment_batch_id: (encode-path-segment $schedule_payment_batch_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/schedule-payment-batch/{schedule_payment_batch_id}/note-attachment"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), schedule_payment_batch_id: (encode-path-segment $schedule_payment_batch_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/schedule-payment-batch/{schedule_payment_batch_id}/note-attachment") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Used to manage attachment notes.
@@ -11233,14 +14294,25 @@ export def "user-monetary-account-schedule-payment-batch-note-attachment create"
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($schedule_payment_batch_id | is-empty) { error make --unspanned { msg: "path parameter 'schedule-payment-batchID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), schedule_payment_batch_id: (encode-path-segment $schedule_payment_batch_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/schedule-payment-batch/{schedule_payment_batch_id}/note-attachment"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), schedule_payment_batch_id: (encode-path-segment $schedule_payment_batch_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/schedule-payment-batch/{schedule_payment_batch_id}/note-attachment") $auth.query)
   let req_body = {"attachment_id": $attachment_id, "description": $description} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Used to manage attachment notes.
@@ -11275,12 +14347,23 @@ export def "user-monetary-account-schedule-payment-batch-note-attachment delete"
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($schedule_payment_batch_id | is-empty) { error make --unspanned { msg: "path parameter 'schedule-payment-batchID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), schedule_payment_batch_id: (encode-path-segment $schedule_payment_batch_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/schedule-payment-batch/{schedule_payment_batch_id}/note-attachment/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), schedule_payment_batch_id: (encode-path-segment $schedule_payment_batch_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/schedule-payment-batch/{schedule_payment_batch_id}/note-attachment/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Used to manage attachment notes.
@@ -11315,12 +14398,23 @@ export def "user-monetary-account-schedule-payment-batch-note-attachment get" [
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($schedule_payment_batch_id | is-empty) { error make --unspanned { msg: "path parameter 'schedule-payment-batchID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), schedule_payment_batch_id: (encode-path-segment $schedule_payment_batch_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/schedule-payment-batch/{schedule_payment_batch_id}/note-attachment/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), schedule_payment_batch_id: (encode-path-segment $schedule_payment_batch_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/schedule-payment-batch/{schedule_payment_batch_id}/note-attachment/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Used to manage attachment notes.
@@ -11358,14 +14452,25 @@ export def "user-monetary-account-schedule-payment-batch-note-attachment update"
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($schedule_payment_batch_id | is-empty) { error make --unspanned { msg: "path parameter 'schedule-payment-batchID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), schedule_payment_batch_id: (encode-path-segment $schedule_payment_batch_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/schedule-payment-batch/{schedule_payment_batch_id}/note-attachment/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), schedule_payment_batch_id: (encode-path-segment $schedule_payment_batch_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/schedule-payment-batch/{schedule_payment_batch_id}/note-attachment/{item_id}") $auth.query)
   let req_body = {"attachment_id": $attachment_id, "description": $description} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Manage the notes for a given user.
@@ -11398,12 +14503,23 @@ export def "user-monetary-account-schedule-payment-batch-note-text list" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($schedule_payment_batch_id | is-empty) { error make --unspanned { msg: "path parameter 'schedule-payment-batchID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), schedule_payment_batch_id: (encode-path-segment $schedule_payment_batch_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/schedule-payment-batch/{schedule_payment_batch_id}/note-text"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), schedule_payment_batch_id: (encode-path-segment $schedule_payment_batch_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/schedule-payment-batch/{schedule_payment_batch_id}/note-text") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Used to manage text notes.
@@ -11438,14 +14554,25 @@ export def "user-monetary-account-schedule-payment-batch-note-text create" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($schedule_payment_batch_id | is-empty) { error make --unspanned { msg: "path parameter 'schedule-payment-batchID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), schedule_payment_batch_id: (encode-path-segment $schedule_payment_batch_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/schedule-payment-batch/{schedule_payment_batch_id}/note-text"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), schedule_payment_batch_id: (encode-path-segment $schedule_payment_batch_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/schedule-payment-batch/{schedule_payment_batch_id}/note-text") $auth.query)
   let req_body = {"content": $content} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Used to manage text notes.
@@ -11480,12 +14607,23 @@ export def "user-monetary-account-schedule-payment-batch-note-text delete" [
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($schedule_payment_batch_id | is-empty) { error make --unspanned { msg: "path parameter 'schedule-payment-batchID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), schedule_payment_batch_id: (encode-path-segment $schedule_payment_batch_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/schedule-payment-batch/{schedule_payment_batch_id}/note-text/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), schedule_payment_batch_id: (encode-path-segment $schedule_payment_batch_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/schedule-payment-batch/{schedule_payment_batch_id}/note-text/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Used to manage text notes.
@@ -11520,12 +14658,23 @@ export def "user-monetary-account-schedule-payment-batch-note-text get" [
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($schedule_payment_batch_id | is-empty) { error make --unspanned { msg: "path parameter 'schedule-payment-batchID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), schedule_payment_batch_id: (encode-path-segment $schedule_payment_batch_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/schedule-payment-batch/{schedule_payment_batch_id}/note-text/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), schedule_payment_batch_id: (encode-path-segment $schedule_payment_batch_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/schedule-payment-batch/{schedule_payment_batch_id}/note-text/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Used to manage text notes.
@@ -11562,14 +14711,25 @@ export def "user-monetary-account-schedule-payment-batch-note-text update" [
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($schedule_payment_batch_id | is-empty) { error make --unspanned { msg: "path parameter 'schedule-payment-batchID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), schedule_payment_batch_id: (encode-path-segment $schedule_payment_batch_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/schedule-payment-batch/{schedule_payment_batch_id}/note-text/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), schedule_payment_batch_id: (encode-path-segment $schedule_payment_batch_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/schedule-payment-batch/{schedule_payment_batch_id}/note-text/{item_id}") $auth.query)
   let req_body = {"content": $content} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Endpoint for schedule payments.
@@ -11602,12 +14762,23 @@ export def "user-monetary-account-schedule-payment delete" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/schedule-payment/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/schedule-payment/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Endpoint for schedule payments.
@@ -11640,12 +14811,23 @@ export def "user-monetary-account-schedule-payment get" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/schedule-payment/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/schedule-payment/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Endpoint for schedule payments.
@@ -11683,14 +14865,25 @@ export def "user-monetary-account-schedule-payment update" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/schedule-payment/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/schedule-payment/{item_id}") $auth.query)
   let req_body = {"payment": $payment, "schedule": $schedule} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Manage the notes for a given user.
@@ -11723,12 +14916,23 @@ export def "user-monetary-account-schedule-payment-note-attachment list" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($schedule_payment_id | is-empty) { error make --unspanned { msg: "path parameter 'schedule-paymentID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), schedule_payment_id: (encode-path-segment $schedule_payment_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/schedule-payment/{schedule_payment_id}/note-attachment"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), schedule_payment_id: (encode-path-segment $schedule_payment_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/schedule-payment/{schedule_payment_id}/note-attachment") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Used to manage attachment notes.
@@ -11764,14 +14968,25 @@ export def "user-monetary-account-schedule-payment-note-attachment create" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($schedule_payment_id | is-empty) { error make --unspanned { msg: "path parameter 'schedule-paymentID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), schedule_payment_id: (encode-path-segment $schedule_payment_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/schedule-payment/{schedule_payment_id}/note-attachment"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), schedule_payment_id: (encode-path-segment $schedule_payment_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/schedule-payment/{schedule_payment_id}/note-attachment") $auth.query)
   let req_body = {"attachment_id": $attachment_id, "description": $description} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Used to manage attachment notes.
@@ -11806,12 +15021,23 @@ export def "user-monetary-account-schedule-payment-note-attachment delete" [
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($schedule_payment_id | is-empty) { error make --unspanned { msg: "path parameter 'schedule-paymentID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), schedule_payment_id: (encode-path-segment $schedule_payment_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/schedule-payment/{schedule_payment_id}/note-attachment/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), schedule_payment_id: (encode-path-segment $schedule_payment_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/schedule-payment/{schedule_payment_id}/note-attachment/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Used to manage attachment notes.
@@ -11846,12 +15072,23 @@ export def "user-monetary-account-schedule-payment-note-attachment get" [
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($schedule_payment_id | is-empty) { error make --unspanned { msg: "path parameter 'schedule-paymentID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), schedule_payment_id: (encode-path-segment $schedule_payment_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/schedule-payment/{schedule_payment_id}/note-attachment/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), schedule_payment_id: (encode-path-segment $schedule_payment_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/schedule-payment/{schedule_payment_id}/note-attachment/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Used to manage attachment notes.
@@ -11889,14 +15126,25 @@ export def "user-monetary-account-schedule-payment-note-attachment update" [
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($schedule_payment_id | is-empty) { error make --unspanned { msg: "path parameter 'schedule-paymentID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), schedule_payment_id: (encode-path-segment $schedule_payment_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/schedule-payment/{schedule_payment_id}/note-attachment/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), schedule_payment_id: (encode-path-segment $schedule_payment_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/schedule-payment/{schedule_payment_id}/note-attachment/{item_id}") $auth.query)
   let req_body = {"attachment_id": $attachment_id, "description": $description} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Manage the notes for a given user.
@@ -11929,12 +15177,23 @@ export def "user-monetary-account-schedule-payment-note-text list" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($schedule_payment_id | is-empty) { error make --unspanned { msg: "path parameter 'schedule-paymentID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), schedule_payment_id: (encode-path-segment $schedule_payment_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/schedule-payment/{schedule_payment_id}/note-text"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), schedule_payment_id: (encode-path-segment $schedule_payment_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/schedule-payment/{schedule_payment_id}/note-text") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Used to manage text notes.
@@ -11969,14 +15228,25 @@ export def "user-monetary-account-schedule-payment-note-text create" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($schedule_payment_id | is-empty) { error make --unspanned { msg: "path parameter 'schedule-paymentID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), schedule_payment_id: (encode-path-segment $schedule_payment_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/schedule-payment/{schedule_payment_id}/note-text"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), schedule_payment_id: (encode-path-segment $schedule_payment_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/schedule-payment/{schedule_payment_id}/note-text") $auth.query)
   let req_body = {"content": $content} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Used to manage text notes.
@@ -12011,12 +15281,23 @@ export def "user-monetary-account-schedule-payment-note-text delete" [
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($schedule_payment_id | is-empty) { error make --unspanned { msg: "path parameter 'schedule-paymentID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), schedule_payment_id: (encode-path-segment $schedule_payment_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/schedule-payment/{schedule_payment_id}/note-text/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), schedule_payment_id: (encode-path-segment $schedule_payment_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/schedule-payment/{schedule_payment_id}/note-text/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Used to manage text notes.
@@ -12051,12 +15332,23 @@ export def "user-monetary-account-schedule-payment-note-text get" [
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($schedule_payment_id | is-empty) { error make --unspanned { msg: "path parameter 'schedule-paymentID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), schedule_payment_id: (encode-path-segment $schedule_payment_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/schedule-payment/{schedule_payment_id}/note-text/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), schedule_payment_id: (encode-path-segment $schedule_payment_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/schedule-payment/{schedule_payment_id}/note-text/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Used to manage text notes.
@@ -12093,14 +15385,25 @@ export def "user-monetary-account-schedule-payment-note-text update" [
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($schedule_payment_id | is-empty) { error make --unspanned { msg: "path parameter 'schedule-paymentID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), schedule_payment_id: (encode-path-segment $schedule_payment_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/schedule-payment/{schedule_payment_id}/note-text/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), schedule_payment_id: (encode-path-segment $schedule_payment_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/schedule-payment/{schedule_payment_id}/note-text/{item_id}") $auth.query)
   let req_body = {"content": $content} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get a specific schedule definition for a given monetary account.
@@ -12133,12 +15436,23 @@ export def "user-monetary-account-schedule get" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/schedule/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/schedule/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # view for reading, updating and listing the scheduled instance.
@@ -12171,12 +15485,23 @@ export def "user-monetary-account-schedule-schedule-instance list" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($schedule_id | is-empty) { error make --unspanned { msg: "path parameter 'scheduleID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), schedule_id: (encode-path-segment $schedule_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/schedule/{schedule_id}/schedule-instance"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), schedule_id: (encode-path-segment $schedule_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/schedule/{schedule_id}/schedule-instance") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # view for reading, updating and listing the scheduled instance.
@@ -12211,12 +15536,23 @@ export def "user-monetary-account-schedule-schedule-instance get" [
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($schedule_id | is-empty) { error make --unspanned { msg: "path parameter 'scheduleID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), schedule_id: (encode-path-segment $schedule_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/schedule/{schedule_id}/schedule-instance/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), schedule_id: (encode-path-segment $schedule_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/schedule/{schedule_id}/schedule-instance/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # view for reading, updating and listing the scheduled instance.
@@ -12257,14 +15593,25 @@ export def "user-monetary-account-schedule-schedule-instance update" [
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($schedule_id | is-empty) { error make --unspanned { msg: "path parameter 'scheduleID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), schedule_id: (encode-path-segment $schedule_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/schedule/{schedule_id}/schedule-instance/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), schedule_id: (encode-path-segment $schedule_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/schedule/{schedule_id}/schedule-instance/{item_id}") $auth.query)
   let req_body = {"result_object": $result_object, "scheduled_object": $scheduled_object, "state": $state} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Manage the notes for a given user.
@@ -12299,12 +15646,23 @@ export def "user-monetary-account-schedule-schedule-instance-note-attachment lis
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($schedule_id | is-empty) { error make --unspanned { msg: "path parameter 'scheduleID' must be non-empty" } }
   if ($schedule_instance_id | is-empty) { error make --unspanned { msg: "path parameter 'schedule-instanceID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), schedule_id: (encode-path-segment $schedule_id), schedule_instance_id: (encode-path-segment $schedule_instance_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/schedule/{schedule_id}/schedule-instance/{schedule_instance_id}/note-attachment"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), schedule_id: (encode-path-segment $schedule_id), schedule_instance_id: (encode-path-segment $schedule_instance_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/schedule/{schedule_id}/schedule-instance/{schedule_instance_id}/note-attachment") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Used to manage attachment notes.
@@ -12342,14 +15700,25 @@ export def "user-monetary-account-schedule-schedule-instance-note-attachment cre
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($schedule_id | is-empty) { error make --unspanned { msg: "path parameter 'scheduleID' must be non-empty" } }
   if ($schedule_instance_id | is-empty) { error make --unspanned { msg: "path parameter 'schedule-instanceID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), schedule_id: (encode-path-segment $schedule_id), schedule_instance_id: (encode-path-segment $schedule_instance_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/schedule/{schedule_id}/schedule-instance/{schedule_instance_id}/note-attachment"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), schedule_id: (encode-path-segment $schedule_id), schedule_instance_id: (encode-path-segment $schedule_instance_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/schedule/{schedule_id}/schedule-instance/{schedule_instance_id}/note-attachment") $auth.query)
   let req_body = {"attachment_id": $attachment_id, "description": $description} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Used to manage attachment notes.
@@ -12386,12 +15755,23 @@ export def "user-monetary-account-schedule-schedule-instance-note-attachment del
   if ($schedule_id | is-empty) { error make --unspanned { msg: "path parameter 'scheduleID' must be non-empty" } }
   if ($schedule_instance_id | is-empty) { error make --unspanned { msg: "path parameter 'schedule-instanceID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), schedule_id: (encode-path-segment $schedule_id), schedule_instance_id: (encode-path-segment $schedule_instance_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/schedule/{schedule_id}/schedule-instance/{schedule_instance_id}/note-attachment/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), schedule_id: (encode-path-segment $schedule_id), schedule_instance_id: (encode-path-segment $schedule_instance_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/schedule/{schedule_id}/schedule-instance/{schedule_instance_id}/note-attachment/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Used to manage attachment notes.
@@ -12428,12 +15808,23 @@ export def "user-monetary-account-schedule-schedule-instance-note-attachment get
   if ($schedule_id | is-empty) { error make --unspanned { msg: "path parameter 'scheduleID' must be non-empty" } }
   if ($schedule_instance_id | is-empty) { error make --unspanned { msg: "path parameter 'schedule-instanceID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), schedule_id: (encode-path-segment $schedule_id), schedule_instance_id: (encode-path-segment $schedule_instance_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/schedule/{schedule_id}/schedule-instance/{schedule_instance_id}/note-attachment/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), schedule_id: (encode-path-segment $schedule_id), schedule_instance_id: (encode-path-segment $schedule_instance_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/schedule/{schedule_id}/schedule-instance/{schedule_instance_id}/note-attachment/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Used to manage attachment notes.
@@ -12473,14 +15864,25 @@ export def "user-monetary-account-schedule-schedule-instance-note-attachment upd
   if ($schedule_id | is-empty) { error make --unspanned { msg: "path parameter 'scheduleID' must be non-empty" } }
   if ($schedule_instance_id | is-empty) { error make --unspanned { msg: "path parameter 'schedule-instanceID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), schedule_id: (encode-path-segment $schedule_id), schedule_instance_id: (encode-path-segment $schedule_instance_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/schedule/{schedule_id}/schedule-instance/{schedule_instance_id}/note-attachment/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), schedule_id: (encode-path-segment $schedule_id), schedule_instance_id: (encode-path-segment $schedule_instance_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/schedule/{schedule_id}/schedule-instance/{schedule_instance_id}/note-attachment/{item_id}") $auth.query)
   let req_body = {"attachment_id": $attachment_id, "description": $description} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Manage the notes for a given user.
@@ -12515,12 +15917,23 @@ export def "user-monetary-account-schedule-schedule-instance-note-text list" [
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($schedule_id | is-empty) { error make --unspanned { msg: "path parameter 'scheduleID' must be non-empty" } }
   if ($schedule_instance_id | is-empty) { error make --unspanned { msg: "path parameter 'schedule-instanceID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), schedule_id: (encode-path-segment $schedule_id), schedule_instance_id: (encode-path-segment $schedule_instance_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/schedule/{schedule_id}/schedule-instance/{schedule_instance_id}/note-text"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), schedule_id: (encode-path-segment $schedule_id), schedule_instance_id: (encode-path-segment $schedule_instance_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/schedule/{schedule_id}/schedule-instance/{schedule_instance_id}/note-text") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Used to manage text notes.
@@ -12557,14 +15970,25 @@ export def "user-monetary-account-schedule-schedule-instance-note-text create" [
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($schedule_id | is-empty) { error make --unspanned { msg: "path parameter 'scheduleID' must be non-empty" } }
   if ($schedule_instance_id | is-empty) { error make --unspanned { msg: "path parameter 'schedule-instanceID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), schedule_id: (encode-path-segment $schedule_id), schedule_instance_id: (encode-path-segment $schedule_instance_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/schedule/{schedule_id}/schedule-instance/{schedule_instance_id}/note-text"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), schedule_id: (encode-path-segment $schedule_id), schedule_instance_id: (encode-path-segment $schedule_instance_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/schedule/{schedule_id}/schedule-instance/{schedule_instance_id}/note-text") $auth.query)
   let req_body = {"content": $content} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Used to manage text notes.
@@ -12601,12 +16025,23 @@ export def "user-monetary-account-schedule-schedule-instance-note-text delete" [
   if ($schedule_id | is-empty) { error make --unspanned { msg: "path parameter 'scheduleID' must be non-empty" } }
   if ($schedule_instance_id | is-empty) { error make --unspanned { msg: "path parameter 'schedule-instanceID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), schedule_id: (encode-path-segment $schedule_id), schedule_instance_id: (encode-path-segment $schedule_instance_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/schedule/{schedule_id}/schedule-instance/{schedule_instance_id}/note-text/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), schedule_id: (encode-path-segment $schedule_id), schedule_instance_id: (encode-path-segment $schedule_instance_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/schedule/{schedule_id}/schedule-instance/{schedule_instance_id}/note-text/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Used to manage text notes.
@@ -12643,12 +16078,23 @@ export def "user-monetary-account-schedule-schedule-instance-note-text get" [
   if ($schedule_id | is-empty) { error make --unspanned { msg: "path parameter 'scheduleID' must be non-empty" } }
   if ($schedule_instance_id | is-empty) { error make --unspanned { msg: "path parameter 'schedule-instanceID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), schedule_id: (encode-path-segment $schedule_id), schedule_instance_id: (encode-path-segment $schedule_instance_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/schedule/{schedule_id}/schedule-instance/{schedule_instance_id}/note-text/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), schedule_id: (encode-path-segment $schedule_id), schedule_instance_id: (encode-path-segment $schedule_instance_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/schedule/{schedule_id}/schedule-instance/{schedule_instance_id}/note-text/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Used to manage text notes.
@@ -12687,14 +16133,25 @@ export def "user-monetary-account-schedule-schedule-instance-note-text update" [
   if ($schedule_id | is-empty) { error make --unspanned { msg: "path parameter 'scheduleID' must be non-empty" } }
   if ($schedule_instance_id | is-empty) { error make --unspanned { msg: "path parameter 'schedule-instanceID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), schedule_id: (encode-path-segment $schedule_id), schedule_instance_id: (encode-path-segment $schedule_instance_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/schedule/{schedule_id}/schedule-instance/{schedule_instance_id}/note-text/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), schedule_id: (encode-path-segment $schedule_id), schedule_instance_id: (encode-path-segment $schedule_instance_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/schedule/{schedule_id}/schedule-instance/{schedule_instance_id}/note-text/{item_id}") $auth.query)
   let req_body = {"content": $content} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # [DEPRECATED - use /share-invite-monetary-account-response] Get a list with all the share inquiries for a monetary account, only if the requesting user has permission to change the details of the various ones.
@@ -12725,12 +16182,23 @@ export def "user-monetary-account-share-invite-monetary-account-inquiry list" [
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/share-invite-monetary-account-inquiry"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/share-invite-monetary-account-inquiry") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # [DEPRECATED - use /share-invite-monetary-account-response] Create a new share inquiry for a monetary account, specifying the permission the other bunq user will have on it.
@@ -12779,14 +16247,25 @@ export def "user-monetary-account-share-invite-monetary-account-inquiry create" 
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/share-invite-monetary-account-inquiry"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/share-invite-monetary-account-inquiry") $auth.query)
   let req_body = {"access_type": $access_type, "alias": $alias, "counter_user_alias": $counter_user_alias, "draft_share_invite_bank_id": $draft_share_invite_bank_id, "end_date": $end_date, "relationship": $relationship, "share_detail": $share_detail, "share_type": $share_type, "start_date": $start_date, "status": $status, "user_alias_created": $user_alias_created, "user_alias_revoked": $user_alias_revoked} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # [DEPRECATED - use /share-invite-monetary-account-response] Get the details of a specific share inquiry.
@@ -12819,12 +16298,23 @@ export def "user-monetary-account-share-invite-monetary-account-inquiry get" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/share-invite-monetary-account-inquiry/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/share-invite-monetary-account-inquiry/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # [DEPRECATED - use /share-invite-monetary-account-response] Update the details of a share. This includes updating status (revoking or cancelling it), granted permission and validity period of this share.
@@ -12875,14 +16365,25 @@ export def "user-monetary-account-share-invite-monetary-account-inquiry update" 
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/share-invite-monetary-account-inquiry/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/share-invite-monetary-account-inquiry/{item_id}") $auth.query)
   let req_body = {"access_type": $access_type, "alias": $alias, "counter_user_alias": $counter_user_alias, "draft_share_invite_bank_id": $draft_share_invite_bank_id, "end_date": $end_date, "relationship": $relationship, "share_detail": $share_detail, "share_type": $share_type, "start_date": $start_date, "status": $status, "user_alias_created": $user_alias_created, "user_alias_revoked": $user_alias_revoked} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # View for requesting Sofort transactions and polling their status.
@@ -12913,12 +16414,23 @@ export def "user-monetary-account-sofort-merchant-transaction list" [
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/sofort-merchant-transaction"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/sofort-merchant-transaction") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # View for requesting Sofort transactions and polling their status.
@@ -12951,12 +16463,23 @@ export def "user-monetary-account-sofort-merchant-transaction get" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/sofort-merchant-transaction/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/sofort-merchant-transaction/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Manage the notes for a given user.
@@ -12989,12 +16512,23 @@ export def "user-monetary-account-sofort-merchant-transaction-note-attachment li
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($sofort_merchant_transaction_id | is-empty) { error make --unspanned { msg: "path parameter 'sofort-merchant-transactionID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), sofort_merchant_transaction_id: (encode-path-segment $sofort_merchant_transaction_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/sofort-merchant-transaction/{sofort_merchant_transaction_id}/note-attachment"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), sofort_merchant_transaction_id: (encode-path-segment $sofort_merchant_transaction_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/sofort-merchant-transaction/{sofort_merchant_transaction_id}/note-attachment") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Used to manage attachment notes.
@@ -13030,14 +16564,25 @@ export def "user-monetary-account-sofort-merchant-transaction-note-attachment cr
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($sofort_merchant_transaction_id | is-empty) { error make --unspanned { msg: "path parameter 'sofort-merchant-transactionID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), sofort_merchant_transaction_id: (encode-path-segment $sofort_merchant_transaction_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/sofort-merchant-transaction/{sofort_merchant_transaction_id}/note-attachment"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), sofort_merchant_transaction_id: (encode-path-segment $sofort_merchant_transaction_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/sofort-merchant-transaction/{sofort_merchant_transaction_id}/note-attachment") $auth.query)
   let req_body = {"attachment_id": $attachment_id, "description": $description} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Used to manage attachment notes.
@@ -13072,12 +16617,23 @@ export def "user-monetary-account-sofort-merchant-transaction-note-attachment de
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($sofort_merchant_transaction_id | is-empty) { error make --unspanned { msg: "path parameter 'sofort-merchant-transactionID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), sofort_merchant_transaction_id: (encode-path-segment $sofort_merchant_transaction_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/sofort-merchant-transaction/{sofort_merchant_transaction_id}/note-attachment/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), sofort_merchant_transaction_id: (encode-path-segment $sofort_merchant_transaction_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/sofort-merchant-transaction/{sofort_merchant_transaction_id}/note-attachment/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Used to manage attachment notes.
@@ -13112,12 +16668,23 @@ export def "user-monetary-account-sofort-merchant-transaction-note-attachment ge
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($sofort_merchant_transaction_id | is-empty) { error make --unspanned { msg: "path parameter 'sofort-merchant-transactionID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), sofort_merchant_transaction_id: (encode-path-segment $sofort_merchant_transaction_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/sofort-merchant-transaction/{sofort_merchant_transaction_id}/note-attachment/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), sofort_merchant_transaction_id: (encode-path-segment $sofort_merchant_transaction_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/sofort-merchant-transaction/{sofort_merchant_transaction_id}/note-attachment/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Used to manage attachment notes.
@@ -13155,14 +16722,25 @@ export def "user-monetary-account-sofort-merchant-transaction-note-attachment up
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($sofort_merchant_transaction_id | is-empty) { error make --unspanned { msg: "path parameter 'sofort-merchant-transactionID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), sofort_merchant_transaction_id: (encode-path-segment $sofort_merchant_transaction_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/sofort-merchant-transaction/{sofort_merchant_transaction_id}/note-attachment/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), sofort_merchant_transaction_id: (encode-path-segment $sofort_merchant_transaction_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/sofort-merchant-transaction/{sofort_merchant_transaction_id}/note-attachment/{item_id}") $auth.query)
   let req_body = {"attachment_id": $attachment_id, "description": $description} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Manage the notes for a given user.
@@ -13195,12 +16773,23 @@ export def "user-monetary-account-sofort-merchant-transaction-note-text list" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($sofort_merchant_transaction_id | is-empty) { error make --unspanned { msg: "path parameter 'sofort-merchant-transactionID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), sofort_merchant_transaction_id: (encode-path-segment $sofort_merchant_transaction_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/sofort-merchant-transaction/{sofort_merchant_transaction_id}/note-text"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), sofort_merchant_transaction_id: (encode-path-segment $sofort_merchant_transaction_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/sofort-merchant-transaction/{sofort_merchant_transaction_id}/note-text") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Used to manage text notes.
@@ -13235,14 +16824,25 @@ export def "user-monetary-account-sofort-merchant-transaction-note-text create" 
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($sofort_merchant_transaction_id | is-empty) { error make --unspanned { msg: "path parameter 'sofort-merchant-transactionID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), sofort_merchant_transaction_id: (encode-path-segment $sofort_merchant_transaction_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/sofort-merchant-transaction/{sofort_merchant_transaction_id}/note-text"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), sofort_merchant_transaction_id: (encode-path-segment $sofort_merchant_transaction_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/sofort-merchant-transaction/{sofort_merchant_transaction_id}/note-text") $auth.query)
   let req_body = {"content": $content} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Used to manage text notes.
@@ -13277,12 +16877,23 @@ export def "user-monetary-account-sofort-merchant-transaction-note-text delete" 
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($sofort_merchant_transaction_id | is-empty) { error make --unspanned { msg: "path parameter 'sofort-merchant-transactionID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), sofort_merchant_transaction_id: (encode-path-segment $sofort_merchant_transaction_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/sofort-merchant-transaction/{sofort_merchant_transaction_id}/note-text/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), sofort_merchant_transaction_id: (encode-path-segment $sofort_merchant_transaction_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/sofort-merchant-transaction/{sofort_merchant_transaction_id}/note-text/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Used to manage text notes.
@@ -13317,12 +16928,23 @@ export def "user-monetary-account-sofort-merchant-transaction-note-text get" [
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($sofort_merchant_transaction_id | is-empty) { error make --unspanned { msg: "path parameter 'sofort-merchant-transactionID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), sofort_merchant_transaction_id: (encode-path-segment $sofort_merchant_transaction_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/sofort-merchant-transaction/{sofort_merchant_transaction_id}/note-text/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), sofort_merchant_transaction_id: (encode-path-segment $sofort_merchant_transaction_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/sofort-merchant-transaction/{sofort_merchant_transaction_id}/note-text/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Used to manage text notes.
@@ -13359,14 +16981,25 @@ export def "user-monetary-account-sofort-merchant-transaction-note-text update" 
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($sofort_merchant_transaction_id | is-empty) { error make --unspanned { msg: "path parameter 'sofort-merchant-transactionID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), sofort_merchant_transaction_id: (encode-path-segment $sofort_merchant_transaction_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/sofort-merchant-transaction/{sofort_merchant_transaction_id}/note-text/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), sofort_merchant_transaction_id: (encode-path-segment $sofort_merchant_transaction_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/sofort-merchant-transaction/{sofort_merchant_transaction_id}/note-text/{item_id}") $auth.query)
   let req_body = {"content": $content} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # An incoming payment made towards an account of an external bank and redirected to a bunq account via switch service.
@@ -13399,12 +17032,23 @@ export def "user-monetary-account-switch-service-payment get" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/switch-service-payment/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/switch-service-payment/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Manage the notes for a given user.
@@ -13437,12 +17081,23 @@ export def "user-monetary-account-switch-service-payment-note-attachment list" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($switch_service_payment_id | is-empty) { error make --unspanned { msg: "path parameter 'switch-service-paymentID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), switch_service_payment_id: (encode-path-segment $switch_service_payment_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/switch-service-payment/{switch_service_payment_id}/note-attachment"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), switch_service_payment_id: (encode-path-segment $switch_service_payment_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/switch-service-payment/{switch_service_payment_id}/note-attachment") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Used to manage attachment notes.
@@ -13478,14 +17133,25 @@ export def "user-monetary-account-switch-service-payment-note-attachment create"
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($switch_service_payment_id | is-empty) { error make --unspanned { msg: "path parameter 'switch-service-paymentID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), switch_service_payment_id: (encode-path-segment $switch_service_payment_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/switch-service-payment/{switch_service_payment_id}/note-attachment"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), switch_service_payment_id: (encode-path-segment $switch_service_payment_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/switch-service-payment/{switch_service_payment_id}/note-attachment") $auth.query)
   let req_body = {"attachment_id": $attachment_id, "description": $description} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Used to manage attachment notes.
@@ -13520,12 +17186,23 @@ export def "user-monetary-account-switch-service-payment-note-attachment delete"
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($switch_service_payment_id | is-empty) { error make --unspanned { msg: "path parameter 'switch-service-paymentID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), switch_service_payment_id: (encode-path-segment $switch_service_payment_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/switch-service-payment/{switch_service_payment_id}/note-attachment/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), switch_service_payment_id: (encode-path-segment $switch_service_payment_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/switch-service-payment/{switch_service_payment_id}/note-attachment/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Used to manage attachment notes.
@@ -13560,12 +17237,23 @@ export def "user-monetary-account-switch-service-payment-note-attachment get" [
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($switch_service_payment_id | is-empty) { error make --unspanned { msg: "path parameter 'switch-service-paymentID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), switch_service_payment_id: (encode-path-segment $switch_service_payment_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/switch-service-payment/{switch_service_payment_id}/note-attachment/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), switch_service_payment_id: (encode-path-segment $switch_service_payment_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/switch-service-payment/{switch_service_payment_id}/note-attachment/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Used to manage attachment notes.
@@ -13603,14 +17291,25 @@ export def "user-monetary-account-switch-service-payment-note-attachment update"
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($switch_service_payment_id | is-empty) { error make --unspanned { msg: "path parameter 'switch-service-paymentID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), switch_service_payment_id: (encode-path-segment $switch_service_payment_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/switch-service-payment/{switch_service_payment_id}/note-attachment/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), switch_service_payment_id: (encode-path-segment $switch_service_payment_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/switch-service-payment/{switch_service_payment_id}/note-attachment/{item_id}") $auth.query)
   let req_body = {"attachment_id": $attachment_id, "description": $description} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Manage the notes for a given user.
@@ -13643,12 +17342,23 @@ export def "user-monetary-account-switch-service-payment-note-text list" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($switch_service_payment_id | is-empty) { error make --unspanned { msg: "path parameter 'switch-service-paymentID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), switch_service_payment_id: (encode-path-segment $switch_service_payment_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/switch-service-payment/{switch_service_payment_id}/note-text"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), switch_service_payment_id: (encode-path-segment $switch_service_payment_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/switch-service-payment/{switch_service_payment_id}/note-text") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Used to manage text notes.
@@ -13683,14 +17393,25 @@ export def "user-monetary-account-switch-service-payment-note-text create" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($switch_service_payment_id | is-empty) { error make --unspanned { msg: "path parameter 'switch-service-paymentID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), switch_service_payment_id: (encode-path-segment $switch_service_payment_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/switch-service-payment/{switch_service_payment_id}/note-text"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), switch_service_payment_id: (encode-path-segment $switch_service_payment_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/switch-service-payment/{switch_service_payment_id}/note-text") $auth.query)
   let req_body = {"content": $content} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Used to manage text notes.
@@ -13725,12 +17446,23 @@ export def "user-monetary-account-switch-service-payment-note-text delete" [
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($switch_service_payment_id | is-empty) { error make --unspanned { msg: "path parameter 'switch-service-paymentID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), switch_service_payment_id: (encode-path-segment $switch_service_payment_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/switch-service-payment/{switch_service_payment_id}/note-text/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), switch_service_payment_id: (encode-path-segment $switch_service_payment_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/switch-service-payment/{switch_service_payment_id}/note-text/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Used to manage text notes.
@@ -13765,12 +17497,23 @@ export def "user-monetary-account-switch-service-payment-note-text get" [
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($switch_service_payment_id | is-empty) { error make --unspanned { msg: "path parameter 'switch-service-paymentID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), switch_service_payment_id: (encode-path-segment $switch_service_payment_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/switch-service-payment/{switch_service_payment_id}/note-text/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), switch_service_payment_id: (encode-path-segment $switch_service_payment_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/switch-service-payment/{switch_service_payment_id}/note-text/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Used to manage text notes.
@@ -13807,14 +17550,25 @@ export def "user-monetary-account-switch-service-payment-note-text update" [
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($switch_service_payment_id | is-empty) { error make --unspanned { msg: "path parameter 'switch-service-paymentID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), switch_service_payment_id: (encode-path-segment $switch_service_payment_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/switch-service-payment/{switch_service_payment_id}/note-text/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), switch_service_payment_id: (encode-path-segment $switch_service_payment_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/switch-service-payment/{switch_service_payment_id}/note-text/{item_id}") $auth.query)
   let req_body = {"content": $content} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Used to create translink transactions.
@@ -13845,12 +17599,23 @@ export def "user-monetary-account-translink-transaction list" [
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/translink-transaction"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/translink-transaction") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Used to create translink transactions.
@@ -13887,14 +17652,25 @@ export def "user-monetary-account-translink-transaction create" [
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/translink-transaction"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/translink-transaction") $auth.query)
   let req_body = {"description": $description, "payments": $payments, "reference": $reference, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Used to create translink transactions.
@@ -13927,12 +17703,23 @@ export def "user-monetary-account-translink-transaction get" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/translink-transaction/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/translink-transaction/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get a listing of all SDD whitelist entries for a target monetary account.
@@ -13963,12 +17750,23 @@ export def "user-monetary-account-whitelist-sdd list" [
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/whitelist-sdd"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/whitelist-sdd") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get a specific SDD whitelist entry.
@@ -14001,12 +17799,23 @@ export def "user-monetary-account-whitelist-sdd get" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/whitelist-sdd/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/whitelist-sdd/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Manage the notes for a given user.
@@ -14041,12 +17850,23 @@ export def "user-monetary-account-whitelist-whitelist-result-note-attachment lis
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($whitelist_id | is-empty) { error make --unspanned { msg: "path parameter 'whitelistID' must be non-empty" } }
   if ($whitelist_result_id | is-empty) { error make --unspanned { msg: "path parameter 'whitelist-resultID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), whitelist_id: (encode-path-segment $whitelist_id), whitelist_result_id: (encode-path-segment $whitelist_result_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/whitelist/{whitelist_id}/whitelist-result/{whitelist_result_id}/note-attachment"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), whitelist_id: (encode-path-segment $whitelist_id), whitelist_result_id: (encode-path-segment $whitelist_result_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/whitelist/{whitelist_id}/whitelist-result/{whitelist_result_id}/note-attachment") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Used to manage attachment notes.
@@ -14084,14 +17904,25 @@ export def "user-monetary-account-whitelist-whitelist-result-note-attachment cre
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($whitelist_id | is-empty) { error make --unspanned { msg: "path parameter 'whitelistID' must be non-empty" } }
   if ($whitelist_result_id | is-empty) { error make --unspanned { msg: "path parameter 'whitelist-resultID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), whitelist_id: (encode-path-segment $whitelist_id), whitelist_result_id: (encode-path-segment $whitelist_result_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/whitelist/{whitelist_id}/whitelist-result/{whitelist_result_id}/note-attachment"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), whitelist_id: (encode-path-segment $whitelist_id), whitelist_result_id: (encode-path-segment $whitelist_result_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/whitelist/{whitelist_id}/whitelist-result/{whitelist_result_id}/note-attachment") $auth.query)
   let req_body = {"attachment_id": $attachment_id, "description": $description} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Used to manage attachment notes.
@@ -14128,12 +17959,23 @@ export def "user-monetary-account-whitelist-whitelist-result-note-attachment del
   if ($whitelist_id | is-empty) { error make --unspanned { msg: "path parameter 'whitelistID' must be non-empty" } }
   if ($whitelist_result_id | is-empty) { error make --unspanned { msg: "path parameter 'whitelist-resultID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), whitelist_id: (encode-path-segment $whitelist_id), whitelist_result_id: (encode-path-segment $whitelist_result_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/whitelist/{whitelist_id}/whitelist-result/{whitelist_result_id}/note-attachment/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), whitelist_id: (encode-path-segment $whitelist_id), whitelist_result_id: (encode-path-segment $whitelist_result_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/whitelist/{whitelist_id}/whitelist-result/{whitelist_result_id}/note-attachment/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Used to manage attachment notes.
@@ -14170,12 +18012,23 @@ export def "user-monetary-account-whitelist-whitelist-result-note-attachment get
   if ($whitelist_id | is-empty) { error make --unspanned { msg: "path parameter 'whitelistID' must be non-empty" } }
   if ($whitelist_result_id | is-empty) { error make --unspanned { msg: "path parameter 'whitelist-resultID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), whitelist_id: (encode-path-segment $whitelist_id), whitelist_result_id: (encode-path-segment $whitelist_result_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/whitelist/{whitelist_id}/whitelist-result/{whitelist_result_id}/note-attachment/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), whitelist_id: (encode-path-segment $whitelist_id), whitelist_result_id: (encode-path-segment $whitelist_result_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/whitelist/{whitelist_id}/whitelist-result/{whitelist_result_id}/note-attachment/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Used to manage attachment notes.
@@ -14215,14 +18068,25 @@ export def "user-monetary-account-whitelist-whitelist-result-note-attachment upd
   if ($whitelist_id | is-empty) { error make --unspanned { msg: "path parameter 'whitelistID' must be non-empty" } }
   if ($whitelist_result_id | is-empty) { error make --unspanned { msg: "path parameter 'whitelist-resultID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), whitelist_id: (encode-path-segment $whitelist_id), whitelist_result_id: (encode-path-segment $whitelist_result_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/whitelist/{whitelist_id}/whitelist-result/{whitelist_result_id}/note-attachment/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), whitelist_id: (encode-path-segment $whitelist_id), whitelist_result_id: (encode-path-segment $whitelist_result_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/whitelist/{whitelist_id}/whitelist-result/{whitelist_result_id}/note-attachment/{item_id}") $auth.query)
   let req_body = {"attachment_id": $attachment_id, "description": $description} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Manage the notes for a given user.
@@ -14257,12 +18121,23 @@ export def "user-monetary-account-whitelist-whitelist-result-note-text list" [
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($whitelist_id | is-empty) { error make --unspanned { msg: "path parameter 'whitelistID' must be non-empty" } }
   if ($whitelist_result_id | is-empty) { error make --unspanned { msg: "path parameter 'whitelist-resultID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), whitelist_id: (encode-path-segment $whitelist_id), whitelist_result_id: (encode-path-segment $whitelist_result_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/whitelist/{whitelist_id}/whitelist-result/{whitelist_result_id}/note-text"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), whitelist_id: (encode-path-segment $whitelist_id), whitelist_result_id: (encode-path-segment $whitelist_result_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/whitelist/{whitelist_id}/whitelist-result/{whitelist_result_id}/note-text") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Used to manage text notes.
@@ -14299,14 +18174,25 @@ export def "user-monetary-account-whitelist-whitelist-result-note-text create" [
   if ($monetary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'monetary-accountID' must be non-empty" } }
   if ($whitelist_id | is-empty) { error make --unspanned { msg: "path parameter 'whitelistID' must be non-empty" } }
   if ($whitelist_result_id | is-empty) { error make --unspanned { msg: "path parameter 'whitelist-resultID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), whitelist_id: (encode-path-segment $whitelist_id), whitelist_result_id: (encode-path-segment $whitelist_result_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/whitelist/{whitelist_id}/whitelist-result/{whitelist_result_id}/note-text"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), whitelist_id: (encode-path-segment $whitelist_id), whitelist_result_id: (encode-path-segment $whitelist_result_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/whitelist/{whitelist_id}/whitelist-result/{whitelist_result_id}/note-text") $auth.query)
   let req_body = {"content": $content} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Used to manage text notes.
@@ -14343,12 +18229,23 @@ export def "user-monetary-account-whitelist-whitelist-result-note-text delete" [
   if ($whitelist_id | is-empty) { error make --unspanned { msg: "path parameter 'whitelistID' must be non-empty" } }
   if ($whitelist_result_id | is-empty) { error make --unspanned { msg: "path parameter 'whitelist-resultID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), whitelist_id: (encode-path-segment $whitelist_id), whitelist_result_id: (encode-path-segment $whitelist_result_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/whitelist/{whitelist_id}/whitelist-result/{whitelist_result_id}/note-text/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), whitelist_id: (encode-path-segment $whitelist_id), whitelist_result_id: (encode-path-segment $whitelist_result_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/whitelist/{whitelist_id}/whitelist-result/{whitelist_result_id}/note-text/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Used to manage text notes.
@@ -14385,12 +18282,23 @@ export def "user-monetary-account-whitelist-whitelist-result-note-text get" [
   if ($whitelist_id | is-empty) { error make --unspanned { msg: "path parameter 'whitelistID' must be non-empty" } }
   if ($whitelist_result_id | is-empty) { error make --unspanned { msg: "path parameter 'whitelist-resultID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), whitelist_id: (encode-path-segment $whitelist_id), whitelist_result_id: (encode-path-segment $whitelist_result_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/whitelist/{whitelist_id}/whitelist-result/{whitelist_result_id}/note-text/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), whitelist_id: (encode-path-segment $whitelist_id), whitelist_result_id: (encode-path-segment $whitelist_result_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/whitelist/{whitelist_id}/whitelist-result/{whitelist_result_id}/note-text/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Used to manage text notes.
@@ -14429,14 +18337,25 @@ export def "user-monetary-account-whitelist-whitelist-result-note-text update" [
   if ($whitelist_id | is-empty) { error make --unspanned { msg: "path parameter 'whitelistID' must be non-empty" } }
   if ($whitelist_result_id | is-empty) { error make --unspanned { msg: "path parameter 'whitelist-resultID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), whitelist_id: (encode-path-segment $whitelist_id), whitelist_result_id: (encode-path-segment $whitelist_result_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/whitelist/{whitelist_id}/whitelist-result/{whitelist_result_id}/note-text/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), monetary_account_id: (encode-path-segment $monetary_account_id), whitelist_id: (encode-path-segment $whitelist_id), whitelist_result_id: (encode-path-segment $whitelist_result_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/monetary-account/{monetary_account_id}/whitelist/{whitelist_id}/whitelist-result/{whitelist_result_id}/note-text/{item_id}") $auth.query)
   let req_body = {"content": $content} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Manage the email notification filters for a user.
@@ -14465,12 +18384,23 @@ export def "user-notification-filter-email list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/notification-filter-email"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/notification-filter-email") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Manage the email notification filters for a user.
@@ -14502,14 +18432,25 @@ export def "user-notification-filter-email create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/notification-filter-email"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/notification-filter-email") $auth.query)
   let req_body = {"notification_filters": $notification_filters} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Manage the push notification filters for a user.
@@ -14538,12 +18479,23 @@ export def "user-notification-filter-push list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/notification-filter-push"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/notification-filter-push") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Manage the push notification filters for a user.
@@ -14575,14 +18527,25 @@ export def "user-notification-filter-push create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/notification-filter-push"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/notification-filter-push") $auth.query)
   let req_body = {"notification_filters": $notification_filters} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Manage the url notification filters for a user.
@@ -14611,12 +18574,23 @@ export def "user-notification-filter-url list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/notification-filter-url"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/notification-filter-url") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Manage the url notification filters for a user.
@@ -14648,14 +18622,25 @@ export def "user-notification-filter-url create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/notification-filter-url"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/notification-filter-url") $auth.query)
   let req_body = {"notification_filters": $notification_filters} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Used for managing OAuth Clients.
@@ -14684,12 +18669,23 @@ export def "user-oauth-client list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/oauth-client"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/oauth-client") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Used for managing OAuth Clients.
@@ -14720,14 +18716,25 @@ export def "user-oauth-client create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/oauth-client"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/oauth-client") $auth.query)
   let req_body = {"status": $status} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Used for managing OAuth Clients.
@@ -14758,12 +18765,23 @@ export def "user-oauth-client get" [
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/oauth-client/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/oauth-client/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Used for managing OAuth Clients.
@@ -14796,14 +18814,25 @@ export def "user-oauth-client update" [
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/oauth-client/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/oauth-client/{item_id}") $auth.query)
   let req_body = {"status": $status} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Used for managing OAuth Client Callback URLs.
@@ -14834,12 +18863,23 @@ export def "user-oauth-client-callback-url list" [
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($oauth_client_id | is-empty) { error make --unspanned { msg: "path parameter 'oauth-clientID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), oauth_client_id: (encode-path-segment $oauth_client_id)} | format pattern "/user/{user_id}/oauth-client/{oauth_client_id}/callback-url"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), oauth_client_id: (encode-path-segment $oauth_client_id)} | format pattern "/user/{user_id}/oauth-client/{oauth_client_id}/callback-url") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Used for managing OAuth Client Callback URLs.
@@ -14872,14 +18912,25 @@ export def "user-oauth-client-callback-url create" [
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($oauth_client_id | is-empty) { error make --unspanned { msg: "path parameter 'oauth-clientID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), oauth_client_id: (encode-path-segment $oauth_client_id)} | format pattern "/user/{user_id}/oauth-client/{oauth_client_id}/callback-url"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), oauth_client_id: (encode-path-segment $oauth_client_id)} | format pattern "/user/{user_id}/oauth-client/{oauth_client_id}/callback-url") $auth.query)
   let req_body = {"url": $url} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Used for managing OAuth Client Callback URLs.
@@ -14912,12 +18963,23 @@ export def "user-oauth-client-callback-url delete" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($oauth_client_id | is-empty) { error make --unspanned { msg: "path parameter 'oauth-clientID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), oauth_client_id: (encode-path-segment $oauth_client_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/oauth-client/{oauth_client_id}/callback-url/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), oauth_client_id: (encode-path-segment $oauth_client_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/oauth-client/{oauth_client_id}/callback-url/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Used for managing OAuth Client Callback URLs.
@@ -14950,12 +19012,23 @@ export def "user-oauth-client-callback-url get" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($oauth_client_id | is-empty) { error make --unspanned { msg: "path parameter 'oauth-clientID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), oauth_client_id: (encode-path-segment $oauth_client_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/oauth-client/{oauth_client_id}/callback-url/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), oauth_client_id: (encode-path-segment $oauth_client_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/oauth-client/{oauth_client_id}/callback-url/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Used for managing OAuth Client Callback URLs.
@@ -14990,14 +19063,25 @@ export def "user-oauth-client-callback-url update" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($oauth_client_id | is-empty) { error make --unspanned { msg: "path parameter 'oauth-clientID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), oauth_client_id: (encode-path-segment $oauth_client_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/oauth-client/{oauth_client_id}/callback-url/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), oauth_client_id: (encode-path-segment $oauth_client_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/oauth-client/{oauth_client_id}/callback-url/{item_id}") $auth.query)
   let req_body = {"url": $url} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # List a users automatic payment auto allocated settings.
@@ -15026,12 +19110,23 @@ export def "user-payment-auto-allocate list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/payment-auto-allocate"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/payment-auto-allocate") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Manage the PaymentServiceProviderDraftPayment's for a PISP.
@@ -15060,12 +19155,23 @@ export def "user-payment-service-provider-draft-payment list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/payment-service-provider-draft-payment"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/payment-service-provider-draft-payment") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Manage the PaymentServiceProviderDraftPayment's for a PISP.
@@ -15103,14 +19209,25 @@ export def "user-payment-service-provider-draft-payment create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/payment-service-provider-draft-payment"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/payment-service-provider-draft-payment") $auth.query)
   let req_body = {"amount": $amount, "counterparty_iban": $counterparty_iban, "counterparty_name": $counterparty_name, "description": $description, "sender_iban": $sender_iban, "sender_name": $sender_name, "status": $status} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Manage the PaymentServiceProviderDraftPayment's for a PISP.
@@ -15141,12 +19258,23 @@ export def "user-payment-service-provider-draft-payment get" [
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/payment-service-provider-draft-payment/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/payment-service-provider-draft-payment/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Manage the PaymentServiceProviderDraftPayment's for a PISP.
@@ -15186,14 +19314,25 @@ export def "user-payment-service-provider-draft-payment update" [
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/payment-service-provider-draft-payment/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/payment-service-provider-draft-payment/{item_id}") $auth.query)
   let req_body = {"amount": $amount, "counterparty_iban": $counterparty_iban, "counterparty_name": $counterparty_name, "description": $description, "sender_iban": $sender_iban, "sender_name": $sender_name, "status": $status} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get a listing of all Slice group settlements.
@@ -15224,12 +19363,23 @@ export def "user-registry-registry-settlement list" [
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($registry_id | is-empty) { error make --unspanned { msg: "path parameter 'registryID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), registry_id: (encode-path-segment $registry_id)} | format pattern "/user/{user_id}/registry/{registry_id}/registry-settlement"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), registry_id: (encode-path-segment $registry_id)} | format pattern "/user/{user_id}/registry/{registry_id}/registry-settlement") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a new Slice group settlement.
@@ -15262,14 +19412,25 @@ export def "user-registry-registry-settlement create" [
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($registry_id | is-empty) { error make --unspanned { msg: "path parameter 'registryID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), registry_id: (encode-path-segment $registry_id)} | format pattern "/user/{user_id}/registry/{registry_id}/registry-settlement"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), registry_id: (encode-path-segment $registry_id)} | format pattern "/user/{user_id}/registry/{registry_id}/registry-settlement") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get a specific Slice group settlement.
@@ -15302,12 +19463,23 @@ export def "user-registry-registry-settlement get" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($registry_id | is-empty) { error make --unspanned { msg: "path parameter 'registryID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), registry_id: (encode-path-segment $registry_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/registry/{registry_id}/registry-settlement/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), registry_id: (encode-path-segment $registry_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/registry/{registry_id}/registry-settlement/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Used to view Rewards.
@@ -15336,12 +19508,23 @@ export def "user-reward list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/reward"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/reward") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Used to view Rewards.
@@ -15370,12 +19553,23 @@ export def "user-reward-recipient list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/reward-recipient"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/reward-recipient") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Used to view Rewards.
@@ -15406,12 +19600,23 @@ export def "user-reward-recipient get" [
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/reward-recipient/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/reward-recipient/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Used to view Rewards.
@@ -15440,12 +19645,23 @@ export def "user-reward-sender list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/reward-sender"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/reward-sender") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Used to view Rewards.
@@ -15476,12 +19692,23 @@ export def "user-reward-sender get" [
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/reward-sender/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/reward-sender/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Used to view Rewards.
@@ -15512,12 +19739,23 @@ export def "user-reward get" [
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/reward/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/reward/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get a collection of scheduled definition for all accessible monetary accounts of the user. You can add the parameter type to filter the response. When type={SCHEDULE_DEFINITION_PAYMENT,SCHEDULE_DEFINITION_PAYMENT_BATCH} is provided only schedule definition object that relate to these definitions are returned.
@@ -15546,12 +19784,23 @@ export def "user-schedule list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/schedule"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/schedule") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Return all the shares a user was invited to.
@@ -15580,12 +19829,23 @@ export def "user-share-invite-monetary-account-response list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/share-invite-monetary-account-response"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/share-invite-monetary-account-response") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Return the details of a specific share a user was invited to.
@@ -15616,12 +19876,23 @@ export def "user-share-invite-monetary-account-response get" [
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/share-invite-monetary-account-response/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/share-invite-monetary-account-response/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Accept or reject a share a user was invited to.
@@ -15663,14 +19934,25 @@ export def "user-share-invite-monetary-account-response update" [
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/share-invite-monetary-account-response/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/share-invite-monetary-account-response/{item_id}") $auth.query)
   let req_body = {"card_id": $card_id, "counter_alias": $counter_alias, "relation_user": $relation_user, "share_detail": $share_detail, "status": $status, "user_alias_cancelled": $user_alias_cancelled} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Create a request from an ideal transaction.
@@ -15701,14 +19983,25 @@ export def "user-token-qr-request-ideal create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/token-qr-request-ideal"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/token-qr-request-ideal") $auth.query)
   let req_body = {"token": $body_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Create a request from an SOFORT transaction.
@@ -15739,14 +20032,25 @@ export def "user-token-qr-request-sofort create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/token-qr-request-sofort"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/token-qr-request-sofort") $auth.query)
   let req_body = {"token": $body_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Used to get a list of supported currencies for Transferwise.
@@ -15775,12 +20079,23 @@ export def "user-transferwise-currency list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/transferwise-currency"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/transferwise-currency") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Used to get quotes from Transferwise. These can be used to initiate payments.
@@ -15818,14 +20133,25 @@ export def "user-transferwise-quote create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/transferwise-quote"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/transferwise-quote") $auth.query)
   let req_body = {"amount_fee": $amount_fee, "amount_source": $amount_source, "amount_target": $amount_target, "currency_source": $currency_source, "currency_target": $currency_target} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Used to get temporary quotes from Transferwise. These cannot be used to initiate payments
@@ -15861,14 +20187,25 @@ export def "user-transferwise-quote-temporary create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/transferwise-quote-temporary"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/transferwise-quote-temporary") $auth.query)
   let req_body = {"amount_source": $amount_source, "amount_target": $amount_target, "currency_source": $currency_source, "currency_target": $currency_target} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Used to get temporary quotes from Transferwise. These cannot be used to initiate payments
@@ -15899,12 +20236,23 @@ export def "user-transferwise-quote-temporary get" [
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/transferwise-quote-temporary/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/transferwise-quote-temporary/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Used to get quotes from Transferwise. These can be used to initiate payments.
@@ -15935,12 +20283,23 @@ export def "user-transferwise-quote get" [
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/transferwise-quote/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/transferwise-quote/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Used to manage recipient accounts with Transferwise.
@@ -15971,12 +20330,23 @@ export def "user-transferwise-quote-transferwise-recipient list" [
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($transferwise_quote_id | is-empty) { error make --unspanned { msg: "path parameter 'transferwise-quoteID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), transferwise_quote_id: (encode-path-segment $transferwise_quote_id)} | format pattern "/user/{user_id}/transferwise-quote/{transferwise_quote_id}/transferwise-recipient"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), transferwise_quote_id: (encode-path-segment $transferwise_quote_id)} | format pattern "/user/{user_id}/transferwise-quote/{transferwise_quote_id}/transferwise-recipient") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Used to manage recipient accounts with Transferwise.
@@ -16013,14 +20383,25 @@ export def "user-transferwise-quote-transferwise-recipient create" [
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($transferwise_quote_id | is-empty) { error make --unspanned { msg: "path parameter 'transferwise-quoteID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), transferwise_quote_id: (encode-path-segment $transferwise_quote_id)} | format pattern "/user/{user_id}/transferwise-quote/{transferwise_quote_id}/transferwise-recipient"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), transferwise_quote_id: (encode-path-segment $transferwise_quote_id)} | format pattern "/user/{user_id}/transferwise-quote/{transferwise_quote_id}/transferwise-recipient") $auth.query)
   let req_body = {"country": $country, "detail": $detail, "name_account_holder": $name_account_holder, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Used to determine the recipient account requirements for Transferwise transfers.
@@ -16051,12 +20432,23 @@ export def "user-transferwise-quote-transferwise-recipient-requirement list" [
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($transferwise_quote_id | is-empty) { error make --unspanned { msg: "path parameter 'transferwise-quoteID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), transferwise_quote_id: (encode-path-segment $transferwise_quote_id)} | format pattern "/user/{user_id}/transferwise-quote/{transferwise_quote_id}/transferwise-recipient-requirement"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), transferwise_quote_id: (encode-path-segment $transferwise_quote_id)} | format pattern "/user/{user_id}/transferwise-quote/{transferwise_quote_id}/transferwise-recipient-requirement") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Used to determine the recipient account requirements for Transferwise transfers.
@@ -16093,14 +20485,25 @@ export def "user-transferwise-quote-transferwise-recipient-requirement create" [
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($transferwise_quote_id | is-empty) { error make --unspanned { msg: "path parameter 'transferwise-quoteID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), transferwise_quote_id: (encode-path-segment $transferwise_quote_id)} | format pattern "/user/{user_id}/transferwise-quote/{transferwise_quote_id}/transferwise-recipient-requirement"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), transferwise_quote_id: (encode-path-segment $transferwise_quote_id)} | format pattern "/user/{user_id}/transferwise-quote/{transferwise_quote_id}/transferwise-recipient-requirement") $auth.query)
   let req_body = {"country": $country, "detail": $detail, "name_account_holder": $name_account_holder, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Used to manage recipient accounts with Transferwise.
@@ -16133,12 +20536,23 @@ export def "user-transferwise-quote-transferwise-recipient delete" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($transferwise_quote_id | is-empty) { error make --unspanned { msg: "path parameter 'transferwise-quoteID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), transferwise_quote_id: (encode-path-segment $transferwise_quote_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/transferwise-quote/{transferwise_quote_id}/transferwise-recipient/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), transferwise_quote_id: (encode-path-segment $transferwise_quote_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/transferwise-quote/{transferwise_quote_id}/transferwise-recipient/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Used to manage recipient accounts with Transferwise.
@@ -16171,12 +20585,23 @@ export def "user-transferwise-quote-transferwise-recipient get" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($transferwise_quote_id | is-empty) { error make --unspanned { msg: "path parameter 'transferwise-quoteID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), transferwise_quote_id: (encode-path-segment $transferwise_quote_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/transferwise-quote/{transferwise_quote_id}/transferwise-recipient/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), transferwise_quote_id: (encode-path-segment $transferwise_quote_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/transferwise-quote/{transferwise_quote_id}/transferwise-recipient/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Used to create Transferwise payments.
@@ -16207,12 +20632,23 @@ export def "user-transferwise-quote-transferwise-transfer list" [
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($transferwise_quote_id | is-empty) { error make --unspanned { msg: "path parameter 'transferwise-quoteID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), transferwise_quote_id: (encode-path-segment $transferwise_quote_id)} | format pattern "/user/{user_id}/transferwise-quote/{transferwise_quote_id}/transferwise-transfer"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), transferwise_quote_id: (encode-path-segment $transferwise_quote_id)} | format pattern "/user/{user_id}/transferwise-quote/{transferwise_quote_id}/transferwise-transfer") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Used to create Transferwise payments.
@@ -16256,14 +20692,25 @@ export def "user-transferwise-quote-transferwise-transfer create" [
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($transferwise_quote_id | is-empty) { error make --unspanned { msg: "path parameter 'transferwise-quoteID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), transferwise_quote_id: (encode-path-segment $transferwise_quote_id)} | format pattern "/user/{user_id}/transferwise-quote/{transferwise_quote_id}/transferwise-transfer"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), transferwise_quote_id: (encode-path-segment $transferwise_quote_id)} | format pattern "/user/{user_id}/transferwise-quote/{transferwise_quote_id}/transferwise-transfer") $auth.query)
   let req_body = {"alias": $alias, "amount_source": $amount_source, "amount_target": $amount_target, "counterparty_alias": $counterparty_alias, "monetary_account_id": $monetary_account_id, "quote": $quote, "recipient_id": $recipient_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Used to determine the account requirements for Transferwise transfers.
@@ -16298,14 +20745,25 @@ export def "user-transferwise-quote-transferwise-transfer-requirement create" [
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($transferwise_quote_id | is-empty) { error make --unspanned { msg: "path parameter 'transferwise-quoteID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), transferwise_quote_id: (encode-path-segment $transferwise_quote_id)} | format pattern "/user/{user_id}/transferwise-quote/{transferwise_quote_id}/transferwise-transfer-requirement"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), transferwise_quote_id: (encode-path-segment $transferwise_quote_id)} | format pattern "/user/{user_id}/transferwise-quote/{transferwise_quote_id}/transferwise-transfer-requirement") $auth.query)
   let req_body = {"detail": $detail, "recipient_id": $recipient_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Used to create Transferwise payments.
@@ -16338,12 +20796,23 @@ export def "user-transferwise-quote-transferwise-transfer get" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($transferwise_quote_id | is-empty) { error make --unspanned { msg: "path parameter 'transferwise-quoteID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), transferwise_quote_id: (encode-path-segment $transferwise_quote_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/transferwise-quote/{transferwise_quote_id}/transferwise-transfer/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), transferwise_quote_id: (encode-path-segment $transferwise_quote_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/transferwise-quote/{transferwise_quote_id}/transferwise-transfer/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Used to manage Transferwise users.
@@ -16372,12 +20841,23 @@ export def "user-transferwise-user list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/transferwise-user"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/transferwise-user") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Used to manage Transferwise users.
@@ -16408,14 +20888,25 @@ export def "user-transferwise-user create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/transferwise-user"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/transferwise-user") $auth.query)
   let req_body = {"oauth_code": $oauth_code} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # See how many trees this user has planted.
@@ -16444,12 +20935,23 @@ export def "user-tree-progress list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/tree-progress"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/tree-progress") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get a listing of all recurring SDD whitelist entries for a target monetary account.
@@ -16478,12 +20980,23 @@ export def "user-whitelist-sdd list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/whitelist-sdd"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/whitelist-sdd") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get a listing of all one off SDD whitelist entries for a target monetary account.
@@ -16512,12 +21025,23 @@ export def "user-whitelist-sdd-one-off list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/whitelist-sdd-one-off"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/whitelist-sdd-one-off") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a new one off SDD whitelist entry.
@@ -16551,14 +21075,25 @@ export def "user-whitelist-sdd-one-off create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/whitelist-sdd-one-off"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/whitelist-sdd-one-off") $auth.query)
   let req_body = {"maximum_amount_per_month": $maximum_amount_per_month, "monetary_account_paying_id": $monetary_account_paying_id, "request_id": $request_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Whitelist an one off SDD so that when another one off SDD from the creditor comes in, it is automatically accepted.
@@ -16589,12 +21124,23 @@ export def "user-whitelist-sdd-one-off delete" [
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/whitelist-sdd-one-off/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/whitelist-sdd-one-off/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Get a specific one off SDD whitelist entry.
@@ -16625,12 +21171,23 @@ export def "user-whitelist-sdd-one-off get" [
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/whitelist-sdd-one-off/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/whitelist-sdd-one-off/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Whitelist an one off SDD so that when another one off SDD from the creditor comes in, it is automatically accepted.
@@ -16666,14 +21223,25 @@ export def "user-whitelist-sdd-one-off update" [
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/whitelist-sdd-one-off/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/whitelist-sdd-one-off/{item_id}") $auth.query)
   let req_body = {"maximum_amount_per_month": $maximum_amount_per_month, "monetary_account_paying_id": $monetary_account_paying_id, "request_id": $request_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get a listing of all recurring SDD whitelist entries for a target monetary account.
@@ -16702,12 +21270,23 @@ export def "user-whitelist-sdd-recurring list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/whitelist-sdd-recurring"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/whitelist-sdd-recurring") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a new recurring SDD whitelist entry.
@@ -16741,14 +21320,25 @@ export def "user-whitelist-sdd-recurring create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/whitelist-sdd-recurring"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/whitelist-sdd-recurring") $auth.query)
   let req_body = {"maximum_amount_per_month": $maximum_amount_per_month, "monetary_account_paying_id": $monetary_account_paying_id, "request_id": $request_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Whitelist a recurring SDD so that when another recurrence comes in, it is automatically accepted.
@@ -16779,12 +21369,23 @@ export def "user-whitelist-sdd-recurring delete" [
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/whitelist-sdd-recurring/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/whitelist-sdd-recurring/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Get a specific recurring SDD whitelist entry.
@@ -16815,12 +21416,23 @@ export def "user-whitelist-sdd-recurring get" [
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/whitelist-sdd-recurring/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/whitelist-sdd-recurring/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Whitelist a recurring SDD so that when another recurrence comes in, it is automatically accepted.
@@ -16856,14 +21468,25 @@ export def "user-whitelist-sdd-recurring update" [
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/whitelist-sdd-recurring/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/whitelist-sdd-recurring/{item_id}") $auth.query)
   let req_body = {"maximum_amount_per_month": $maximum_amount_per_month, "monetary_account_paying_id": $monetary_account_paying_id, "request_id": $request_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get a specific recurring SDD whitelist entry.
@@ -16894,10 +21517,21 @@ export def "user-whitelist-sdd get" [
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/whitelist-sdd/{item_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), item_id: (encode-path-segment $item_id)} | format pattern "/user/{user_id}/whitelist-sdd/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Cache-Control": $cache_control, "User-Agent": $user_agent, "X-Bunq-Language": $x_bunq_language, "X-Bunq-Region": $x_bunq_region, "X-Bunq-Client-Request-Id": $x_bunq_client_request_id, "X-Bunq-Geolocation": $x_bunq_geolocation, "X-Bunq-Client-Authentication": $x_bunq_client_authentication} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }

@@ -8,7 +8,7 @@ const BASE_URL = "http://localhost//rest.rgd.mcw.edu/rgdws"
 # `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
 # where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o RAT_GENOME_DATABASE_REST_API_TOKEN | default "" }
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o RAT_GENOME_DATABASE_REST_API_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
@@ -40,14 +40,11 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
-# Trick: `url encode --all` over-encodes, then we decode the four unreserved
-# punctuation chars back. Pre-existing %XX sequences in the input survive
-# because `url encode --all` first turns their % into %25.
 def encode-path-segment [v: any]: nothing -> string {
   $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
-# Serialize an array-typed path parameter (issue 49.A). OpenAPI 3 `style: simple`
+# Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
 # (the default for path params) and Swagger 2 `collectionFormat: csv` both join
 # the elements with a literal comma WITHIN the single path segment, each element
 # RFC-3986-encoded individually (so a comma inside an element stays %2C). Without
@@ -58,51 +55,45 @@ def encode-path-array [v: any]: nothing -> string {
   if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
 }
 
-# Build URL from base, path, and optional query string
-def build-url [base: string, path: string, query?: string]: nothing -> string {
+# Build the request URL from base, path, and any number of pre-encoded query
+# fragments (param serializer output and/or the auth query). Each fragment is an
+# `&`-joinable `key=value` string already percent-encoded by its producer; empty
+# fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
+# delimiters are hand-spliced — and any query already on the base URL is merged in.
+def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
   let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
-  let result = ($parsed | upsert path $full_path)
-  if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
+  let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
+  $parsed | upsert path $full_path | upsert query $query | url join
 }
 
-# Build the dry-run record returned by --dry-run. Shape:
-#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
-#    auth: {scheme, location}}
-# `meta` carries logical-form data (the query record by spec name, the pre-serialization
-# body) that do-request itself cannot reconstruct from its wire-format args.
-def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
-  let m = ($meta | default {})
-  {
-    dry_run: true
-    method: $method
-    url: $url
-    query: ($m | get -o query | default {})
-    headers: $auth.headers
-    body: ($m | get -o body)
-    content_type: $content_type
-    timeout: $timeout
-    auth: {scheme: $auth.scheme, location: $auth.location}
-  }
+# Success policy: did this response succeed? Single source of truth, consulted by
+# handle-response and the HEAD header-unwrap. Empty ok_codes means the spec listed
+# none, so fall back to < 400. Otherwise: any 2xx, plus documented success codes.
+def status-ok [status: int, ok_codes: list<int>]: nothing -> bool {
+  if ($ok_codes | is-empty) { $status < 400 } else { ($status >= 200 and $status < 300) or ($status in $ok_codes) }
 }
 
-# Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
-  let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
-  let timeout = ($max_time | default 30min)
-  let ct = ($content_type | default "application/json")
-  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
-  let resp = match $method {
-    "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
-  }
-  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
-  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
+# Unwrap a `--full` HTTP response into the user-facing value. Response arrives
+# via pipeline; ok_codes gates the error throw (see status-ok).
+def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: record -> any {
+  let resp = $in
+  if $allow_errors { return $resp }
+  if not (status-ok $resp.status $ok_codes) { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } }
+  if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
+  if $resp.status == 204 { return null }
+  $resp.body
+}
+
+# GET — bodyless, honours --raw
+def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+}
+
+# POST — body + content-type
+def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 def base-url-completer [] { ["http://localhost//rest.rgd.mcw.edu/rgdws"] }
@@ -151,10 +142,21 @@ export def "agr-affected-genomic-models get-using" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($taxon_id | is-empty) { error make --unspanned { msg: "path parameter 'taxonId' must be non-empty" } }
-  let full_url = (build-url $base ({taxon_id: (encode-path-segment $taxon_id)} | format pattern "/agr/affectedGenomicModels/{taxon_id}"))
+  let full_url = (build-url $base ({taxon_id: (encode-path-segment $taxon_id)} | format pattern "/agr/affectedGenomicModels/{taxon_id}") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get gene allele records submitted by RGD to AGR by taxonId
@@ -176,10 +178,21 @@ export def "agr-alleles get-for-taxon-using" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($taxon_id | is-empty) { error make --unspanned { msg: "path parameter 'taxonId' must be non-empty" } }
-  let full_url = (build-url $base ({taxon_id: (encode-path-segment $taxon_id)} | format pattern "/agr/alleles/{taxon_id}"))
+  let full_url = (build-url $base ({taxon_id: (encode-path-segment $taxon_id)} | format pattern "/agr/alleles/{taxon_id}") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get expression annotations submitted by RGD to AGR by taxonId
@@ -201,10 +214,21 @@ export def "agr-expression get-for-taxon-using" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($taxon_id | is-empty) { error make --unspanned { msg: "path parameter 'taxonId' must be non-empty" } }
-  let full_url = (build-url $base ({taxon_id: (encode-path-segment $taxon_id)} | format pattern "/agr/expression/{taxon_id}"))
+  let full_url = (build-url $base ({taxon_id: (encode-path-segment $taxon_id)} | format pattern "/agr/expression/{taxon_id}") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get phenotype annotations submitted by RGD to AGR by taxonId
@@ -226,10 +250,21 @@ export def "agr-phenotypes get-for-taxon-using" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($taxon_id | is-empty) { error make --unspanned { msg: "path parameter 'taxonId' must be non-empty" } }
-  let full_url = (build-url $base ({taxon_id: (encode-path-segment $taxon_id)} | format pattern "/agr/phenotypes/{taxon_id}"))
+  let full_url = (build-url $base ({taxon_id: (encode-path-segment $taxon_id)} | format pattern "/agr/phenotypes/{taxon_id}") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get basic variant records submitted by RGD to AGR by taxonId
@@ -251,10 +286,21 @@ export def "agr-variants get-for-taxon-using" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($taxon_id | is-empty) { error make --unspanned { msg: "path parameter 'taxonId' must be non-empty" } }
-  let full_url = (build-url $base ({taxon_id: (encode-path-segment $taxon_id)} | format pattern "/agr/variants/{taxon_id}"))
+  let full_url = (build-url $base ({taxon_id: (encode-path-segment $taxon_id)} | format pattern "/agr/variants/{taxon_id}") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get gene records submitted by RGD to AGR by taxonId
@@ -276,10 +322,21 @@ export def "agr get-genes-for-latest-assembly-using" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($taxon_id | is-empty) { error make --unspanned { msg: "path parameter 'taxonId' must be non-empty" } }
-  let full_url = (build-url $base ({taxon_id: (encode-path-segment $taxon_id)} | format pattern "/agr/{taxon_id}"))
+  let full_url = (build-url $base ({taxon_id: (encode-path-segment $taxon_id)} | format pattern "/agr/{taxon_id}") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Return a list of genes annotated to an ontology term
@@ -304,12 +361,23 @@ export def "annotations get-using-create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/annotations/")
+  let full_url = (build-url $base "/annotations/" $auth.query)
   let req_body = {"evidenceCodes": $evidence_codes, "ids": $ids, "speciesTypeKeys": $species_type_keys, "termAcc": $term_acc} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200 201]
 }
 
 # Returns a list ontology term accession IDs annotated to an rgd object
@@ -331,10 +399,21 @@ export def "annotations-acc-id get-term-using" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($rgd_id | is-empty) { error make --unspanned { msg: "path parameter 'rgdId' must be non-empty" } }
-  let full_url = (build-url $base ({rgd_id: (encode-path-segment $rgd_id)} | format pattern "/annotations/accId/{rgd_id}"))
+  let full_url = (build-url $base ({rgd_id: (encode-path-segment $rgd_id)} | format pattern "/annotations/accId/{rgd_id}") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns annotation count for ontology accession ID
@@ -358,10 +437,21 @@ export def "annotations-count get-by-acc-using" [
   let base = ($base_url | default $BASE_URL)
   if ($acc_id | is-empty) { error make --unspanned { msg: "path parameter 'accId' must be non-empty" } }
   if ($include_children | is-empty) { error make --unspanned { msg: "path parameter 'includeChildren' must be non-empty" } }
-  let full_url = (build-url $base ({acc_id: (encode-path-segment $acc_id), include_children: (encode-path-segment $include_children)} | format pattern "/annotations/count/{acc_id}/{include_children}"))
+  let full_url = (build-url $base ({acc_id: (encode-path-segment $acc_id), include_children: (encode-path-segment $include_children)} | format pattern "/annotations/count/{acc_id}/{include_children}") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns annotation count for ontology accession ID and speicies
@@ -387,10 +477,21 @@ export def "annotations-count get-by-acc-and-species-using" [
   if ($acc_id | is-empty) { error make --unspanned { msg: "path parameter 'accId' must be non-empty" } }
   if ($species_type_key | is-empty) { error make --unspanned { msg: "path parameter 'speciesTypeKey' must be non-empty" } }
   if ($include_children | is-empty) { error make --unspanned { msg: "path parameter 'includeChildren' must be non-empty" } }
-  let full_url = (build-url $base ({acc_id: (encode-path-segment $acc_id), species_type_key: (encode-path-segment $species_type_key), include_children: (encode-path-segment $include_children)} | format pattern "/annotations/count/{acc_id}/{species_type_key}/{include_children}"))
+  let full_url = (build-url $base ({acc_id: (encode-path-segment $acc_id), species_type_key: (encode-path-segment $species_type_key), include_children: (encode-path-segment $include_children)} | format pattern "/annotations/count/{acc_id}/{species_type_key}/{include_children}") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns annotation count for ontology accession ID and object type
@@ -418,10 +519,21 @@ export def "annotations-count get-by-acc-and-object-type-using" [
   if ($species_type_key | is-empty) { error make --unspanned { msg: "path parameter 'speciesTypeKey' must be non-empty" } }
   if ($include_children | is-empty) { error make --unspanned { msg: "path parameter 'includeChildren' must be non-empty" } }
   if ($object_type | is-empty) { error make --unspanned { msg: "path parameter 'objectType' must be non-empty" } }
-  let full_url = (build-url $base ({acc_id: (encode-path-segment $acc_id), species_type_key: (encode-path-segment $species_type_key), include_children: (encode-path-segment $include_children), object_type: (encode-path-segment $object_type)} | format pattern "/annotations/count/{acc_id}/{species_type_key}/{include_children}/{object_type}"))
+  let full_url = (build-url $base ({acc_id: (encode-path-segment $acc_id), species_type_key: (encode-path-segment $species_type_key), include_children: (encode-path-segment $include_children), object_type: (encode-path-segment $object_type)} | format pattern "/annotations/count/{acc_id}/{species_type_key}/{include_children}/{object_type}") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns a list of annotations for a reference
@@ -443,10 +555,21 @@ export def "annotations-reference get-annots-by-refrerence-using" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($ref_rgd_id | is-empty) { error make --unspanned { msg: "path parameter 'refRgdId' must be non-empty" } }
-  let full_url = (build-url $base ({ref_rgd_id: (encode-path-segment $ref_rgd_id)} | format pattern "/annotations/reference/{ref_rgd_id}"))
+  let full_url = (build-url $base ({ref_rgd_id: (encode-path-segment $ref_rgd_id)} | format pattern "/annotations/reference/{ref_rgd_id}") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns a list of annotations by RGD ID
@@ -468,10 +591,21 @@ export def "annotations-rgd-id get-by-using" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($rgd_id | is-empty) { error make --unspanned { msg: "path parameter 'rgdId' must be non-empty" } }
-  let full_url = (build-url $base ({rgd_id: (encode-path-segment $rgd_id)} | format pattern "/annotations/rgdId/{rgd_id}"))
+  let full_url = (build-url $base ({rgd_id: (encode-path-segment $rgd_id)} | format pattern "/annotations/rgdId/{rgd_id}") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns a list of annotations by RGD ID and ontology prefix
@@ -495,10 +629,21 @@ export def "annotations-rgd-id get-by-and-ontology-using" [
   let base = ($base_url | default $BASE_URL)
   if ($rgd_id | is-empty) { error make --unspanned { msg: "path parameter 'rgdId' must be non-empty" } }
   if ($ontology_prefix | is-empty) { error make --unspanned { msg: "path parameter 'ontologyPrefix' must be non-empty" } }
-  let full_url = (build-url $base ({rgd_id: (encode-path-segment $rgd_id), ontology_prefix: (encode-path-segment $ontology_prefix)} | format pattern "/annotations/rgdId/{rgd_id}/{ontology_prefix}"))
+  let full_url = (build-url $base ({rgd_id: (encode-path-segment $rgd_id), ontology_prefix: (encode-path-segment $ontology_prefix)} | format pattern "/annotations/rgdId/{rgd_id}/{ontology_prefix}") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns a list of annotations by RGD ID and ontology term accession ID
@@ -522,10 +667,21 @@ export def "annotations get-by-acc-and-rgd-using" [
   let base = ($base_url | default $BASE_URL)
   if ($acc_id | is-empty) { error make --unspanned { msg: "path parameter 'accId' must be non-empty" } }
   if ($rgd_id | is-empty) { error make --unspanned { msg: "path parameter 'rgdId' must be non-empty" } }
-  let full_url = (build-url $base ({acc_id: (encode-path-segment $acc_id), rgd_id: (encode-path-segment $rgd_id)} | format pattern "/annotations/{acc_id}/{rgd_id}"))
+  let full_url = (build-url $base ({acc_id: (encode-path-segment $acc_id), rgd_id: (encode-path-segment $rgd_id)} | format pattern "/annotations/{acc_id}/{rgd_id}") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns a list annotations for an ontology term or a term and it's children
@@ -551,10 +707,21 @@ export def "annotations get-using" [
   if ($acc_id | is-empty) { error make --unspanned { msg: "path parameter 'accId' must be non-empty" } }
   if ($species_type_key | is-empty) { error make --unspanned { msg: "path parameter 'speciesTypeKey' must be non-empty" } }
   if ($include_children | is-empty) { error make --unspanned { msg: "path parameter 'includeChildren' must be non-empty" } }
-  let full_url = (build-url $base ({acc_id: (encode-path-segment $acc_id), species_type_key: (encode-path-segment $species_type_key), include_children: (encode-path-segment $include_children)} | format pattern "/annotations/{acc_id}/{species_type_key}/{include_children}"))
+  let full_url = (build-url $base ({acc_id: (encode-path-segment $acc_id), species_type_key: (encode-path-segment $species_type_key), include_children: (encode-path-segment $include_children)} | format pattern "/annotations/{acc_id}/{species_type_key}/{include_children}") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Return a list of genes annotated to the term.Genes are rgdids separated by comma.Species type is an integer value.term is the ontology
@@ -578,12 +745,23 @@ export def "enrichment-annotated-genes get-data-using-create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/enrichment/annotatedGenes")
+  let full_url = (build-url $base "/enrichment/annotatedGenes" $auth.query)
   let req_body = {"accId": $acc_id, "geneSymbols": $gene_symbols, "species": $species} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200 201]
 }
 
 # Return a chart of ontology terms annotated to the genes.Genes are rgdids separated by comma.Species type is an integer value.Aspect is the Ontology group
@@ -607,12 +785,23 @@ export def "enrichment-data get-using-create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/enrichment/data")
+  let full_url = (build-url $base "/enrichment/data" $auth.query)
   let req_body = {"aspect": $aspect, "genes": $genes, "species": $species} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200 201]
 }
 
 # Return a list of genes for an affymetrix ID
@@ -636,10 +825,21 @@ export def "genes-affy-id get-by-using" [
   let base = ($base_url | default $BASE_URL)
   if ($affy_id | is-empty) { error make --unspanned { msg: "path parameter 'affyId' must be non-empty" } }
   if ($species_type_key | is-empty) { error make --unspanned { msg: "path parameter 'speciesTypeKey' must be non-empty" } }
-  let full_url = (build-url $base ({affy_id: (encode-path-segment $affy_id), species_type_key: (encode-path-segment $species_type_key)} | format pattern "/genes/affyId/{affy_id}/{species_type_key}"))
+  let full_url = (build-url $base ({affy_id: (encode-path-segment $affy_id), species_type_key: (encode-path-segment $species_type_key)} | format pattern "/genes/affyId/{affy_id}/{species_type_key}") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Return a list of genes for an alias and species
@@ -663,10 +863,21 @@ export def "genes-alias get-by-symbol-using" [
   let base = ($base_url | default $BASE_URL)
   if ($alias_symbol | is-empty) { error make --unspanned { msg: "path parameter 'aliasSymbol' must be non-empty" } }
   if ($species_type_key | is-empty) { error make --unspanned { msg: "path parameter 'speciesTypeKey' must be non-empty" } }
-  let full_url = (build-url $base ({alias_symbol: (encode-path-segment $alias_symbol), species_type_key: (encode-path-segment $species_type_key)} | format pattern "/genes/alias/{alias_symbol}/{species_type_key}"))
+  let full_url = (build-url $base ({alias_symbol: (encode-path-segment $alias_symbol), species_type_key: (encode-path-segment $species_type_key)} | format pattern "/genes/alias/{alias_symbol}/{species_type_key}") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Return a list of gene alleles
@@ -688,10 +899,21 @@ export def "genes-allele get-using" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($rgd_id | is-empty) { error make --unspanned { msg: "path parameter 'rgdId' must be non-empty" } }
-  let full_url = (build-url $base ({rgd_id: (encode-path-segment $rgd_id)} | format pattern "/genes/allele/{rgd_id}"))
+  let full_url = (build-url $base ({rgd_id: (encode-path-segment $rgd_id)} | format pattern "/genes/allele/{rgd_id}") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Return a list of genes annotated to an ontology term
@@ -715,12 +937,23 @@ export def "genes-annotation get-annotated-using-create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/genes/annotation")
+  let full_url = (build-url $base "/genes/annotation" $auth.query)
   let req_body = {"accId": $acc_id, "evidenceCodes": $evidence_codes, "speciesTypeKeys": $species_type_keys} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200 201]
 }
 
 # Return a list of genes annotated to an ontology term
@@ -742,10 +975,21 @@ export def "genes-annotation get-list-annotated-using" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($acc_id | is-empty) { error make --unspanned { msg: "path parameter 'accId' must be non-empty" } }
-  let full_url = (build-url $base ({acc_id: (encode-path-segment $acc_id)} | format pattern "/genes/annotation/{acc_id}"))
+  let full_url = (build-url $base ({acc_id: (encode-path-segment $acc_id)} | format pattern "/genes/annotation/{acc_id}") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Return a list of genes annotated to an ontology term
@@ -769,10 +1013,21 @@ export def "genes-annotation get-annotated-using" [
   let base = ($base_url | default $BASE_URL)
   if ($acc_id | is-empty) { error make --unspanned { msg: "path parameter 'accId' must be non-empty" } }
   if ($species_type_key | is-empty) { error make --unspanned { msg: "path parameter 'speciesTypeKey' must be non-empty" } }
-  let full_url = (build-url $base ({acc_id: (encode-path-segment $acc_id), species_type_key: (encode-path-segment $species_type_key)} | format pattern "/genes/annotation/{acc_id}/{species_type_key}"))
+  let full_url = (build-url $base ({acc_id: (encode-path-segment $acc_id), species_type_key: (encode-path-segment $species_type_key)} | format pattern "/genes/annotation/{acc_id}/{species_type_key}") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Return a list of genes by keyword and species type key
@@ -796,10 +1051,21 @@ export def "genes-keyword get-by-using" [
   let base = ($base_url | default $BASE_URL)
   if ($keyword | is-empty) { error make --unspanned { msg: "path parameter 'keyword' must be non-empty" } }
   if ($species_type_key | is-empty) { error make --unspanned { msg: "path parameter 'speciesTypeKey' must be non-empty" } }
-  let full_url = (build-url $base ({keyword: (encode-path-segment $keyword), species_type_key: (encode-path-segment $species_type_key)} | format pattern "/genes/keyword/{keyword}/{species_type_key}"))
+  let full_url = (build-url $base ({keyword: (encode-path-segment $keyword), species_type_key: (encode-path-segment $species_type_key)} | format pattern "/genes/keyword/{keyword}/{species_type_key}") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Return a list of all genes with position information for an assembly
@@ -821,10 +1087,21 @@ export def "genes-map get-by-key-using" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($map_key | is-empty) { error make --unspanned { msg: "path parameter 'mapKey' must be non-empty" } }
-  let full_url = (build-url $base ({map_key: (encode-path-segment $map_key)} | format pattern "/genes/map/{map_key}"))
+  let full_url = (build-url $base ({map_key: (encode-path-segment $map_key)} | format pattern "/genes/map/{map_key}") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Return a list of genes position and map key
@@ -852,10 +1129,21 @@ export def "genes-mapped get-by-position-using" [
   if ($start | is-empty) { error make --unspanned { msg: "path parameter 'start' must be non-empty" } }
   if ($stop | is-empty) { error make --unspanned { msg: "path parameter 'stop' must be non-empty" } }
   if ($map_key | is-empty) { error make --unspanned { msg: "path parameter 'mapKey' must be non-empty" } }
-  let full_url = (build-url $base ({chr: (encode-path-segment $chr), start: (encode-path-segment $start), stop: (encode-path-segment $stop), map_key: (encode-path-segment $map_key)} | format pattern "/genes/mapped/{chr}/{start}/{stop}/{map_key}"))
+  let full_url = (build-url $base ({chr: (encode-path-segment $chr), start: (encode-path-segment $start), stop: (encode-path-segment $stop), map_key: (encode-path-segment $map_key)} | format pattern "/genes/mapped/{chr}/{start}/{stop}/{map_key}") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Return a list of gene orthologs
@@ -878,12 +1166,23 @@ export def "genes-orthologs get-by-list-using-create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/genes/orthologs")
+  let full_url = (build-url $base "/genes/orthologs" $auth.query)
   let req_body = {"rgdIds": $rgd_ids, "speciesTypeKeys": $species_type_keys} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200 201]
 }
 
 # Return a list of gene orthologs
@@ -905,10 +1204,21 @@ export def "genes-orthologs get-using" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($rgd_id | is-empty) { error make --unspanned { msg: "path parameter 'rgdId' must be non-empty" } }
-  let full_url = (build-url $base ({rgd_id: (encode-path-segment $rgd_id)} | format pattern "/genes/orthologs/{rgd_id}"))
+  let full_url = (build-url $base ({rgd_id: (encode-path-segment $rgd_id)} | format pattern "/genes/orthologs/{rgd_id}") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Return a list of genes in region
@@ -936,10 +1246,21 @@ export def "genes-region get-in-using" [
   if ($start | is-empty) { error make --unspanned { msg: "path parameter 'start' must be non-empty" } }
   if ($stop | is-empty) { error make --unspanned { msg: "path parameter 'stop' must be non-empty" } }
   if ($map_key | is-empty) { error make --unspanned { msg: "path parameter 'mapKey' must be non-empty" } }
-  let full_url = (build-url $base ({chr: (encode-path-segment $chr), start: (encode-path-segment $start), stop: (encode-path-segment $stop), map_key: (encode-path-segment $map_key)} | format pattern "/genes/region/{chr}/{start}/{stop}/{map_key}"))
+  let full_url = (build-url $base ({chr: (encode-path-segment $chr), start: (encode-path-segment $start), stop: (encode-path-segment $stop), map_key: (encode-path-segment $map_key)} | format pattern "/genes/region/{chr}/{start}/{stop}/{map_key}") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Return a list of all genes for a species in RGD
@@ -961,10 +1282,21 @@ export def "genes-species get-by-using" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($species_type_key | is-empty) { error make --unspanned { msg: "path parameter 'speciesTypeKey' must be non-empty" } }
-  let full_url = (build-url $base ({species_type_key: (encode-path-segment $species_type_key)} | format pattern "/genes/species/{species_type_key}"))
+  let full_url = (build-url $base ({species_type_key: (encode-path-segment $species_type_key)} | format pattern "/genes/species/{species_type_key}") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Return a list of genes position and map key
@@ -992,10 +1324,21 @@ export def "genes get-by-position-using" [
   if ($start | is-empty) { error make --unspanned { msg: "path parameter 'start' must be non-empty" } }
   if ($stop | is-empty) { error make --unspanned { msg: "path parameter 'stop' must be non-empty" } }
   if ($map_key | is-empty) { error make --unspanned { msg: "path parameter 'mapKey' must be non-empty" } }
-  let full_url = (build-url $base ({chr: (encode-path-segment $chr), start: (encode-path-segment $start), stop: (encode-path-segment $stop), map_key: (encode-path-segment $map_key)} | format pattern "/genes/{chr}/{start}/{stop}/{map_key}"))
+  let full_url = (build-url $base ({chr: (encode-path-segment $chr), start: (encode-path-segment $start), stop: (encode-path-segment $stop), map_key: (encode-path-segment $map_key)} | format pattern "/genes/{chr}/{start}/{stop}/{map_key}") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get a gene record by RGD ID
@@ -1017,10 +1360,21 @@ export def "genes get-by-rgd-using" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($rgd_id | is-empty) { error make --unspanned { msg: "path parameter 'rgdId' must be non-empty" } }
-  let full_url = (build-url $base ({rgd_id: (encode-path-segment $rgd_id)} | format pattern "/genes/{rgd_id}"))
+  let full_url = (build-url $base ({rgd_id: (encode-path-segment $rgd_id)} | format pattern "/genes/{rgd_id}") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get a gene record by symbol and species type key
@@ -1044,10 +1398,21 @@ export def "genes get-by-using" [
   let base = ($base_url | default $BASE_URL)
   if ($symbol | is-empty) { error make --unspanned { msg: "path parameter 'symbol' must be non-empty" } }
   if ($species_type_key | is-empty) { error make --unspanned { msg: "path parameter 'speciesTypeKey' must be non-empty" } }
-  let full_url = (build-url $base ({symbol: (encode-path-segment $symbol), species_type_key: (encode-path-segment $species_type_key)} | format pattern "/genes/{symbol}/{species_type_key}"))
+  let full_url = (build-url $base ({symbol: (encode-path-segment $symbol), species_type_key: (encode-path-segment $species_type_key)} | format pattern "/genes/{symbol}/{species_type_key}") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns a list of gene types avialable in RGD
@@ -1067,10 +1432,21 @@ export def "lookup-gene-types get-using" [
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/lookup/geneTypes")
+  let full_url = (build-url $base "/lookup/geneTypes" $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Translate RGD IDs to Ensembl Gene IDs
@@ -1092,12 +1468,23 @@ export def "lookup-id-map-ensembl-gene get-mapping-using-create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/lookup/id/map/EnsemblGene")
+  let full_url = (build-url $base "/lookup/id/map/EnsemblGene" $auth.query)
   let req_body = {"rgdIds": $rgd_ids} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200 201]
 }
 
 # Translate an RGD ID to an Ensembl Gene ID
@@ -1119,10 +1506,21 @@ export def "lookup-id-map-ensembl-gene get-mapping-using" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($rgd_id | is-empty) { error make --unspanned { msg: "path parameter 'rgdId' must be non-empty" } }
-  let full_url = (build-url $base ({rgd_id: (encode-path-segment $rgd_id)} | format pattern "/lookup/id/map/EnsemblGene/{rgd_id}"))
+  let full_url = (build-url $base ({rgd_id: (encode-path-segment $rgd_id)} | format pattern "/lookup/id/map/EnsemblGene/{rgd_id}") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Translate RGD IDs to Ensembl Protein IDs
@@ -1144,12 +1542,23 @@ export def "lookup-id-map-ensembl-protein get-mapping-using-create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/lookup/id/map/EnsemblProtein")
+  let full_url = (build-url $base "/lookup/id/map/EnsemblProtein" $auth.query)
   let req_body = {"rgdIds": $rgd_ids} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200 201]
 }
 
 # Translate an RGD ID to an Ensembl Protein ID
@@ -1171,10 +1580,21 @@ export def "lookup-id-map-ensembl-protein get-mapping-using" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($rgd_id | is-empty) { error make --unspanned { msg: "path parameter 'rgdId' must be non-empty" } }
-  let full_url = (build-url $base ({rgd_id: (encode-path-segment $rgd_id)} | format pattern "/lookup/id/map/EnsemblProtein/{rgd_id}"))
+  let full_url = (build-url $base ({rgd_id: (encode-path-segment $rgd_id)} | format pattern "/lookup/id/map/EnsemblProtein/{rgd_id}") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Translate RGD IDs to Ensembl Transcript IDs
@@ -1196,12 +1616,23 @@ export def "lookup-id-map-ensembl-transcript get-mapping-using-create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/lookup/id/map/EnsemblTranscript")
+  let full_url = (build-url $base "/lookup/id/map/EnsemblTranscript" $auth.query)
   let req_body = {"rgdIds": $rgd_ids} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200 201]
 }
 
 # Translate an RGD ID to an Ensembl Transcript ID
@@ -1223,10 +1654,21 @@ export def "lookup-id-map-ensembl-transcript get-mapping-using" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($rgd_id | is-empty) { error make --unspanned { msg: "path parameter 'rgdId' must be non-empty" } }
-  let full_url = (build-url $base ({rgd_id: (encode-path-segment $rgd_id)} | format pattern "/lookup/id/map/EnsemblTranscript/{rgd_id}"))
+  let full_url = (build-url $base ({rgd_id: (encode-path-segment $rgd_id)} | format pattern "/lookup/id/map/EnsemblTranscript/{rgd_id}") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Translate RGD IDs to GTEx IDs
@@ -1248,12 +1690,23 @@ export def "lookup-id-map-gt-ex get-gtex-mapping-using-create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/lookup/id/map/GTEx")
+  let full_url = (build-url $base "/lookup/id/map/GTEx" $auth.query)
   let req_body = {"rgdIds": $rgd_ids} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200 201]
 }
 
 # Translate an RGD ID to an GTEx ID
@@ -1275,10 +1728,21 @@ export def "lookup-id-map-gt-ex get-gtex-mapping-using" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($rgd_id | is-empty) { error make --unspanned { msg: "path parameter 'rgdId' must be non-empty" } }
-  let full_url = (build-url $base ({rgd_id: (encode-path-segment $rgd_id)} | format pattern "/lookup/id/map/GTEx/{rgd_id}"))
+  let full_url = (build-url $base ({rgd_id: (encode-path-segment $rgd_id)} | format pattern "/lookup/id/map/GTEx/{rgd_id}") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Translate RGD IDs to GenBank Nucleotide IDs
@@ -1300,12 +1764,23 @@ export def "lookup-id-map-gen-bank-nucleotide get-mapping-using-create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/lookup/id/map/GenBankNucleotide")
+  let full_url = (build-url $base "/lookup/id/map/GenBankNucleotide" $auth.query)
   let req_body = {"rgdIds": $rgd_ids} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200 201]
 }
 
 # Translate an RGD ID to a GenBank Nucleotide ID
@@ -1327,10 +1802,21 @@ export def "lookup-id-map-gen-bank-nucleotide get-mapping-using" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($rgd_id | is-empty) { error make --unspanned { msg: "path parameter 'rgdId' must be non-empty" } }
-  let full_url = (build-url $base ({rgd_id: (encode-path-segment $rgd_id)} | format pattern "/lookup/id/map/GenBankNucleotide/{rgd_id}"))
+  let full_url = (build-url $base ({rgd_id: (encode-path-segment $rgd_id)} | format pattern "/lookup/id/map/GenBankNucleotide/{rgd_id}") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Translate RGD IDs to GenBank Protein IDs
@@ -1352,12 +1838,23 @@ export def "lookup-id-map-gen-bank-protein get-mapping-using-create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/lookup/id/map/GenBankProtein")
+  let full_url = (build-url $base "/lookup/id/map/GenBankProtein" $auth.query)
   let req_body = {"rgdIds": $rgd_ids} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200 201]
 }
 
 # Translate an RGD ID to a GenBank Protein ID
@@ -1379,10 +1876,21 @@ export def "lookup-id-map-gen-bank-protein get-mapping-using" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($rgd_id | is-empty) { error make --unspanned { msg: "path parameter 'rgdId' must be non-empty" } }
-  let full_url = (build-url $base ({rgd_id: (encode-path-segment $rgd_id)} | format pattern "/lookup/id/map/GenBankProtein/{rgd_id}"))
+  let full_url = (build-url $base ({rgd_id: (encode-path-segment $rgd_id)} | format pattern "/lookup/id/map/GenBankProtein/{rgd_id}") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Translate RGD IDs to HGNC IDs
@@ -1404,12 +1912,23 @@ export def "lookup-id-map-hgnc get-mapping-using-create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/lookup/id/map/HGNC")
+  let full_url = (build-url $base "/lookup/id/map/HGNC" $auth.query)
   let req_body = {"rgdIds": $rgd_ids} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200 201]
 }
 
 # Translate an RGD ID to an HGNC ID
@@ -1431,10 +1950,21 @@ export def "lookup-id-map-hgnc get-mapping-using" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($rgd_id | is-empty) { error make --unspanned { msg: "path parameter 'rgdId' must be non-empty" } }
-  let full_url = (build-url $base ({rgd_id: (encode-path-segment $rgd_id)} | format pattern "/lookup/id/map/HGNC/{rgd_id}"))
+  let full_url = (build-url $base ({rgd_id: (encode-path-segment $rgd_id)} | format pattern "/lookup/id/map/HGNC/{rgd_id}") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Translate RGD IDs to MGI IDs
@@ -1456,12 +1986,23 @@ export def "lookup-id-map-mgi get-mapping-using-create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/lookup/id/map/MGI")
+  let full_url = (build-url $base "/lookup/id/map/MGI" $auth.query)
   let req_body = {"rgdIds": $rgd_ids} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200 201]
 }
 
 # Translate an RGD ID to an MGI ID
@@ -1483,10 +2024,21 @@ export def "lookup-id-map-mgi get-mapping-using" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($rgd_id | is-empty) { error make --unspanned { msg: "path parameter 'rgdId' must be non-empty" } }
-  let full_url = (build-url $base ({rgd_id: (encode-path-segment $rgd_id)} | format pattern "/lookup/id/map/MGI/{rgd_id}"))
+  let full_url = (build-url $base ({rgd_id: (encode-path-segment $rgd_id)} | format pattern "/lookup/id/map/MGI/{rgd_id}") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Translate RGD IDs to NCBI Gene IDs
@@ -1508,12 +2060,23 @@ export def "lookup-id-map-ncbi-gene get-mapping-using-create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/lookup/id/map/NCBIGene")
+  let full_url = (build-url $base "/lookup/id/map/NCBIGene" $auth.query)
   let req_body = {"rgdIds": $rgd_ids} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200 201]
 }
 
 # Translate an RGD ID to an NCBI Gene ID
@@ -1535,10 +2098,21 @@ export def "lookup-id-map-ncbi-gene get-mapping-using" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($rgd_id | is-empty) { error make --unspanned { msg: "path parameter 'rgdId' must be non-empty" } }
-  let full_url = (build-url $base ({rgd_id: (encode-path-segment $rgd_id)} | format pattern "/lookup/id/map/NCBIGene/{rgd_id}"))
+  let full_url = (build-url $base ({rgd_id: (encode-path-segment $rgd_id)} | format pattern "/lookup/id/map/NCBIGene/{rgd_id}") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Translate RGD IDs to UniProt IDs
@@ -1560,12 +2134,23 @@ export def "lookup-id-map-uni-prot get-mapping-using-create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/lookup/id/map/UniProt")
+  let full_url = (build-url $base "/lookup/id/map/UniProt" $auth.query)
   let req_body = {"rgdIds": $rgd_ids} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200 201]
 }
 
 # Translate an RGD ID to a UniProt ID
@@ -1587,10 +2172,21 @@ export def "lookup-id-map-uni-prot get-mapping-using" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($rgd_id | is-empty) { error make --unspanned { msg: "path parameter 'rgdId' must be non-empty" } }
-  let full_url = (build-url $base ({rgd_id: (encode-path-segment $rgd_id)} | format pattern "/lookup/id/map/UniProt/{rgd_id}"))
+  let full_url = (build-url $base ({rgd_id: (encode-path-segment $rgd_id)} | format pattern "/lookup/id/map/UniProt/{rgd_id}") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Return a list assembly maps for a species
@@ -1612,10 +2208,21 @@ export def "lookup-maps get-using" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($species_type_key | is-empty) { error make --unspanned { msg: "path parameter 'speciesTypeKey' must be non-empty" } }
-  let full_url = (build-url $base ({species_type_key: (encode-path-segment $species_type_key)} | format pattern "/lookup/maps/{species_type_key}"))
+  let full_url = (build-url $base ({species_type_key: (encode-path-segment $species_type_key)} | format pattern "/lookup/maps/{species_type_key}") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Return a Map of species type keys available in RGD
@@ -1635,10 +2242,21 @@ export def "lookup-species-type-keys get-using" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/lookup/speciesTypeKeys")
+  let full_url = (build-url $base "/lookup/speciesTypeKeys" $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Return a standardUnit for an ontology if it exists
@@ -1660,10 +2278,21 @@ export def "lookup-standard-unit get-maps-using-by-acc-id" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($acc_id | is-empty) { error make --unspanned { msg: "path parameter 'accId' must be non-empty" } }
-  let full_url = (build-url $base ({acc_id: (encode-path-segment $acc_id)} | format pattern "/lookup/standardUnit/{acc_id}"))
+  let full_url = (build-url $base ({acc_id: (encode-path-segment $acc_id)} | format pattern "/lookup/standardUnit/{acc_id}") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Return a list of chromosomes
@@ -1687,10 +2316,21 @@ export def "maps-chr get-by-assembly-using" [
   let base = ($base_url | default $BASE_URL)
   if ($chromosome | is-empty) { error make --unspanned { msg: "path parameter 'chromosome' must be non-empty" } }
   if ($map_key | is-empty) { error make --unspanned { msg: "path parameter 'mapKey' must be non-empty" } }
-  let full_url = (build-url $base ({chromosome: (encode-path-segment $chromosome), map_key: (encode-path-segment $map_key)} | format pattern "/maps/chr/{chromosome}/{map_key}"))
+  let full_url = (build-url $base ({chromosome: (encode-path-segment $chromosome), map_key: (encode-path-segment $map_key)} | format pattern "/maps/chr/{chromosome}/{map_key}") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Return a list of chromosomes
@@ -1712,10 +2352,21 @@ export def "maps-chr get-chromosomes-by-assembly-using" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($map_key | is-empty) { error make --unspanned { msg: "path parameter 'mapKey' must be non-empty" } }
-  let full_url = (build-url $base ({map_key: (encode-path-segment $map_key)} | format pattern "/maps/chr/{map_key}"))
+  let full_url = (build-url $base ({map_key: (encode-path-segment $map_key)} | format pattern "/maps/chr/{map_key}") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Return a list of assemblies
@@ -1737,10 +2388,21 @@ export def "maps get-by-species-using" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($species_type_key | is-empty) { error make --unspanned { msg: "path parameter 'speciesTypeKey' must be non-empty" } }
-  let full_url = (build-url $base ({species_type_key: (encode-path-segment $species_type_key)} | format pattern "/maps/{species_type_key}"))
+  let full_url = (build-url $base ({species_type_key: (encode-path-segment $species_type_key)} | format pattern "/maps/{species_type_key}") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns child and parent terms for Accession ID
@@ -1762,10 +2424,21 @@ export def "ontology-ont get-dags-using" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($acc_id | is-empty) { error make --unspanned { msg: "path parameter 'accId' must be non-empty" } }
-  let full_url = (build-url $base ({acc_id: (encode-path-segment $acc_id)} | format pattern "/ontology/ont/{acc_id}"))
+  let full_url = (build-url $base ({acc_id: (encode-path-segment $acc_id)} | format pattern "/ontology/ont/{acc_id}") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns true or false for terms
@@ -1789,10 +2462,21 @@ export def "ontology-term get-is-descendant-of-using" [
   let base = ($base_url | default $BASE_URL)
   if ($acc_id1 | is-empty) { error make --unspanned { msg: "path parameter 'accId1' must be non-empty" } }
   if ($acc_id2 | is-empty) { error make --unspanned { msg: "path parameter 'accId2' must be non-empty" } }
-  let full_url = (build-url $base ({acc_id1: (encode-path-segment $acc_id1), acc_id2: (encode-path-segment $acc_id2)} | format pattern "/ontology/term/{acc_id1}/{acc_id2}"))
+  let full_url = (build-url $base ({acc_id1: (encode-path-segment $acc_id1), acc_id2: (encode-path-segment $acc_id2)} | format pattern "/ontology/term/{acc_id1}/{acc_id2}") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns term for Accession ID
@@ -1814,10 +2498,21 @@ export def "ontology-term get-using" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($acc_id | is-empty) { error make --unspanned { msg: "path parameter 'accId' must be non-empty" } }
-  let full_url = (build-url $base ({acc_id: (encode-path-segment $acc_id)} | format pattern "/ontology/term/{acc_id}"))
+  let full_url = (build-url $base ({acc_id: (encode-path-segment $acc_id)} | format pattern "/ontology/term/{acc_id}") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Return a list of pathways based on search term
@@ -1839,10 +2534,21 @@ export def "pathways-diagrams-search get-using" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($search_string | is-empty) { error make --unspanned { msg: "path parameter 'searchString' must be non-empty" } }
-  let full_url = (build-url $base ({search_string: (encode-path-segment $search_string)} | format pattern "/pathways/diagrams/search/{search_string}"))
+  let full_url = (build-url $base ({search_string: (encode-path-segment $search_string)} | format pattern "/pathways/diagrams/search/{search_string}") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Return a list of pathways based on category provided
@@ -1864,10 +2570,21 @@ export def "pathways-diagrams-for-category get-with-using" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($category | is-empty) { error make --unspanned { msg: "path parameter 'category' must be non-empty" } }
-  let full_url = (build-url $base ({category: (encode-path-segment $category)} | format pattern "/pathways/diagramsForCategory/{category}"))
+  let full_url = (build-url $base ({category: (encode-path-segment $category)} | format pattern "/pathways/diagramsForCategory/{category}") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Return a list of quantitative phenotypes values based on a combination of Clinical Measurement, Experimental Condition, Rat Strain, and/or Measurement Method ontology terms. Results will be all records that match all terms submitted. Ontology ids should be submitted as a comma delimited list (ex. RS:0000029,CMO:0000155,CMO:0000139). Species type is an integer value (3=rat, 4=chinchilla). Reference RGD ID for a study works like a filter.
@@ -1893,10 +2610,21 @@ export def "phenotype-phenominer-chart get-using" [
   if ($species_type_key | is-empty) { error make --unspanned { msg: "path parameter 'speciesTypeKey' must be non-empty" } }
   if ($ref_rgd_id | is-empty) { error make --unspanned { msg: "path parameter 'refRgdId' must be non-empty" } }
   if ($term_string | is-empty) { error make --unspanned { msg: "path parameter 'termString' must be non-empty" } }
-  let full_url = (build-url $base ({species_type_key: (encode-path-segment $species_type_key), ref_rgd_id: (encode-path-segment $ref_rgd_id), term_string: (encode-path-segment $term_string)} | format pattern "/phenotype/phenominer/chart/{species_type_key}/{ref_rgd_id}/{term_string}"))
+  let full_url = (build-url $base ({species_type_key: (encode-path-segment $species_type_key), ref_rgd_id: (encode-path-segment $ref_rgd_id), term_string: (encode-path-segment $term_string)} | format pattern "/phenotype/phenominer/chart/{species_type_key}/{ref_rgd_id}/{term_string}") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Return a list of quantitative phenotypes values based on a combination of Clinical Measurement, Experimental Condition, Rat Strain, and/or Measurement Method ontology terms. Results will be all records that match all terms submitted. Ontology ids should be submitted as a comma delimited list (ex. RS:0000029,CMO:0000155,CMO:0000139). Species type is an integer value (3=rat, 4=chinchilla)
@@ -1920,10 +2648,21 @@ export def "phenotype-phenominer-chart get-using-by-species-type-key-term-string
   let base = ($base_url | default $BASE_URL)
   if ($species_type_key | is-empty) { error make --unspanned { msg: "path parameter 'speciesTypeKey' must be non-empty" } }
   if ($term_string | is-empty) { error make --unspanned { msg: "path parameter 'termString' must be non-empty" } }
-  let full_url = (build-url $base ({species_type_key: (encode-path-segment $species_type_key), term_string: (encode-path-segment $term_string)} | format pattern "/phenotype/phenominer/chart/{species_type_key}/{term_string}"))
+  let full_url = (build-url $base ({species_type_key: (encode-path-segment $species_type_key), term_string: (encode-path-segment $term_string)} | format pattern "/phenotype/phenominer/chart/{species_type_key}/{term_string}") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns a list QTL for given position and assembly map
@@ -1951,10 +2690,21 @@ export def "qtls-mapped get-by-position-using" [
   if ($start | is-empty) { error make --unspanned { msg: "path parameter 'start' must be non-empty" } }
   if ($stop | is-empty) { error make --unspanned { msg: "path parameter 'stop' must be non-empty" } }
   if ($map_key | is-empty) { error make --unspanned { msg: "path parameter 'mapKey' must be non-empty" } }
-  let full_url = (build-url $base ({chr: (encode-path-segment $chr), start: (encode-path-segment $start), stop: (encode-path-segment $stop), map_key: (encode-path-segment $map_key)} | format pattern "/qtls/mapped/{chr}/{start}/{stop}/{map_key}"))
+  let full_url = (build-url $base ({chr: (encode-path-segment $chr), start: (encode-path-segment $start), stop: (encode-path-segment $stop), map_key: (encode-path-segment $map_key)} | format pattern "/qtls/mapped/{chr}/{start}/{stop}/{map_key}") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns a list QTL for given position and assembly map
@@ -1982,10 +2732,21 @@ export def "qtls get-list-by-position-using" [
   if ($start | is-empty) { error make --unspanned { msg: "path parameter 'start' must be non-empty" } }
   if ($stop | is-empty) { error make --unspanned { msg: "path parameter 'stop' must be non-empty" } }
   if ($map_key | is-empty) { error make --unspanned { msg: "path parameter 'mapKey' must be non-empty" } }
-  let full_url = (build-url $base ({chr: (encode-path-segment $chr), start: (encode-path-segment $start), stop: (encode-path-segment $stop), map_key: (encode-path-segment $map_key)} | format pattern "/qtls/{chr}/{start}/{stop}/{map_key}"))
+  let full_url = (build-url $base ({chr: (encode-path-segment $chr), start: (encode-path-segment $start), stop: (encode-path-segment $stop), map_key: (encode-path-segment $map_key)} | format pattern "/qtls/{chr}/{start}/{stop}/{map_key}") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Return a QTL for provided RGD ID
@@ -2007,10 +2768,21 @@ export def "qtls get-by-rgd-using" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($rgd_id | is-empty) { error make --unspanned { msg: "path parameter 'rgdId' must be non-empty" } }
-  let full_url = (build-url $base ({rgd_id: (encode-path-segment $rgd_id)} | format pattern "/qtls/{rgd_id}"))
+  let full_url = (build-url $base ({rgd_id: (encode-path-segment $rgd_id)} | format pattern "/qtls/{rgd_id}") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns a list SSLP for given position and assembly map
@@ -2038,10 +2810,21 @@ export def "sslps-mapped get-by-position-using" [
   if ($start | is-empty) { error make --unspanned { msg: "path parameter 'start' must be non-empty" } }
   if ($stop | is-empty) { error make --unspanned { msg: "path parameter 'stop' must be non-empty" } }
   if ($map_key | is-empty) { error make --unspanned { msg: "path parameter 'mapKey' must be non-empty" } }
-  let full_url = (build-url $base ({chr: (encode-path-segment $chr), start: (encode-path-segment $start), stop: (encode-path-segment $stop), map_key: (encode-path-segment $map_key)} | format pattern "/sslps/mapped/{chr}/{start}/{stop}/{map_key}"))
+  let full_url = (build-url $base ({chr: (encode-path-segment $chr), start: (encode-path-segment $start), stop: (encode-path-segment $stop), map_key: (encode-path-segment $map_key)} | format pattern "/sslps/mapped/{chr}/{start}/{stop}/{map_key}") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Count of active objects by type, for specified species and date
@@ -2065,10 +2848,21 @@ export def "stats-count-active-object get-using" [
   let base = ($base_url | default $BASE_URL)
   if ($species_type_key | is-empty) { error make --unspanned { msg: "path parameter 'speciesTypeKey' must be non-empty" } }
   if ($date_yyyymmdd | is-empty) { error make --unspanned { msg: "path parameter 'dateYYYYMMDD' must be non-empty" } }
-  let full_url = (build-url $base ({species_type_key: (encode-path-segment $species_type_key), date_yyyymmdd: (encode-path-segment $date_yyyymmdd)} | format pattern "/stats/count/activeObject/{species_type_key}/{date_yyyymmdd}"))
+  let full_url = (build-url $base ({species_type_key: (encode-path-segment $species_type_key), date_yyyymmdd: (encode-path-segment $date_yyyymmdd)} | format pattern "/stats/count/activeObject/{species_type_key}/{date_yyyymmdd}") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Count of gene types, for specified species and date
@@ -2092,10 +2886,21 @@ export def "stats-count-gene-type get-using" [
   let base = ($base_url | default $BASE_URL)
   if ($species_type_key | is-empty) { error make --unspanned { msg: "path parameter 'speciesTypeKey' must be non-empty" } }
   if ($date_yyyymmdd | is-empty) { error make --unspanned { msg: "path parameter 'dateYYYYMMDD' must be non-empty" } }
-  let full_url = (build-url $base ({species_type_key: (encode-path-segment $species_type_key), date_yyyymmdd: (encode-path-segment $date_yyyymmdd)} | format pattern "/stats/count/geneType/{species_type_key}/{date_yyyymmdd}"))
+  let full_url = (build-url $base ({species_type_key: (encode-path-segment $species_type_key), date_yyyymmdd: (encode-path-segment $date_yyyymmdd)} | format pattern "/stats/count/geneType/{species_type_key}/{date_yyyymmdd}") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Count of objects with given status, for specified species and date
@@ -2119,10 +2924,21 @@ export def "stats-count-object-status get-using" [
   let base = ($base_url | default $BASE_URL)
   if ($species_type_key | is-empty) { error make --unspanned { msg: "path parameter 'speciesTypeKey' must be non-empty" } }
   if ($date_yyyymmdd | is-empty) { error make --unspanned { msg: "path parameter 'dateYYYYMMDD' must be non-empty" } }
-  let full_url = (build-url $base ({species_type_key: (encode-path-segment $species_type_key), date_yyyymmdd: (encode-path-segment $date_yyyymmdd)} | format pattern "/stats/count/objectStatus/{species_type_key}/{date_yyyymmdd}"))
+  let full_url = (build-url $base ({species_type_key: (encode-path-segment $species_type_key), date_yyyymmdd: (encode-path-segment $date_yyyymmdd)} | format pattern "/stats/count/objectStatus/{species_type_key}/{date_yyyymmdd}") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Count of objects with reference sequence(s), by object type, for specified species and date
@@ -2146,10 +2962,21 @@ export def "stats-count-object-with-ref-seq get-using" [
   let base = ($base_url | default $BASE_URL)
   if ($species_type_key | is-empty) { error make --unspanned { msg: "path parameter 'speciesTypeKey' must be non-empty" } }
   if ($date_yyyymmdd | is-empty) { error make --unspanned { msg: "path parameter 'dateYYYYMMDD' must be non-empty" } }
-  let full_url = (build-url $base ({species_type_key: (encode-path-segment $species_type_key), date_yyyymmdd: (encode-path-segment $date_yyyymmdd)} | format pattern "/stats/count/objectWithRefSeq/{species_type_key}/{date_yyyymmdd}"))
+  let full_url = (build-url $base ({species_type_key: (encode-path-segment $species_type_key), date_yyyymmdd: (encode-path-segment $date_yyyymmdd)} | format pattern "/stats/count/objectWithRefSeq/{species_type_key}/{date_yyyymmdd}") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Count of objects with reference, by object type, for specified species and date
@@ -2173,10 +3000,21 @@ export def "stats-count-object-with-reference get-using" [
   let base = ($base_url | default $BASE_URL)
   if ($species_type_key | is-empty) { error make --unspanned { msg: "path parameter 'speciesTypeKey' must be non-empty" } }
   if ($date_yyyymmdd | is-empty) { error make --unspanned { msg: "path parameter 'dateYYYYMMDD' must be non-empty" } }
-  let full_url = (build-url $base ({species_type_key: (encode-path-segment $species_type_key), date_yyyymmdd: (encode-path-segment $date_yyyymmdd)} | format pattern "/stats/count/objectWithReference/{species_type_key}/{date_yyyymmdd}"))
+  let full_url = (build-url $base ({species_type_key: (encode-path-segment $species_type_key), date_yyyymmdd: (encode-path-segment $date_yyyymmdd)} | format pattern "/stats/count/objectWithReference/{species_type_key}/{date_yyyymmdd}") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Count of objects with external database ids, by database id, for specified species, object type and date
@@ -2202,10 +3040,21 @@ export def "stats-count-object-with-xdb get-xd-bs-using" [
   if ($species_type_key | is-empty) { error make --unspanned { msg: "path parameter 'speciesTypeKey' must be non-empty" } }
   if ($object_key | is-empty) { error make --unspanned { msg: "path parameter 'objectKey' must be non-empty" } }
   if ($date_yyyymmdd | is-empty) { error make --unspanned { msg: "path parameter 'dateYYYYMMDD' must be non-empty" } }
-  let full_url = (build-url $base ({species_type_key: (encode-path-segment $species_type_key), object_key: (encode-path-segment $object_key), date_yyyymmdd: (encode-path-segment $date_yyyymmdd)} | format pattern "/stats/count/objectWithXdb/{species_type_key}/{object_key}/{date_yyyymmdd}"))
+  let full_url = (build-url $base ({species_type_key: (encode-path-segment $species_type_key), object_key: (encode-path-segment $object_key), date_yyyymmdd: (encode-path-segment $date_yyyymmdd)} | format pattern "/stats/count/objectWithXdb/{species_type_key}/{object_key}/{date_yyyymmdd}") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Count of protein interactions, for specified species and date
@@ -2229,10 +3078,21 @@ export def "stats-count-protein-interaction get-using" [
   let base = ($base_url | default $BASE_URL)
   if ($species_type_key | is-empty) { error make --unspanned { msg: "path parameter 'speciesTypeKey' must be non-empty" } }
   if ($date_yyyymmdd | is-empty) { error make --unspanned { msg: "path parameter 'dateYYYYMMDD' must be non-empty" } }
-  let full_url = (build-url $base ({species_type_key: (encode-path-segment $species_type_key), date_yyyymmdd: (encode-path-segment $date_yyyymmdd)} | format pattern "/stats/count/proteinInteraction/{species_type_key}/{date_yyyymmdd}"))
+  let full_url = (build-url $base ({species_type_key: (encode-path-segment $species_type_key), date_yyyymmdd: (encode-path-segment $date_yyyymmdd)} | format pattern "/stats/count/proteinInteraction/{species_type_key}/{date_yyyymmdd}") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Count of strains, by qtl inheritance type, for specified species and date
@@ -2256,10 +3116,21 @@ export def "stats-count-qtl-inheritance-type get-using" [
   let base = ($base_url | default $BASE_URL)
   if ($species_type_key | is-empty) { error make --unspanned { msg: "path parameter 'speciesTypeKey' must be non-empty" } }
   if ($date_yyyymmdd | is-empty) { error make --unspanned { msg: "path parameter 'dateYYYYMMDD' must be non-empty" } }
-  let full_url = (build-url $base ({species_type_key: (encode-path-segment $species_type_key), date_yyyymmdd: (encode-path-segment $date_yyyymmdd)} | format pattern "/stats/count/qtlInheritanceType/{species_type_key}/{date_yyyymmdd}"))
+  let full_url = (build-url $base ({species_type_key: (encode-path-segment $species_type_key), date_yyyymmdd: (encode-path-segment $date_yyyymmdd)} | format pattern "/stats/count/qtlInheritanceType/{species_type_key}/{date_yyyymmdd}") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Count of retired objects by type, for specified species and date
@@ -2283,10 +3154,21 @@ export def "stats-count-retired-object get-using" [
   let base = ($base_url | default $BASE_URL)
   if ($species_type_key | is-empty) { error make --unspanned { msg: "path parameter 'speciesTypeKey' must be non-empty" } }
   if ($date_yyyymmdd | is-empty) { error make --unspanned { msg: "path parameter 'dateYYYYMMDD' must be non-empty" } }
-  let full_url = (build-url $base ({species_type_key: (encode-path-segment $species_type_key), date_yyyymmdd: (encode-path-segment $date_yyyymmdd)} | format pattern "/stats/count/retiredObject/{species_type_key}/{date_yyyymmdd}"))
+  let full_url = (build-url $base ({species_type_key: (encode-path-segment $species_type_key), date_yyyymmdd: (encode-path-segment $date_yyyymmdd)} | format pattern "/stats/count/retiredObject/{species_type_key}/{date_yyyymmdd}") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Count of strain types, for specified species and date
@@ -2310,10 +3192,21 @@ export def "stats-count-strain-type get-using" [
   let base = ($base_url | default $BASE_URL)
   if ($species_type_key | is-empty) { error make --unspanned { msg: "path parameter 'speciesTypeKey' must be non-empty" } }
   if ($date_yyyymmdd | is-empty) { error make --unspanned { msg: "path parameter 'dateYYYYMMDD' must be non-empty" } }
-  let full_url = (build-url $base ({species_type_key: (encode-path-segment $species_type_key), date_yyyymmdd: (encode-path-segment $date_yyyymmdd)} | format pattern "/stats/count/strainType/{species_type_key}/{date_yyyymmdd}"))
+  let full_url = (build-url $base ({species_type_key: (encode-path-segment $species_type_key), date_yyyymmdd: (encode-path-segment $date_yyyymmdd)} | format pattern "/stats/count/strainType/{species_type_key}/{date_yyyymmdd}") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Count of withdrawn objects by type, for specified species and date
@@ -2337,10 +3230,21 @@ export def "stats-count-withdrawn-object get-using" [
   let base = ($base_url | default $BASE_URL)
   if ($species_type_key | is-empty) { error make --unspanned { msg: "path parameter 'speciesTypeKey' must be non-empty" } }
   if ($date_yyyymmdd | is-empty) { error make --unspanned { msg: "path parameter 'dateYYYYMMDD' must be non-empty" } }
-  let full_url = (build-url $base ({species_type_key: (encode-path-segment $species_type_key), date_yyyymmdd: (encode-path-segment $date_yyyymmdd)} | format pattern "/stats/count/withdrawnObject/{species_type_key}/{date_yyyymmdd}"))
+  let full_url = (build-url $base ({species_type_key: (encode-path-segment $species_type_key), date_yyyymmdd: (encode-path-segment $date_yyyymmdd)} | format pattern "/stats/count/withdrawnObject/{species_type_key}/{date_yyyymmdd}") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Count of external database ids, for specied species and date
@@ -2364,10 +3268,21 @@ export def "stats-count-xdb get-using" [
   let base = ($base_url | default $BASE_URL)
   if ($species_type_key | is-empty) { error make --unspanned { msg: "path parameter 'speciesTypeKey' must be non-empty" } }
   if ($date_yyyymmdd | is-empty) { error make --unspanned { msg: "path parameter 'dateYYYYMMDD' must be non-empty" } }
-  let full_url = (build-url $base ({species_type_key: (encode-path-segment $species_type_key), date_yyyymmdd: (encode-path-segment $date_yyyymmdd)} | format pattern "/stats/count/xdb/{species_type_key}/{date_yyyymmdd}"))
+  let full_url = (build-url $base ({species_type_key: (encode-path-segment $species_type_key), date_yyyymmdd: (encode-path-segment $date_yyyymmdd)} | format pattern "/stats/count/xdb/{species_type_key}/{date_yyyymmdd}") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Count difference of active objects, by type, for specified species and date range
@@ -2393,10 +3308,21 @@ export def "stats-diff-active-object get-using" [
   if ($species_type_key | is-empty) { error make --unspanned { msg: "path parameter 'speciesTypeKey' must be non-empty" } }
   if ($date_from_yyyymmdd | is-empty) { error make --unspanned { msg: "path parameter 'dateFromYYYYMMDD' must be non-empty" } }
   if ($date_to_yyyymmdd | is-empty) { error make --unspanned { msg: "path parameter 'dateToYYYYMMDD' must be non-empty" } }
-  let full_url = (build-url $base ({species_type_key: (encode-path-segment $species_type_key), date_from_yyyymmdd: (encode-path-segment $date_from_yyyymmdd), date_to_yyyymmdd: (encode-path-segment $date_to_yyyymmdd)} | format pattern "/stats/diff/activeObject/{species_type_key}/{date_from_yyyymmdd}/{date_to_yyyymmdd}"))
+  let full_url = (build-url $base ({species_type_key: (encode-path-segment $species_type_key), date_from_yyyymmdd: (encode-path-segment $date_from_yyyymmdd), date_to_yyyymmdd: (encode-path-segment $date_to_yyyymmdd)} | format pattern "/stats/diff/activeObject/{species_type_key}/{date_from_yyyymmdd}/{date_to_yyyymmdd}") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Count difference of gene types, for specified species and date range
@@ -2422,10 +3348,21 @@ export def "stats-diff-gene-type get-using" [
   if ($species_type_key | is-empty) { error make --unspanned { msg: "path parameter 'speciesTypeKey' must be non-empty" } }
   if ($date_from_yyyymmdd | is-empty) { error make --unspanned { msg: "path parameter 'dateFromYYYYMMDD' must be non-empty" } }
   if ($date_to_yyyymmdd | is-empty) { error make --unspanned { msg: "path parameter 'dateToYYYYMMDD' must be non-empty" } }
-  let full_url = (build-url $base ({species_type_key: (encode-path-segment $species_type_key), date_from_yyyymmdd: (encode-path-segment $date_from_yyyymmdd), date_to_yyyymmdd: (encode-path-segment $date_to_yyyymmdd)} | format pattern "/stats/diff/geneType/{species_type_key}/{date_from_yyyymmdd}/{date_to_yyyymmdd}"))
+  let full_url = (build-url $base ({species_type_key: (encode-path-segment $species_type_key), date_from_yyyymmdd: (encode-path-segment $date_from_yyyymmdd), date_to_yyyymmdd: (encode-path-segment $date_to_yyyymmdd)} | format pattern "/stats/diff/geneType/{species_type_key}/{date_from_yyyymmdd}/{date_to_yyyymmdd}") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Count difference of objects with given status, for specified species and date range
@@ -2451,10 +3388,21 @@ export def "stats-diff-object-status get-using" [
   if ($species_type_key | is-empty) { error make --unspanned { msg: "path parameter 'speciesTypeKey' must be non-empty" } }
   if ($date_from_yyyymmdd | is-empty) { error make --unspanned { msg: "path parameter 'dateFromYYYYMMDD' must be non-empty" } }
   if ($date_to_yyyymmdd | is-empty) { error make --unspanned { msg: "path parameter 'dateToYYYYMMDD' must be non-empty" } }
-  let full_url = (build-url $base ({species_type_key: (encode-path-segment $species_type_key), date_from_yyyymmdd: (encode-path-segment $date_from_yyyymmdd), date_to_yyyymmdd: (encode-path-segment $date_to_yyyymmdd)} | format pattern "/stats/diff/objectStatus/{species_type_key}/{date_from_yyyymmdd}/{date_to_yyyymmdd}"))
+  let full_url = (build-url $base ({species_type_key: (encode-path-segment $species_type_key), date_from_yyyymmdd: (encode-path-segment $date_from_yyyymmdd), date_to_yyyymmdd: (encode-path-segment $date_to_yyyymmdd)} | format pattern "/stats/diff/objectStatus/{species_type_key}/{date_from_yyyymmdd}/{date_to_yyyymmdd}") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Count difference of objects with reference sequence(s), by object type, for specified species and date range
@@ -2480,10 +3428,21 @@ export def "stats-diff-object-with-ref-seq get-using" [
   if ($species_type_key | is-empty) { error make --unspanned { msg: "path parameter 'speciesTypeKey' must be non-empty" } }
   if ($date_from_yyyymmdd | is-empty) { error make --unspanned { msg: "path parameter 'dateFromYYYYMMDD' must be non-empty" } }
   if ($date_to_yyyymmdd | is-empty) { error make --unspanned { msg: "path parameter 'dateToYYYYMMDD' must be non-empty" } }
-  let full_url = (build-url $base ({species_type_key: (encode-path-segment $species_type_key), date_from_yyyymmdd: (encode-path-segment $date_from_yyyymmdd), date_to_yyyymmdd: (encode-path-segment $date_to_yyyymmdd)} | format pattern "/stats/diff/objectWithRefSeq/{species_type_key}/{date_from_yyyymmdd}/{date_to_yyyymmdd}"))
+  let full_url = (build-url $base ({species_type_key: (encode-path-segment $species_type_key), date_from_yyyymmdd: (encode-path-segment $date_from_yyyymmdd), date_to_yyyymmdd: (encode-path-segment $date_to_yyyymmdd)} | format pattern "/stats/diff/objectWithRefSeq/{species_type_key}/{date_from_yyyymmdd}/{date_to_yyyymmdd}") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Count difference of objects with reference, by object type, for specified species and date range
@@ -2509,10 +3468,21 @@ export def "stats-diff-object-with-reference get-using" [
   if ($species_type_key | is-empty) { error make --unspanned { msg: "path parameter 'speciesTypeKey' must be non-empty" } }
   if ($date_from_yyyymmdd | is-empty) { error make --unspanned { msg: "path parameter 'dateFromYYYYMMDD' must be non-empty" } }
   if ($date_to_yyyymmdd | is-empty) { error make --unspanned { msg: "path parameter 'dateToYYYYMMDD' must be non-empty" } }
-  let full_url = (build-url $base ({species_type_key: (encode-path-segment $species_type_key), date_from_yyyymmdd: (encode-path-segment $date_from_yyyymmdd), date_to_yyyymmdd: (encode-path-segment $date_to_yyyymmdd)} | format pattern "/stats/diff/objectWithReference/{species_type_key}/{date_from_yyyymmdd}/{date_to_yyyymmdd}"))
+  let full_url = (build-url $base ({species_type_key: (encode-path-segment $species_type_key), date_from_yyyymmdd: (encode-path-segment $date_from_yyyymmdd), date_to_yyyymmdd: (encode-path-segment $date_to_yyyymmdd)} | format pattern "/stats/diff/objectWithReference/{species_type_key}/{date_from_yyyymmdd}/{date_to_yyyymmdd}") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Count difference of objects with external database ids, by database id, for specified species, object type and date range
@@ -2540,10 +3510,21 @@ export def "stats-diff-object-with-xdb get-xd-bs-using" [
   if ($object_key | is-empty) { error make --unspanned { msg: "path parameter 'objectKey' must be non-empty" } }
   if ($date_from_yyyymmdd | is-empty) { error make --unspanned { msg: "path parameter 'dateFromYYYYMMDD' must be non-empty" } }
   if ($date_to_yyyymmdd | is-empty) { error make --unspanned { msg: "path parameter 'dateToYYYYMMDD' must be non-empty" } }
-  let full_url = (build-url $base ({species_type_key: (encode-path-segment $species_type_key), object_key: (encode-path-segment $object_key), date_from_yyyymmdd: (encode-path-segment $date_from_yyyymmdd), date_to_yyyymmdd: (encode-path-segment $date_to_yyyymmdd)} | format pattern "/stats/diff/objectWithXdb/{species_type_key}/{object_key}/{date_from_yyyymmdd}/{date_to_yyyymmdd}"))
+  let full_url = (build-url $base ({species_type_key: (encode-path-segment $species_type_key), object_key: (encode-path-segment $object_key), date_from_yyyymmdd: (encode-path-segment $date_from_yyyymmdd), date_to_yyyymmdd: (encode-path-segment $date_to_yyyymmdd)} | format pattern "/stats/diff/objectWithXdb/{species_type_key}/{object_key}/{date_from_yyyymmdd}/{date_to_yyyymmdd}") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Count difference of protein interactions, for specified species and date range
@@ -2569,10 +3550,21 @@ export def "stats-diff-protein-interaction get-using" [
   if ($species_type_key | is-empty) { error make --unspanned { msg: "path parameter 'speciesTypeKey' must be non-empty" } }
   if ($date_from_yyyymmdd | is-empty) { error make --unspanned { msg: "path parameter 'dateFromYYYYMMDD' must be non-empty" } }
   if ($date_to_yyyymmdd | is-empty) { error make --unspanned { msg: "path parameter 'dateToYYYYMMDD' must be non-empty" } }
-  let full_url = (build-url $base ({species_type_key: (encode-path-segment $species_type_key), date_from_yyyymmdd: (encode-path-segment $date_from_yyyymmdd), date_to_yyyymmdd: (encode-path-segment $date_to_yyyymmdd)} | format pattern "/stats/diff/proteinInteraction/{species_type_key}/{date_from_yyyymmdd}/{date_to_yyyymmdd}"))
+  let full_url = (build-url $base ({species_type_key: (encode-path-segment $species_type_key), date_from_yyyymmdd: (encode-path-segment $date_from_yyyymmdd), date_to_yyyymmdd: (encode-path-segment $date_to_yyyymmdd)} | format pattern "/stats/diff/proteinInteraction/{species_type_key}/{date_from_yyyymmdd}/{date_to_yyyymmdd}") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Count difference of strains, by qtl inheritance type, for specified species and date range
@@ -2598,10 +3590,21 @@ export def "stats-diff-qtl-inheritance-type get-using" [
   if ($species_type_key | is-empty) { error make --unspanned { msg: "path parameter 'speciesTypeKey' must be non-empty" } }
   if ($date_from_yyyymmdd | is-empty) { error make --unspanned { msg: "path parameter 'dateFromYYYYMMDD' must be non-empty" } }
   if ($date_to_yyyymmdd | is-empty) { error make --unspanned { msg: "path parameter 'dateToYYYYMMDD' must be non-empty" } }
-  let full_url = (build-url $base ({species_type_key: (encode-path-segment $species_type_key), date_from_yyyymmdd: (encode-path-segment $date_from_yyyymmdd), date_to_yyyymmdd: (encode-path-segment $date_to_yyyymmdd)} | format pattern "/stats/diff/qtlInheritanceType/{species_type_key}/{date_from_yyyymmdd}/{date_to_yyyymmdd}"))
+  let full_url = (build-url $base ({species_type_key: (encode-path-segment $species_type_key), date_from_yyyymmdd: (encode-path-segment $date_from_yyyymmdd), date_to_yyyymmdd: (encode-path-segment $date_to_yyyymmdd)} | format pattern "/stats/diff/qtlInheritanceType/{species_type_key}/{date_from_yyyymmdd}/{date_to_yyyymmdd}") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Count difference of retired objects, by type, for specified species and date range
@@ -2627,10 +3630,21 @@ export def "stats-diff-retired-object get-using" [
   if ($species_type_key | is-empty) { error make --unspanned { msg: "path parameter 'speciesTypeKey' must be non-empty" } }
   if ($date_from_yyyymmdd | is-empty) { error make --unspanned { msg: "path parameter 'dateFromYYYYMMDD' must be non-empty" } }
   if ($date_to_yyyymmdd | is-empty) { error make --unspanned { msg: "path parameter 'dateToYYYYMMDD' must be non-empty" } }
-  let full_url = (build-url $base ({species_type_key: (encode-path-segment $species_type_key), date_from_yyyymmdd: (encode-path-segment $date_from_yyyymmdd), date_to_yyyymmdd: (encode-path-segment $date_to_yyyymmdd)} | format pattern "/stats/diff/retiredObject/{species_type_key}/{date_from_yyyymmdd}/{date_to_yyyymmdd}"))
+  let full_url = (build-url $base ({species_type_key: (encode-path-segment $species_type_key), date_from_yyyymmdd: (encode-path-segment $date_from_yyyymmdd), date_to_yyyymmdd: (encode-path-segment $date_to_yyyymmdd)} | format pattern "/stats/diff/retiredObject/{species_type_key}/{date_from_yyyymmdd}/{date_to_yyyymmdd}") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Count difference of strain types, for specified species and date range
@@ -2656,10 +3670,21 @@ export def "stats-diff-strain-type get-using" [
   if ($species_type_key | is-empty) { error make --unspanned { msg: "path parameter 'speciesTypeKey' must be non-empty" } }
   if ($date_from_yyyymmdd | is-empty) { error make --unspanned { msg: "path parameter 'dateFromYYYYMMDD' must be non-empty" } }
   if ($date_to_yyyymmdd | is-empty) { error make --unspanned { msg: "path parameter 'dateToYYYYMMDD' must be non-empty" } }
-  let full_url = (build-url $base ({species_type_key: (encode-path-segment $species_type_key), date_from_yyyymmdd: (encode-path-segment $date_from_yyyymmdd), date_to_yyyymmdd: (encode-path-segment $date_to_yyyymmdd)} | format pattern "/stats/diff/strainType/{species_type_key}/{date_from_yyyymmdd}/{date_to_yyyymmdd}"))
+  let full_url = (build-url $base ({species_type_key: (encode-path-segment $species_type_key), date_from_yyyymmdd: (encode-path-segment $date_from_yyyymmdd), date_to_yyyymmdd: (encode-path-segment $date_to_yyyymmdd)} | format pattern "/stats/diff/strainType/{species_type_key}/{date_from_yyyymmdd}/{date_to_yyyymmdd}") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Count difference of withdrawn objects, by type, for specified species and date range
@@ -2685,10 +3710,21 @@ export def "stats-diff-withdrawn-object get-using" [
   if ($species_type_key | is-empty) { error make --unspanned { msg: "path parameter 'speciesTypeKey' must be non-empty" } }
   if ($date_from_yyyymmdd | is-empty) { error make --unspanned { msg: "path parameter 'dateFromYYYYMMDD' must be non-empty" } }
   if ($date_to_yyyymmdd | is-empty) { error make --unspanned { msg: "path parameter 'dateToYYYYMMDD' must be non-empty" } }
-  let full_url = (build-url $base ({species_type_key: (encode-path-segment $species_type_key), date_from_yyyymmdd: (encode-path-segment $date_from_yyyymmdd), date_to_yyyymmdd: (encode-path-segment $date_to_yyyymmdd)} | format pattern "/stats/diff/withdrawnObject/{species_type_key}/{date_from_yyyymmdd}/{date_to_yyyymmdd}"))
+  let full_url = (build-url $base ({species_type_key: (encode-path-segment $species_type_key), date_from_yyyymmdd: (encode-path-segment $date_from_yyyymmdd), date_to_yyyymmdd: (encode-path-segment $date_to_yyyymmdd)} | format pattern "/stats/diff/withdrawnObject/{species_type_key}/{date_from_yyyymmdd}/{date_to_yyyymmdd}") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Count difference of external database ids, for specified species and date range
@@ -2714,10 +3750,21 @@ export def "stats-diff-xdb get-using" [
   if ($species_type_key | is-empty) { error make --unspanned { msg: "path parameter 'speciesTypeKey' must be non-empty" } }
   if ($date_from_yyyymmdd | is-empty) { error make --unspanned { msg: "path parameter 'dateFromYYYYMMDD' must be non-empty" } }
   if ($date_to_yyyymmdd | is-empty) { error make --unspanned { msg: "path parameter 'dateToYYYYMMDD' must be non-empty" } }
-  let full_url = (build-url $base ({species_type_key: (encode-path-segment $species_type_key), date_from_yyyymmdd: (encode-path-segment $date_from_yyyymmdd), date_to_yyyymmdd: (encode-path-segment $date_to_yyyymmdd)} | format pattern "/stats/diff/xdb/{species_type_key}/{date_from_yyyymmdd}/{date_to_yyyymmdd}"))
+  let full_url = (build-url $base ({species_type_key: (encode-path-segment $species_type_key), date_from_yyyymmdd: (encode-path-segment $date_from_yyyymmdd), date_to_yyyymmdd: (encode-path-segment $date_to_yyyymmdd)} | format pattern "/stats/diff/xdb/{species_type_key}/{date_from_yyyymmdd}/{date_to_yyyymmdd}") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # getTermStats
@@ -2741,10 +3788,21 @@ export def "stats-term get-using" [
   let base = ($base_url | default $BASE_URL)
   if ($acc_id | is-empty) { error make --unspanned { msg: "path parameter 'accId' must be non-empty" } }
   if ($filter_acc_id | is-empty) { error make --unspanned { msg: "path parameter 'filterAccId' must be non-empty" } }
-  let full_url = (build-url $base ({acc_id: (encode-path-segment $acc_id), filter_acc_id: (encode-path-segment $filter_acc_id)} | format pattern "/stats/term/{acc_id}/{filter_acc_id}"))
+  let full_url = (build-url $base ({acc_id: (encode-path-segment $acc_id), filter_acc_id: (encode-path-segment $filter_acc_id)} | format pattern "/stats/term/{acc_id}/{filter_acc_id}") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Return all active strains in RGD
@@ -2764,10 +3822,21 @@ export def "strains-all get-using" [
 ]: nothing -> table<backgroundStrainRgdId: int, chrAltered: string, color: string, geneticStatus: string, genetics: string, imageUrl: string, inbredGen: string, key: int, lastStatus: string, lastStatusObject: record<cryopreservedEmbryo: bool, cryopreservedSperm: bool, cryorecovery: bool, key: int, liveAnimals: bool, statusDate: string, strainRgdId: int>, modificationMethod: string, name: string, notes: string, origin: string, researchUse: string, rgdId: int, source: string, speciesTypeKey: int, statusLog: list<record>, strain: string, strainTypeName: string, substrain: string, symbol: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/strains/all")
+  let full_url = (build-url $base "/strains/all" $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Return all active strains by position
@@ -2795,10 +3864,21 @@ export def "strains get-by-position-using" [
   if ($start | is-empty) { error make --unspanned { msg: "path parameter 'start' must be non-empty" } }
   if ($stop | is-empty) { error make --unspanned { msg: "path parameter 'stop' must be non-empty" } }
   if ($map_key | is-empty) { error make --unspanned { msg: "path parameter 'mapKey' must be non-empty" } }
-  let full_url = (build-url $base ({chr: (encode-path-segment $chr), start: (encode-path-segment $start), stop: (encode-path-segment $stop), map_key: (encode-path-segment $map_key)} | format pattern "/strains/{chr}/{start}/{stop}/{map_key}"))
+  let full_url = (build-url $base ({chr: (encode-path-segment $chr), start: (encode-path-segment $start), stop: (encode-path-segment $stop), map_key: (encode-path-segment $map_key)} | format pattern "/strains/{chr}/{start}/{stop}/{map_key}") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Return a strain by RGD ID
@@ -2820,8 +3900,19 @@ export def "strains get-by-rgd-using" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($rgd_id | is-empty) { error make --unspanned { msg: "path parameter 'rgdId' must be non-empty" } }
-  let full_url = (build-url $base ({rgd_id: (encode-path-segment $rgd_id)} | format pattern "/strains/{rgd_id}"))
+  let full_url = (build-url $base ({rgd_id: (encode-path-segment $rgd_id)} | format pattern "/strains/{rgd_id}") $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }

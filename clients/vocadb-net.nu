@@ -8,7 +8,7 @@ const BASE_URL = "http://localhost"
 # `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
 # where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o VOCADBWEB_TOKEN | default "" }
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o VOCADBWEB_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
@@ -40,14 +40,11 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
-# Trick: `url encode --all` over-encodes, then we decode the four unreserved
-# punctuation chars back. Pre-existing %XX sequences in the input survive
-# because `url encode --all` first turns their % into %25.
 def encode-path-segment [v: any]: nothing -> string {
   $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
-# Serialize an array-typed path parameter (issue 49.A). OpenAPI 3 `style: simple`
+# Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
 # (the default for path params) and Swagger 2 `collectionFormat: csv` both join
 # the elements with a literal comma WITHIN the single path segment, each element
 # RFC-3986-encoded individually (so a comma inside an element stays %2C). Without
@@ -58,51 +55,51 @@ def encode-path-array [v: any]: nothing -> string {
   if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
 }
 
-# Build URL from base, path, and optional query string
-def build-url [base: string, path: string, query?: string]: nothing -> string {
+# Build the request URL from base, path, and any number of pre-encoded query
+# fragments (param serializer output and/or the auth query). Each fragment is an
+# `&`-joinable `key=value` string already percent-encoded by its producer; empty
+# fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
+# delimiters are hand-spliced — and any query already on the base URL is merged in.
+def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
   let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
-  let result = ($parsed | upsert path $full_path)
-  if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
+  let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
+  $parsed | upsert path $full_path | upsert query $query | url join
 }
 
-# Build the dry-run record returned by --dry-run. Shape:
-#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
-#    auth: {scheme, location}}
-# `meta` carries logical-form data (the query record by spec name, the pre-serialization
-# body) that do-request itself cannot reconstruct from its wire-format args.
-def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
-  let m = ($meta | default {})
-  {
-    dry_run: true
-    method: $method
-    url: $url
-    query: ($m | get -o query | default {})
-    headers: $auth.headers
-    body: ($m | get -o body)
-    content_type: $content_type
-    timeout: $timeout
-    auth: {scheme: $auth.scheme, location: $auth.location}
-  }
+# Success policy: did this response succeed? Single source of truth, consulted by
+# handle-response and the HEAD header-unwrap. Empty ok_codes means the spec listed
+# none, so fall back to < 400. Otherwise: any 2xx, plus documented success codes.
+def status-ok [status: int, ok_codes: list<int>]: nothing -> bool {
+  if ($ok_codes | is-empty) { $status < 400 } else { ($status >= 200 and $status < 300) or ($status in $ok_codes) }
 }
 
-# Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
-  let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
-  let timeout = ($max_time | default 30min)
-  let ct = ($content_type | default "application/json")
-  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
-  let resp = match $method {
-    "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
-  }
-  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
-  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
+# Unwrap a `--full` HTTP response into the user-facing value. Response arrives
+# via pipeline; ok_codes gates the error throw (see status-ok).
+def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: record -> any {
+  let resp = $in
+  if $allow_errors { return $resp }
+  if not (status-ok $resp.status $ok_codes) { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } }
+  if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
+  if $resp.status == 204 { return null }
+  $resp.body
+}
+
+# GET — bodyless, honours --raw
+def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+}
+
+# POST — body + content-type
+def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# DELETE — body via --data
+def send-delete [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http delete --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url } else { http delete --headers $req.headers --content-type $req.content_type --data $body --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url }
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 def base-url-completer [] { ["http://localhost"] }
@@ -222,10 +219,21 @@ export def "activity-entries get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "before" $before "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "userId" $user_id "scalar") (serialize-qp "editEvent" $edit_event "scalar") (serialize-qp "entryType" $entry_type "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "getTotalCount" $get_total_count "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "entryFields" $entry_fields "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "sortRule" $sort_rule "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/activityEntries" $qp)
+  let full_url = (build-url $base "/api/activityEntries" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"before": $before, "since": $since, "userId": $user_id, "editEvent": $edit_event, "entryType": $entry_type, "maxResults": $max_results, "getTotalCount": $get_total_count, "fields": $fields, "entryFields": $entry_fields, "lang": $lang, "sortRule": $sort_rule} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"before": $before, "since": $since, "userId": $user_id, "editEvent": $edit_event, "entryType": $entry_type, "maxResults": $max_results, "getTotalCount": $get_total_count, "fields": $fields, "entryFields": $entry_fields, "lang": $lang, "sortRule": $sort_rule} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /api/albums
@@ -267,10 +275,21 @@ export def "albums list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "discTypes" $disc_types "scalar") (serialize-qp "tagName[]" $tag_name "multi") (serialize-qp "tagId[]" $tag_id "multi") (serialize-qp "childTags" $child_tags "scalar") (serialize-qp "artistId[]" $artist_id "multi") (serialize-qp "artistParticipationStatus" $artist_participation_status "scalar") (serialize-qp "childVoicebanks" $child_voicebanks "scalar") (serialize-qp "includeMembers" $include_members "scalar") (serialize-qp "barcode" $barcode "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "releaseDateAfter" $release_date_after "scalar") (serialize-qp "releaseDateBefore" $release_date_before "scalar") (serialize-qp "advancedFilters" $advanced_filters "multi") (serialize-qp "start" $start "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "getTotalCount" $get_total_count "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "preferAccurateMatches" $prefer_accurate_matches "scalar") (serialize-qp "deleted" $deleted "scalar") (serialize-qp "nameMatchMode" $name_match_mode "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/albums" $qp)
+  let full_url = (build-url $base "/api/albums" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"query": $query, "discTypes": $disc_types, "tagName[]": $tag_name, "tagId[]": $tag_id, "childTags": $child_tags, "artistId[]": $artist_id, "artistParticipationStatus": $artist_participation_status, "childVoicebanks": $child_voicebanks, "includeMembers": $include_members, "barcode": $barcode, "status": $status, "releaseDateAfter": $release_date_after, "releaseDateBefore": $release_date_before, "advancedFilters": $advanced_filters, "start": $start, "maxResults": $max_results, "getTotalCount": $get_total_count, "sort": $qp_sort, "preferAccurateMatches": $prefer_accurate_matches, "deleted": $deleted, "nameMatchMode": $name_match_mode, "fields": $fields, "lang": $lang} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"query": $query, "discTypes": $disc_types, "tagName[]": $tag_name, "tagId[]": $tag_id, "childTags": $child_tags, "artistId[]": $artist_id, "artistParticipationStatus": $artist_participation_status, "childVoicebanks": $child_voicebanks, "includeMembers": $include_members, "barcode": $barcode, "status": $status, "releaseDateAfter": $release_date_after, "releaseDateBefore": $release_date_before, "advancedFilters": $advanced_filters, "start": $start, "maxResults": $max_results, "getTotalCount": $get_total_count, "sort": $qp_sort, "preferAccurateMatches": $prefer_accurate_matches, "deleted": $deleted, "nameMatchMode": $name_match_mode, "fields": $fields, "lang": $lang} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # DELETE /api/albums/comments/{commentId}
@@ -289,10 +308,21 @@ export def "albums-comments delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($comment_id | is-empty) { error make --unspanned { msg: "path parameter 'commentId' must be non-empty" } }
-  let full_url = (build-url $base ({comment_id: (encode-path-segment $comment_id)} | format pattern "/api/albums/comments/{comment_id}"))
+  let full_url = (build-url $base ({comment_id: (encode-path-segment $comment_id)} | format pattern "/api/albums/comments/{comment_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # POST /api/albums/comments/{commentId}
@@ -321,12 +351,23 @@ export def "albums-comments create-by-comment-id" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($comment_id | is-empty) { error make --unspanned { msg: "path parameter 'commentId' must be non-empty" } }
-  let full_url = (build-url $base ({comment_id: (encode-path-segment $comment_id)} | format pattern "/api/albums/comments/{comment_id}"))
+  let full_url = (build-url $base ({comment_id: (encode-path-segment $comment_id)} | format pattern "/api/albums/comments/{comment_id}") $auth.query)
   let req_body = {"author": $author, "authorName": $author_name, "created": $created, "entry": $entry, "id": $id, "message": $message} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # GET /api/albums/names
@@ -348,10 +389,21 @@ export def "albums-names get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "nameMatchMode" $name_match_mode "scalar") (serialize-qp "maxResults" $max_results "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/albums/names" $qp)
+  let full_url = (build-url $base "/api/albums/names" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"query": $query, "nameMatchMode": $name_match_mode, "maxResults": $max_results} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"query": $query, "nameMatchMode": $name_match_mode, "maxResults": $max_results} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /api/albums/new
@@ -372,10 +424,21 @@ export def "albums-new get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "languagePreference" $language_preference "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/albums/new" $qp)
+  let full_url = (build-url $base "/api/albums/new" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"languagePreference": $language_preference, "fields": $fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"languagePreference": $language_preference, "fields": $fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /api/albums/top
@@ -397,10 +460,21 @@ export def "albums-top get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ignoreIds[]" $ignore_ids "multi") (serialize-qp "languagePreference" $language_preference "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/albums/top" $qp)
+  let full_url = (build-url $base "/api/albums/top" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"ignoreIds[]": $ignore_ids, "languagePreference": $language_preference, "fields": $fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"ignoreIds[]": $ignore_ids, "languagePreference": $language_preference, "fields": $fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # DELETE /api/albums/{id}
@@ -421,10 +495,21 @@ export def "albums delete" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "notes" $notes "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/albums/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/albums/{id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"notes": $notes} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"notes": $notes} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # GET /api/albums/{id}
@@ -448,10 +533,21 @@ export def "albums get" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "songFields" $song_fields "scalar") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/albums/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/albums/{id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"fields": $fields, "songFields": $song_fields, "lang": $lang} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"fields": $fields, "songFields": $song_fields, "lang": $lang} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /api/albums/{id}/comments
@@ -471,10 +567,21 @@ export def "albums-comments get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/albums/{id}/comments"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/albums/{id}/comments") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # POST /api/albums/{id}/comments
@@ -504,12 +611,23 @@ export def "albums-comments create-by-id" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/albums/{id}/comments"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/albums/{id}/comments") $auth.query)
   let req_body = {"author": $author, "authorName": $author_name, "created": $created, "entry": $entry, "id": $body_id, "message": $message} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # GET /api/albums/{id}/reviews
@@ -531,10 +649,21 @@ export def "albums-reviews get" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "languageCode" $language_code "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/albums/{id}/reviews") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/albums/{id}/reviews") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"languageCode": $language_code} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"languageCode": $language_code} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # POST /api/albums/{id}/reviews
@@ -564,12 +693,23 @@ export def "albums-reviews create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/albums/{id}/reviews"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/albums/{id}/reviews") $auth.query)
   let req_body = {"albumId": $album_id, "date": $date, "id": $body_id, "languageCode": $language_code, "text": $text, "title": $title, "user": $user} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # DELETE /api/albums/{id}/reviews/{reviewId}
@@ -590,10 +730,21 @@ export def "albums-reviews delete" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($review_id | is-empty) { error make --unspanned { msg: "path parameter 'reviewId' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), review_id: (encode-path-segment $review_id)} | format pattern "/api/albums/{id}/reviews/{review_id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), review_id: (encode-path-segment $review_id)} | format pattern "/api/albums/{id}/reviews/{review_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # GET /api/albums/{id}/tracks
@@ -616,10 +767,21 @@ export def "albums-tracks get" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/albums/{id}/tracks") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/albums/{id}/tracks") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"fields": $fields, "lang": $lang} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"fields": $fields, "lang": $lang} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /api/albums/{id}/tracks/fields
@@ -643,10 +805,21 @@ export def "albums-tracks-fields get" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "field[]" $field "multi") (serialize-qp "discNumber" $disc_number "scalar") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/albums/{id}/tracks/fields") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/albums/{id}/tracks/fields") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"field[]": $field, "discNumber": $disc_number, "lang": $lang} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"field[]": $field, "discNumber": $disc_number, "lang": $lang} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /api/albums/{id}/user-collections
@@ -668,10 +841,21 @@ export def "albums-user-collections get" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "languagePreference" $language_preference "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/albums/{id}/user-collections") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/albums/{id}/user-collections") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"languagePreference": $language_preference} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"languagePreference": $language_preference} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /api/artists
@@ -707,10 +891,21 @@ export def "artists list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "artistTypes" $artist_types "scalar") (serialize-qp "allowBaseVoicebanks" $allow_base_voicebanks "scalar") (serialize-qp "tagName[]" $tag_name "multi") (serialize-qp "tagId[]" $tag_id "multi") (serialize-qp "childTags" $child_tags "scalar") (serialize-qp "followedByUserId" $followed_by_user_id "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "advancedFilters" $advanced_filters "multi") (serialize-qp "start" $start "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "getTotalCount" $get_total_count "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "preferAccurateMatches" $prefer_accurate_matches "scalar") (serialize-qp "nameMatchMode" $name_match_mode "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/artists" $qp)
+  let full_url = (build-url $base "/api/artists" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"query": $query, "artistTypes": $artist_types, "allowBaseVoicebanks": $allow_base_voicebanks, "tagName[]": $tag_name, "tagId[]": $tag_id, "childTags": $child_tags, "followedByUserId": $followed_by_user_id, "status": $status, "advancedFilters": $advanced_filters, "start": $start, "maxResults": $max_results, "getTotalCount": $get_total_count, "sort": $qp_sort, "preferAccurateMatches": $prefer_accurate_matches, "nameMatchMode": $name_match_mode, "fields": $fields, "lang": $lang} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"query": $query, "artistTypes": $artist_types, "allowBaseVoicebanks": $allow_base_voicebanks, "tagName[]": $tag_name, "tagId[]": $tag_id, "childTags": $child_tags, "followedByUserId": $followed_by_user_id, "status": $status, "advancedFilters": $advanced_filters, "start": $start, "maxResults": $max_results, "getTotalCount": $get_total_count, "sort": $qp_sort, "preferAccurateMatches": $prefer_accurate_matches, "nameMatchMode": $name_match_mode, "fields": $fields, "lang": $lang} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # DELETE /api/artists/comments/{commentId}
@@ -729,10 +924,21 @@ export def "artists-comments delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($comment_id | is-empty) { error make --unspanned { msg: "path parameter 'commentId' must be non-empty" } }
-  let full_url = (build-url $base ({comment_id: (encode-path-segment $comment_id)} | format pattern "/api/artists/comments/{comment_id}"))
+  let full_url = (build-url $base ({comment_id: (encode-path-segment $comment_id)} | format pattern "/api/artists/comments/{comment_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # POST /api/artists/comments/{commentId}
@@ -761,12 +967,23 @@ export def "artists-comments create-by-comment-id" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($comment_id | is-empty) { error make --unspanned { msg: "path parameter 'commentId' must be non-empty" } }
-  let full_url = (build-url $base ({comment_id: (encode-path-segment $comment_id)} | format pattern "/api/artists/comments/{comment_id}"))
+  let full_url = (build-url $base ({comment_id: (encode-path-segment $comment_id)} | format pattern "/api/artists/comments/{comment_id}") $auth.query)
   let req_body = {"author": $author, "authorName": $author_name, "created": $created, "entry": $entry, "id": $id, "message": $message} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # GET /api/artists/names
@@ -788,10 +1005,21 @@ export def "artists-names get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "nameMatchMode" $name_match_mode "scalar") (serialize-qp "maxResults" $max_results "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/artists/names" $qp)
+  let full_url = (build-url $base "/api/artists/names" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"query": $query, "nameMatchMode": $name_match_mode, "maxResults": $max_results} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"query": $query, "nameMatchMode": $name_match_mode, "maxResults": $max_results} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # DELETE /api/artists/{id}
@@ -812,10 +1040,21 @@ export def "artists delete" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "notes" $notes "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/artists/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/artists/{id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"notes": $notes} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"notes": $notes} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # GET /api/artists/{id}
@@ -839,10 +1078,21 @@ export def "artists get" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "relations" $relations "scalar") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/artists/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/artists/{id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"fields": $fields, "relations": $relations, "lang": $lang} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"fields": $fields, "relations": $relations, "lang": $lang} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /api/artists/{id}/comments
@@ -862,10 +1112,21 @@ export def "artists-comments get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/artists/{id}/comments"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/artists/{id}/comments") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # POST /api/artists/{id}/comments
@@ -895,12 +1156,23 @@ export def "artists-comments create-by-id" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/artists/{id}/comments"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/artists/{id}/comments") $auth.query)
   let req_body = {"author": $author, "authorName": $author_name, "created": $created, "entry": $entry, "id": $body_id, "message": $message} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # GET /api/comments
@@ -929,10 +1201,21 @@ export def "comments list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "before" $before "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "userId" $user_id "scalar") (serialize-qp "entryType" $entry_type "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "getTotalCount" $get_total_count "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "entryFields" $entry_fields "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "sortRule" $sort_rule "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/comments" $qp)
+  let full_url = (build-url $base "/api/comments" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"before": $before, "since": $since, "userId": $user_id, "entryType": $entry_type, "maxResults": $max_results, "getTotalCount": $get_total_count, "fields": $fields, "entryFields": $entry_fields, "lang": $lang, "sortRule": $sort_rule} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"before": $before, "since": $since, "userId": $user_id, "entryType": $entry_type, "maxResults": $max_results, "getTotalCount": $get_total_count, "fields": $fields, "entryFields": $entry_fields, "lang": $lang, "sortRule": $sort_rule} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /api/comments/{entryType}-comments
@@ -954,10 +1237,21 @@ export def "comments get" [
   let base = ($base_url | default $BASE_URL)
   if ($entry_type | is-empty) { error make --unspanned { msg: "path parameter 'entryType' must be non-empty" } }
   let qp = [(serialize-qp "entryId" $entry_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({entry_type: (encode-path-segment $entry_type)} | format pattern "/api/comments/{entry_type}-comments") $qp)
+  let full_url = (build-url $base ({entry_type: (encode-path-segment $entry_type)} | format pattern "/api/comments/{entry_type}-comments") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"entryId": $entry_id} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"entryId": $entry_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # POST /api/comments/{entryType}-comments
@@ -987,12 +1281,23 @@ export def "comments create-by-entry-type" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($entry_type | is-empty) { error make --unspanned { msg: "path parameter 'entryType' must be non-empty" } }
-  let full_url = (build-url $base ({entry_type: (encode-path-segment $entry_type)} | format pattern "/api/comments/{entry_type}-comments"))
+  let full_url = (build-url $base ({entry_type: (encode-path-segment $entry_type)} | format pattern "/api/comments/{entry_type}-comments") $auth.query)
   let req_body = {"author": $author, "authorName": $author_name, "created": $created, "entry": $entry, "id": $id, "message": $message} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # DELETE /api/comments/{entryType}-comments/{commentId}
@@ -1013,10 +1318,21 @@ export def "comments delete" [
   let base = ($base_url | default $BASE_URL)
   if ($entry_type | is-empty) { error make --unspanned { msg: "path parameter 'entryType' must be non-empty" } }
   if ($comment_id | is-empty) { error make --unspanned { msg: "path parameter 'commentId' must be non-empty" } }
-  let full_url = (build-url $base ({entry_type: (encode-path-segment $entry_type), comment_id: (encode-path-segment $comment_id)} | format pattern "/api/comments/{entry_type}-comments/{comment_id}"))
+  let full_url = (build-url $base ({entry_type: (encode-path-segment $entry_type), comment_id: (encode-path-segment $comment_id)} | format pattern "/api/comments/{entry_type}-comments/{comment_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # POST /api/comments/{entryType}-comments/{commentId}
@@ -1047,12 +1363,23 @@ export def "comments create-by-entry-type-comment-id" [
   let base = ($base_url | default $BASE_URL)
   if ($entry_type | is-empty) { error make --unspanned { msg: "path parameter 'entryType' must be non-empty" } }
   if ($comment_id | is-empty) { error make --unspanned { msg: "path parameter 'commentId' must be non-empty" } }
-  let full_url = (build-url $base ({entry_type: (encode-path-segment $entry_type), comment_id: (encode-path-segment $comment_id)} | format pattern "/api/comments/{entry_type}-comments/{comment_id}"))
+  let full_url = (build-url $base ({entry_type: (encode-path-segment $entry_type), comment_id: (encode-path-segment $comment_id)} | format pattern "/api/comments/{entry_type}-comments/{comment_id}") $auth.query)
   let req_body = {"author": $author, "authorName": $author_name, "created": $created, "entry": $entry, "id": $id, "message": $message} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # DELETE /api/discussions/comments/{commentId}
@@ -1071,10 +1398,21 @@ export def "discussions-comments delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($comment_id | is-empty) { error make --unspanned { msg: "path parameter 'commentId' must be non-empty" } }
-  let full_url = (build-url $base ({comment_id: (encode-path-segment $comment_id)} | format pattern "/api/discussions/comments/{comment_id}"))
+  let full_url = (build-url $base ({comment_id: (encode-path-segment $comment_id)} | format pattern "/api/discussions/comments/{comment_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # POST /api/discussions/comments/{commentId}
@@ -1103,12 +1441,23 @@ export def "discussions-comments create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($comment_id | is-empty) { error make --unspanned { msg: "path parameter 'commentId' must be non-empty" } }
-  let full_url = (build-url $base ({comment_id: (encode-path-segment $comment_id)} | format pattern "/api/discussions/comments/{comment_id}"))
+  let full_url = (build-url $base ({comment_id: (encode-path-segment $comment_id)} | format pattern "/api/discussions/comments/{comment_id}") $auth.query)
   let req_body = {"author": $author, "authorName": $author_name, "created": $created, "entry": $entry, "id": $id, "message": $message} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # GET /api/discussions/folders
@@ -1128,10 +1477,21 @@ export def "discussions-folders get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/discussions/folders" $qp)
+  let full_url = (build-url $base "/api/discussions/folders" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"fields": $fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"fields": $fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # POST /api/discussions/folders
@@ -1158,12 +1518,23 @@ export def "discussions-folders create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/discussions/folders")
+  let full_url = (build-url $base "/api/discussions/folders" $auth.query)
   let req_body = {"description": $description, "id": $id, "lastTopicAuthor": $last_topic_author, "lastTopicDate": $last_topic_date, "name": $name, "topicCount": $topic_count} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # GET /api/discussions/folders/{folderId}/topics
@@ -1188,10 +1559,21 @@ export def "discussions-folders-topics get" [
   let base = ($base_url | default $BASE_URL)
   if ($folder_id | is-empty) { error make --unspanned { msg: "path parameter 'folderId' must be non-empty" } }
   let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({folder_id: (encode-path-segment $folder_id)} | format pattern "/api/discussions/folders/{folder_id}/topics") $qp)
+  let full_url = (build-url $base ({folder_id: (encode-path-segment $folder_id)} | format pattern "/api/discussions/folders/{folder_id}/topics") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"fields": $fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"fields": $fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # POST /api/discussions/folders/{folderId}/topics
@@ -1226,12 +1608,23 @@ export def "discussions-folders-topics create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($folder_id | is-empty) { error make --unspanned { msg: "path parameter 'folderId' must be non-empty" } }
-  let full_url = (build-url $base ({folder_id: (encode-path-segment $folder_id)} | format pattern "/api/discussions/folders/{folder_id}/topics"))
+  let full_url = (build-url $base ({folder_id: (encode-path-segment $folder_id)} | format pattern "/api/discussions/folders/{folder_id}/topics") $auth.query)
   let req_body = {"author": $author, "commentCount": $comment_count, "comments": $comments, "content": $content, "created": $created, "folderId": $body_folder_id, "id": $id, "lastComment": $last_comment, "locked": $locked, "name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # GET /api/discussions/topics
@@ -1256,10 +1649,21 @@ export def "discussions-topics list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "folderId" $folder_id "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "getTotalCount" $get_total_count "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/discussions/topics" $qp)
+  let full_url = (build-url $base "/api/discussions/topics" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"folderId": $folder_id, "start": $start, "maxResults": $max_results, "getTotalCount": $get_total_count, "sort": $qp_sort, "fields": $fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"folderId": $folder_id, "start": $start, "maxResults": $max_results, "getTotalCount": $get_total_count, "sort": $qp_sort, "fields": $fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # DELETE /api/discussions/topics/{topicId}
@@ -1278,10 +1682,21 @@ export def "discussions-topics delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($topic_id | is-empty) { error make --unspanned { msg: "path parameter 'topicId' must be non-empty" } }
-  let full_url = (build-url $base ({topic_id: (encode-path-segment $topic_id)} | format pattern "/api/discussions/topics/{topic_id}"))
+  let full_url = (build-url $base ({topic_id: (encode-path-segment $topic_id)} | format pattern "/api/discussions/topics/{topic_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # GET /api/discussions/topics/{topicId}
@@ -1303,10 +1718,21 @@ export def "discussions-topics get" [
   let base = ($base_url | default $BASE_URL)
   if ($topic_id | is-empty) { error make --unspanned { msg: "path parameter 'topicId' must be non-empty" } }
   let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({topic_id: (encode-path-segment $topic_id)} | format pattern "/api/discussions/topics/{topic_id}") $qp)
+  let full_url = (build-url $base ({topic_id: (encode-path-segment $topic_id)} | format pattern "/api/discussions/topics/{topic_id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"fields": $fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"fields": $fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # POST /api/discussions/topics/{topicId}
@@ -1340,12 +1766,23 @@ export def "discussions-topics create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($topic_id | is-empty) { error make --unspanned { msg: "path parameter 'topicId' must be non-empty" } }
-  let full_url = (build-url $base ({topic_id: (encode-path-segment $topic_id)} | format pattern "/api/discussions/topics/{topic_id}"))
+  let full_url = (build-url $base ({topic_id: (encode-path-segment $topic_id)} | format pattern "/api/discussions/topics/{topic_id}") $auth.query)
   let req_body = {"author": $author, "commentCount": $comment_count, "comments": $comments, "content": $content, "created": $created, "folderId": $folder_id, "id": $id, "lastComment": $last_comment, "locked": $locked, "name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # POST /api/discussions/topics/{topicId}/comments
@@ -1375,12 +1812,23 @@ export def "discussions-topics-comments create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($topic_id | is-empty) { error make --unspanned { msg: "path parameter 'topicId' must be non-empty" } }
-  let full_url = (build-url $base ({topic_id: (encode-path-segment $topic_id)} | format pattern "/api/discussions/topics/{topic_id}/comments"))
+  let full_url = (build-url $base ({topic_id: (encode-path-segment $topic_id)} | format pattern "/api/discussions/topics/{topic_id}/comments") $auth.query)
   let req_body = {"author": $author, "authorName": $author_name, "created": $created, "entry": $entry, "id": $id, "message": $message} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # GET /api/entries
@@ -1412,10 +1860,21 @@ export def "entries get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "tagName[]" $tag_name "multi") (serialize-qp "tagId[]" $tag_id "multi") (serialize-qp "childTags" $child_tags "scalar") (serialize-qp "entryTypes" $entry_types "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "getTotalCount" $get_total_count "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "nameMatchMode" $name_match_mode "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/entries" $qp)
+  let full_url = (build-url $base "/api/entries" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"query": $query, "tagName[]": $tag_name, "tagId[]": $tag_id, "childTags": $child_tags, "entryTypes": $entry_types, "status": $status, "start": $start, "maxResults": $max_results, "getTotalCount": $get_total_count, "sort": $qp_sort, "nameMatchMode": $name_match_mode, "fields": $fields, "lang": $lang} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"query": $query, "tagName[]": $tag_name, "tagId[]": $tag_id, "childTags": $child_tags, "entryTypes": $entry_types, "status": $status, "start": $start, "maxResults": $max_results, "getTotalCount": $get_total_count, "sort": $qp_sort, "nameMatchMode": $name_match_mode, "fields": $fields, "lang": $lang} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /api/entries/names
@@ -1437,10 +1896,21 @@ export def "entries-names get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "nameMatchMode" $name_match_mode "scalar") (serialize-qp "maxResults" $max_results "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/entries/names" $qp)
+  let full_url = (build-url $base "/api/entries/names" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"query": $query, "nameMatchMode": $name_match_mode, "maxResults": $max_results} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"query": $query, "nameMatchMode": $name_match_mode, "maxResults": $max_results} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /api/entry-types/{entryType}/{subType}/tag
@@ -1464,10 +1934,21 @@ export def "entry-types-tag get" [
   if ($entry_type | is-empty) { error make --unspanned { msg: "path parameter 'entryType' must be non-empty" } }
   if ($sub_type | is-empty) { error make --unspanned { msg: "path parameter 'subType' must be non-empty" } }
   let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({entry_type: (encode-path-segment $entry_type), sub_type: (encode-path-segment $sub_type)} | format pattern "/api/entry-types/{entry_type}/{sub_type}/tag") $qp)
+  let full_url = (build-url $base ({entry_type: (encode-path-segment $entry_type), sub_type: (encode-path-segment $sub_type)} | format pattern "/api/entry-types/{entry_type}/{sub_type}/tag") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"fields": $fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"fields": $fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /api/pvs/for-songs
@@ -1492,10 +1973,21 @@ export def "pvs-for-songs get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "author" $author "scalar") (serialize-qp "service" $service "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "getTotalCount" $get_total_count "scalar") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/pvs/for-songs" $qp)
+  let full_url = (build-url $base "/api/pvs/for-songs" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"name": $name, "author": $author, "service": $service, "maxResults": $max_results, "getTotalCount": $get_total_count, "lang": $lang} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"name": $name, "author": $author, "service": $service, "maxResults": $max_results, "getTotalCount": $get_total_count, "lang": $lang} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /api/releaseEventSeries
@@ -1521,10 +2013,21 @@ export def "release-event-series list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "getTotalCount" $get_total_count "scalar") (serialize-qp "nameMatchMode" $name_match_mode "scalar") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/releaseEventSeries" $qp)
+  let full_url = (build-url $base "/api/releaseEventSeries" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"query": $query, "fields": $fields, "start": $start, "maxResults": $max_results, "getTotalCount": $get_total_count, "nameMatchMode": $name_match_mode, "lang": $lang} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"query": $query, "fields": $fields, "start": $start, "maxResults": $max_results, "getTotalCount": $get_total_count, "nameMatchMode": $name_match_mode, "lang": $lang} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # DELETE /api/releaseEventSeries/{id}
@@ -1546,10 +2049,21 @@ export def "release-event-series delete" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "notes" $notes "scalar") (serialize-qp "hardDelete" $hard_delete "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/releaseEventSeries/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/releaseEventSeries/{id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"notes": $notes, "hardDelete": $hard_delete} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"notes": $notes, "hardDelete": $hard_delete} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # GET /api/releaseEventSeries/{id}
@@ -1572,10 +2086,21 @@ export def "release-event-series get" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/releaseEventSeries/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/releaseEventSeries/{id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"fields": $fields, "lang": $lang} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"fields": $fields, "lang": $lang} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /api/releaseEventSeries/{id}/for-edit
@@ -1595,10 +2120,21 @@ export def "release-event-series-for-edit get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/releaseEventSeries/{id}/for-edit"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/releaseEventSeries/{id}/for-edit") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /api/releaseEvents
@@ -1637,10 +2173,21 @@ export def "release-events list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "nameMatchMode" $name_match_mode "scalar") (serialize-qp "seriesId" $series_id "scalar") (serialize-qp "afterDate" $after_date "scalar") (serialize-qp "beforeDate" $before_date "scalar") (serialize-qp "category" $category "scalar") (serialize-qp "userCollectionId" $user_collection_id "scalar") (serialize-qp "tagId[]" $tag_id "multi") (serialize-qp "childTags" $child_tags "scalar") (serialize-qp "artistId[]" $artist_id "multi") (serialize-qp "childVoicebanks" $child_voicebanks "scalar") (serialize-qp "includeMembers" $include_members "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "getTotalCount" $get_total_count "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "sortDirection" $sort_direction "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/releaseEvents" $qp)
+  let full_url = (build-url $base "/api/releaseEvents" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"query": $query, "nameMatchMode": $name_match_mode, "seriesId": $series_id, "afterDate": $after_date, "beforeDate": $before_date, "category": $category, "userCollectionId": $user_collection_id, "tagId[]": $tag_id, "childTags": $child_tags, "artistId[]": $artist_id, "childVoicebanks": $child_voicebanks, "includeMembers": $include_members, "status": $status, "start": $start, "maxResults": $max_results, "getTotalCount": $get_total_count, "sort": $qp_sort, "fields": $fields, "lang": $lang, "sortDirection": $sort_direction} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"query": $query, "nameMatchMode": $name_match_mode, "seriesId": $series_id, "afterDate": $after_date, "beforeDate": $before_date, "category": $category, "userCollectionId": $user_collection_id, "tagId[]": $tag_id, "childTags": $child_tags, "artistId[]": $artist_id, "childVoicebanks": $child_voicebanks, "includeMembers": $include_members, "status": $status, "start": $start, "maxResults": $max_results, "getTotalCount": $get_total_count, "sort": $qp_sort, "fields": $fields, "lang": $lang, "sortDirection": $sort_direction} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /api/releaseEvents/names
@@ -1661,10 +2208,21 @@ export def "release-events-names get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "maxResults" $max_results "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/releaseEvents/names" $qp)
+  let full_url = (build-url $base "/api/releaseEvents/names" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"query": $query, "maxResults": $max_results} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"query": $query, "maxResults": $max_results} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /api/releaseEvents/{eventId}/albums
@@ -1687,10 +2245,21 @@ export def "release-events-albums get" [
   let base = ($base_url | default $BASE_URL)
   if ($event_id | is-empty) { error make --unspanned { msg: "path parameter 'eventId' must be non-empty" } }
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({event_id: (encode-path-segment $event_id)} | format pattern "/api/releaseEvents/{event_id}/albums") $qp)
+  let full_url = (build-url $base ({event_id: (encode-path-segment $event_id)} | format pattern "/api/releaseEvents/{event_id}/albums") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"fields": $fields, "lang": $lang} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"fields": $fields, "lang": $lang} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /api/releaseEvents/{eventId}/published-songs
@@ -1713,10 +2282,21 @@ export def "release-events-published-songs get" [
   let base = ($base_url | default $BASE_URL)
   if ($event_id | is-empty) { error make --unspanned { msg: "path parameter 'eventId' must be non-empty" } }
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({event_id: (encode-path-segment $event_id)} | format pattern "/api/releaseEvents/{event_id}/published-songs") $qp)
+  let full_url = (build-url $base ({event_id: (encode-path-segment $event_id)} | format pattern "/api/releaseEvents/{event_id}/published-songs") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"fields": $fields, "lang": $lang} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"fields": $fields, "lang": $lang} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # POST /api/releaseEvents/{eventId}/reports
@@ -1739,10 +2319,21 @@ export def "release-events-reports create" [
   let base = ($base_url | default $BASE_URL)
   if ($event_id | is-empty) { error make --unspanned { msg: "path parameter 'eventId' must be non-empty" } }
   let qp = [(serialize-qp "reportType" $report_type "scalar") (serialize-qp "notes" $notes "scalar") (serialize-qp "versionNumber" $version_number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({event_id: (encode-path-segment $event_id)} | format pattern "/api/releaseEvents/{event_id}/reports") $qp)
+  let full_url = (build-url $base ({event_id: (encode-path-segment $event_id)} | format pattern "/api/releaseEvents/{event_id}/reports") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"reportType": $report_type, "notes": $notes, "versionNumber": $version_number} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"reportType": $report_type, "notes": $notes, "versionNumber": $version_number} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # DELETE /api/releaseEvents/{id}
@@ -1764,10 +2355,21 @@ export def "release-events delete" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "notes" $notes "scalar") (serialize-qp "hardDelete" $hard_delete "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/releaseEvents/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/releaseEvents/{id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"notes": $notes, "hardDelete": $hard_delete} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"notes": $notes, "hardDelete": $hard_delete} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # GET /api/releaseEvents/{id}
@@ -1790,10 +2392,21 @@ export def "release-events get" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/releaseEvents/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/releaseEvents/{id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"fields": $fields, "lang": $lang} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"fields": $fields, "lang": $lang} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /api/resources/{cultureCode}
@@ -1815,10 +2428,21 @@ export def "resources get" [
   let base = ($base_url | default $BASE_URL)
   if ($culture_code | is-empty) { error make --unspanned { msg: "path parameter 'cultureCode' must be non-empty" } }
   let qp = [(serialize-qp "setNames[]" $set_names "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({culture_code: (encode-path-segment $culture_code)} | format pattern "/api/resources/{culture_code}") $qp)
+  let full_url = (build-url $base ({culture_code: (encode-path-segment $culture_code)} | format pattern "/api/resources/{culture_code}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"setNames[]": $set_names} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"setNames[]": $set_names} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # POST /api/songLists
@@ -1850,12 +2474,23 @@ export def "song-lists create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/songLists")
+  let full_url = (build-url $base "/api/songLists" $auth.query)
   let req_body = {"deleted": $deleted, "description": $description, "eventDate": $event_date, "featuredCategory": $featured_category, "id": $id, "mainPicture": $main_picture, "name": $name, "songLinks": $song_links, "status": $status, "updateNotes": $update_notes} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # DELETE /api/songLists/comments/{commentId}
@@ -1874,10 +2509,21 @@ export def "song-lists-comments delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($comment_id | is-empty) { error make --unspanned { msg: "path parameter 'commentId' must be non-empty" } }
-  let full_url = (build-url $base ({comment_id: (encode-path-segment $comment_id)} | format pattern "/api/songLists/comments/{comment_id}"))
+  let full_url = (build-url $base ({comment_id: (encode-path-segment $comment_id)} | format pattern "/api/songLists/comments/{comment_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # POST /api/songLists/comments/{commentId}
@@ -1906,12 +2552,23 @@ export def "song-lists-comments create-by-comment-id" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($comment_id | is-empty) { error make --unspanned { msg: "path parameter 'commentId' must be non-empty" } }
-  let full_url = (build-url $base ({comment_id: (encode-path-segment $comment_id)} | format pattern "/api/songLists/comments/{comment_id}"))
+  let full_url = (build-url $base ({comment_id: (encode-path-segment $comment_id)} | format pattern "/api/songLists/comments/{comment_id}") $auth.query)
   let req_body = {"author": $author, "authorName": $author_name, "created": $created, "entry": $entry, "id": $id, "message": $message} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # GET /api/songLists/featured
@@ -1941,10 +2598,21 @@ export def "song-lists-featured get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "tagId[]" $tag_id "multi") (serialize-qp "childTags" $child_tags "scalar") (serialize-qp "nameMatchMode" $name_match_mode "scalar") (serialize-qp "featuredCategory" $featured_category "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "getTotalCount" $get_total_count "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/songLists/featured" $qp)
+  let full_url = (build-url $base "/api/songLists/featured" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"query": $query, "tagId[]": $tag_id, "childTags": $child_tags, "nameMatchMode": $name_match_mode, "featuredCategory": $featured_category, "start": $start, "maxResults": $max_results, "getTotalCount": $get_total_count, "sort": $qp_sort, "fields": $fields, "lang": $lang} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"query": $query, "tagId[]": $tag_id, "childTags": $child_tags, "nameMatchMode": $name_match_mode, "featuredCategory": $featured_category, "start": $start, "maxResults": $max_results, "getTotalCount": $get_total_count, "sort": $qp_sort, "fields": $fields, "lang": $lang} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /api/songLists/featured/names
@@ -1967,10 +2635,21 @@ export def "song-lists-featured-names get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "nameMatchMode" $name_match_mode "scalar") (serialize-qp "featuredCategory" $featured_category "scalar") (serialize-qp "maxResults" $max_results "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/songLists/featured/names" $qp)
+  let full_url = (build-url $base "/api/songLists/featured/names" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"query": $query, "nameMatchMode": $name_match_mode, "featuredCategory": $featured_category, "maxResults": $max_results} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"query": $query, "nameMatchMode": $name_match_mode, "featuredCategory": $featured_category, "maxResults": $max_results} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # DELETE /api/songLists/{id}
@@ -1992,10 +2671,21 @@ export def "song-lists delete" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "notes" $notes "scalar") (serialize-qp "hardDelete" $hard_delete "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/songLists/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/songLists/{id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"notes": $notes, "hardDelete": $hard_delete} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"notes": $notes, "hardDelete": $hard_delete} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # GET /api/songLists/{listId}/comments
@@ -2015,10 +2705,21 @@ export def "song-lists-comments get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($list_id | is-empty) { error make --unspanned { msg: "path parameter 'listId' must be non-empty" } }
-  let full_url = (build-url $base ({list_id: (encode-path-segment $list_id)} | format pattern "/api/songLists/{list_id}/comments"))
+  let full_url = (build-url $base ({list_id: (encode-path-segment $list_id)} | format pattern "/api/songLists/{list_id}/comments") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # POST /api/songLists/{listId}/comments
@@ -2048,12 +2749,23 @@ export def "song-lists-comments create-by-list-id" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($list_id | is-empty) { error make --unspanned { msg: "path parameter 'listId' must be non-empty" } }
-  let full_url = (build-url $base ({list_id: (encode-path-segment $list_id)} | format pattern "/api/songLists/{list_id}/comments"))
+  let full_url = (build-url $base ({list_id: (encode-path-segment $list_id)} | format pattern "/api/songLists/{list_id}/comments") $auth.query)
   let req_body = {"author": $author, "authorName": $author_name, "created": $created, "entry": $entry, "id": $id, "message": $message} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # GET /api/songLists/{listId}/songs
@@ -2088,10 +2800,21 @@ export def "song-lists-songs get" [
   let base = ($base_url | default $BASE_URL)
   if ($list_id | is-empty) { error make --unspanned { msg: "path parameter 'listId' must be non-empty" } }
   let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "songTypes" $song_types "scalar") (serialize-qp "pvServices" $pv_services "scalar") (serialize-qp "tagId[]" $tag_id "multi") (serialize-qp "artistId[]" $artist_id "multi") (serialize-qp "childVoicebanks" $child_voicebanks "scalar") (serialize-qp "advancedFilters" $advanced_filters "multi") (serialize-qp "start" $start "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "getTotalCount" $get_total_count "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "nameMatchMode" $name_match_mode "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({list_id: (encode-path-segment $list_id)} | format pattern "/api/songLists/{list_id}/songs") $qp)
+  let full_url = (build-url $base ({list_id: (encode-path-segment $list_id)} | format pattern "/api/songLists/{list_id}/songs") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"query": $query, "songTypes": $song_types, "pvServices": $pv_services, "tagId[]": $tag_id, "artistId[]": $artist_id, "childVoicebanks": $child_voicebanks, "advancedFilters": $advanced_filters, "start": $start, "maxResults": $max_results, "getTotalCount": $get_total_count, "sort": $qp_sort, "nameMatchMode": $name_match_mode, "fields": $fields, "lang": $lang} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"query": $query, "songTypes": $song_types, "pvServices": $pv_services, "tagId[]": $tag_id, "artistId[]": $artist_id, "childVoicebanks": $child_voicebanks, "advancedFilters": $advanced_filters, "start": $start, "maxResults": $max_results, "getTotalCount": $get_total_count, "sort": $qp_sort, "nameMatchMode": $name_match_mode, "fields": $fields, "lang": $lang} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /api/songs
@@ -2143,10 +2866,21 @@ export def "songs list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "songTypes" $song_types "scalar") (serialize-qp "afterDate" $after_date "scalar") (serialize-qp "beforeDate" $before_date "scalar") (serialize-qp "tagName[]" $tag_name "multi") (serialize-qp "tagId[]" $tag_id "multi") (serialize-qp "childTags" $child_tags "scalar") (serialize-qp "unifyTypesAndTags" $unify_types_and_tags "scalar") (serialize-qp "artistId[]" $artist_id "multi") (serialize-qp "artistParticipationStatus" $artist_participation_status "scalar") (serialize-qp "childVoicebanks" $child_voicebanks "scalar") (serialize-qp "includeMembers" $include_members "scalar") (serialize-qp "onlyWithPvs" $only_with_pvs "scalar") (serialize-qp "pvServices" $pv_services "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "minScore" $min_score "scalar") (serialize-qp "userCollectionId" $user_collection_id "scalar") (serialize-qp "releaseEventId" $release_event_id "scalar") (serialize-qp "parentSongId" $parent_song_id "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "advancedFilters" $advanced_filters "multi") (serialize-qp "start" $start "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "getTotalCount" $get_total_count "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "preferAccurateMatches" $prefer_accurate_matches "scalar") (serialize-qp "nameMatchMode" $name_match_mode "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "minMilliBpm" $min_milli_bpm "scalar") (serialize-qp "maxMilliBpm" $max_milli_bpm "scalar") (serialize-qp "minLength" $min_length "scalar") (serialize-qp "maxLength" $max_length "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/songs" $qp)
+  let full_url = (build-url $base "/api/songs" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"query": $query, "songTypes": $song_types, "afterDate": $after_date, "beforeDate": $before_date, "tagName[]": $tag_name, "tagId[]": $tag_id, "childTags": $child_tags, "unifyTypesAndTags": $unify_types_and_tags, "artistId[]": $artist_id, "artistParticipationStatus": $artist_participation_status, "childVoicebanks": $child_voicebanks, "includeMembers": $include_members, "onlyWithPvs": $only_with_pvs, "pvServices": $pv_services, "since": $since, "minScore": $min_score, "userCollectionId": $user_collection_id, "releaseEventId": $release_event_id, "parentSongId": $parent_song_id, "status": $status, "advancedFilters": $advanced_filters, "start": $start, "maxResults": $max_results, "getTotalCount": $get_total_count, "sort": $qp_sort, "preferAccurateMatches": $prefer_accurate_matches, "nameMatchMode": $name_match_mode, "fields": $fields, "lang": $lang, "minMilliBpm": $min_milli_bpm, "maxMilliBpm": $max_milli_bpm, "minLength": $min_length, "maxLength": $max_length} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"query": $query, "songTypes": $song_types, "afterDate": $after_date, "beforeDate": $before_date, "tagName[]": $tag_name, "tagId[]": $tag_id, "childTags": $child_tags, "unifyTypesAndTags": $unify_types_and_tags, "artistId[]": $artist_id, "artistParticipationStatus": $artist_participation_status, "childVoicebanks": $child_voicebanks, "includeMembers": $include_members, "onlyWithPvs": $only_with_pvs, "pvServices": $pv_services, "since": $since, "minScore": $min_score, "userCollectionId": $user_collection_id, "releaseEventId": $release_event_id, "parentSongId": $parent_song_id, "status": $status, "advancedFilters": $advanced_filters, "start": $start, "maxResults": $max_results, "getTotalCount": $get_total_count, "sort": $qp_sort, "preferAccurateMatches": $prefer_accurate_matches, "nameMatchMode": $name_match_mode, "fields": $fields, "lang": $lang, "minMilliBpm": $min_milli_bpm, "maxMilliBpm": $max_milli_bpm, "minLength": $min_length, "maxLength": $max_length} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /api/songs/byPv
@@ -2169,10 +2903,21 @@ export def "songs-by-pv get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pvService" $pv_service "scalar") (serialize-qp "pvId" $pv_id "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/songs/byPv" $qp)
+  let full_url = (build-url $base "/api/songs/byPv" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"pvService": $pv_service, "pvId": $pv_id, "fields": $fields, "lang": $lang} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"pvService": $pv_service, "pvId": $pv_id, "fields": $fields, "lang": $lang} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # DELETE /api/songs/comments/{commentId}
@@ -2191,10 +2936,21 @@ export def "songs-comments delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($comment_id | is-empty) { error make --unspanned { msg: "path parameter 'commentId' must be non-empty" } }
-  let full_url = (build-url $base ({comment_id: (encode-path-segment $comment_id)} | format pattern "/api/songs/comments/{comment_id}"))
+  let full_url = (build-url $base ({comment_id: (encode-path-segment $comment_id)} | format pattern "/api/songs/comments/{comment_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # POST /api/songs/comments/{commentId}
@@ -2223,12 +2979,23 @@ export def "songs-comments create-by-comment-id" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($comment_id | is-empty) { error make --unspanned { msg: "path parameter 'commentId' must be non-empty" } }
-  let full_url = (build-url $base ({comment_id: (encode-path-segment $comment_id)} | format pattern "/api/songs/comments/{comment_id}"))
+  let full_url = (build-url $base ({comment_id: (encode-path-segment $comment_id)} | format pattern "/api/songs/comments/{comment_id}") $auth.query)
   let req_body = {"author": $author, "authorName": $author_name, "created": $created, "entry": $entry, "id": $id, "message": $message} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # GET /api/songs/highlighted
@@ -2249,10 +3016,21 @@ export def "songs-highlighted get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "languagePreference" $language_preference "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/songs/highlighted" $qp)
+  let full_url = (build-url $base "/api/songs/highlighted" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"languagePreference": $language_preference, "fields": $fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"languagePreference": $language_preference, "fields": $fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /api/songs/lyrics/{lyricsId}
@@ -2272,10 +3050,21 @@ export def "songs-lyrics get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($lyrics_id | is-empty) { error make --unspanned { msg: "path parameter 'lyricsId' must be non-empty" } }
-  let full_url = (build-url $base ({lyrics_id: (encode-path-segment $lyrics_id)} | format pattern "/api/songs/lyrics/{lyrics_id}"))
+  let full_url = (build-url $base ({lyrics_id: (encode-path-segment $lyrics_id)} | format pattern "/api/songs/lyrics/{lyrics_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /api/songs/names
@@ -2297,10 +3086,21 @@ export def "songs-names get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "nameMatchMode" $name_match_mode "scalar") (serialize-qp "maxResults" $max_results "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/songs/names" $qp)
+  let full_url = (build-url $base "/api/songs/names" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"query": $query, "nameMatchMode": $name_match_mode, "maxResults": $max_results} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"query": $query, "nameMatchMode": $name_match_mode, "maxResults": $max_results} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /api/songs/top-rated
@@ -2326,10 +3126,21 @@ export def "songs-top-rated get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "durationHours" $duration_hours "scalar") (serialize-qp "startDate" $start_date "scalar") (serialize-qp "filterBy" $filter_by "scalar") (serialize-qp "vocalist" $vocalist "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "languagePreference" $language_preference "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/songs/top-rated" $qp)
+  let full_url = (build-url $base "/api/songs/top-rated" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"durationHours": $duration_hours, "startDate": $start_date, "filterBy": $filter_by, "vocalist": $vocalist, "maxResults": $max_results, "fields": $fields, "languagePreference": $language_preference} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"durationHours": $duration_hours, "startDate": $start_date, "filterBy": $filter_by, "vocalist": $vocalist, "maxResults": $max_results, "fields": $fields, "languagePreference": $language_preference} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # DELETE /api/songs/{id}
@@ -2350,10 +3161,21 @@ export def "songs delete" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "notes" $notes "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/songs/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/songs/{id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"notes": $notes} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"notes": $notes} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # GET /api/songs/{id}
@@ -2376,10 +3198,21 @@ export def "songs get" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/songs/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/songs/{id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"fields": $fields, "lang": $lang} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"fields": $fields, "lang": $lang} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /api/songs/{id}/comments
@@ -2399,10 +3232,21 @@ export def "songs-comments get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/songs/{id}/comments"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/songs/{id}/comments") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # POST /api/songs/{id}/comments
@@ -2432,12 +3276,23 @@ export def "songs-comments create-by-id" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/songs/{id}/comments"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/songs/{id}/comments") $auth.query)
   let req_body = {"author": $author, "authorName": $author_name, "created": $created, "entry": $entry, "id": $body_id, "message": $message} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # GET /api/songs/{id}/derived
@@ -2460,10 +3315,21 @@ export def "songs-derived get" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/songs/{id}/derived") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/songs/{id}/derived") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"fields": $fields, "lang": $lang} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"fields": $fields, "lang": $lang} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /api/songs/{id}/ratings
@@ -2486,10 +3352,21 @@ export def "songs-ratings get" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "userFields" $user_fields "scalar") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/songs/{id}/ratings") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/songs/{id}/ratings") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"userFields": $user_fields, "lang": $lang} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"userFields": $user_fields, "lang": $lang} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # POST /api/songs/{id}/ratings
@@ -2510,12 +3387,23 @@ export def "songs-ratings create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/songs/{id}/ratings"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/songs/{id}/ratings") $auth.query)
   let req_body = {"rating": $rating} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # GET /api/songs/{id}/related
@@ -2538,10 +3426,21 @@ export def "songs-related get" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/songs/{id}/related") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/songs/{id}/related") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"fields": $fields, "lang": $lang} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"fields": $fields, "lang": $lang} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /api/tags
@@ -2572,10 +3471,21 @@ export def "tags list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "allowChildren" $allow_children "scalar") (serialize-qp "categoryName" $category_name "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "getTotalCount" $get_total_count "scalar") (serialize-qp "nameMatchMode" $name_match_mode "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "preferAccurateMatches" $prefer_accurate_matches "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "target" $target "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/tags" $qp)
+  let full_url = (build-url $base "/api/tags" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"query": $query, "allowChildren": $allow_children, "categoryName": $category_name, "start": $start, "maxResults": $max_results, "getTotalCount": $get_total_count, "nameMatchMode": $name_match_mode, "sort": $qp_sort, "preferAccurateMatches": $prefer_accurate_matches, "fields": $fields, "lang": $lang, "target": $target} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"query": $query, "allowChildren": $allow_children, "categoryName": $category_name, "start": $start, "maxResults": $max_results, "getTotalCount": $get_total_count, "nameMatchMode": $name_match_mode, "sort": $qp_sort, "preferAccurateMatches": $prefer_accurate_matches, "fields": $fields, "lang": $lang, "target": $target} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # POST /api/tags
@@ -2595,10 +3505,21 @@ export def "tags create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "name" $name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/tags" $qp)
+  let full_url = (build-url $base "/api/tags" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"name": $name} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"name": $name} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # GET /api/tags/byName/{name}
@@ -2624,10 +3545,21 @@ export def "tags-by-name get" [
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/api/tags/byName/{name}") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/api/tags/byName/{name}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"fields": $fields, "lang": $lang} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"fields": $fields, "lang": $lang} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /api/tags/categoryNames
@@ -2648,10 +3580,21 @@ export def "tags-category-names get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "nameMatchMode" $name_match_mode "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/tags/categoryNames" $qp)
+  let full_url = (build-url $base "/api/tags/categoryNames" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"query": $query, "nameMatchMode": $name_match_mode} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"query": $query, "nameMatchMode": $name_match_mode} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # DELETE /api/tags/comments/{commentId}
@@ -2670,10 +3613,21 @@ export def "tags-comments delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($comment_id | is-empty) { error make --unspanned { msg: "path parameter 'commentId' must be non-empty" } }
-  let full_url = (build-url $base ({comment_id: (encode-path-segment $comment_id)} | format pattern "/api/tags/comments/{comment_id}"))
+  let full_url = (build-url $base ({comment_id: (encode-path-segment $comment_id)} | format pattern "/api/tags/comments/{comment_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # POST /api/tags/comments/{commentId}
@@ -2702,12 +3656,23 @@ export def "tags-comments create-by-comment-id" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($comment_id | is-empty) { error make --unspanned { msg: "path parameter 'commentId' must be non-empty" } }
-  let full_url = (build-url $base ({comment_id: (encode-path-segment $comment_id)} | format pattern "/api/tags/comments/{comment_id}"))
+  let full_url = (build-url $base ({comment_id: (encode-path-segment $comment_id)} | format pattern "/api/tags/comments/{comment_id}") $auth.query)
   let req_body = {"author": $author, "authorName": $author_name, "created": $created, "entry": $entry, "id": $id, "message": $message} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # GET /api/tags/names
@@ -2729,10 +3694,21 @@ export def "tags-names get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "allowAliases" $allow_aliases "scalar") (serialize-qp "maxResults" $max_results "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/tags/names" $qp)
+  let full_url = (build-url $base "/api/tags/names" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"query": $query, "allowAliases": $allow_aliases, "maxResults": $max_results} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"query": $query, "allowAliases": $allow_aliases, "maxResults": $max_results} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /api/tags/top
@@ -2755,10 +3731,21 @@ export def "tags-top get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "categoryName" $category_name "scalar") (serialize-qp "entryType" $entry_type "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/tags/top" $qp)
+  let full_url = (build-url $base "/api/tags/top" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"categoryName": $category_name, "entryType": $entry_type, "maxResults": $max_results, "lang": $lang} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"categoryName": $category_name, "entryType": $entry_type, "maxResults": $max_results, "lang": $lang} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # DELETE /api/tags/{id}
@@ -2780,10 +3767,21 @@ export def "tags delete" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "notes" $notes "scalar") (serialize-qp "hardDelete" $hard_delete "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/tags/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/tags/{id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"notes": $notes, "hardDelete": $hard_delete} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"notes": $notes, "hardDelete": $hard_delete} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # GET /api/tags/{id}
@@ -2806,10 +3804,21 @@ export def "tags get" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/tags/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/tags/{id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"fields": $fields, "lang": $lang} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"fields": $fields, "lang": $lang} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /api/tags/{tagId}/children
@@ -2832,10 +3841,21 @@ export def "tags-children get" [
   let base = ($base_url | default $BASE_URL)
   if ($tag_id | is-empty) { error make --unspanned { msg: "path parameter 'tagId' must be non-empty" } }
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({tag_id: (encode-path-segment $tag_id)} | format pattern "/api/tags/{tag_id}/children") $qp)
+  let full_url = (build-url $base ({tag_id: (encode-path-segment $tag_id)} | format pattern "/api/tags/{tag_id}/children") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"fields": $fields, "lang": $lang} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"fields": $fields, "lang": $lang} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /api/tags/{tagId}/comments
@@ -2855,10 +3875,21 @@ export def "tags-comments get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tag_id | is-empty) { error make --unspanned { msg: "path parameter 'tagId' must be non-empty" } }
-  let full_url = (build-url $base ({tag_id: (encode-path-segment $tag_id)} | format pattern "/api/tags/{tag_id}/comments"))
+  let full_url = (build-url $base ({tag_id: (encode-path-segment $tag_id)} | format pattern "/api/tags/{tag_id}/comments") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # POST /api/tags/{tagId}/comments
@@ -2888,12 +3919,23 @@ export def "tags-comments create-by-tag-id" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tag_id | is-empty) { error make --unspanned { msg: "path parameter 'tagId' must be non-empty" } }
-  let full_url = (build-url $base ({tag_id: (encode-path-segment $tag_id)} | format pattern "/api/tags/{tag_id}/comments"))
+  let full_url = (build-url $base ({tag_id: (encode-path-segment $tag_id)} | format pattern "/api/tags/{tag_id}/comments") $auth.query)
   let req_body = {"author": $author, "authorName": $author_name, "created": $created, "entry": $entry, "id": $id, "message": $message} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # POST /api/tags/{tagId}/reports
@@ -2916,10 +3958,21 @@ export def "tags-reports create" [
   let base = ($base_url | default $BASE_URL)
   if ($tag_id | is-empty) { error make --unspanned { msg: "path parameter 'tagId' must be non-empty" } }
   let qp = [(serialize-qp "reportType" $report_type "scalar") (serialize-qp "notes" $notes "scalar") (serialize-qp "versionNumber" $version_number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({tag_id: (encode-path-segment $tag_id)} | format pattern "/api/tags/{tag_id}/reports") $qp)
+  let full_url = (build-url $base ({tag_id: (encode-path-segment $tag_id)} | format pattern "/api/tags/{tag_id}/reports") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"reportType": $report_type, "notes": $notes, "versionNumber": $version_number} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"reportType": $report_type, "notes": $notes, "versionNumber": $version_number} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # GET /api/users
@@ -2951,10 +4004,21 @@ export def "users list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "groups" $groups "scalar") (serialize-qp "joinDateAfter" $join_date_after "scalar") (serialize-qp "joinDateBefore" $join_date_before "scalar") (serialize-qp "nameMatchMode" $name_match_mode "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "getTotalCount" $get_total_count "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "includeDisabled" $include_disabled "scalar") (serialize-qp "onlyVerified" $only_verified "scalar") (serialize-qp "knowsLanguage" $knows_language "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/users" $qp)
+  let full_url = (build-url $base "/api/users" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"query": $query, "groups": $groups, "joinDateAfter": $join_date_after, "joinDateBefore": $join_date_before, "nameMatchMode": $name_match_mode, "start": $start, "maxResults": $max_results, "getTotalCount": $get_total_count, "sort": $qp_sort, "includeDisabled": $include_disabled, "onlyVerified": $only_verified, "knowsLanguage": $knows_language, "fields": $fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"query": $query, "groups": $groups, "joinDateAfter": $join_date_after, "joinDateBefore": $join_date_before, "nameMatchMode": $name_match_mode, "start": $start, "maxResults": $max_results, "getTotalCount": $get_total_count, "sort": $qp_sort, "includeDisabled": $include_disabled, "onlyVerified": $only_verified, "knowsLanguage": $knows_language, "fields": $fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /api/users/current
@@ -2974,10 +4038,21 @@ export def "users-current get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/users/current" $qp)
+  let full_url = (build-url $base "/api/users/current" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"fields": $fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"fields": $fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /api/users/current/album-collection-statuses/{albumId}
@@ -2997,10 +4072,21 @@ export def "users-current-album-collection-statuses get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($album_id | is-empty) { error make --unspanned { msg: "path parameter 'albumId' must be non-empty" } }
-  let full_url = (build-url $base ({album_id: (encode-path-segment $album_id)} | format pattern "/api/users/current/album-collection-statuses/{album_id}"))
+  let full_url = (build-url $base ({album_id: (encode-path-segment $album_id)} | format pattern "/api/users/current/album-collection-statuses/{album_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # POST /api/users/current/albums/{albumId}
@@ -3024,10 +4110,21 @@ export def "users-current-albums create" [
   let base = ($base_url | default $BASE_URL)
   if ($album_id | is-empty) { error make --unspanned { msg: "path parameter 'albumId' must be non-empty" } }
   let qp = [(serialize-qp "collectionStatus" $collection_status "scalar") (serialize-qp "mediaType" $media_type "scalar") (serialize-qp "rating" $rating "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({album_id: (encode-path-segment $album_id)} | format pattern "/api/users/current/albums/{album_id}") $qp)
+  let full_url = (build-url $base ({album_id: (encode-path-segment $album_id)} | format pattern "/api/users/current/albums/{album_id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"collectionStatus": $collection_status, "mediaType": $media_type, "rating": $rating} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"collectionStatus": $collection_status, "mediaType": $media_type, "rating": $rating} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # GET /api/users/current/followedArtists/{artistId}
@@ -3047,10 +4144,21 @@ export def "users-current-followed-artists get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($artist_id | is-empty) { error make --unspanned { msg: "path parameter 'artistId' must be non-empty" } }
-  let full_url = (build-url $base ({artist_id: (encode-path-segment $artist_id)} | format pattern "/api/users/current/followedArtists/{artist_id}"))
+  let full_url = (build-url $base ({artist_id: (encode-path-segment $artist_id)} | format pattern "/api/users/current/followedArtists/{artist_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # DELETE /api/users/current/followedTags/{tagId}
@@ -3069,10 +4177,21 @@ export def "users-current-followed-tags delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tag_id | is-empty) { error make --unspanned { msg: "path parameter 'tagId' must be non-empty" } }
-  let full_url = (build-url $base ({tag_id: (encode-path-segment $tag_id)} | format pattern "/api/users/current/followedTags/{tag_id}"))
+  let full_url = (build-url $base ({tag_id: (encode-path-segment $tag_id)} | format pattern "/api/users/current/followedTags/{tag_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # POST /api/users/current/followedTags/{tagId}
@@ -3091,10 +4210,21 @@ export def "users-current-followed-tags create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tag_id | is-empty) { error make --unspanned { msg: "path parameter 'tagId' must be non-empty" } }
-  let full_url = (build-url $base ({tag_id: (encode-path-segment $tag_id)} | format pattern "/api/users/current/followedTags/{tag_id}"))
+  let full_url = (build-url $base ({tag_id: (encode-path-segment $tag_id)} | format pattern "/api/users/current/followedTags/{tag_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # GET /api/users/current/ratedSongs/{songId}
@@ -3114,10 +4244,21 @@ export def "users-current-rated-songs get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($song_id | is-empty) { error make --unspanned { msg: "path parameter 'songId' must be non-empty" } }
-  let full_url = (build-url $base ({song_id: (encode-path-segment $song_id)} | format pattern "/api/users/current/ratedSongs/{song_id}"))
+  let full_url = (build-url $base ({song_id: (encode-path-segment $song_id)} | format pattern "/api/users/current/ratedSongs/{song_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # POST /api/users/current/refreshEntryEdit
@@ -3138,10 +4279,21 @@ export def "users-current-refresh-entry-edit create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "entryType" $entry_type "scalar") (serialize-qp "entryId" $entry_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/users/current/refreshEntryEdit" $qp)
+  let full_url = (build-url $base "/api/users/current/refreshEntryEdit" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"entryType": $entry_type, "entryId": $entry_id} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"entryType": $entry_type, "entryId": $entry_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # POST /api/users/current/songTags/{songId}
@@ -3160,10 +4312,21 @@ export def "users-current-song-tags create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($song_id | is-empty) { error make --unspanned { msg: "path parameter 'songId' must be non-empty" } }
-  let full_url = (build-url $base ({song_id: (encode-path-segment $song_id)} | format pattern "/api/users/current/songTags/{song_id}"))
+  let full_url = (build-url $base ({song_id: (encode-path-segment $song_id)} | format pattern "/api/users/current/songTags/{song_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # GET /api/users/messages/{messageId}
@@ -3183,10 +4346,21 @@ export def "users-messages get-by-message-id" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($message_id | is-empty) { error make --unspanned { msg: "path parameter 'messageId' must be non-empty" } }
-  let full_url = (build-url $base ({message_id: (encode-path-segment $message_id)} | format pattern "/api/users/messages/{message_id}"))
+  let full_url = (build-url $base ({message_id: (encode-path-segment $message_id)} | format pattern "/api/users/messages/{message_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /api/users/names
@@ -3209,10 +4383,21 @@ export def "users-names get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "nameMatchMode" $name_match_mode "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "includeDisabled" $include_disabled "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/users/names" $qp)
+  let full_url = (build-url $base "/api/users/names" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"query": $query, "nameMatchMode": $name_match_mode, "maxResults": $max_results, "includeDisabled": $include_disabled} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"query": $query, "nameMatchMode": $name_match_mode, "maxResults": $max_results, "includeDisabled": $include_disabled} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # DELETE /api/users/profileComments/{commentId}
@@ -3231,10 +4416,21 @@ export def "users-profile-comments delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($comment_id | is-empty) { error make --unspanned { msg: "path parameter 'commentId' must be non-empty" } }
-  let full_url = (build-url $base ({comment_id: (encode-path-segment $comment_id)} | format pattern "/api/users/profileComments/{comment_id}"))
+  let full_url = (build-url $base ({comment_id: (encode-path-segment $comment_id)} | format pattern "/api/users/profileComments/{comment_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # POST /api/users/profileComments/{commentId}
@@ -3263,12 +4459,23 @@ export def "users-profile-comments create-by-comment-id" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($comment_id | is-empty) { error make --unspanned { msg: "path parameter 'commentId' must be non-empty" } }
-  let full_url = (build-url $base ({comment_id: (encode-path-segment $comment_id)} | format pattern "/api/users/profileComments/{comment_id}"))
+  let full_url = (build-url $base ({comment_id: (encode-path-segment $comment_id)} | format pattern "/api/users/profileComments/{comment_id}") $auth.query)
   let req_body = {"author": $author, "authorName": $author_name, "created": $created, "entry": $entry, "id": $id, "message": $message} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # GET /api/users/{id}
@@ -3290,10 +4497,21 @@ export def "users get" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/users/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/users/{id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"fields": $fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"fields": $fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /api/users/{id}/album-collection-statuses/{albumId}
@@ -3315,10 +4533,21 @@ export def "users-album-collection-statuses get" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($album_id | is-empty) { error make --unspanned { msg: "path parameter 'albumId' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), album_id: (encode-path-segment $album_id)} | format pattern "/api/users/{id}/album-collection-statuses/{album_id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), album_id: (encode-path-segment $album_id)} | format pattern "/api/users/{id}/album-collection-statuses/{album_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /api/users/{id}/albums
@@ -3355,10 +4584,21 @@ export def "users-albums get" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "tagId" $tag_id "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "artistId" $artist_id "scalar") (serialize-qp "purchaseStatuses" $purchase_statuses "scalar") (serialize-qp "releaseEventId" $release_event_id "scalar") (serialize-qp "albumTypes" $album_types "scalar") (serialize-qp "advancedFilters" $advanced_filters "multi") (serialize-qp "start" $start "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "getTotalCount" $get_total_count "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "nameMatchMode" $name_match_mode "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "mediaType" $media_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/users/{id}/albums") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/users/{id}/albums") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"query": $query, "tagId": $tag_id, "tag": $tag, "artistId": $artist_id, "purchaseStatuses": $purchase_statuses, "releaseEventId": $release_event_id, "albumTypes": $album_types, "advancedFilters": $advanced_filters, "start": $start, "maxResults": $max_results, "getTotalCount": $get_total_count, "sort": $qp_sort, "nameMatchMode": $name_match_mode, "fields": $fields, "lang": $lang, "mediaType": $media_type} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"query": $query, "tagId": $tag_id, "tag": $tag, "artistId": $artist_id, "purchaseStatuses": $purchase_statuses, "releaseEventId": $release_event_id, "albumTypes": $album_types, "advancedFilters": $advanced_filters, "start": $start, "maxResults": $max_results, "getTotalCount": $get_total_count, "sort": $qp_sort, "nameMatchMode": $name_match_mode, "fields": $fields, "lang": $lang, "mediaType": $media_type} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /api/users/{id}/events
@@ -3380,10 +4620,21 @@ export def "users-events get" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "relationshipType" $relationship_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/users/{id}/events") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/users/{id}/events") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"relationshipType": $relationship_type} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"relationshipType": $relationship_type} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /api/users/{id}/followedArtists
@@ -3414,10 +4665,21 @@ export def "users-followed-artists list" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "tagId[]" $tag_id "multi") (serialize-qp "artistType" $artist_type "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "getTotalCount" $get_total_count "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "nameMatchMode" $name_match_mode "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/users/{id}/followedArtists") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/users/{id}/followedArtists") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"query": $query, "tagId[]": $tag_id, "artistType": $artist_type, "start": $start, "maxResults": $max_results, "getTotalCount": $get_total_count, "sort": $qp_sort, "nameMatchMode": $name_match_mode, "fields": $fields, "lang": $lang} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"query": $query, "tagId[]": $tag_id, "artistType": $artist_type, "start": $start, "maxResults": $max_results, "getTotalCount": $get_total_count, "sort": $qp_sort, "nameMatchMode": $name_match_mode, "fields": $fields, "lang": $lang} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /api/users/{id}/followedArtists/{artistId}
@@ -3439,10 +4701,21 @@ export def "users-followed-artists get" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($artist_id | is-empty) { error make --unspanned { msg: "path parameter 'artistId' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), artist_id: (encode-path-segment $artist_id)} | format pattern "/api/users/{id}/followedArtists/{artist_id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), artist_id: (encode-path-segment $artist_id)} | format pattern "/api/users/{id}/followedArtists/{artist_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # DELETE /api/users/{id}/messages
@@ -3463,10 +4736,21 @@ export def "users-messages delete" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "messageId" $message_id "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/users/{id}/messages") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/users/{id}/messages") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"messageId": $message_id} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"messageId": $message_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # GET /api/users/{id}/messages
@@ -3493,10 +4777,21 @@ export def "users-messages get-by-id" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "inbox" $inbox "scalar") (serialize-qp "unread" $unread "scalar") (serialize-qp "anotherUserId" $another_user_id "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "getTotalCount" $get_total_count "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/users/{id}/messages") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/users/{id}/messages") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"inbox": $inbox, "unread": $unread, "anotherUserId": $another_user_id, "start": $start, "maxResults": $max_results, "getTotalCount": $get_total_count} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"inbox": $inbox, "unread": $unread, "anotherUserId": $another_user_id, "start": $start, "maxResults": $max_results, "getTotalCount": $get_total_count} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # POST /api/users/{id}/messages
@@ -3529,12 +4824,23 @@ export def "users-messages create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/users/{id}/messages"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/users/{id}/messages") $auth.query)
   let req_body = {"body": $body, "createdFormatted": $created_formatted, "highPriority": $high_priority, "id": $body_id, "inbox": $inbox, "read": $read, "receiver": $receiver, "sender": $sender, "subject": $subject} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # GET /api/users/{id}/profileComments
@@ -3558,10 +4864,21 @@ export def "users-profile-comments get" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "getTotalCount" $get_total_count "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/users/{id}/profileComments") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/users/{id}/profileComments") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"start": $start, "maxResults": $max_results, "getTotalCount": $get_total_count} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"start": $start, "maxResults": $max_results, "getTotalCount": $get_total_count} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # POST /api/users/{id}/profileComments
@@ -3591,12 +4908,23 @@ export def "users-profile-comments create-by-id" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/users/{id}/profileComments"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/users/{id}/profileComments") $auth.query)
   let req_body = {"author": $author, "authorName": $author_name, "created": $created, "entry": $entry, "id": $body_id, "message": $message} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # GET /api/users/{id}/ratedSongs
@@ -3635,10 +4963,21 @@ export def "users-rated-songs list" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "tagName" $tag_name "scalar") (serialize-qp "tagId[]" $tag_id "multi") (serialize-qp "artistId[]" $artist_id "multi") (serialize-qp "childVoicebanks" $child_voicebanks "scalar") (serialize-qp "artistGrouping" $artist_grouping "scalar") (serialize-qp "rating" $rating "scalar") (serialize-qp "songListId" $song_list_id "scalar") (serialize-qp "groupByRating" $group_by_rating "scalar") (serialize-qp "pvServices" $pv_services "scalar") (serialize-qp "advancedFilters" $advanced_filters "multi") (serialize-qp "start" $start "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "getTotalCount" $get_total_count "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "nameMatchMode" $name_match_mode "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/users/{id}/ratedSongs") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/users/{id}/ratedSongs") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"query": $query, "tagName": $tag_name, "tagId[]": $tag_id, "artistId[]": $artist_id, "childVoicebanks": $child_voicebanks, "artistGrouping": $artist_grouping, "rating": $rating, "songListId": $song_list_id, "groupByRating": $group_by_rating, "pvServices": $pv_services, "advancedFilters": $advanced_filters, "start": $start, "maxResults": $max_results, "getTotalCount": $get_total_count, "sort": $qp_sort, "nameMatchMode": $name_match_mode, "fields": $fields, "lang": $lang} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"query": $query, "tagName": $tag_name, "tagId[]": $tag_id, "artistId[]": $artist_id, "childVoicebanks": $child_voicebanks, "artistGrouping": $artist_grouping, "rating": $rating, "songListId": $song_list_id, "groupByRating": $group_by_rating, "pvServices": $pv_services, "advancedFilters": $advanced_filters, "start": $start, "maxResults": $max_results, "getTotalCount": $get_total_count, "sort": $qp_sort, "nameMatchMode": $name_match_mode, "fields": $fields, "lang": $lang} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /api/users/{id}/ratedSongs/{songId}
@@ -3660,10 +4999,21 @@ export def "users-rated-songs get" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($song_id | is-empty) { error make --unspanned { msg: "path parameter 'songId' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), song_id: (encode-path-segment $song_id)} | format pattern "/api/users/{id}/ratedSongs/{song_id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), song_id: (encode-path-segment $song_id)} | format pattern "/api/users/{id}/ratedSongs/{song_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # POST /api/users/{id}/reports
@@ -3686,12 +5036,23 @@ export def "users-reports create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/users/{id}/reports"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/users/{id}/reports") $auth.query)
   let req_body = {"reason": $reason, "reportType": $report_type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # POST /api/users/{id}/settings/{settingName}
@@ -3714,12 +5075,23 @@ export def "users-settings create" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($setting_name | is-empty) { error make --unspanned { msg: "path parameter 'settingName' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), setting_name: (encode-path-segment $setting_name)} | format pattern "/api/users/{id}/settings/{setting_name}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), setting_name: (encode-path-segment $setting_name)} | format pattern "/api/users/{id}/settings/{setting_name}") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # GET /api/users/{id}/songLists
@@ -3749,10 +5121,21 @@ export def "users-song-lists get" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "tagId[]" $tag_id "multi") (serialize-qp "childTags" $child_tags "scalar") (serialize-qp "nameMatchMode" $name_match_mode "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "getTotalCount" $get_total_count "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/users/{id}/songLists") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/users/{id}/songLists") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"query": $query, "tagId[]": $tag_id, "childTags": $child_tags, "nameMatchMode": $name_match_mode, "start": $start, "maxResults": $max_results, "getTotalCount": $get_total_count, "sort": $qp_sort, "fields": $fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"query": $query, "tagId[]": $tag_id, "childTags": $child_tags, "nameMatchMode": $name_match_mode, "start": $start, "maxResults": $max_results, "getTotalCount": $get_total_count, "sort": $qp_sort, "fields": $fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /api/venues
@@ -3783,10 +5166,21 @@ export def "venues get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "getTotalCount" $get_total_count "scalar") (serialize-qp "nameMatchMode" $name_match_mode "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "sortRule" $sort_rule "scalar") (serialize-qp "latitude" $latitude "scalar") (serialize-qp "longitude" $longitude "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "distanceUnit" $distance_unit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/venues" $qp)
+  let full_url = (build-url $base "/api/venues" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"query": $query, "fields": $fields, "start": $start, "maxResults": $max_results, "getTotalCount": $get_total_count, "nameMatchMode": $name_match_mode, "lang": $lang, "sortRule": $sort_rule, "latitude": $latitude, "longitude": $longitude, "radius": $radius, "distanceUnit": $distance_unit} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"query": $query, "fields": $fields, "start": $start, "maxResults": $max_results, "getTotalCount": $get_total_count, "nameMatchMode": $name_match_mode, "lang": $lang, "sortRule": $sort_rule, "latitude": $latitude, "longitude": $longitude, "radius": $radius, "distanceUnit": $distance_unit} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # DELETE /api/venues/{id}
@@ -3808,10 +5202,21 @@ export def "venues delete" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "notes" $notes "scalar") (serialize-qp "hardDelete" $hard_delete "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/venues/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/venues/{id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"notes": $notes, "hardDelete": $hard_delete} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"notes": $notes, "hardDelete": $hard_delete} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # POST /api/venues/{id}/reports
@@ -3834,8 +5239,19 @@ export def "venues-reports create" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "reportType" $report_type "scalar") (serialize-qp "notes" $notes "scalar") (serialize-qp "versionNumber" $version_number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/venues/{id}/reports") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/venues/{id}/reports") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"reportType": $report_type, "notes": $notes, "versionNumber": $version_number} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"reportType": $report_type, "notes": $notes, "versionNumber": $version_number} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }

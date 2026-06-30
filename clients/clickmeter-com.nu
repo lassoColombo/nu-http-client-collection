@@ -8,7 +8,7 @@ const BASE_URL = "http://apiv2.clickmeter.com:80"
 # `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
 # where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o CLICKMETER_API_TOKEN | default "" }
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o CLICKMETER_API_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
@@ -41,14 +41,11 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
-# Trick: `url encode --all` over-encodes, then we decode the four unreserved
-# punctuation chars back. Pre-existing %XX sequences in the input survive
-# because `url encode --all` first turns their % into %25.
 def encode-path-segment [v: any]: nothing -> string {
   $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
-# Serialize an array-typed path parameter (issue 49.A). OpenAPI 3 `style: simple`
+# Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
 # (the default for path params) and Swagger 2 `collectionFormat: csv` both join
 # the elements with a literal comma WITHIN the single path segment, each element
 # RFC-3986-encoded individually (so a comma inside an element stays %2C). Without
@@ -59,51 +56,57 @@ def encode-path-array [v: any]: nothing -> string {
   if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
 }
 
-# Build URL from base, path, and optional query string
-def build-url [base: string, path: string, query?: string]: nothing -> string {
+# Build the request URL from base, path, and any number of pre-encoded query
+# fragments (param serializer output and/or the auth query). Each fragment is an
+# `&`-joinable `key=value` string already percent-encoded by its producer; empty
+# fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
+# delimiters are hand-spliced — and any query already on the base URL is merged in.
+def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
   let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
-  let result = ($parsed | upsert path $full_path)
-  if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
+  let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
+  $parsed | upsert path $full_path | upsert query $query | url join
 }
 
-# Build the dry-run record returned by --dry-run. Shape:
-#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
-#    auth: {scheme, location}}
-# `meta` carries logical-form data (the query record by spec name, the pre-serialization
-# body) that do-request itself cannot reconstruct from its wire-format args.
-def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
-  let m = ($meta | default {})
-  {
-    dry_run: true
-    method: $method
-    url: $url
-    query: ($m | get -o query | default {})
-    headers: $auth.headers
-    body: ($m | get -o body)
-    content_type: $content_type
-    timeout: $timeout
-    auth: {scheme: $auth.scheme, location: $auth.location}
-  }
+# Success policy: did this response succeed? Single source of truth, consulted by
+# handle-response and the HEAD header-unwrap. Empty ok_codes means the spec listed
+# none, so fall back to < 400. Otherwise: any 2xx, plus documented success codes.
+def status-ok [status: int, ok_codes: list<int>]: nothing -> bool {
+  if ($ok_codes | is-empty) { $status < 400 } else { ($status >= 200 and $status < 300) or ($status in $ok_codes) }
 }
 
-# Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
-  let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
-  let timeout = ($max_time | default 30min)
-  let ct = ($content_type | default "application/json")
-  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
-  let resp = match $method {
-    "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
-  }
-  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
-  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
+# Unwrap a `--full` HTTP response into the user-facing value. Response arrives
+# via pipeline; ok_codes gates the error throw (see status-ok).
+def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: record -> any {
+  let resp = $in
+  if $allow_errors { return $resp }
+  if not (status-ok $resp.status $ok_codes) { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } }
+  if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
+  if $resp.status == 204 { return null }
+  $resp.body
+}
+
+# GET — bodyless, honours --raw
+def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+}
+
+# POST — body + content-type
+def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# PUT — body + content-type
+def send-put [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http put --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http put --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# DELETE — body via --data
+def send-delete [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http delete --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url } else { http delete --headers $req.headers --content-type $req.content_type --data $body --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url }
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 def base-url-completer [] { ["http://apiv2.clickmeter.com:80" "https://apiv2.clickmeter.com:80"] }
@@ -173,10 +176,21 @@ export def "account get" [
 ]: nothing -> record<boGoVal: string, bonusClicks: int, companyName: string, companyRole: string, email: string, firstName: string, lastName: string, phone: string, redirectOnly: bool, registrationDate: string, timeframeMinDate: string, timezone: int, timezonename: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/account")
+  let full_url = (build-url $base "/account" $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update current account data
@@ -211,12 +225,23 @@ export def "account create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/account")
+  let full_url = (build-url $base "/account" $auth.query)
   let req_body = {"boGoVal": $bo_go_val, "bonusClicks": $bonus_clicks, "companyName": $company_name, "companyRole": $company_role, "email": $email, "firstName": $first_name, "lastName": $last_name, "phone": $phone, "redirectOnly": $redirect_only, "registrationDate": $registration_date, "timeframeMinDate": $timeframe_min_date, "timezone": $timezone, "timezonename": $timezonename} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve list of a domains allowed to redirect in DDU mode
@@ -240,10 +265,21 @@ export def "account-domainwhitelist get-domain-whitelist" [
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/account/domainwhitelist" $qp)
+  let full_url = (build-url $base "/account/domainwhitelist" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"offset": $offset, "limit": $limit} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"offset": $offset, "limit": $limit} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create an domain entry
@@ -267,12 +303,23 @@ export def "account-domainwhitelist update-domain-whitelist" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/account/domainwhitelist")
+  let full_url = (build-url $base "/account/domainwhitelist" $auth.query)
   let req_body = {"id": $id, "name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Delete an domain entry
@@ -295,10 +342,21 @@ export def "account-domainwhitelist delete-domain-whitelist" [
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   if ($whitelist_id | is-empty) { error make --unspanned { msg: "path parameter 'whitelistId' must be non-empty" } }
-  let full_url = (build-url $base ({whitelist_id: (encode-path-segment $whitelist_id)} | format pattern "/account/domainwhitelist/{whitelist_id}"))
+  let full_url = (build-url $base ({whitelist_id: (encode-path-segment $whitelist_id)} | format pattern "/account/domainwhitelist/{whitelist_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve list of a guest
@@ -325,10 +383,21 @@ export def "account-guests list" [
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "sortBy" $sort_by "scalar") (serialize-qp "sortDirection" $sort_direction "scalar") (serialize-qp "textSearch" $text_search "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/account/guests" $qp)
+  let full_url = (build-url $base "/account/guests" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"offset": $offset, "limit": $limit, "sortBy": $sort_by, "sortDirection": $sort_direction, "textSearch": $text_search} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"offset": $offset, "limit": $limit, "sortBy": $sort_by, "sortDirection": $sort_direction, "textSearch": $text_search} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a guest
@@ -379,12 +448,23 @@ export def "account-guests update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/account/guests")
+  let full_url = (build-url $base "/account/guests" $auth.query)
   let req_body = {"apiKey": $api_key, "conversionOptions": $conversion_options, "creationDate": $creation_date, "currentGrant": $current_grant, "dateFormat": $date_format, "decimalSeparator": $decimal_separator, "email": $email, "extendedGrants": $extended_grants, "groupGrants": $group_grants, "hitOptions": $hit_options, "id": $id, "key": $key, "language": $language, "loginCount": $login_count, "name": $name, "notes": $notes, "numberGroupSeparator": $number_group_separator, "password": $password, "timeFormat": $time_format, "timeZone": $time_zone, "timeframeMinDate": $timeframe_min_date, "timezonename": $timezonename, "tlGrants": $tl_grants, "tpGrants": $tp_grants, "userName": $user_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve count of guests
@@ -407,10 +487,21 @@ export def "account-guests-count get" [
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "textSearch" $text_search "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/account/guests/count" $qp)
+  let full_url = (build-url $base "/account/guests/count" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"textSearch": $text_search} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"textSearch": $text_search} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Delete a guest
@@ -433,10 +524,21 @@ export def "account-guests delete" [
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   if ($guest_id | is-empty) { error make --unspanned { msg: "path parameter 'guestId' must be non-empty" } }
-  let full_url = (build-url $base ({guest_id: (encode-path-segment $guest_id)} | format pattern "/account/guests/{guest_id}"))
+  let full_url = (build-url $base ({guest_id: (encode-path-segment $guest_id)} | format pattern "/account/guests/{guest_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve a guest
@@ -459,10 +561,21 @@ export def "account-guests get" [
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   if ($guest_id | is-empty) { error make --unspanned { msg: "path parameter 'guestId' must be non-empty" } }
-  let full_url = (build-url $base ({guest_id: (encode-path-segment $guest_id)} | format pattern "/account/guests/{guest_id}"))
+  let full_url = (build-url $base ({guest_id: (encode-path-segment $guest_id)} | format pattern "/account/guests/{guest_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update a guest
@@ -515,12 +628,23 @@ export def "account-guests create" [
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   if ($guest_id | is-empty) { error make --unspanned { msg: "path parameter 'guestId' must be non-empty" } }
-  let full_url = (build-url $base ({guest_id: (encode-path-segment $guest_id)} | format pattern "/account/guests/{guest_id}"))
+  let full_url = (build-url $base ({guest_id: (encode-path-segment $guest_id)} | format pattern "/account/guests/{guest_id}") $auth.query)
   let req_body = {"apiKey": $api_key, "conversionOptions": $conversion_options, "creationDate": $creation_date, "currentGrant": $current_grant, "dateFormat": $date_format, "decimalSeparator": $decimal_separator, "email": $email, "extendedGrants": $extended_grants, "groupGrants": $group_grants, "hitOptions": $hit_options, "id": $id, "key": $key, "language": $language, "loginCount": $login_count, "name": $name, "notes": $notes, "numberGroupSeparator": $number_group_separator, "password": $password, "timeFormat": $time_format, "timeZone": $time_zone, "timeframeMinDate": $timeframe_min_date, "timezonename": $timezonename, "tlGrants": $tl_grants, "tpGrants": $tp_grants, "userName": $user_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve permissions for a guest
@@ -549,10 +673,21 @@ export def "account-guests-permissions get" [
   let base = ($base_url | default $BASE_URL)
   if ($guest_id | is-empty) { error make --unspanned { msg: "path parameter 'guestId' must be non-empty" } }
   let qp = [(serialize-qp "entityType" $entity_type "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "entityId" $entity_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({guest_id: (encode-path-segment $guest_id)} | format pattern "/account/guests/{guest_id}/permissions") $qp)
+  let full_url = (build-url $base ({guest_id: (encode-path-segment $guest_id)} | format pattern "/account/guests/{guest_id}/permissions") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"entityType": $entity_type, "offset": $offset, "limit": $limit, "type": $type, "entityId": $entity_id} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"entityType": $entity_type, "offset": $offset, "limit": $limit, "type": $type, "entityId": $entity_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve count of the permissions for a guest
@@ -579,10 +714,21 @@ export def "account-guests-permissions-count get" [
   let base = ($base_url | default $BASE_URL)
   if ($guest_id | is-empty) { error make --unspanned { msg: "path parameter 'guestId' must be non-empty" } }
   let qp = [(serialize-qp "entityType" $entity_type "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "entityId" $entity_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({guest_id: (encode-path-segment $guest_id)} | format pattern "/account/guests/{guest_id}/permissions/count") $qp)
+  let full_url = (build-url $base ({guest_id: (encode-path-segment $guest_id)} | format pattern "/account/guests/{guest_id}/permissions/count") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"entityType": $entity_type, "type": $type, "entityId": $entity_id} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"entityType": $entity_type, "type": $type, "entityId": $entity_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Change the permission on a shared object
@@ -610,12 +756,23 @@ export def "account-guests-permissions-patch create" [
   let base = ($base_url | default $BASE_URL)
   if ($guest_id | is-empty) { error make --unspanned { msg: "path parameter 'guestId' must be non-empty" } }
   if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
-  let full_url = (build-url $base ({guest_id: (encode-path-segment $guest_id), type: (encode-path-segment $type)} | format pattern "/account/guests/{guest_id}/{type}/permissions/patch"))
+  let full_url = (build-url $base ({guest_id: (encode-path-segment $guest_id), type: (encode-path-segment $type)} | format pattern "/account/guests/{guest_id}/{type}/permissions/patch") $auth.query)
   let req_body = {"Action": $action, "Id": $id, "Verb": $verb} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Change the permission on a shared object
@@ -644,12 +801,23 @@ export def "account-guests-permissions-patch update" [
   let base = ($base_url | default $BASE_URL)
   if ($guest_id | is-empty) { error make --unspanned { msg: "path parameter 'guestId' must be non-empty" } }
   if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
-  let full_url = (build-url $base ({guest_id: (encode-path-segment $guest_id), type: (encode-path-segment $type)} | format pattern "/account/guests/{guest_id}/{type}/permissions/patch"))
+  let full_url = (build-url $base ({guest_id: (encode-path-segment $guest_id), type: (encode-path-segment $type)} | format pattern "/account/guests/{guest_id}/{type}/permissions/patch") $auth.query)
   let req_body = {"Action": $action, "Id": $id, "Verb": $verb} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve list of a ip to exclude from event tracking
@@ -673,10 +841,21 @@ export def "account-ipblacklist get-ip-blacklist" [
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/account/ipblacklist" $qp)
+  let full_url = (build-url $base "/account/ipblacklist" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"offset": $offset, "limit": $limit} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"offset": $offset, "limit": $limit} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create an ip blacklist entry
@@ -700,12 +879,23 @@ export def "account-ipblacklist update-ip-blacklist" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/account/ipblacklist")
+  let full_url = (build-url $base "/account/ipblacklist" $auth.query)
   let req_body = {"id": $id, "ip": $ip} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Delete an ip blacklist entry
@@ -728,10 +918,21 @@ export def "account-ipblacklist delete-ip-blacklist" [
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   if ($blacklist_id | is-empty) { error make --unspanned { msg: "path parameter 'blacklistId' must be non-empty" } }
-  let full_url = (build-url $base ({blacklist_id: (encode-path-segment $blacklist_id)} | format pattern "/account/ipblacklist/{blacklist_id}"))
+  let full_url = (build-url $base ({blacklist_id: (encode-path-segment $blacklist_id)} | format pattern "/account/ipblacklist/{blacklist_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve current account plan
@@ -752,10 +953,21 @@ export def "account-plan get" [
 ]: nothing -> record<allowedPersonalDomains: int, allowedPersonalUrls: int, billingPeriodEnd: string, billingPeriodStart: string, bonusMonthlyEvents: int, maximumDatapoints: int, maximumGuests: int, monthlyEvents: int, name: string, price: float, profileId: int, recurring: bool, recurringPeriod: int, usedDatapoints: int, usedMonthlyEvents: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/account/plan")
+  let full_url = (build-url $base "/account/plan" $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve statistics about this customer for a timeframe
@@ -782,10 +994,21 @@ export def "aggregated get-statistics-single" [
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "timeFrame" $time_frame "scalar") (serialize-qp "fromDay" $from_day "scalar") (serialize-qp "toDay" $to_day "scalar") (serialize-qp "hourly" $hourly "scalar") (serialize-qp "onlyFavorites" $only_favorites "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/aggregated" $qp)
+  let full_url = (build-url $base "/aggregated" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"timeFrame": $time_frame, "fromDay": $from_day, "toDay": $to_day, "hourly": $hourly, "onlyFavorites": $only_favorites} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"timeFrame": $time_frame, "fromDay": $from_day, "toDay": $to_day, "hourly": $hourly, "onlyFavorites": $only_favorites} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve statistics about this customer for a timeframe grouped by some temporal entity (day/week/month)
@@ -811,10 +1034,21 @@ export def "aggregated-list get-statistics" [
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "timeFrame" $time_frame "scalar") (serialize-qp "fromDay" $from_day "scalar") (serialize-qp "toDay" $to_day "scalar") (serialize-qp "groupBy" $group_by "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/aggregated/list" $qp)
+  let full_url = (build-url $base "/aggregated/list" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"timeFrame": $time_frame, "fromDay": $from_day, "toDay": $to_day, "groupBy": $group_by} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"timeFrame": $time_frame, "fromDay": $from_day, "toDay": $to_day, "groupBy": $group_by} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve statistics about a subset of conversions for a timeframe with conversions data
@@ -845,10 +1079,21 @@ export def "aggregated-summary-conversions get" [
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "timeFrame" $time_frame "scalar") (serialize-qp "fromDay" $from_day "scalar") (serialize-qp "toDay" $to_day "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "sortBy" $sort_by "scalar") (serialize-qp "sortDirection" $sort_direction "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "textSearch" $text_search "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/aggregated/summary/conversions" $qp)
+  let full_url = (build-url $base "/aggregated/summary/conversions" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"timeFrame": $time_frame, "fromDay": $from_day, "toDay": $to_day, "status": $status, "sortBy": $sort_by, "sortDirection": $sort_direction, "offset": $offset, "limit": $limit, "textSearch": $text_search} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"timeFrame": $time_frame, "fromDay": $from_day, "toDay": $to_day, "status": $status, "sortBy": $sort_by, "sortDirection": $sort_direction, "offset": $offset, "limit": $limit, "textSearch": $text_search} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve statistics about a subset of datapoints for a timeframe with datapoints data
@@ -883,10 +1128,21 @@ export def "aggregated-summary-datapoints get" [
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "timeFrame" $time_frame "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "fromDay" $from_day "scalar") (serialize-qp "toDay" $to_day "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "favourite" $favourite "scalar") (serialize-qp "sortBy" $sort_by "scalar") (serialize-qp "sortDirection" $sort_direction "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "groupId" $group_id "scalar") (serialize-qp "textSearch" $text_search "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/aggregated/summary/datapoints" $qp)
+  let full_url = (build-url $base "/aggregated/summary/datapoints" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"timeFrame": $time_frame, "type": $type, "fromDay": $from_day, "toDay": $to_day, "status": $status, "tag": $tag, "favourite": $favourite, "sortBy": $sort_by, "sortDirection": $sort_direction, "offset": $offset, "limit": $limit, "groupId": $group_id, "textSearch": $text_search} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"timeFrame": $time_frame, "type": $type, "fromDay": $from_day, "toDay": $to_day, "status": $status, "tag": $tag, "favourite": $favourite, "sortBy": $sort_by, "sortDirection": $sort_direction, "offset": $offset, "limit": $limit, "groupId": $group_id, "textSearch": $text_search} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve statistics about a subset of groups for a timeframe with groups data
@@ -919,10 +1175,21 @@ export def "aggregated-summary-groups get" [
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "timeFrame" $time_frame "scalar") (serialize-qp "fromDay" $from_day "scalar") (serialize-qp "toDay" $to_day "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "favourite" $favourite "scalar") (serialize-qp "sortBy" $sort_by "scalar") (serialize-qp "sortDirection" $sort_direction "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "textSearch" $text_search "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/aggregated/summary/groups" $qp)
+  let full_url = (build-url $base "/aggregated/summary/groups" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"timeFrame": $time_frame, "fromDay": $from_day, "toDay": $to_day, "status": $status, "tag": $tag, "favourite": $favourite, "sortBy": $sort_by, "sortDirection": $sort_direction, "offset": $offset, "limit": $limit, "textSearch": $text_search} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"timeFrame": $time_frame, "fromDay": $from_day, "toDay": $to_day, "status": $status, "tag": $tag, "favourite": $favourite, "sortBy": $sort_by, "sortDirection": $sort_direction, "offset": $offset, "limit": $limit, "textSearch": $text_search} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve the latest list of events of this account. Limited to last 100.
@@ -949,10 +1216,21 @@ export def "clickstream get-click-stream" [
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "group" $group "scalar") (serialize-qp "datapoint" $datapoint "scalar") (serialize-qp "conversion" $conversion "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/clickstream" $qp)
+  let full_url = (build-url $base "/clickstream" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"group": $group, "datapoint": $datapoint, "conversion": $conversion, "pageSize": $page_size, "filter": $filter} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"group": $group, "datapoint": $datapoint, "conversion": $conversion, "pageSize": $page_size, "filter": $filter} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve a list of conversions
@@ -980,10 +1258,21 @@ export def "conversions list" [
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "textSearch" $text_search "scalar") (serialize-qp "createdAfter" $created_after "scalar") (serialize-qp "createdBefore" $created_before "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/conversions" $qp)
+  let full_url = (build-url $base "/conversions" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"offset": $offset, "limit": $limit, "status": $status, "textSearch": $text_search, "createdAfter": $created_after, "createdBefore": $created_before} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"offset": $offset, "limit": $limit, "status": $status, "textSearch": $text_search, "createdAfter": $created_after, "createdBefore": $created_before} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a conversion
@@ -1013,12 +1302,23 @@ export def "conversions update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/conversions")
+  let full_url = (build-url $base "/conversions" $auth.query)
   let req_body = {"code": $code, "creationDate": $creation_date, "deleted": $deleted, "description": $description, "id": $id, "name": $name, "protocol": $protocol, "value": $value} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve statistics about this customer for a timeframe related to a subset of conversions grouped by some temporal entity (day/week/month)
@@ -1045,10 +1345,21 @@ export def "conversions-aggregated-list get-statistics-list" [
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "timeFrame" $time_frame "scalar") (serialize-qp "fromDay" $from_day "scalar") (serialize-qp "toDay" $to_day "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "groupBy" $group_by "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/conversions/aggregated/list" $qp)
+  let full_url = (build-url $base "/conversions/aggregated/list" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"timeFrame": $time_frame, "fromDay": $from_day, "toDay": $to_day, "status": $status, "groupBy": $group_by} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"timeFrame": $time_frame, "fromDay": $from_day, "toDay": $to_day, "status": $status, "groupBy": $group_by} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve a count of conversions
@@ -1074,10 +1385,21 @@ export def "conversions-count get" [
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "status" $status "scalar") (serialize-qp "textSearch" $text_search "scalar") (serialize-qp "createdAfter" $created_after "scalar") (serialize-qp "createdBefore" $created_before "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/conversions/count" $qp)
+  let full_url = (build-url $base "/conversions/count" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"status": $status, "textSearch": $text_search, "createdAfter": $created_after, "createdBefore": $created_before} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"status": $status, "textSearch": $text_search, "createdAfter": $created_after, "createdBefore": $created_before} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Delete conversion specified by id
@@ -1100,10 +1422,21 @@ export def "conversions delete" [
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   if ($conversion_id | is-empty) { error make --unspanned { msg: "path parameter 'conversionId' must be non-empty" } }
-  let full_url = (build-url $base ({conversion_id: (encode-path-segment $conversion_id)} | format pattern "/conversions/{conversion_id}"))
+  let full_url = (build-url $base ({conversion_id: (encode-path-segment $conversion_id)} | format pattern "/conversions/{conversion_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve conversion specified by id
@@ -1125,10 +1458,21 @@ export def "conversions get" [
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   if ($conversion_id | is-empty) { error make --unspanned { msg: "path parameter 'conversionId' must be non-empty" } }
-  let full_url = (build-url $base ({conversion_id: (encode-path-segment $conversion_id)} | format pattern "/conversions/{conversion_id}"))
+  let full_url = (build-url $base ({conversion_id: (encode-path-segment $conversion_id)} | format pattern "/conversions/{conversion_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update conversion specified by id
@@ -1160,12 +1504,23 @@ export def "conversions create" [
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   if ($conversion_id | is-empty) { error make --unspanned { msg: "path parameter 'conversionId' must be non-empty" } }
-  let full_url = (build-url $base ({conversion_id: (encode-path-segment $conversion_id)} | format pattern "/conversions/{conversion_id}"))
+  let full_url = (build-url $base ({conversion_id: (encode-path-segment $conversion_id)} | format pattern "/conversions/{conversion_id}") $auth.query)
   let req_body = {"code": $code, "creationDate": $creation_date, "deleted": $deleted, "description": $description, "id": $id, "name": $name, "protocol": $protocol, "value": $value} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve statistics about this conversion for a timeframe
@@ -1195,10 +1550,21 @@ export def "conversions-aggregated get-statistics-single" [
   let base = ($base_url | default $BASE_URL)
   if ($conversion_id | is-empty) { error make --unspanned { msg: "path parameter 'conversionId' must be non-empty" } }
   let qp = [(serialize-qp "timeFrame" $time_frame "scalar") (serialize-qp "fromDay" $from_day "scalar") (serialize-qp "toDay" $to_day "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "favourite" $favourite "scalar") (serialize-qp "hourly" $hourly "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({conversion_id: (encode-path-segment $conversion_id)} | format pattern "/conversions/{conversion_id}/aggregated") $qp)
+  let full_url = (build-url $base ({conversion_id: (encode-path-segment $conversion_id)} | format pattern "/conversions/{conversion_id}/aggregated") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"timeFrame": $time_frame, "fromDay": $from_day, "toDay": $to_day, "tag": $tag, "favourite": $favourite, "hourly": $hourly} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"timeFrame": $time_frame, "fromDay": $from_day, "toDay": $to_day, "tag": $tag, "favourite": $favourite, "hourly": $hourly} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve statistics about this conversion for a timeframe grouped by some temporal entity (day/week/month)
@@ -1226,10 +1592,21 @@ export def "conversions-aggregated-list get-statistics" [
   let base = ($base_url | default $BASE_URL)
   if ($conversion_id | is-empty) { error make --unspanned { msg: "path parameter 'conversionId' must be non-empty" } }
   let qp = [(serialize-qp "timeFrame" $time_frame "scalar") (serialize-qp "fromDay" $from_day "scalar") (serialize-qp "toDay" $to_day "scalar") (serialize-qp "groupBy" $group_by "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({conversion_id: (encode-path-segment $conversion_id)} | format pattern "/conversions/{conversion_id}/aggregated/list") $qp)
+  let full_url = (build-url $base ({conversion_id: (encode-path-segment $conversion_id)} | format pattern "/conversions/{conversion_id}/aggregated/list") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"timeFrame": $time_frame, "fromDay": $from_day, "toDay": $to_day, "groupBy": $group_by} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"timeFrame": $time_frame, "fromDay": $from_day, "toDay": $to_day, "groupBy": $group_by} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve a list of datapoints connected to this conversion
@@ -1261,10 +1638,21 @@ export def "conversions-datapoints get" [
   let base = ($base_url | default $BASE_URL)
   if ($conversion_id | is-empty) { error make --unspanned { msg: "path parameter 'conversionId' must be non-empty" } }
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "tags" $tags "scalar") (serialize-qp "textSearch" $text_search "scalar") (serialize-qp "createdAfter" $created_after "scalar") (serialize-qp "createdBefore" $created_before "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({conversion_id: (encode-path-segment $conversion_id)} | format pattern "/conversions/{conversion_id}/datapoints") $qp)
+  let full_url = (build-url $base ({conversion_id: (encode-path-segment $conversion_id)} | format pattern "/conversions/{conversion_id}/datapoints") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"offset": $offset, "limit": $limit, "type": $type, "status": $status, "tags": $tags, "textSearch": $text_search, "createdAfter": $created_after, "createdBefore": $created_before} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"offset": $offset, "limit": $limit, "type": $type, "status": $status, "tags": $tags, "textSearch": $text_search, "createdAfter": $created_after, "createdBefore": $created_before} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Modify the association between a conversion and multiple datapoints
@@ -1289,12 +1677,23 @@ export def "conversions-datapoints-batch-patch update" [
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   if ($conversion_id | is-empty) { error make --unspanned { msg: "path parameter 'conversionId' must be non-empty" } }
-  let full_url = (build-url $base ({conversion_id: (encode-path-segment $conversion_id)} | format pattern "/conversions/{conversion_id}/datapoints/batch/patch"))
+  let full_url = (build-url $base ({conversion_id: (encode-path-segment $conversion_id)} | format pattern "/conversions/{conversion_id}/datapoints/batch/patch") $auth.query)
   let req_body = {"PatchRequests": $patch_requests} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve a count of datapoints connected to this conversion
@@ -1324,10 +1723,21 @@ export def "conversions-datapoints-count get" [
   let base = ($base_url | default $BASE_URL)
   if ($conversion_id | is-empty) { error make --unspanned { msg: "path parameter 'conversionId' must be non-empty" } }
   let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "tags" $tags "scalar") (serialize-qp "textSearch" $text_search "scalar") (serialize-qp "createdAfter" $created_after "scalar") (serialize-qp "createdBefore" $created_before "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({conversion_id: (encode-path-segment $conversion_id)} | format pattern "/conversions/{conversion_id}/datapoints/count") $qp)
+  let full_url = (build-url $base ({conversion_id: (encode-path-segment $conversion_id)} | format pattern "/conversions/{conversion_id}/datapoints/count") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"type": $type, "status": $status, "tags": $tags, "textSearch": $text_search, "createdAfter": $created_after, "createdBefore": $created_before} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"type": $type, "status": $status, "tags": $tags, "textSearch": $text_search, "createdAfter": $created_after, "createdBefore": $created_before} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Modify the association between a conversion and a datapoint
@@ -1354,12 +1764,23 @@ export def "conversions-datapoints-patch update" [
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   if ($conversion_id | is-empty) { error make --unspanned { msg: "path parameter 'conversionId' must be non-empty" } }
-  let full_url = (build-url $base ({conversion_id: (encode-path-segment $conversion_id)} | format pattern "/conversions/{conversion_id}/datapoints/patch"))
+  let full_url = (build-url $base ({conversion_id: (encode-path-segment $conversion_id)} | format pattern "/conversions/{conversion_id}/datapoints/patch") $auth.query)
   let req_body = {"Action": $action, "Id": $id, "ReplaceId": $replace_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve the list of events related to this conversion.
@@ -1389,10 +1810,21 @@ export def "conversions-hits get" [
   let base = ($base_url | default $BASE_URL)
   if ($conversion_id | is-empty) { error make --unspanned { msg: "path parameter 'conversionId' must be non-empty" } }
   let qp = [(serialize-qp "timeframe" $timeframe "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "fromDay" $from_day "scalar") (serialize-qp "toDay" $to_day "scalar") (serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({conversion_id: (encode-path-segment $conversion_id)} | format pattern "/conversions/{conversion_id}/hits") $qp)
+  let full_url = (build-url $base ({conversion_id: (encode-path-segment $conversion_id)} | format pattern "/conversions/{conversion_id}/hits") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"timeframe": $timeframe, "limit": $limit, "offset": $offset, "fromDay": $from_day, "toDay": $to_day, "filter": $filter} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"timeframe": $timeframe, "limit": $limit, "offset": $offset, "fromDay": $from_day, "toDay": $to_day, "filter": $filter} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Fast patch the "notes" field of a conversion
@@ -1417,12 +1849,23 @@ export def "conversions-notes update" [
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   if ($conversion_id | is-empty) { error make --unspanned { msg: "path parameter 'conversionId' must be non-empty" } }
-  let full_url = (build-url $base ({conversion_id: (encode-path-segment $conversion_id)} | format pattern "/conversions/{conversion_id}/notes"))
+  let full_url = (build-url $base ({conversion_id: (encode-path-segment $conversion_id)} | format pattern "/conversions/{conversion_id}/notes") $auth.query)
   let req_body = {"Text": $text} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # List of all the datapoints associated to the user
@@ -1455,10 +1898,21 @@ export def "datapoints get-data-points" [
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "tags" $tags "scalar") (serialize-qp "textSearch" $text_search "scalar") (serialize-qp "onlyFavorites" $only_favorites "scalar") (serialize-qp "sortBy" $sort_by "scalar") (serialize-qp "sortDirection" $sort_direction "scalar") (serialize-qp "createdAfter" $created_after "scalar") (serialize-qp "createdBefore" $created_before "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/datapoints" $qp)
+  let full_url = (build-url $base "/datapoints" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"offset": $offset, "limit": $limit, "type": $type, "status": $status, "tags": $tags, "textSearch": $text_search, "onlyFavorites": $only_favorites, "sortBy": $sort_by, "sortDirection": $sort_direction, "createdAfter": $created_after, "createdBefore": $created_before} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"offset": $offset, "limit": $limit, "type": $type, "status": $status, "tags": $tags, "textSearch": $text_search, "onlyFavorites": $only_favorites, "sortBy": $sort_by, "sortDirection": $sort_direction, "createdAfter": $created_after, "createdBefore": $created_before} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a datapoint
@@ -1513,12 +1967,23 @@ export def "datapoints update-data-points" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/datapoints")
+  let full_url = (build-url $base "/datapoints" $auth.query)
   let req_body = {"creationDate": $creation_date, "encodeIp": $encode_ip, "fifthConversionId": $fifth_conversion_id, "fifthConversionName": $fifth_conversion_name, "firstConversionId": $first_conversion_id, "firstConversionName": $first_conversion_name, "fourthConversionId": $fourth_conversion_id, "fourthConversionName": $fourth_conversion_name, "groupId": $group_id, "groupName": $group_name, "id": $id, "isPublic": $is_public, "isSecured": $is_secured, "lightTracking": $light_tracking, "name": $name, "notes": $notes, "preferred": $preferred, "redirectOnly": $redirect_only, "secondConversionId": $second_conversion_id, "secondConversionName": $second_conversion_name, "status": $status, "tags": $tags, "thirdConversionId": $third_conversion_id, "thirdConversionName": $third_conversion_name, "title": $title, "trackingCode": $tracking_code, "type": $type, "typeTL": $type_tl, "typeTP": $type_tp, "writePermited": $write_permited} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve statistics about this customer for a timeframe by groups
@@ -1548,10 +2013,21 @@ export def "datapoints-aggregated list" [
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "timeFrame" $time_frame "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "fromDay" $from_day "scalar") (serialize-qp "toDay" $to_day "scalar") (serialize-qp "hourly" $hourly "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "favourite" $favourite "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/datapoints/aggregated" $qp)
+  let full_url = (build-url $base "/datapoints/aggregated" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"timeFrame": $time_frame, "type": $type, "fromDay": $from_day, "toDay": $to_day, "hourly": $hourly, "status": $status, "tag": $tag, "favourite": $favourite} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"timeFrame": $time_frame, "type": $type, "fromDay": $from_day, "toDay": $to_day, "hourly": $hourly, "status": $status, "tag": $tag, "favourite": $favourite} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve statistics about all datapoints of this customer for a timeframe grouped by some temporal entity (day/week/month)
@@ -1581,10 +2057,21 @@ export def "datapoints-aggregated-list get-data-points-statistics-list" [
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "timeFrame" $time_frame "scalar") (serialize-qp "fromDay" $from_day "scalar") (serialize-qp "toDay" $to_day "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "favourite" $favourite "scalar") (serialize-qp "groupBy" $group_by "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/datapoints/aggregated/list" $qp)
+  let full_url = (build-url $base "/datapoints/aggregated/list" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"type": $type, "timeFrame": $time_frame, "fromDay": $from_day, "toDay": $to_day, "status": $status, "tag": $tag, "favourite": $favourite, "groupBy": $group_by} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"type": $type, "timeFrame": $time_frame, "fromDay": $from_day, "toDay": $to_day, "status": $status, "tag": $tag, "favourite": $favourite, "groupBy": $group_by} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Delete multiple datapoints
@@ -1608,12 +2095,23 @@ export def "datapoints-batch delete-data-points" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/datapoints/batch")
+  let full_url = (build-url $base "/datapoints/batch" $auth.query)
   let req_body = {"Entities": $entities} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Update multiple datapoints
@@ -1637,12 +2135,23 @@ export def "datapoints-batch create-data-points" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/datapoints/batch")
+  let full_url = (build-url $base "/datapoints/batch" $auth.query)
   let req_body = {"List": $list} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Create multiple datapoints
@@ -1666,12 +2175,23 @@ export def "datapoints-batch update-data-points" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/datapoints/batch")
+  let full_url = (build-url $base "/datapoints/batch" $auth.query)
   let req_body = {"List": $list} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Count the datapoints associated to the user
@@ -1700,10 +2220,21 @@ export def "datapoints-count get-data-points" [
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "tags" $tags "scalar") (serialize-qp "textSearch" $text_search "scalar") (serialize-qp "onlyFavorites" $only_favorites "scalar") (serialize-qp "createdAfter" $created_after "scalar") (serialize-qp "createdBefore" $created_before "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/datapoints/count" $qp)
+  let full_url = (build-url $base "/datapoints/count" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"type": $type, "status": $status, "tags": $tags, "textSearch": $text_search, "onlyFavorites": $only_favorites, "createdAfter": $created_after, "createdBefore": $created_before} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"type": $type, "status": $status, "tags": $tags, "textSearch": $text_search, "onlyFavorites": $only_favorites, "createdAfter": $created_after, "createdBefore": $created_before} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Delete a datapoint
@@ -1726,10 +2257,21 @@ export def "datapoints delete-data-points" [
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/datapoints/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/datapoints/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Get a datapoint
@@ -1751,10 +2293,21 @@ export def "datapoints get" [
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/datapoints/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/datapoints/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update a datapoint
@@ -1811,12 +2364,23 @@ export def "datapoints create-data-points" [
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/datapoints/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/datapoints/{id}") $auth.query)
   let req_body = {"creationDate": $creation_date, "encodeIp": $encode_ip, "fifthConversionId": $fifth_conversion_id, "fifthConversionName": $fifth_conversion_name, "firstConversionId": $first_conversion_id, "firstConversionName": $first_conversion_name, "fourthConversionId": $fourth_conversion_id, "fourthConversionName": $fourth_conversion_name, "groupId": $group_id, "groupName": $group_name, "id": $body_id, "isPublic": $is_public, "isSecured": $is_secured, "lightTracking": $light_tracking, "name": $name, "notes": $notes, "preferred": $preferred, "redirectOnly": $redirect_only, "secondConversionId": $second_conversion_id, "secondConversionName": $second_conversion_name, "status": $status, "tags": $tags, "thirdConversionId": $third_conversion_id, "thirdConversionName": $third_conversion_name, "title": $title, "trackingCode": $tracking_code, "type": $type, "typeTL": $type_tl, "typeTP": $type_tp, "writePermited": $write_permited} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve statistics about this datapoint for a timeframe
@@ -1844,10 +2408,21 @@ export def "datapoints-aggregated get-data-points-statistics-single" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "timeFrame" $time_frame "scalar") (serialize-qp "fromDay" $from_day "scalar") (serialize-qp "toDay" $to_day "scalar") (serialize-qp "hourly" $hourly "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/datapoints/{id}/aggregated") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/datapoints/{id}/aggregated") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"timeFrame": $time_frame, "fromDay": $from_day, "toDay": $to_day, "hourly": $hourly} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"timeFrame": $time_frame, "fromDay": $from_day, "toDay": $to_day, "hourly": $hourly} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve statistics about this datapoint for a timeframe grouped by some temporal entity (day/week/month)
@@ -1875,10 +2450,21 @@ export def "datapoints-aggregated-list get-data-points-statistics" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "timeFrame" $time_frame "scalar") (serialize-qp "fromDay" $from_day "scalar") (serialize-qp "toDay" $to_day "scalar") (serialize-qp "groupBy" $group_by "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/datapoints/{id}/aggregated/list") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/datapoints/{id}/aggregated/list") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"timeFrame": $time_frame, "fromDay": $from_day, "toDay": $to_day, "groupBy": $group_by} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"timeFrame": $time_frame, "fromDay": $from_day, "toDay": $to_day, "groupBy": $group_by} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Fast switch the "favourite" field of a datapoint
@@ -1901,10 +2487,21 @@ export def "datapoints-favourite update-data-points" [
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/datapoints/{id}/favourite"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/datapoints/{id}/favourite") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve the list of events related to this datapoint.
@@ -1934,10 +2531,21 @@ export def "datapoints-hits get-data-points" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "timeframe" $timeframe "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "fromDay" $from_day "scalar") (serialize-qp "toDay" $to_day "scalar") (serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/datapoints/{id}/hits") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/datapoints/{id}/hits") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"timeframe": $timeframe, "limit": $limit, "offset": $offset, "fromDay": $from_day, "toDay": $to_day, "filter": $filter} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"timeframe": $timeframe, "limit": $limit, "offset": $offset, "fromDay": $from_day, "toDay": $to_day, "filter": $filter} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Fast patch the "notes" field of a datapoint
@@ -1962,12 +2570,23 @@ export def "datapoints-notes update-data-points" [
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/datapoints/{id}/notes"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/datapoints/{id}/notes") $auth.query)
   let req_body = {"Text": $text} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve a list of domains
@@ -1993,10 +2612,21 @@ export def "domains list" [
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "name" $name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/domains" $qp)
+  let full_url = (build-url $base "/domains" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"offset": $offset, "limit": $limit, "type": $type, "name": $name} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"offset": $offset, "limit": $limit, "type": $type, "name": $name} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a domain
@@ -2023,12 +2653,23 @@ export def "domains update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/domains")
+  let full_url = (build-url $base "/domains" $auth.query)
   let req_body = {"custom404": $custom404, "customHomepage": $custom_homepage, "id": $id, "name": $name, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve count of domains
@@ -2052,10 +2693,21 @@ export def "domains-count get" [
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "name" $name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/domains/count" $qp)
+  let full_url = (build-url $base "/domains/count" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"type": $type, "name": $name} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"type": $type, "name": $name} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Delete a domain
@@ -2078,10 +2730,21 @@ export def "domains delete" [
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/domains/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/domains/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Get a domain
@@ -2103,10 +2766,21 @@ export def "domains get" [
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/domains/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/domains/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update a domain
@@ -2135,12 +2809,23 @@ export def "domains update-by-id" [
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/domains/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/domains/{id}") $auth.query)
   let req_body = {"custom404": $custom404, "customHomepage": $custom_homepage, "id": $body_id, "name": $name, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # List of all the groups associated to the user.
@@ -2170,10 +2855,21 @@ export def "groups list" [
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "tags" $tags "scalar") (serialize-qp "textSearch" $text_search "scalar") (serialize-qp "createdAfter" $created_after "scalar") (serialize-qp "createdBefore" $created_before "scalar") (serialize-qp "write" $write "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/groups" $qp)
+  let full_url = (build-url $base "/groups" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"offset": $offset, "limit": $limit, "status": $status, "tags": $tags, "textSearch": $text_search, "createdAfter": $created_after, "createdBefore": $created_before, "write": $write} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"offset": $offset, "limit": $limit, "status": $status, "tags": $tags, "textSearch": $text_search, "createdAfter": $created_after, "createdBefore": $created_before, "write": $write} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a group
@@ -2206,12 +2902,23 @@ export def "groups update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/groups")
+  let full_url = (build-url $base "/groups" $auth.query)
   let req_body = {"creationDate": $creation_date, "deleted": $deleted, "id": $id, "isPublic": $is_public, "name": $name, "notes": $notes, "preferred": $preferred, "redirectOnly": $redirect_only, "tags": $tags, "writePermited": $write_permited} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve statistics about this customer for a timeframe by groups
@@ -2240,10 +2947,21 @@ export def "groups-aggregated list" [
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "timeFrame" $time_frame "scalar") (serialize-qp "fromDay" $from_day "scalar") (serialize-qp "toDay" $to_day "scalar") (serialize-qp "hourly" $hourly "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "favourite" $favourite "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/groups/aggregated" $qp)
+  let full_url = (build-url $base "/groups/aggregated" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"timeFrame": $time_frame, "fromDay": $from_day, "toDay": $to_day, "hourly": $hourly, "status": $status, "tag": $tag, "favourite": $favourite} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"timeFrame": $time_frame, "fromDay": $from_day, "toDay": $to_day, "hourly": $hourly, "status": $status, "tag": $tag, "favourite": $favourite} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve statistics about all groups of this customer for a timeframe grouped by some temporal entity (day/week/month)
@@ -2272,10 +2990,21 @@ export def "groups-aggregated-list get-statistics-list" [
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "timeFrame" $time_frame "scalar") (serialize-qp "fromDay" $from_day "scalar") (serialize-qp "toDay" $to_day "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "favourite" $favourite "scalar") (serialize-qp "groupBy" $group_by "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/groups/aggregated/list" $qp)
+  let full_url = (build-url $base "/groups/aggregated/list" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"timeFrame": $time_frame, "fromDay": $from_day, "toDay": $to_day, "status": $status, "tag": $tag, "favourite": $favourite, "groupBy": $group_by} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"timeFrame": $time_frame, "fromDay": $from_day, "toDay": $to_day, "status": $status, "tag": $tag, "favourite": $favourite, "groupBy": $group_by} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Count the groups associated to the user.
@@ -2303,10 +3032,21 @@ export def "groups-count get" [
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "status" $status "scalar") (serialize-qp "tags" $tags "scalar") (serialize-qp "textSearch" $text_search "scalar") (serialize-qp "createdAfter" $created_after "scalar") (serialize-qp "createdBefore" $created_before "scalar") (serialize-qp "write" $write "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/groups/count" $qp)
+  let full_url = (build-url $base "/groups/count" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"status": $status, "tags": $tags, "textSearch": $text_search, "createdAfter": $created_after, "createdBefore": $created_before, "write": $write} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"status": $status, "tags": $tags, "textSearch": $text_search, "createdAfter": $created_after, "createdBefore": $created_before, "write": $write} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Delete group specified by id
@@ -2329,10 +3069,21 @@ export def "groups delete" [
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/groups/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/groups/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Get a group
@@ -2354,10 +3105,21 @@ export def "groups get" [
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/groups/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/groups/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update a group
@@ -2392,12 +3154,23 @@ export def "groups create" [
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/groups/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/groups/{id}") $auth.query)
   let req_body = {"creationDate": $creation_date, "deleted": $deleted, "id": $body_id, "isPublic": $is_public, "name": $name, "notes": $notes, "preferred": $preferred, "redirectOnly": $redirect_only, "tags": $tags, "writePermited": $write_permited} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve statistics about this group for a timeframe
@@ -2425,10 +3198,21 @@ export def "groups-aggregated get-statistics-single" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "timeFrame" $time_frame "scalar") (serialize-qp "fromDay" $from_day "scalar") (serialize-qp "toDay" $to_day "scalar") (serialize-qp "hourly" $hourly "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/groups/{id}/aggregated") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/groups/{id}/aggregated") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"timeFrame": $time_frame, "fromDay": $from_day, "toDay": $to_day, "hourly": $hourly} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"timeFrame": $time_frame, "fromDay": $from_day, "toDay": $to_day, "hourly": $hourly} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve statistics about this group for a timeframe grouped by some temporal entity (day/week/month)
@@ -2456,10 +3240,21 @@ export def "groups-aggregated-list get-statistics" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "timeFrame" $time_frame "scalar") (serialize-qp "fromDay" $from_day "scalar") (serialize-qp "toDay" $to_day "scalar") (serialize-qp "groupBy" $group_by "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/groups/{id}/aggregated/list") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/groups/{id}/aggregated/list") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"timeFrame": $time_frame, "fromDay": $from_day, "toDay": $to_day, "groupBy": $group_by} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"timeFrame": $time_frame, "fromDay": $from_day, "toDay": $to_day, "groupBy": $group_by} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve statistics about a subset of datapoints for a timeframe with datapoints data
@@ -2495,10 +3290,21 @@ export def "groups-aggregated-summary get-datapoints" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "timeFrame" $time_frame "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "fromDay" $from_day "scalar") (serialize-qp "toDay" $to_day "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "favourite" $favourite "scalar") (serialize-qp "sortBy" $sort_by "scalar") (serialize-qp "sortDirection" $sort_direction "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "textSearch" $text_search "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/groups/{id}/aggregated/summary") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/groups/{id}/aggregated/summary") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"timeFrame": $time_frame, "type": $type, "fromDay": $from_day, "toDay": $to_day, "status": $status, "tag": $tag, "favourite": $favourite, "sortBy": $sort_by, "sortDirection": $sort_direction, "offset": $offset, "limit": $limit, "textSearch": $text_search} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"timeFrame": $time_frame, "type": $type, "fromDay": $from_day, "toDay": $to_day, "status": $status, "tag": $tag, "favourite": $favourite, "sortBy": $sort_by, "sortDirection": $sort_direction, "offset": $offset, "limit": $limit, "textSearch": $text_search} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List of all the datapoints associated to the user in this group.
@@ -2533,10 +3339,21 @@ export def "groups-datapoints get" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "tags" $tags "scalar") (serialize-qp "textSearch" $text_search "scalar") (serialize-qp "onlyFavorites" $only_favorites "scalar") (serialize-qp "sortBy" $sort_by "scalar") (serialize-qp "sortDirection" $sort_direction "scalar") (serialize-qp "createdAfter" $created_after "scalar") (serialize-qp "createdBefore" $created_before "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/groups/{id}/datapoints") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/groups/{id}/datapoints") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"offset": $offset, "limit": $limit, "type": $type, "status": $status, "tags": $tags, "textSearch": $text_search, "onlyFavorites": $only_favorites, "sortBy": $sort_by, "sortDirection": $sort_direction, "createdAfter": $created_after, "createdBefore": $created_before} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"offset": $offset, "limit": $limit, "type": $type, "status": $status, "tags": $tags, "textSearch": $text_search, "onlyFavorites": $only_favorites, "sortBy": $sort_by, "sortDirection": $sort_direction, "createdAfter": $created_after, "createdBefore": $created_before} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a datapoint in this group
@@ -2593,12 +3410,23 @@ export def "groups-datapoints update" [
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/groups/{id}/datapoints"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/groups/{id}/datapoints") $auth.query)
   let req_body = {"creationDate": $creation_date, "encodeIp": $encode_ip, "fifthConversionId": $fifth_conversion_id, "fifthConversionName": $fifth_conversion_name, "firstConversionId": $first_conversion_id, "firstConversionName": $first_conversion_name, "fourthConversionId": $fourth_conversion_id, "fourthConversionName": $fourth_conversion_name, "groupId": $group_id, "groupName": $group_name, "id": $body_id, "isPublic": $is_public, "isSecured": $is_secured, "lightTracking": $light_tracking, "name": $name, "notes": $notes, "preferred": $preferred, "redirectOnly": $redirect_only, "secondConversionId": $second_conversion_id, "secondConversionName": $second_conversion_name, "status": $status, "tags": $tags, "thirdConversionId": $third_conversion_id, "thirdConversionName": $third_conversion_name, "title": $title, "trackingCode": $tracking_code, "type": $type, "typeTL": $type_tl, "typeTP": $type_tp, "writePermited": $write_permited} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Count the datapoints associated to the user in this group.
@@ -2629,10 +3457,21 @@ export def "groups-datapoints-count get" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "tags" $tags "scalar") (serialize-qp "textSearch" $text_search "scalar") (serialize-qp "onlyFavorites" $only_favorites "scalar") (serialize-qp "createdAfter" $created_after "scalar") (serialize-qp "createdBefore" $created_before "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/groups/{id}/datapoints/count") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/groups/{id}/datapoints/count") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"type": $type, "status": $status, "tags": $tags, "textSearch": $text_search, "onlyFavorites": $only_favorites, "createdAfter": $created_after, "createdBefore": $created_before} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"type": $type, "status": $status, "tags": $tags, "textSearch": $text_search, "onlyFavorites": $only_favorites, "createdAfter": $created_after, "createdBefore": $created_before} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Fast switch the "favourite" field of a group
@@ -2655,10 +3494,21 @@ export def "groups-favourite update" [
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/groups/{id}/favourite"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/groups/{id}/favourite") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve the list of events related to this group.
@@ -2688,10 +3538,21 @@ export def "groups-hits get" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "timeframe" $timeframe "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "fromDay" $from_day "scalar") (serialize-qp "toDay" $to_day "scalar") (serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/groups/{id}/hits") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/groups/{id}/hits") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"timeframe": $timeframe, "limit": $limit, "offset": $offset, "fromDay": $from_day, "toDay": $to_day, "filter": $filter} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"timeframe": $timeframe, "limit": $limit, "offset": $offset, "fromDay": $from_day, "toDay": $to_day, "filter": $filter} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Fast patch the "notes" field of a group
@@ -2716,12 +3577,23 @@ export def "groups-notes update" [
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/groups/{id}/notes"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/groups/{id}/notes") $auth.query)
   let req_body = {"Text": $text} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve the list of events related to this account.
@@ -2749,10 +3621,21 @@ export def "hits get" [
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "timeframe" $timeframe "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "fromDay" $from_day "scalar") (serialize-qp "toDay" $to_day "scalar") (serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/hits" $qp)
+  let full_url = (build-url $base "/hits" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"timeframe": $timeframe, "limit": $limit, "offset": $offset, "fromDay": $from_day, "toDay": $to_day, "filter": $filter} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"timeframe": $timeframe, "limit": $limit, "offset": $offset, "fromDay": $from_day, "toDay": $to_day, "filter": $filter} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve current account data
@@ -2773,10 +3656,21 @@ export def "me get" [
 ]: nothing -> record<boGoVal: string, bonusClicks: int, companyName: string, companyRole: string, email: string, firstName: string, lastName: string, phone: string, redirectOnly: bool, registrationDate: string, timeframeMinDate: string, timezone: int, timezonename: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/me")
+  let full_url = (build-url $base "/me" $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve current account plan
@@ -2797,10 +3691,21 @@ export def "me-plan get" [
 ]: nothing -> record<allowedPersonalDomains: int, allowedPersonalUrls: int, billingPeriodEnd: string, billingPeriodStart: string, bonusMonthlyEvents: int, maximumDatapoints: int, maximumGuests: int, monthlyEvents: int, name: string, price: float, profileId: int, recurring: bool, recurringPeriod: int, usedDatapoints: int, usedMonthlyEvents: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/me/plan")
+  let full_url = (build-url $base "/me/plan" $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List of all the retargeting scripts associated to the user
@@ -2824,10 +3729,21 @@ export def "retargeting list" [
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/retargeting" $qp)
+  let full_url = (build-url $base "/retargeting" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"offset": $offset, "limit": $limit} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"offset": $offset, "limit": $limit} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Creates a retargeting script
@@ -2852,12 +3768,23 @@ export def "retargeting update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/retargeting")
+  let full_url = (build-url $base "/retargeting" $auth.query)
   let req_body = {"id": $id, "name": $name, "script": $script} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve count of retargeting scripts
@@ -2878,10 +3805,21 @@ export def "retargeting-count get" [
 ]: nothing -> record<count: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/retargeting/count")
+  let full_url = (build-url $base "/retargeting/count" $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes a retargeting script (and remove associations)
@@ -2904,10 +3842,21 @@ export def "retargeting delete" [
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/retargeting/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/retargeting/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Get a retargeting script object
@@ -2929,10 +3878,21 @@ export def "retargeting get" [
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/retargeting/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/retargeting/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates a retargeting script
@@ -2959,12 +3919,23 @@ export def "retargeting create" [
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/retargeting/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/retargeting/{id}") $auth.query)
   let req_body = {"id": $body_id, "name": $name, "script": $script} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # List of all the datapoints associated to the retargeting script.
@@ -2998,10 +3969,21 @@ export def "retargeting-datapoints get" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "tags" $tags "scalar") (serialize-qp "textSearch" $text_search "scalar") (serialize-qp "onlyFavorites" $only_favorites "scalar") (serialize-qp "sortBy" $sort_by "scalar") (serialize-qp "sortDirection" $sort_direction "scalar") (serialize-qp "createdAfter" $created_after "scalar") (serialize-qp "createdBefore" $created_before "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/retargeting/{id}/datapoints") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/retargeting/{id}/datapoints") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"offset": $offset, "limit": $limit, "status": $status, "tags": $tags, "textSearch": $text_search, "onlyFavorites": $only_favorites, "sortBy": $sort_by, "sortDirection": $sort_direction, "createdAfter": $created_after, "createdBefore": $created_before} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"offset": $offset, "limit": $limit, "status": $status, "tags": $tags, "textSearch": $text_search, "onlyFavorites": $only_favorites, "sortBy": $sort_by, "sortDirection": $sort_direction, "createdAfter": $created_after, "createdBefore": $created_before} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Count the datapoints associated to the retargeting script.
@@ -3031,10 +4013,21 @@ export def "retargeting-datapoints-count get" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "status" $status "scalar") (serialize-qp "tags" $tags "scalar") (serialize-qp "textSearch" $text_search "scalar") (serialize-qp "onlyFavorites" $only_favorites "scalar") (serialize-qp "createdAfter" $created_after "scalar") (serialize-qp "createdBefore" $created_before "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/retargeting/{id}/datapoints/count") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/retargeting/{id}/datapoints/count") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"status": $status, "tags": $tags, "textSearch": $text_search, "onlyFavorites": $only_favorites, "createdAfter": $created_after, "createdBefore": $created_before} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"status": $status, "tags": $tags, "textSearch": $text_search, "onlyFavorites": $only_favorites, "createdAfter": $created_after, "createdBefore": $created_before} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List of all the groups associated to the user filtered by this tag.
@@ -3062,10 +4055,21 @@ export def "tags list" [
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "datapoints" $datapoints "scalar") (serialize-qp "groups" $groups "scalar") (serialize-qp "type" $type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/tags" $qp)
+  let full_url = (build-url $base "/tags" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"offset": $offset, "limit": $limit, "name": $name, "datapoints": $datapoints, "groups": $groups, "type": $type} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"offset": $offset, "limit": $limit, "name": $name, "datapoints": $datapoints, "groups": $groups, "type": $type} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a tag
@@ -3091,12 +4095,23 @@ export def "tags update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/tags")
+  let full_url = (build-url $base "/tags" $auth.query)
   let req_body = {"datapoints": $datapoints, "groups": $groups, "id": $id, "name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # List of all the groups associated to the user filtered by this tag.
@@ -3122,10 +4137,21 @@ export def "tags-count get" [
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "datapoints" $datapoints "scalar") (serialize-qp "groups" $groups "scalar") (serialize-qp "type" $type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/tags/count" $qp)
+  let full_url = (build-url $base "/tags/count" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"name": $name, "datapoints": $datapoints, "groups": $groups, "type": $type} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"name": $name, "datapoints": $datapoints, "groups": $groups, "type": $type} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Delete a tag
@@ -3148,10 +4174,21 @@ export def "tags delete" [
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   if ($tag_id | is-empty) { error make --unspanned { msg: "path parameter 'tagId' must be non-empty" } }
-  let full_url = (build-url $base ({tag_id: (encode-path-segment $tag_id)} | format pattern "/tags/{tag_id}"))
+  let full_url = (build-url $base ({tag_id: (encode-path-segment $tag_id)} | format pattern "/tags/{tag_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve a tag
@@ -3173,10 +4210,21 @@ export def "tags get" [
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   if ($tag_id | is-empty) { error make --unspanned { msg: "path parameter 'tagId' must be non-empty" } }
-  let full_url = (build-url $base ({tag_id: (encode-path-segment $tag_id)} | format pattern "/tags/{tag_id}"))
+  let full_url = (build-url $base ({tag_id: (encode-path-segment $tag_id)} | format pattern "/tags/{tag_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Delete the association of this tag with all datapoints
@@ -3199,10 +4247,21 @@ export def "tags-datapoints delete-related" [
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   if ($tag_id | is-empty) { error make --unspanned { msg: "path parameter 'tagId' must be non-empty" } }
-  let full_url = (build-url $base ({tag_id: (encode-path-segment $tag_id)} | format pattern "/tags/{tag_id}/datapoints"))
+  let full_url = (build-url $base ({tag_id: (encode-path-segment $tag_id)} | format pattern "/tags/{tag_id}/datapoints") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # List of all the datapoints associated to the user filtered by this tag
@@ -3233,10 +4292,21 @@ export def "tags-datapoints get" [
   let base = ($base_url | default $BASE_URL)
   if ($tag_id | is-empty) { error make --unspanned { msg: "path parameter 'tagId' must be non-empty" } }
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "textSearch" $text_search "scalar") (serialize-qp "createdAfter" $created_after "scalar") (serialize-qp "createdBefore" $created_before "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({tag_id: (encode-path-segment $tag_id)} | format pattern "/tags/{tag_id}/datapoints") $qp)
+  let full_url = (build-url $base ({tag_id: (encode-path-segment $tag_id)} | format pattern "/tags/{tag_id}/datapoints") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"offset": $offset, "limit": $limit, "type": $type, "status": $status, "textSearch": $text_search, "createdAfter": $created_after, "createdBefore": $created_before} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"offset": $offset, "limit": $limit, "type": $type, "status": $status, "textSearch": $text_search, "createdAfter": $created_after, "createdBefore": $created_before} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Count the datapoints associated to the user filtered by this tag
@@ -3265,10 +4335,21 @@ export def "tags-datapoints-count get" [
   let base = ($base_url | default $BASE_URL)
   if ($tag_id | is-empty) { error make --unspanned { msg: "path parameter 'tagId' must be non-empty" } }
   let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "textSearch" $text_search "scalar") (serialize-qp "createdAfter" $created_after "scalar") (serialize-qp "createdBefore" $created_before "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({tag_id: (encode-path-segment $tag_id)} | format pattern "/tags/{tag_id}/datapoints/count") $qp)
+  let full_url = (build-url $base ({tag_id: (encode-path-segment $tag_id)} | format pattern "/tags/{tag_id}/datapoints/count") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"type": $type, "status": $status, "textSearch": $text_search, "createdAfter": $created_after, "createdBefore": $created_before} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"type": $type, "status": $status, "textSearch": $text_search, "createdAfter": $created_after, "createdBefore": $created_before} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Associate/Deassociate a tag with a datapoint
@@ -3294,12 +4375,23 @@ export def "tags-datapoints-patch update-data-point" [
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   if ($tag_id | is-empty) { error make --unspanned { msg: "path parameter 'tagId' must be non-empty" } }
-  let full_url = (build-url $base ({tag_id: (encode-path-segment $tag_id)} | format pattern "/tags/{tag_id}/datapoints/patch"))
+  let full_url = (build-url $base ({tag_id: (encode-path-segment $tag_id)} | format pattern "/tags/{tag_id}/datapoints/patch") $auth.query)
   let req_body = {"Action": $action, "Id": $id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Delete the association of this tag with all groups
@@ -3322,10 +4414,21 @@ export def "tags-groups delete-related" [
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   if ($tag_id | is-empty) { error make --unspanned { msg: "path parameter 'tagId' must be non-empty" } }
-  let full_url = (build-url $base ({tag_id: (encode-path-segment $tag_id)} | format pattern "/tags/{tag_id}/groups"))
+  let full_url = (build-url $base ({tag_id: (encode-path-segment $tag_id)} | format pattern "/tags/{tag_id}/groups") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # List of all the groups associated to the user filtered by this tag.
@@ -3355,10 +4458,21 @@ export def "tags-groups get" [
   let base = ($base_url | default $BASE_URL)
   if ($tag_id | is-empty) { error make --unspanned { msg: "path parameter 'tagId' must be non-empty" } }
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "textSearch" $text_search "scalar") (serialize-qp "createdAfter" $created_after "scalar") (serialize-qp "createdBefore" $created_before "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({tag_id: (encode-path-segment $tag_id)} | format pattern "/tags/{tag_id}/groups") $qp)
+  let full_url = (build-url $base ({tag_id: (encode-path-segment $tag_id)} | format pattern "/tags/{tag_id}/groups") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"offset": $offset, "limit": $limit, "status": $status, "textSearch": $text_search, "createdAfter": $created_after, "createdBefore": $created_before} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"offset": $offset, "limit": $limit, "status": $status, "textSearch": $text_search, "createdAfter": $created_after, "createdBefore": $created_before} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Count the groups associated to the user filtered by this tag
@@ -3386,10 +4500,21 @@ export def "tags-groups-count get" [
   let base = ($base_url | default $BASE_URL)
   if ($tag_id | is-empty) { error make --unspanned { msg: "path parameter 'tagId' must be non-empty" } }
   let qp = [(serialize-qp "status" $status "scalar") (serialize-qp "textSearch" $text_search "scalar") (serialize-qp "createdAfter" $created_after "scalar") (serialize-qp "createdBefore" $created_before "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({tag_id: (encode-path-segment $tag_id)} | format pattern "/tags/{tag_id}/groups/count") $qp)
+  let full_url = (build-url $base ({tag_id: (encode-path-segment $tag_id)} | format pattern "/tags/{tag_id}/groups/count") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"status": $status, "textSearch": $text_search, "createdAfter": $created_after, "createdBefore": $created_before} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"status": $status, "textSearch": $text_search, "createdAfter": $created_after, "createdBefore": $created_before} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Associate/Deassociate a tag with a group
@@ -3415,12 +4540,23 @@ export def "tags-groups-patch update" [
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   if ($tag_id | is-empty) { error make --unspanned { msg: "path parameter 'tagId' must be non-empty" } }
-  let full_url = (build-url $base ({tag_id: (encode-path-segment $tag_id)} | format pattern "/tags/{tag_id}/groups/patch"))
+  let full_url = (build-url $base ({tag_id: (encode-path-segment $tag_id)} | format pattern "/tags/{tag_id}/groups/patch") $auth.query)
   let req_body = {"Action": $action, "Id": $id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Fast patch a tag name
@@ -3445,10 +4581,21 @@ export def "tags-name update" [
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   if ($tag_id | is-empty) { error make --unspanned { msg: "path parameter 'tagId' must be non-empty" } }
-  let full_url = (build-url $base ({tag_id: (encode-path-segment $tag_id)} | format pattern "/tags/{tag_id}/name"))
+  let full_url = (build-url $base ({tag_id: (encode-path-segment $tag_id)} | format pattern "/tags/{tag_id}/name") $auth.query)
   let req_body = {"Text": $text} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }

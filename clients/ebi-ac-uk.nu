@@ -8,7 +8,7 @@ const BASE_URL = "https://www.ebi.ac.uk/Tools/crossbar"
 # `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
 # where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o CROSSBAR_DATA_API_TOKEN | default "" }
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o CROSSBAR_DATA_API_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
@@ -40,14 +40,11 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
-# Trick: `url encode --all` over-encodes, then we decode the four unreserved
-# punctuation chars back. Pre-existing %XX sequences in the input survive
-# because `url encode --all` first turns their % into %25.
 def encode-path-segment [v: any]: nothing -> string {
   $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
-# Serialize an array-typed path parameter (issue 49.A). OpenAPI 3 `style: simple`
+# Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
 # (the default for path params) and Swagger 2 `collectionFormat: csv` both join
 # the elements with a literal comma WITHIN the single path segment, each element
 # RFC-3986-encoded individually (so a comma inside an element stays %2C). Without
@@ -58,51 +55,39 @@ def encode-path-array [v: any]: nothing -> string {
   if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
 }
 
-# Build URL from base, path, and optional query string
-def build-url [base: string, path: string, query?: string]: nothing -> string {
+# Build the request URL from base, path, and any number of pre-encoded query
+# fragments (param serializer output and/or the auth query). Each fragment is an
+# `&`-joinable `key=value` string already percent-encoded by its producer; empty
+# fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
+# delimiters are hand-spliced — and any query already on the base URL is merged in.
+def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
   let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
-  let result = ($parsed | upsert path $full_path)
-  if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
+  let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
+  $parsed | upsert path $full_path | upsert query $query | url join
 }
 
-# Build the dry-run record returned by --dry-run. Shape:
-#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
-#    auth: {scheme, location}}
-# `meta` carries logical-form data (the query record by spec name, the pre-serialization
-# body) that do-request itself cannot reconstruct from its wire-format args.
-def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
-  let m = ($meta | default {})
-  {
-    dry_run: true
-    method: $method
-    url: $url
-    query: ($m | get -o query | default {})
-    headers: $auth.headers
-    body: ($m | get -o body)
-    content_type: $content_type
-    timeout: $timeout
-    auth: {scheme: $auth.scheme, location: $auth.location}
-  }
+# Success policy: did this response succeed? Single source of truth, consulted by
+# handle-response and the HEAD header-unwrap. Empty ok_codes means the spec listed
+# none, so fall back to < 400. Otherwise: any 2xx, plus documented success codes.
+def status-ok [status: int, ok_codes: list<int>]: nothing -> bool {
+  if ($ok_codes | is-empty) { $status < 400 } else { ($status >= 200 and $status < 300) or ($status in $ok_codes) }
 }
 
-# Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
-  let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
-  let timeout = ($max_time | default 30min)
-  let ct = ($content_type | default "application/json")
-  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
-  let resp = match $method {
-    "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
-  }
-  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
-  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
+# Unwrap a `--full` HTTP response into the user-facing value. Response arrives
+# via pipeline; ok_codes gates the error throw (see status-ok).
+def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: record -> any {
+  let resp = $in
+  if $allow_errors { return $resp }
+  if not (status-ok $resp.status $ok_codes) { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } }
+  if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
+  if $resp.status == 204 { return null }
+  $resp.body
+}
+
+# GET — bodyless, honours --raw
+def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
 }
 
 def base-url-completer [] { ["https://www.ebi.ac.uk/Tools/crossbar"] }
@@ -156,10 +141,21 @@ export def "activities get-using" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "assayChemblId" $assay_chembl_id "multi") (serialize-qp "limit" $limit "scalar") (serialize-qp "moleculeChemblId" $molecule_chembl_id "multi") (serialize-qp "page" $page "scalar") (serialize-qp "pchemblValue" $pchembl_value "scalar") (serialize-qp "targetChemblId" $target_chembl_id "multi")] | flatten | str join "&"
-  let full_url = (build-url $base "/activities" $qp)
+  let full_url = (build-url $base "/activities" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"assayChemblId": $assay_chembl_id, "limit": $limit, "moleculeChemblId": $molecule_chembl_id, "page": $page, "pchemblValue": $pchembl_value, "targetChemblId": $target_chembl_id} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"assayChemblId": $assay_chembl_id, "limit": $limit, "moleculeChemblId": $molecule_chembl_id, "page": $page, "pchemblValue": $pchembl_value, "targetChemblId": $target_chembl_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get ChEMBL assays
@@ -186,10 +182,21 @@ export def "assays get-using" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "assayChemblId" $assay_chembl_id "multi") (serialize-qp "assayOrg" $assay_org "multi") (serialize-qp "assayType" $assay_type "multi") (serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "targetChemblId" $target_chembl_id "multi")] | flatten | str join "&"
-  let full_url = (build-url $base "/assays" $qp)
+  let full_url = (build-url $base "/assays" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"assayChemblId": $assay_chembl_id, "assayOrg": $assay_org, "assayType": $assay_type, "limit": $limit, "page": $page, "targetChemblId": $target_chembl_id} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"assayChemblId": $assay_chembl_id, "assayOrg": $assay_org, "assayType": $assay_type, "limit": $limit, "page": $page, "targetChemblId": $target_chembl_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # drugs collected from Drugbank
@@ -217,10 +224,21 @@ export def "drugs get-using" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "accession" $accession "multi") (serialize-qp "chemblId" $chembl_id "multi") (serialize-qp "identifier" $identifier "multi") (serialize-qp "limit" $limit "scalar") (serialize-qp "name" $name "multi") (serialize-qp "page" $page "scalar") (serialize-qp "pubchemCid" $pubchem_cid "multi")] | flatten | str join "&"
-  let full_url = (build-url $base "/drugs" $qp)
+  let full_url = (build-url $base "/drugs" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"accession": $accession, "chemblId": $chembl_id, "identifier": $identifier, "limit": $limit, "name": $name, "page": $page, "pubchemCid": $pubchem_cid} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"accession": $accession, "chemblId": $chembl_id, "identifier": $identifier, "limit": $limit, "name": $name, "page": $page, "pubchemCid": $pubchem_cid} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get EFO diseases data
@@ -249,10 +267,21 @@ export def "efo get-using" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "doid" $doid "multi") (serialize-qp "label" $label "multi") (serialize-qp "limit" $limit "scalar") (serialize-qp "mesh" $mesh "multi") (serialize-qp "oboId" $obo_id "multi") (serialize-qp "omimId" $omim_id "multi") (serialize-qp "page" $page "scalar") (serialize-qp "synonym" $synonym "multi")] | flatten | str join "&"
-  let full_url = (build-url $base "/efo" $qp)
+  let full_url = (build-url $base "/efo" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"doid": $doid, "label": $label, "limit": $limit, "mesh": $mesh, "oboId": $obo_id, "omimId": $omim_id, "page": $page, "synonym": $synonym} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"doid": $doid, "label": $label, "limit": $limit, "mesh": $mesh, "oboId": $obo_id, "omimId": $omim_id, "page": $page, "synonym": $synonym} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get HPO phenotypes data
@@ -278,10 +307,21 @@ export def "hpo get-using" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "genesymbol" $genesymbol "multi") (serialize-qp "hpotermname" $hpotermname "multi") (serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "synonym" $synonym "multi")] | flatten | str join "&"
-  let full_url = (build-url $base "/hpo" $qp)
+  let full_url = (build-url $base "/hpo" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"genesymbol": $genesymbol, "hpotermname": $hpotermname, "limit": $limit, "page": $page, "synonym": $synonym} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"genesymbol": $genesymbol, "hpotermname": $hpotermname, "limit": $limit, "page": $page, "synonym": $synonym} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Molecular Interactions collected from IntAct
@@ -307,10 +347,21 @@ export def "intact get-using" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "accession" $accession "multi") (serialize-qp "confidence" $confidence "scalar") (serialize-qp "gene" $gene "multi") (serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/intact" $qp)
+  let full_url = (build-url $base "/intact" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"accession": $accession, "confidence": $confidence, "gene": $gene, "limit": $limit, "page": $page} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"accession": $accession, "confidence": $confidence, "gene": $gene, "limit": $limit, "page": $page} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get ChEMBL molecules
@@ -336,10 +387,21 @@ export def "molecules get-using" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "canonicalSmiles" $canonical_smiles "multi") (serialize-qp "inchiKey" $inchi_key "multi") (serialize-qp "limit" $limit "scalar") (serialize-qp "moleculeChemblId" $molecule_chembl_id "multi") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/molecules" $qp)
+  let full_url = (build-url $base "/molecules" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"canonicalSmiles": $canonical_smiles, "inchiKey": $inchi_key, "limit": $limit, "moleculeChemblId": $molecule_chembl_id, "page": $page} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"canonicalSmiles": $canonical_smiles, "inchiKey": $inchi_key, "limit": $limit, "moleculeChemblId": $molecule_chembl_id, "page": $page} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Proteins collected from Uniprot for selective tax ids HUMAN(9606), MOUSE(10090), RAT(10116), BOVINE(9913), ESCHERICHIA_COLI(83333), SUS_SCROFA(9823), MYCOBACTERIUM_TUBERCULOSIS(83332), ORYCTOLAGUS_CUNICULUS(9986), SACCHAROMYCES_CEREVISIAE(559292), CVHSA(694009) & SARS2(2697049)
@@ -373,10 +435,21 @@ export def "proteins get-using" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "accession" $accession "multi") (serialize-qp "ec" $ec "multi") (serialize-qp "fullName" $full_name "multi") (serialize-qp "gene" $gene "multi") (serialize-qp "go" $go "multi") (serialize-qp "interpro" $interpro "multi") (serialize-qp "limit" $limit "scalar") (serialize-qp "omim" $omim "multi") (serialize-qp "orphanet" $orphanet "multi") (serialize-qp "page" $page "scalar") (serialize-qp "pfam" $pfam "multi") (serialize-qp "reactome" $reactome "multi") (serialize-qp "taxId" $tax_id "multi")] | flatten | str join "&"
-  let full_url = (build-url $base "/proteins" $qp)
+  let full_url = (build-url $base "/proteins" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"accession": $accession, "ec": $ec, "fullName": $full_name, "gene": $gene, "go": $go, "interpro": $interpro, "limit": $limit, "omim": $omim, "orphanet": $orphanet, "page": $page, "pfam": $pfam, "reactome": $reactome, "taxId": $tax_id} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"accession": $accession, "ec": $ec, "fullName": $full_name, "gene": $gene, "go": $go, "interpro": $interpro, "limit": $limit, "omim": $omim, "orphanet": $orphanet, "page": $page, "pfam": $pfam, "reactome": $reactome, "taxId": $tax_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get pubchem bioassays
@@ -402,10 +475,21 @@ export def "pubchem-bioassays get-using" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "accession" $accession "multi") (serialize-qp "assayPubchemId" $assay_pubchem_id "multi") (serialize-qp "limit" $limit "scalar") (serialize-qp "ncbiProteinId" $ncbi_protein_id "multi") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/pubchem/bioassays" $qp)
+  let full_url = (build-url $base "/pubchem/bioassays" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"accession": $accession, "assayPubchemId": $assay_pubchem_id, "limit": $limit, "ncbiProteinId": $ncbi_protein_id, "page": $page} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"accession": $accession, "assayPubchemId": $assay_pubchem_id, "limit": $limit, "ncbiProteinId": $ncbi_protein_id, "page": $page} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get pubchem bioassays associated to particular substance ids (sid) & outcome
@@ -430,10 +514,21 @@ export def "pubchem-bioassays-sids get-using" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "outcome" $outcome "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "sids" $sids "multi")] | flatten | str join "&"
-  let full_url = (build-url $base "/pubchem/bioassays/sids" $qp)
+  let full_url = (build-url $base "/pubchem/bioassays/sids" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"limit": $limit, "outcome": $outcome, "page": $page, "sids": $sids} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"limit": $limit, "outcome": $outcome, "page": $page, "sids": $sids} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get pubchem compounds
@@ -459,10 +554,21 @@ export def "pubchem-compounds get-using" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "canonicalSmiles" $canonical_smiles "multi") (serialize-qp "cid" $cid "multi") (serialize-qp "inchiKey" $inchi_key "multi") (serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/pubchem/compounds" $qp)
+  let full_url = (build-url $base "/pubchem/compounds" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"canonicalSmiles": $canonical_smiles, "cid": $cid, "inchiKey": $inchi_key, "limit": $limit, "page": $page} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"canonicalSmiles": $canonical_smiles, "cid": $cid, "inchiKey": $inchi_key, "limit": $limit, "page": $page} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get pubchem substances
@@ -487,10 +593,21 @@ export def "pubchem-substances get-using" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "cid" $cid "multi") (serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "sid" $sid "multi")] | flatten | str join "&"
-  let full_url = (build-url $base "/pubchem/substances" $qp)
+  let full_url = (build-url $base "/pubchem/substances" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cid": $cid, "limit": $limit, "page": $page, "sid": $sid} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"cid": $cid, "limit": $limit, "page": $page, "sid": $sid} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get ChEMBL targets
@@ -515,8 +632,19 @@ export def "targets get-using" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "accession" $accession "multi") (serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "targetIds" $target_ids "multi")] | flatten | str join "&"
-  let full_url = (build-url $base "/targets" $qp)
+  let full_url = (build-url $base "/targets" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"accession": $accession, "limit": $limit, "page": $page, "targetIds": $target_ids} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"accession": $accession, "limit": $limit, "page": $page, "targetIds": $target_ids} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }

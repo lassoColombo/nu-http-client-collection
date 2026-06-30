@@ -8,7 +8,7 @@ const BASE_URL = "https://neutrinoapi.net"
 # `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
 # where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o NEUTRINO_API_TOKEN | default "" }
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o NEUTRINO_API_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
@@ -52,14 +52,11 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
-# Trick: `url encode --all` over-encodes, then we decode the four unreserved
-# punctuation chars back. Pre-existing %XX sequences in the input survive
-# because `url encode --all` first turns their % into %25.
 def encode-path-segment [v: any]: nothing -> string {
   $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
-# Serialize an array-typed path parameter (issue 49.A). OpenAPI 3 `style: simple`
+# Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
 # (the default for path params) and Swagger 2 `collectionFormat: csv` both join
 # the elements with a literal comma WITHIN the single path segment, each element
 # RFC-3986-encoded individually (so a comma inside an element stays %2C). Without
@@ -70,51 +67,45 @@ def encode-path-array [v: any]: nothing -> string {
   if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
 }
 
-# Build URL from base, path, and optional query string
-def build-url [base: string, path: string, query?: string]: nothing -> string {
+# Build the request URL from base, path, and any number of pre-encoded query
+# fragments (param serializer output and/or the auth query). Each fragment is an
+# `&`-joinable `key=value` string already percent-encoded by its producer; empty
+# fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
+# delimiters are hand-spliced — and any query already on the base URL is merged in.
+def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
   let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
-  let result = ($parsed | upsert path $full_path)
-  if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
+  let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
+  $parsed | upsert path $full_path | upsert query $query | url join
 }
 
-# Build the dry-run record returned by --dry-run. Shape:
-#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
-#    auth: {scheme, location}}
-# `meta` carries logical-form data (the query record by spec name, the pre-serialization
-# body) that do-request itself cannot reconstruct from its wire-format args.
-def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
-  let m = ($meta | default {})
-  {
-    dry_run: true
-    method: $method
-    url: $url
-    query: ($m | get -o query | default {})
-    headers: $auth.headers
-    body: ($m | get -o body)
-    content_type: $content_type
-    timeout: $timeout
-    auth: {scheme: $auth.scheme, location: $auth.location}
-  }
+# Success policy: did this response succeed? Single source of truth, consulted by
+# handle-response and the HEAD header-unwrap. Empty ok_codes means the spec listed
+# none, so fall back to < 400. Otherwise: any 2xx, plus documented success codes.
+def status-ok [status: int, ok_codes: list<int>]: nothing -> bool {
+  if ($ok_codes | is-empty) { $status < 400 } else { ($status >= 200 and $status < 300) or ($status in $ok_codes) }
 }
 
-# Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
-  let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
-  let timeout = ($max_time | default 30min)
-  let ct = ($content_type | default "application/json")
-  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
-  let resp = match $method {
-    "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
-  }
-  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
-  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
+# Unwrap a `--full` HTTP response into the user-facing value. Response arrives
+# via pipeline; ok_codes gates the error throw (see status-ok).
+def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: record -> any {
+  let resp = $in
+  if $allow_errors { return $resp }
+  if not (status-ok $resp.status $ok_codes) { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } }
+  if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
+  if $resp.status == 204 { return null }
+  $resp.body
+}
+
+# GET — bodyless, honours --raw
+def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+}
+
+# POST — body + content-type
+def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 def base-url-completer [] { ["https://neutrinoapi.net"] }
@@ -165,13 +156,24 @@ export def "bad-word-filter create" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o NEUTRINO_API_APIKEY_TOKEN | default "")) "api-key") (build-auth ($token_userid | default ($env | get -o NEUTRINO_API_USERID_TOKEN | default "")) "user-id")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/bad-word-filter")
+  let full_url = (build-url $base "/bad-word-filter" $auth.query)
   let req_body = {"catalog": $catalog, "censor-character": $censor_character, "content": $content} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/x-www-form-urlencoded"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # BIN List Download
@@ -194,10 +196,21 @@ export def "bin-list-download list" [
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o NEUTRINO_API_APIKEY_TOKEN | default "")) "api-key") (build-auth ($token_userid | default ($env | get -o NEUTRINO_API_USERID_TOKEN | default "")) "user-id")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "include-iso3" $include_iso3 "scalar") (serialize-qp "include-8digit" $include_8digit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/bin-list-download" $qp)
+  let full_url = (build-url $base "/bin-list-download" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"include-iso3": $include_iso3, "include-8digit": $include_8digit} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"include-iso3": $include_iso3, "include-8digit": $include_8digit} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # BIN Lookup
@@ -220,10 +233,21 @@ export def "bin-lookup get" [
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o NEUTRINO_API_APIKEY_TOKEN | default "")) "api-key") (build-auth ($token_userid | default ($env | get -o NEUTRINO_API_USERID_TOKEN | default "")) "user-id")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "bin-number" $bin_number "scalar") (serialize-qp "customer-ip" $customer_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/bin-lookup" $qp)
+  let full_url = (build-url $base "/bin-lookup" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"bin-number": $bin_number, "customer-ip": $customer_ip} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"bin-number": $bin_number, "customer-ip": $customer_ip} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Browser Bot
@@ -251,13 +275,24 @@ export def "browser-bot create" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o NEUTRINO_API_APIKEY_TOKEN | default "")) "api-key") (build-auth ($token_userid | default ($env | get -o NEUTRINO_API_USERID_TOKEN | default "")) "user-id")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/browser-bot")
+  let full_url = (build-url $base "/browser-bot" $auth.query)
   let req_body = {"delay": $delay, "exec": $exec, "ignore-certificate-errors": $ignore_certificate_errors, "selector": $selector, "timeout": $timeout, "url": $url, "user-agent": $user_agent} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/x-www-form-urlencoded"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Convert
@@ -281,10 +316,21 @@ export def "convert get" [
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o NEUTRINO_API_APIKEY_TOKEN | default "")) "api-key") (build-auth ($token_userid | default ($env | get -o NEUTRINO_API_USERID_TOKEN | default "")) "user-id")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "from-value" $from_value "scalar") (serialize-qp "from-type" $from_type "scalar") (serialize-qp "to-type" $to_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/convert" $qp)
+  let full_url = (build-url $base "/convert" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"from-value": $from_value, "from-type": $from_type, "to-type": $to_type} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"from-value": $from_value, "from-type": $from_type, "to-type": $to_type} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Email Validate
@@ -307,10 +353,21 @@ export def "email-validate validate" [
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o NEUTRINO_API_APIKEY_TOKEN | default "")) "api-key") (build-auth ($token_userid | default ($env | get -o NEUTRINO_API_USERID_TOKEN | default "")) "user-id")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "email" $email "scalar") (serialize-qp "fix-typos" $fix_typos "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/email-validate" $qp)
+  let full_url = (build-url $base "/email-validate" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"email": $email, "fix-typos": $fix_typos} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"email": $email, "fix-typos": $fix_typos} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Email Verify
@@ -333,10 +390,21 @@ export def "email-verify verify" [
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o NEUTRINO_API_APIKEY_TOKEN | default "")) "api-key") (build-auth ($token_userid | default ($env | get -o NEUTRINO_API_USERID_TOKEN | default "")) "user-id")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "email" $email "scalar") (serialize-qp "fix-typos" $fix_typos "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/email-verify" $qp)
+  let full_url = (build-url $base "/email-verify" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"email": $email, "fix-typos": $fix_typos} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"email": $email, "fix-typos": $fix_typos} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Geocode Address
@@ -367,10 +435,21 @@ export def "geocode-address get" [
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o NEUTRINO_API_APIKEY_TOKEN | default "")) "api-key") (build-auth ($token_userid | default ($env | get -o NEUTRINO_API_USERID_TOKEN | default "")) "user-id")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "address" $address "scalar") (serialize-qp "house-number" $house_number "scalar") (serialize-qp "street" $street "scalar") (serialize-qp "city" $city "scalar") (serialize-qp "county" $county "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "postal-code" $postal_code "scalar") (serialize-qp "country-code" $country_code "scalar") (serialize-qp "language-code" $language_code "scalar") (serialize-qp "fuzzy-search" $fuzzy_search "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/geocode-address" $qp)
+  let full_url = (build-url $base "/geocode-address" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"address": $address, "house-number": $house_number, "street": $street, "city": $city, "county": $county, "state": $state, "postal-code": $postal_code, "country-code": $country_code, "language-code": $language_code, "fuzzy-search": $fuzzy_search} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"address": $address, "house-number": $house_number, "street": $street, "city": $city, "county": $county, "state": $state, "postal-code": $postal_code, "country-code": $country_code, "language-code": $language_code, "fuzzy-search": $fuzzy_search} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Geocode Reverse
@@ -395,10 +474,21 @@ export def "geocode-reverse get" [
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o NEUTRINO_API_APIKEY_TOKEN | default "")) "api-key") (build-auth ($token_userid | default ($env | get -o NEUTRINO_API_USERID_TOKEN | default "")) "user-id")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "latitude" $latitude "scalar") (serialize-qp "longitude" $longitude "scalar") (serialize-qp "language-code" $language_code "scalar") (serialize-qp "zoom" $zoom "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/geocode-reverse" $qp)
+  let full_url = (build-url $base "/geocode-reverse" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"latitude": $latitude, "longitude": $longitude, "language-code": $language_code, "zoom": $zoom} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"latitude": $latitude, "longitude": $longitude, "language-code": $language_code, "zoom": $zoom} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # HLR Lookup
@@ -421,10 +511,21 @@ export def "hlr-lookup get" [
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o NEUTRINO_API_APIKEY_TOKEN | default "")) "api-key") (build-auth ($token_userid | default ($env | get -o NEUTRINO_API_USERID_TOKEN | default "")) "user-id")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "number" $number "scalar") (serialize-qp "country-code" $country_code "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/hlr-lookup" $qp)
+  let full_url = (build-url $base "/hlr-lookup" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"number": $number, "country-code": $country_code} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"number": $number, "country-code": $country_code} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Host Reputation
@@ -448,10 +549,21 @@ export def "host-reputation get" [
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o NEUTRINO_API_APIKEY_TOKEN | default "")) "api-key") (build-auth ($token_userid | default ($env | get -o NEUTRINO_API_USERID_TOKEN | default "")) "user-id")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "host" $host "scalar") (serialize-qp "list-rating" $list_rating "scalar") (serialize-qp "zones" $zones "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/host-reputation" $qp)
+  let full_url = (build-url $base "/host-reputation" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"host": $host, "list-rating": $list_rating, "zones": $zones} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"host": $host, "list-rating": $list_rating, "zones": $zones} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # HTML Clean
@@ -474,13 +586,24 @@ export def "html-clean create" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o NEUTRINO_API_APIKEY_TOKEN | default "")) "api-key") (build-auth ($token_userid | default ($env | get -o NEUTRINO_API_USERID_TOKEN | default "")) "user-id")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/html-clean")
+  let full_url = (build-url $base "/html-clean" $auth.query)
   let req_body = {"content": $content, "output-type": $output_type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/x-www-form-urlencoded"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # HTML Render
@@ -523,13 +646,24 @@ export def "html-render create" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o NEUTRINO_API_APIKEY_TOKEN | default "")) "api-key") (build-auth ($token_userid | default ($env | get -o NEUTRINO_API_USERID_TOKEN | default "")) "user-id")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/html-render")
+  let full_url = (build-url $base "/html-render" $auth.query)
   let req_body = {"content": $content, "css": $css, "delay": $delay, "footer": $footer, "format": $format, "grayscale": $grayscale, "header": $header, "ignore-certificate-errors": $ignore_certificate_errors, "image-height": $image_height, "image-width": $image_width, "landscape": $landscape, "margin": $margin, "margin-bottom": $margin_bottom, "margin-left": $margin_left, "margin-right": $margin_right, "margin-top": $margin_top, "page-height": $page_height, "page-size": $page_size, "page-width": $page_width, "timeout": $timeout, "title": $title, "zoom": $zoom} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/x-www-form-urlencoded"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Image Resize
@@ -556,13 +690,24 @@ export def "image-resize resize" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o NEUTRINO_API_APIKEY_TOKEN | default "")) "api-key") (build-auth ($token_userid | default ($env | get -o NEUTRINO_API_USERID_TOKEN | default "")) "user-id")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/image-resize")
+  let full_url = (build-url $base "/image-resize" $auth.query)
   let req_body = {"bg-color": $bg_color, "format": $format, "height": $height, "image-url": $image_url, "resize-mode": $resize_mode, "width": $width} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/x-www-form-urlencoded"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Image Watermark
@@ -592,13 +737,24 @@ export def "image-watermark create" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o NEUTRINO_API_APIKEY_TOKEN | default "")) "api-key") (build-auth ($token_userid | default ($env | get -o NEUTRINO_API_USERID_TOKEN | default "")) "user-id")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/image-watermark")
+  let full_url = (build-url $base "/image-watermark" $auth.query)
   let req_body = {"bg-color": $bg_color, "format": $format, "height": $height, "image-url": $image_url, "opacity": $opacity, "position": $position, "resize-mode": $resize_mode, "watermark-url": $watermark_url, "width": $width} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/x-www-form-urlencoded"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # IP Blocklist
@@ -621,10 +777,21 @@ export def "ip-blocklist get" [
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o NEUTRINO_API_APIKEY_TOKEN | default "")) "api-key") (build-auth ($token_userid | default ($env | get -o NEUTRINO_API_USERID_TOKEN | default "")) "user-id")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ip" $ip "scalar") (serialize-qp "vpn-lookup" $vpn_lookup "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/ip-blocklist" $qp)
+  let full_url = (build-url $base "/ip-blocklist" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"ip": $ip, "vpn-lookup": $vpn_lookup} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"ip": $ip, "vpn-lookup": $vpn_lookup} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # IP Blocklist Download
@@ -649,10 +816,21 @@ export def "ip-blocklist-download download" [
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o NEUTRINO_API_APIKEY_TOKEN | default "")) "api-key") (build-auth ($token_userid | default ($env | get -o NEUTRINO_API_USERID_TOKEN | default "")) "user-id")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "include-vpn" $include_vpn "scalar") (serialize-qp "cidr" $cidr "scalar") (serialize-qp "ip6" $ip6 "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/ip-blocklist-download" $qp)
+  let full_url = (build-url $base "/ip-blocklist-download" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"format": $format, "include-vpn": $include_vpn, "cidr": $cidr, "ip6": $ip6} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"format": $format, "include-vpn": $include_vpn, "cidr": $cidr, "ip6": $ip6} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # IP Info
@@ -675,10 +853,21 @@ export def "ip-info get" [
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o NEUTRINO_API_APIKEY_TOKEN | default "")) "api-key") (build-auth ($token_userid | default ($env | get -o NEUTRINO_API_USERID_TOKEN | default "")) "user-id")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ip" $ip "scalar") (serialize-qp "reverse-lookup" $reverse_lookup "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/ip-info" $qp)
+  let full_url = (build-url $base "/ip-info" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"ip": $ip, "reverse-lookup": $reverse_lookup} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"ip": $ip, "reverse-lookup": $reverse_lookup} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # IP Probe
@@ -700,10 +889,21 @@ export def "ip-probe get" [
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o NEUTRINO_API_APIKEY_TOKEN | default "")) "api-key") (build-auth ($token_userid | default ($env | get -o NEUTRINO_API_USERID_TOKEN | default "")) "user-id")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ip" $ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/ip-probe" $qp)
+  let full_url = (build-url $base "/ip-probe" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"ip": $ip} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"ip": $ip} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Phone Playback
@@ -728,13 +928,24 @@ export def "phone-playback create" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o NEUTRINO_API_APIKEY_TOKEN | default "")) "api-key") (build-auth ($token_userid | default ($env | get -o NEUTRINO_API_USERID_TOKEN | default "")) "user-id")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/phone-playback")
+  let full_url = (build-url $base "/phone-playback" $auth.query)
   let req_body = {"audio-url": $audio_url, "limit": $limit, "limit-ttl": $limit_ttl, "number": $number} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/x-www-form-urlencoded"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Phone Validate
@@ -758,10 +969,21 @@ export def "phone-validate validate" [
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o NEUTRINO_API_APIKEY_TOKEN | default "")) "api-key") (build-auth ($token_userid | default ($env | get -o NEUTRINO_API_USERID_TOKEN | default "")) "user-id")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "number" $number "scalar") (serialize-qp "country-code" $country_code "scalar") (serialize-qp "ip" $ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/phone-validate" $qp)
+  let full_url = (build-url $base "/phone-validate" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"number": $number, "country-code": $country_code, "ip": $ip} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"number": $number, "country-code": $country_code, "ip": $ip} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Phone Verify
@@ -790,13 +1012,24 @@ export def "phone-verify verify" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o NEUTRINO_API_APIKEY_TOKEN | default "")) "api-key") (build-auth ($token_userid | default ($env | get -o NEUTRINO_API_USERID_TOKEN | default "")) "user-id")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/phone-verify")
+  let full_url = (build-url $base "/phone-verify" $auth.query)
   let req_body = {"code-length": $code_length, "country-code": $country_code, "language-code": $language_code, "limit": $limit, "limit-ttl": $limit_ttl, "number": $number, "playback-delay": $playback_delay, "security-code": $security_code} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/x-www-form-urlencoded"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # QR Code
@@ -822,13 +1055,24 @@ export def "qr-code create" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o NEUTRINO_API_APIKEY_TOKEN | default "")) "api-key") (build-auth ($token_userid | default ($env | get -o NEUTRINO_API_USERID_TOKEN | default "")) "user-id")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/qr-code")
+  let full_url = (build-url $base "/qr-code" $auth.query)
   let req_body = {"bg-color": $bg_color, "content": $content, "fg-color": $fg_color, "height": $height, "width": $width} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/x-www-form-urlencoded"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # SMS Verify
@@ -856,13 +1100,24 @@ export def "sms-verify verify" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o NEUTRINO_API_APIKEY_TOKEN | default "")) "api-key") (build-auth ($token_userid | default ($env | get -o NEUTRINO_API_USERID_TOKEN | default "")) "user-id")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/sms-verify")
+  let full_url = (build-url $base "/sms-verify" $auth.query)
   let req_body = {"code-length": $code_length, "country-code": $country_code, "language-code": $language_code, "limit": $limit, "limit-ttl": $limit_ttl, "number": $number, "security-code": $security_code} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/x-www-form-urlencoded"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # UA Lookup
@@ -890,10 +1145,21 @@ export def "ua-lookup get" [
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o NEUTRINO_API_APIKEY_TOKEN | default "")) "api-key") (build-auth ($token_userid | default ($env | get -o NEUTRINO_API_USERID_TOKEN | default "")) "user-id")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ua" $ua "scalar") (serialize-qp "ua-version" $ua_version "scalar") (serialize-qp "ua-platform" $ua_platform "scalar") (serialize-qp "ua-platform-version" $ua_platform_version "scalar") (serialize-qp "ua-mobile" $ua_mobile "scalar") (serialize-qp "device-model" $device_model "scalar") (serialize-qp "device-brand" $device_brand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/ua-lookup" $qp)
+  let full_url = (build-url $base "/ua-lookup" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"ua": $ua, "ua-version": $ua_version, "ua-platform": $ua_platform, "ua-platform-version": $ua_platform_version, "ua-mobile": $ua_mobile, "device-model": $device_model, "device-brand": $device_brand} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"ua": $ua, "ua-version": $ua_version, "ua-platform": $ua_platform, "ua-platform-version": $ua_platform_version, "ua-mobile": $ua_mobile, "device-model": $device_model, "device-brand": $device_brand} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # URL Info
@@ -919,10 +1185,21 @@ export def "url-info get" [
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o NEUTRINO_API_APIKEY_TOKEN | default "")) "api-key") (build-auth ($token_userid | default ($env | get -o NEUTRINO_API_USERID_TOKEN | default "")) "user-id")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "url" $url "scalar") (serialize-qp "fetch-content" $fetch_content "scalar") (serialize-qp "ignore-certificate-errors" $ignore_certificate_errors "scalar") (serialize-qp "timeout" $timeout "scalar") (serialize-qp "retry" $retry "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/url-info" $qp)
+  let full_url = (build-url $base "/url-info" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"url": $url, "fetch-content": $fetch_content, "ignore-certificate-errors": $ignore_certificate_errors, "timeout": $timeout, "retry": $retry} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"url": $url, "fetch-content": $fetch_content, "ignore-certificate-errors": $ignore_certificate_errors, "timeout": $timeout, "retry": $retry} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Verify Security Code
@@ -945,8 +1222,19 @@ export def "verify-security-code verify" [
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o NEUTRINO_API_APIKEY_TOKEN | default "")) "api-key") (build-auth ($token_userid | default ($env | get -o NEUTRINO_API_USERID_TOKEN | default "")) "user-id")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "security-code" $security_code "scalar") (serialize-qp "limit-by" $limit_by "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/verify-security-code" $qp)
+  let full_url = (build-url $base "/verify-security-code" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"security-code": $security_code, "limit-by": $limit_by} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"security-code": $security_code, "limit-by": $limit_by} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }

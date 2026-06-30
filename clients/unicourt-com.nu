@@ -8,7 +8,7 @@ const BASE_URL = "https://enterpriseapi.unicourt.com"
 # `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
 # where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o UNICOURT_ENTERPRISE_APIS_TOKEN | default "" }
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o UNICOURT_ENTERPRISE_APIS_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
@@ -41,14 +41,11 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
-# Trick: `url encode --all` over-encodes, then we decode the four unreserved
-# punctuation chars back. Pre-existing %XX sequences in the input survive
-# because `url encode --all` first turns their % into %25.
 def encode-path-segment [v: any]: nothing -> string {
   $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
-# Serialize an array-typed path parameter (issue 49.A). OpenAPI 3 `style: simple`
+# Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
 # (the default for path params) and Swagger 2 `collectionFormat: csv` both join
 # the elements with a literal comma WITHIN the single path segment, each element
 # RFC-3986-encoded individually (so a comma inside an element stays %2C). Without
@@ -59,51 +56,57 @@ def encode-path-array [v: any]: nothing -> string {
   if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
 }
 
-# Build URL from base, path, and optional query string
-def build-url [base: string, path: string, query?: string]: nothing -> string {
+# Build the request URL from base, path, and any number of pre-encoded query
+# fragments (param serializer output and/or the auth query). Each fragment is an
+# `&`-joinable `key=value` string already percent-encoded by its producer; empty
+# fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
+# delimiters are hand-spliced — and any query already on the base URL is merged in.
+def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
   let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
-  let result = ($parsed | upsert path $full_path)
-  if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
+  let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
+  $parsed | upsert path $full_path | upsert query $query | url join
 }
 
-# Build the dry-run record returned by --dry-run. Shape:
-#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
-#    auth: {scheme, location}}
-# `meta` carries logical-form data (the query record by spec name, the pre-serialization
-# body) that do-request itself cannot reconstruct from its wire-format args.
-def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
-  let m = ($meta | default {})
-  {
-    dry_run: true
-    method: $method
-    url: $url
-    query: ($m | get -o query | default {})
-    headers: $auth.headers
-    body: ($m | get -o body)
-    content_type: $content_type
-    timeout: $timeout
-    auth: {scheme: $auth.scheme, location: $auth.location}
-  }
+# Success policy: did this response succeed? Single source of truth, consulted by
+# handle-response and the HEAD header-unwrap. Empty ok_codes means the spec listed
+# none, so fall back to < 400. Otherwise: any 2xx, plus documented success codes.
+def status-ok [status: int, ok_codes: list<int>]: nothing -> bool {
+  if ($ok_codes | is-empty) { $status < 400 } else { ($status >= 200 and $status < 300) or ($status in $ok_codes) }
 }
 
-# Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
-  let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
-  let timeout = ($max_time | default 30min)
-  let ct = ($content_type | default "application/json")
-  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
-  let resp = match $method {
-    "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
-  }
-  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
-  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
+# Unwrap a `--full` HTTP response into the user-facing value. Response arrives
+# via pipeline; ok_codes gates the error throw (see status-ok).
+def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: record -> any {
+  let resp = $in
+  if $allow_errors { return $resp }
+  if not (status-ok $resp.status $ok_codes) { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } }
+  if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
+  if $resp.status == 204 { return null }
+  $resp.body
+}
+
+# GET — bodyless, honours --raw
+def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+}
+
+# POST — body + content-type
+def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# PUT — body + content-type
+def send-put [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http put --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http put --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# DELETE — body via --data
+def send-delete [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http delete --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url } else { http delete --headers $req.headers --content-type $req.content_type --data $body --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url }
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 def base-url-completer [] { ["https://enterpriseapi.unicourt.com"] }
@@ -162,10 +165,21 @@ export def "attorney get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($attorney_id | is-empty) { error make --unspanned { msg: "path parameter 'attorneyId' must be non-empty" } }
-  let full_url = (build-url $base ({attorney_id: (encode-path-segment $attorney_id)} | format pattern "/attorney/{attorney_id}"))
+  let full_url = (build-url $base ({attorney_id: (encode-path-segment $attorney_id)} | format pattern "/attorney/{attorney_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets Associated Party details for a requested Attorney ID.
@@ -189,10 +203,21 @@ export def "attorney-associated-parties get" [
   let base = ($base_url | default $BASE_URL)
   if ($attorney_id | is-empty) { error make --unspanned { msg: "path parameter 'attorneyId' must be non-empty" } }
   let qp = [(serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({attorney_id: (encode-path-segment $attorney_id)} | format pattern "/attorney/{attorney_id}/associatedParties") $qp)
+  let full_url = (build-url $base ({attorney_id: (encode-path-segment $attorney_id)} | format pattern "/attorney/{attorney_id}/associatedParties") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"pageNumber": $page_number} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"pageNumber": $page_number} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Specify the billing cycle to know the API usage.
@@ -214,10 +239,21 @@ export def "billing-cycle-usage get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_cycle | is-empty) { error make --unspanned { msg: "path parameter 'billingCycle' must be non-empty" } }
-  let full_url = (build-url $base ({billing_cycle: (encode-path-segment $billing_cycle)} | format pattern "/billingCycleUsage/{billing_cycle}"))
+  let full_url = (build-url $base ({billing_cycle: (encode-path-segment $billing_cycle)} | format pattern "/billingCycleUsage/{billing_cycle}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get all the previous 12 billing cycles.
@@ -237,10 +273,21 @@ export def "billing-cycles get" [
 ]: nothing -> record<billingCycleArray: list<string>, object: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/billingCycles")
+  let full_url = (build-url $base "/billingCycles" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get list of callback types with count for a requested Date.
@@ -263,10 +310,21 @@ export def "callbacks get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "date" $date "scalar") (serialize-qp "status" $status "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/callbacks" $qp)
+  let full_url = (build-url $base "/callbacks" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"date": $date, "status": $status} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"date": $date, "status": $status} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets case information for a requested Case ID.
@@ -288,10 +346,21 @@ export def "case get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($case_id | is-empty) { error make --unspanned { msg: "path parameter 'caseId' must be non-empty" } }
-  let full_url = (build-url $base ({case_id: (encode-path-segment $case_id)} | format pattern "/case/{case_id}"))
+  let full_url = (build-url $base ({case_id: (encode-path-segment $case_id)} | format pattern "/case/{case_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets Attorneys for a requested Case ID.
@@ -316,10 +385,21 @@ export def "case-attorneys get" [
   let base = ($base_url | default $BASE_URL)
   if ($case_id | is-empty) { error make --unspanned { msg: "path parameter 'caseId' must be non-empty" } }
   let qp = [(serialize-qp "isVisible" $is_visible "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({case_id: (encode-path-segment $case_id)} | format pattern "/case/{case_id}/attorneys") $qp)
+  let full_url = (build-url $base ({case_id: (encode-path-segment $case_id)} | format pattern "/case/{case_id}/attorneys") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"isVisible": $is_visible, "pageNumber": $page_number} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"isVisible": $is_visible, "pageNumber": $page_number} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets Docket Entries for a requested Case ID.
@@ -345,10 +425,21 @@ export def "case-docket-entries get" [
   let base = ($base_url | default $BASE_URL)
   if ($case_id | is-empty) { error make --unspanned { msg: "path parameter 'caseId' must be non-empty" } }
   let qp = [(serialize-qp "docketNumber" $docket_number "scalar") (serialize-qp "sortBy" $sort_by "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({case_id: (encode-path-segment $case_id)} | format pattern "/case/{case_id}/docketEntries") $qp)
+  let full_url = (build-url $base ({case_id: (encode-path-segment $case_id)} | format pattern "/case/{case_id}/docketEntries") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"docketNumber": $docket_number, "sortBy": $sort_by, "pageNumber": $page_number} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"docketNumber": $docket_number, "sortBy": $sort_by, "pageNumber": $page_number} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets Primary Documents of Docket Entries.
@@ -376,10 +467,21 @@ export def "case-docket-entries-primary-documents get" [
   let base = ($base_url | default $BASE_URL)
   if ($case_id | is-empty) { error make --unspanned { msg: "path parameter 'caseId' must be non-empty" } }
   let qp = [(serialize-qp "docketNumber" $docket_number "scalar") (serialize-qp "inLibrary" $in_library "scalar") (serialize-qp "afterFirstFetchDate" $after_first_fetch_date "scalar") (serialize-qp "libraryDate" $library_date "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({case_id: (encode-path-segment $case_id)} | format pattern "/case/{case_id}/docketEntries/primaryDocuments") $qp)
+  let full_url = (build-url $base ({case_id: (encode-path-segment $case_id)} | format pattern "/case/{case_id}/docketEntries/primaryDocuments") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"docketNumber": $docket_number, "inLibrary": $in_library, "afterFirstFetchDate": $after_first_fetch_date, "libraryDate": $library_date, "pageNumber": $page_number} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"docketNumber": $docket_number, "inLibrary": $in_library, "afterFirstFetchDate": $after_first_fetch_date, "libraryDate": $library_date, "pageNumber": $page_number} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets Secondary Documents of Docket Entries.
@@ -407,10 +509,21 @@ export def "case-docket-entries-secondary-documents get" [
   let base = ($base_url | default $BASE_URL)
   if ($case_id | is-empty) { error make --unspanned { msg: "path parameter 'caseId' must be non-empty" } }
   let qp = [(serialize-qp "docketNumber" $docket_number "scalar") (serialize-qp "inLibrary" $in_library "scalar") (serialize-qp "afterFirstFetchDate" $after_first_fetch_date "scalar") (serialize-qp "libraryDate" $library_date "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({case_id: (encode-path-segment $case_id)} | format pattern "/case/{case_id}/docketEntries/secondaryDocuments") $qp)
+  let full_url = (build-url $base ({case_id: (encode-path-segment $case_id)} | format pattern "/case/{case_id}/docketEntries/secondaryDocuments") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"docketNumber": $docket_number, "inLibrary": $in_library, "afterFirstFetchDate": $after_first_fetch_date, "libraryDate": $library_date, "pageNumber": $page_number} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"docketNumber": $docket_number, "inLibrary": $in_library, "afterFirstFetchDate": $after_first_fetch_date, "libraryDate": $library_date, "pageNumber": $page_number} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets Documents for a requested Case ID.
@@ -439,10 +552,21 @@ export def "case-documents get" [
   let base = ($base_url | default $BASE_URL)
   if ($case_id | is-empty) { error make --unspanned { msg: "path parameter 'caseId' must be non-empty" } }
   let qp = [(serialize-qp "inLibrary" $in_library "scalar") (serialize-qp "afterFirstFetchDate" $after_first_fetch_date "scalar") (serialize-qp "libraryDate" $library_date "scalar") (serialize-qp "firstFetchDate" $first_fetch_date "scalar") (serialize-qp "sortBy" $sort_by "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({case_id: (encode-path-segment $case_id)} | format pattern "/case/{case_id}/documents") $qp)
+  let full_url = (build-url $base ({case_id: (encode-path-segment $case_id)} | format pattern "/case/{case_id}/documents") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"inLibrary": $in_library, "afterFirstFetchDate": $after_first_fetch_date, "libraryDate": $library_date, "firstFetchDate": $first_fetch_date, "sortBy": $sort_by, "pageNumber": $page_number} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"inLibrary": $in_library, "afterFirstFetchDate": $after_first_fetch_date, "libraryDate": $library_date, "firstFetchDate": $first_fetch_date, "sortBy": $sort_by, "pageNumber": $page_number} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets Hearings for a requested Case ID.
@@ -467,10 +591,21 @@ export def "case-hearings get" [
   let base = ($base_url | default $BASE_URL)
   if ($case_id | is-empty) { error make --unspanned { msg: "path parameter 'caseId' must be non-empty" } }
   let qp = [(serialize-qp "sortBy" $sort_by "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({case_id: (encode-path-segment $case_id)} | format pattern "/case/{case_id}/hearings") $qp)
+  let full_url = (build-url $base ({case_id: (encode-path-segment $case_id)} | format pattern "/case/{case_id}/hearings") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"sortBy": $sort_by, "pageNumber": $page_number} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"sortBy": $sort_by, "pageNumber": $page_number} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets Judges for a requested Case ID.
@@ -495,10 +630,21 @@ export def "case-judges get" [
   let base = ($base_url | default $BASE_URL)
   if ($case_id | is-empty) { error make --unspanned { msg: "path parameter 'caseId' must be non-empty" } }
   let qp = [(serialize-qp "isVisible" $is_visible "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({case_id: (encode-path-segment $case_id)} | format pattern "/case/{case_id}/judges") $qp)
+  let full_url = (build-url $base ({case_id: (encode-path-segment $case_id)} | format pattern "/case/{case_id}/judges") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"isVisible": $is_visible, "pageNumber": $page_number} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"isVisible": $is_visible, "pageNumber": $page_number} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets Parties for a requested Case ID.
@@ -527,10 +673,21 @@ export def "case-parties get" [
   let base = ($base_url | default $BASE_URL)
   if ($case_id | is-empty) { error make --unspanned { msg: "path parameter 'caseId' must be non-empty" } }
   let qp = [(serialize-qp "isVisible" $is_visible "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "partyRoleId" $party_role_id "scalar") (serialize-qp "partyRoleGroupId" $party_role_group_id "scalar") (serialize-qp "attorneyRepresentationTypeId" $attorney_representation_type_id "scalar") (serialize-qp "partyClassificationType" $party_classification_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({case_id: (encode-path-segment $case_id)} | format pattern "/case/{case_id}/parties") $qp)
+  let full_url = (build-url $base ({case_id: (encode-path-segment $case_id)} | format pattern "/case/{case_id}/parties") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"isVisible": $is_visible, "pageNumber": $page_number, "partyRoleId": $party_role_id, "partyRoleGroupId": $party_role_group_id, "attorneyRepresentationTypeId": $attorney_representation_type_id, "partyClassificationType": $party_classification_type} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"isVisible": $is_visible, "pageNumber": $page_number, "partyRoleId": $party_role_id, "partyRoleGroupId": $party_role_group_id, "attorneyRepresentationTypeId": $attorney_representation_type_id, "partyClassificationType": $party_classification_type} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets Related Cases for a requested Case ID.
@@ -554,10 +711,21 @@ export def "case-related-cases get" [
   let base = ($base_url | default $BASE_URL)
   if ($case_id | is-empty) { error make --unspanned { msg: "path parameter 'caseId' must be non-empty" } }
   let qp = [(serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({case_id: (encode-path-segment $case_id)} | format pattern "/case/{case_id}/relatedCases") $qp)
+  let full_url = (build-url $base ({case_id: (encode-path-segment $case_id)} | format pattern "/case/{case_id}/relatedCases") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"pageNumber": $page_number} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"pageNumber": $page_number} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Case Count Analytics by Area Of Law.
@@ -580,10 +748,21 @@ export def "case-count-analytics-by-area-of-law get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/caseCountAnalyticsByAreaOfLaw" $qp)
+  let full_url = (build-url $base "/caseCountAnalyticsByAreaOfLaw" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"q": $q, "pageNumber": $page_number} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"q": $q, "pageNumber": $page_number} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Case Count Analytics by Case Class.
@@ -606,10 +785,21 @@ export def "case-count-analytics-by-case-class get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/caseCountAnalyticsByCaseClass" $qp)
+  let full_url = (build-url $base "/caseCountAnalyticsByCaseClass" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"q": $q, "pageNumber": $page_number} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"q": $q, "pageNumber": $page_number} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Case Count Analytics by Case Filed Date.
@@ -633,10 +823,21 @@ export def "case-count-analytics-by-case-filed-date get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "groupBy" $group_by "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/caseCountAnalyticsByCaseFiledDate" $qp)
+  let full_url = (build-url $base "/caseCountAnalyticsByCaseFiledDate" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"q": $q, "pageNumber": $page_number, "groupBy": $group_by} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"q": $q, "pageNumber": $page_number, "groupBy": $group_by} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Case Count Analytics by Case Type.
@@ -659,10 +860,21 @@ export def "case-count-analytics-by-case-type get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/caseCountAnalyticsByCaseType" $qp)
+  let full_url = (build-url $base "/caseCountAnalyticsByCaseType" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"q": $q, "pageNumber": $page_number} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"q": $q, "pageNumber": $page_number} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Case Count Analytics by Case Type Group.
@@ -685,10 +897,21 @@ export def "case-count-analytics-by-case-type-group get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/caseCountAnalyticsByCaseTypeGroup" $qp)
+  let full_url = (build-url $base "/caseCountAnalyticsByCaseTypeGroup" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"q": $q, "pageNumber": $page_number} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"q": $q, "pageNumber": $page_number} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Case Count Analytics by Court.
@@ -711,10 +934,21 @@ export def "case-count-analytics-by-court get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/caseCountAnalyticsByCourt" $qp)
+  let full_url = (build-url $base "/caseCountAnalyticsByCourt" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"q": $q, "pageNumber": $page_number} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"q": $q, "pageNumber": $page_number} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Case Count Analytics by Court Location.
@@ -737,10 +971,21 @@ export def "case-count-analytics-by-court-location get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/caseCountAnalyticsByCourtLocation" $qp)
+  let full_url = (build-url $base "/caseCountAnalyticsByCourtLocation" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"q": $q, "pageNumber": $page_number} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"q": $q, "pageNumber": $page_number} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Case Count Analytics by Court System.
@@ -763,10 +1008,21 @@ export def "case-count-analytics-by-court-system get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/caseCountAnalyticsByCourtSystem" $qp)
+  let full_url = (build-url $base "/caseCountAnalyticsByCourtSystem" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"q": $q, "pageNumber": $page_number} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"q": $q, "pageNumber": $page_number} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Case Count Analytics by CourtType.
@@ -789,10 +1045,21 @@ export def "case-count-analytics-by-court-type get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/caseCountAnalyticsByCourtType" $qp)
+  let full_url = (build-url $base "/caseCountAnalyticsByCourtType" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"q": $q, "pageNumber": $page_number} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"q": $q, "pageNumber": $page_number} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Case Count Analytics by Jurisdiction Geo.
@@ -815,10 +1082,21 @@ export def "case-count-analytics-by-jurisdiction-geo get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/caseCountAnalyticsByJurisdictionGeo" $qp)
+  let full_url = (build-url $base "/caseCountAnalyticsByJurisdictionGeo" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"q": $q, "pageNumber": $page_number} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"q": $q, "pageNumber": $page_number} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Case Count Analytics by Attorney.
@@ -841,10 +1119,21 @@ export def "case-count-analytics-by-norm-attorney get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/caseCountAnalyticsByNormAttorney" $qp)
+  let full_url = (build-url $base "/caseCountAnalyticsByNormAttorney" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"q": $q, "pageNumber": $page_number} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"q": $q, "pageNumber": $page_number} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Case Count Analytics by Judge.
@@ -867,10 +1156,21 @@ export def "case-count-analytics-by-norm-judge get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/caseCountAnalyticsByNormJudge" $qp)
+  let full_url = (build-url $base "/caseCountAnalyticsByNormJudge" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"q": $q, "pageNumber": $page_number} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"q": $q, "pageNumber": $page_number} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Case Count Analytics by Norm Law Firm.
@@ -893,10 +1193,21 @@ export def "case-count-analytics-by-norm-law-firm get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/caseCountAnalyticsByNormLawFirm" $qp)
+  let full_url = (build-url $base "/caseCountAnalyticsByNormLawFirm" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"q": $q, "pageNumber": $page_number} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"q": $q, "pageNumber": $page_number} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Case Count Analytics by Party.
@@ -919,10 +1230,21 @@ export def "case-count-analytics-by-norm-party get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/caseCountAnalyticsByNormParty" $qp)
+  let full_url = (build-url $base "/caseCountAnalyticsByNormParty" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"q": $q, "pageNumber": $page_number} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"q": $q, "pageNumber": $page_number} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Case Count Analytics by Party Role.
@@ -945,10 +1267,21 @@ export def "case-count-analytics-by-party-role get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/caseCountAnalyticsByPartyRole" $qp)
+  let full_url = (build-url $base "/caseCountAnalyticsByPartyRole" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"q": $q, "pageNumber": $page_number} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"q": $q, "pageNumber": $page_number} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Case Count Analytics by Party Role Group.
@@ -971,10 +1304,21 @@ export def "case-count-analytics-by-party-role-group get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/caseCountAnalyticsByPartyRoleGroup" $qp)
+  let full_url = (build-url $base "/caseCountAnalyticsByPartyRoleGroup" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"q": $q, "pageNumber": $page_number} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"q": $q, "pageNumber": $page_number} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets details for a requested Document ID.
@@ -996,10 +1340,21 @@ export def "case-document get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($case_document_id | is-empty) { error make --unspanned { msg: "path parameter 'caseDocumentId' must be non-empty" } }
-  let full_url = (build-url $base ({case_document_id: (encode-path-segment $case_document_id)} | format pattern "/caseDocument/{case_document_id}"))
+  let full_url = (build-url $base ({case_document_id: (encode-path-segment $case_document_id)} | format pattern "/caseDocument/{case_document_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets downloadable URL for a requested Document ID.
@@ -1023,10 +1378,21 @@ export def "case-document-download get" [
   let base = ($base_url | default $BASE_URL)
   if ($case_document_id | is-empty) { error make --unspanned { msg: "path parameter 'caseDocumentId' must be non-empty" } }
   let qp = [(serialize-qp "isPreviewDocument" $is_preview_document "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({case_document_id: (encode-path-segment $case_document_id)} | format pattern "/caseDocumentDownload/{case_document_id}") $qp)
+  let full_url = (build-url $base ({case_document_id: (encode-path-segment $case_document_id)} | format pattern "/caseDocumentDownload/{case_document_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"isPreviewDocument": $is_preview_document} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"isPreviewDocument": $is_preview_document} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Add Case Document Order for requested Document Ids.
@@ -1051,12 +1417,23 @@ export def "case-document-order update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/caseDocumentOrder")
+  let full_url = (build-url $base "/caseDocumentOrder" $auth.query)
   let req_body = {"caseDocumentId": $case_document_id, "isPreviewOnly": $is_preview_only, "pacerOptions": $pacer_options} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get Case Document Order Callback list for a requested Date.
@@ -1080,10 +1457,21 @@ export def "case-document-order-callbacks list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "date" $date "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/caseDocumentOrder/callbacks" $qp)
+  let full_url = (build-url $base "/caseDocumentOrder/callbacks" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"date": $date, "status": $status, "pageNumber": $page_number} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"date": $date, "status": $status, "pageNumber": $page_number} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get Case Document Order Callback for a requested Case Document Order Callback Id.
@@ -1105,10 +1493,21 @@ export def "case-document-order-callbacks get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($case_document_order_callback_id | is-empty) { error make --unspanned { msg: "path parameter 'caseDocumentOrderCallbackId' must be non-empty" } }
-  let full_url = (build-url $base ({case_document_order_callback_id: (encode-path-segment $case_document_order_callback_id)} | format pattern "/caseDocumentOrder/callbacks/{case_document_order_callback_id}"))
+  let full_url = (build-url $base ({case_document_order_callback_id: (encode-path-segment $case_document_order_callback_id)} | format pattern "/caseDocumentOrder/callbacks/{case_document_order_callback_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get Case Export Callback list for a requested Date.
@@ -1132,10 +1531,21 @@ export def "case-export-callbacks list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "date" $date "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/caseExport/callbacks" $qp)
+  let full_url = (build-url $base "/caseExport/callbacks" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"date": $date, "status": $status, "pageNumber": $page_number} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"date": $date, "status": $status, "pageNumber": $page_number} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get Case Export Callback for a requested Case Export Callback Id.
@@ -1157,10 +1567,21 @@ export def "case-export-callbacks get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($case_export_callback_id | is-empty) { error make --unspanned { msg: "path parameter 'caseExportCallbackId' must be non-empty" } }
-  let full_url = (build-url $base ({case_export_callback_id: (encode-path-segment $case_export_callback_id)} | format pattern "/caseExport/callbacks/{case_export_callback_id}"))
+  let full_url = (build-url $base ({case_export_callback_id: (encode-path-segment $case_export_callback_id)} | format pattern "/caseExport/callbacks/{case_export_callback_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets case exported for a requested Case ID.
@@ -1182,10 +1603,21 @@ export def "case-export export" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($case_id | is-empty) { error make --unspanned { msg: "path parameter 'caseId' must be non-empty" } }
-  let full_url = (build-url $base ({case_id: (encode-path-segment $case_id)} | format pattern "/caseExport/{case_id}"))
+  let full_url = (build-url $base ({case_id: (encode-path-segment $case_id)} | format pattern "/caseExport/{case_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Case search.
@@ -1210,10 +1642,21 @@ export def "case-search list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/caseSearch" $qp)
+  let full_url = (build-url $base "/caseSearch" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"q": $q, "sort": $qp_sort, "order": $order, "pageNumber": $page_number} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"q": $q, "sort": $qp_sort, "order": $order, "pageNumber": $page_number} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Case search results for a given caseSearchId.
@@ -1237,10 +1680,21 @@ export def "case-search list-1" [
   let base = ($base_url | default $BASE_URL)
   if ($case_search_id | is-empty) { error make --unspanned { msg: "path parameter 'caseSearchId' must be non-empty" } }
   let qp = [(serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({case_search_id: (encode-path-segment $case_search_id)} | format pattern "/caseSearch/{case_search_id}") $qp)
+  let full_url = (build-url $base ({case_search_id: (encode-path-segment $case_search_id)} | format pattern "/caseSearch/{case_search_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"pageNumber": $page_number} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"pageNumber": $page_number} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Add Case Track for the requested Case Id.
@@ -1265,12 +1719,23 @@ export def "case-track update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/caseTrack")
+  let full_url = (build-url $base "/caseTrack" $auth.query)
   let req_body = {"caseTrackParams": $case_track_params, "schedule": $schedule} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Remove Case Track for a specific Case Id.
@@ -1292,10 +1757,21 @@ export def "case-track delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($case_id | is-empty) { error make --unspanned { msg: "path parameter 'caseId' must be non-empty" } }
-  let full_url = (build-url $base ({case_id: (encode-path-segment $case_id)} | format pattern "/caseTrack/{case_id}"))
+  let full_url = (build-url $base ({case_id: (encode-path-segment $case_id)} | format pattern "/caseTrack/{case_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Get Case Track for a requested Case Id.
@@ -1317,10 +1793,21 @@ export def "case-track get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($case_id | is-empty) { error make --unspanned { msg: "path parameter 'caseId' must be non-empty" } }
-  let full_url = (build-url $base ({case_id: (encode-path-segment $case_id)} | format pattern "/caseTrack/{case_id}"))
+  let full_url = (build-url $base ({case_id: (encode-path-segment $case_id)} | format pattern "/caseTrack/{case_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get Case Track list.
@@ -1344,10 +1831,21 @@ export def "case-tracks get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "lastFetchDate" $last_fetch_date "scalar") (serialize-qp "lastFetchDateWithUpdates" $last_fetch_date_with_updates "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/caseTracks" $qp)
+  let full_url = (build-url $base "/caseTracks" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"lastFetchDate": $last_fetch_date, "lastFetchDateWithUpdates": $last_fetch_date_with_updates, "pageNumber": $page_number} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"lastFetchDate": $last_fetch_date, "lastFetchDateWithUpdates": $last_fetch_date_with_updates, "pageNumber": $page_number} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Add Case Update for the requested Case Id.
@@ -1371,12 +1869,23 @@ export def "case-update update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/caseUpdate")
+  let full_url = (build-url $base "/caseUpdate" $auth.query)
   let req_body = {"caseId": $case_id, "pacerOptions": $pacer_options} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get Case Updates for a requested CaseId.
@@ -1398,10 +1907,21 @@ export def "case-update get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($case_id | is-empty) { error make --unspanned { msg: "path parameter 'caseId' must be non-empty" } }
-  let full_url = (build-url $base ({case_id: (encode-path-segment $case_id)} | format pattern "/caseUpdate/{case_id}"))
+  let full_url = (build-url $base ({case_id: (encode-path-segment $case_id)} | format pattern "/caseUpdate/{case_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get Case Update list for a requested Date.
@@ -1426,10 +1946,21 @@ export def "case-updates get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "caseId" $case_id "scalar") (serialize-qp "requestedDate" $requested_date "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/caseUpdates" $qp)
+  let full_url = (build-url $base "/caseUpdates" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"caseId": $case_id, "requestedDate": $requested_date, "status": $status, "pageNumber": $page_number} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"caseId": $case_id, "requestedDate": $requested_date, "status": $status, "pageNumber": $page_number} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets Court Coverage of all courts of specific type.
@@ -1451,10 +1982,21 @@ export def "court-coverage get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($court_id | is-empty) { error make --unspanned { msg: "path parameter 'courtId' must be non-empty" } }
-  let full_url = (build-url $base ({court_id: (encode-path-segment $court_id)} | format pattern "/courtCoverage/{court_id}"))
+  let full_url = (build-url $base ({court_id: (encode-path-segment $court_id)} | format pattern "/courtCoverage/{court_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get API usage for a requested Date.
@@ -1476,10 +2018,21 @@ export def "daily-usage get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($date | is-empty) { error make --unspanned { msg: "path parameter 'date' must be non-empty" } }
-  let full_url = (build-url $base ({date: (encode-path-segment $date)} | format pattern "/dailyUsage/{date}"))
+  let full_url = (build-url $base ({date: (encode-path-segment $date)} | format pattern "/dailyUsage/{date}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Generate new token to access API.
@@ -1502,12 +2055,23 @@ export def "generate-new-token generate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/generateNewToken")
+  let full_url = (build-url $base "/generateNewToken" $auth.query)
   let req_body = {"clientId": $client_id, "clientSecret": $client_secret} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # API to invalidate all access tokens.
@@ -1530,12 +2094,23 @@ export def "invalidate-all-tokens list" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/invalidateAllTokens")
+  let full_url = (build-url $base "/invalidateAllTokens" $auth.query)
   let req_body = {"clientId": $client_id, "clientSecret": $client_secret} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # API to invalidate the access token.
@@ -1559,12 +2134,23 @@ export def "invalidate-token update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/invalidateToken")
+  let full_url = (build-url $base "/invalidateToken" $auth.query)
   let req_body = {"clientId": $client_id, "clientSecret": $client_secret, "tokenId": $token_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Gets details for a requested Judge ID.
@@ -1586,10 +2172,21 @@ export def "judge get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($judge_id | is-empty) { error make --unspanned { msg: "path parameter 'judgeId' must be non-empty" } }
-  let full_url = (build-url $base ({judge_id: (encode-path-segment $judge_id)} | format pattern "/judge/{judge_id}"))
+  let full_url = (build-url $base ({judge_id: (encode-path-segment $judge_id)} | format pattern "/judge/{judge_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # API to list all the access tokens Id.
@@ -1612,12 +2209,23 @@ export def "list-all-token-ids list" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/listAllTokenIds")
+  let full_url = (build-url $base "/listAllTokenIds" $auth.query)
   let req_body = {"clientId": $client_id, "clientSecret": $client_secret} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # AreaOfLaw Object.
@@ -1642,10 +2250,21 @@ export def "master-data-area-of-law list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/masterData/areaOfLaw" $qp)
+  let full_url = (build-url $base "/masterData/areaOfLaw" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"q": $q, "pageNumber": $page_number, "sort": $qp_sort, "order": $order} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"q": $q, "pageNumber": $page_number, "sort": $qp_sort, "order": $order} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # AreaOfLaw Object for the given AreaOfLaw Id.
@@ -1667,10 +2286,21 @@ export def "master-data-area-of-law get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($area_of_law_id | is-empty) { error make --unspanned { msg: "path parameter 'areaOfLawId' must be non-empty" } }
-  let full_url = (build-url $base ({area_of_law_id: (encode-path-segment $area_of_law_id)} | format pattern "/masterData/areaOfLaw/{area_of_law_id}"))
+  let full_url = (build-url $base ({area_of_law_id: (encode-path-segment $area_of_law_id)} | format pattern "/masterData/areaOfLaw/{area_of_law_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Attorney Representation Type Object.
@@ -1695,10 +2325,21 @@ export def "master-data-attorney-representation-type list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/masterData/attorneyRepresentationType" $qp)
+  let full_url = (build-url $base "/masterData/attorneyRepresentationType" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"q": $q, "pageNumber": $page_number, "sort": $qp_sort, "order": $order} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"q": $q, "pageNumber": $page_number, "sort": $qp_sort, "order": $order} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Attorney Representation Type Object for the given attorneyRepresentationTypeId.
@@ -1720,10 +2361,21 @@ export def "master-data-attorney-representation-type get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($attorney_representation_type_id | is-empty) { error make --unspanned { msg: "path parameter 'attorneyRepresentationTypeId' must be non-empty" } }
-  let full_url = (build-url $base ({attorney_representation_type_id: (encode-path-segment $attorney_representation_type_id)} | format pattern "/masterData/attorneyRepresentationType/{attorney_representation_type_id}"))
+  let full_url = (build-url $base ({attorney_representation_type_id: (encode-path-segment $attorney_representation_type_id)} | format pattern "/masterData/attorneyRepresentationType/{attorney_representation_type_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Attorney Type Object.
@@ -1748,10 +2400,21 @@ export def "master-data-attorney-type list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/masterData/attorneyType" $qp)
+  let full_url = (build-url $base "/masterData/attorneyType" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"q": $q, "pageNumber": $page_number, "sort": $qp_sort, "order": $order} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"q": $q, "pageNumber": $page_number, "sort": $qp_sort, "order": $order} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Attorney Type Object for given Attorney Type Id.
@@ -1773,10 +2436,21 @@ export def "master-data-attorney-type get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($attorney_type_id | is-empty) { error make --unspanned { msg: "path parameter 'attorneyTypeId' must be non-empty" } }
-  let full_url = (build-url $base ({attorney_type_id: (encode-path-segment $attorney_type_id)} | format pattern "/masterData/attorneyType/{attorney_type_id}"))
+  let full_url = (build-url $base ({attorney_type_id: (encode-path-segment $attorney_type_id)} | format pattern "/masterData/attorneyType/{attorney_type_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Case Class Object.
@@ -1801,10 +2475,21 @@ export def "master-data-case-class list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/masterData/caseClass" $qp)
+  let full_url = (build-url $base "/masterData/caseClass" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"q": $q, "pageNumber": $page_number, "sort": $qp_sort, "order": $order} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"q": $q, "pageNumber": $page_number, "sort": $qp_sort, "order": $order} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Case Class Object for the given Case Class Id.
@@ -1826,10 +2511,21 @@ export def "master-data-case-class get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($case_class_id | is-empty) { error make --unspanned { msg: "path parameter 'caseClassId' must be non-empty" } }
-  let full_url = (build-url $base ({case_class_id: (encode-path-segment $case_class_id)} | format pattern "/masterData/caseClass/{case_class_id}"))
+  let full_url = (build-url $base ({case_class_id: (encode-path-segment $case_class_id)} | format pattern "/masterData/caseClass/{case_class_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Case Relationship Type Object.
@@ -1854,10 +2550,21 @@ export def "master-data-case-relationship-type list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/masterData/caseRelationshipType" $qp)
+  let full_url = (build-url $base "/masterData/caseRelationshipType" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"q": $q, "pageNumber": $page_number, "sort": $qp_sort, "order": $order} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"q": $q, "pageNumber": $page_number, "sort": $qp_sort, "order": $order} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Case Relationship Type Object for the given caseRelationshipTypeId.
@@ -1879,10 +2586,21 @@ export def "master-data-case-relationship-type get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($case_relationship_type_id | is-empty) { error make --unspanned { msg: "path parameter 'caseRelationshipTypeId' must be non-empty" } }
-  let full_url = (build-url $base ({case_relationship_type_id: (encode-path-segment $case_relationship_type_id)} | format pattern "/masterData/caseRelationshipType/{case_relationship_type_id}"))
+  let full_url = (build-url $base ({case_relationship_type_id: (encode-path-segment $case_relationship_type_id)} | format pattern "/masterData/caseRelationshipType/{case_relationship_type_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Case Status Object.
@@ -1907,10 +2625,21 @@ export def "master-data-case-status list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/masterData/caseStatus" $qp)
+  let full_url = (build-url $base "/masterData/caseStatus" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"q": $q, "pageNumber": $page_number, "sort": $qp_sort, "order": $order} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"q": $q, "pageNumber": $page_number, "sort": $qp_sort, "order": $order} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the caseStatus information for the given caseStatusId.
@@ -1932,10 +2661,21 @@ export def "master-data-case-status get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($case_status_id | is-empty) { error make --unspanned { msg: "path parameter 'caseStatusId' must be non-empty" } }
-  let full_url = (build-url $base ({case_status_id: (encode-path-segment $case_status_id)} | format pattern "/masterData/caseStatus/{case_status_id}"))
+  let full_url = (build-url $base ({case_status_id: (encode-path-segment $case_status_id)} | format pattern "/masterData/caseStatus/{case_status_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Case Status Group Object.
@@ -1960,10 +2700,21 @@ export def "master-data-case-status-group list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/masterData/caseStatusGroup" $qp)
+  let full_url = (build-url $base "/masterData/caseStatusGroup" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"q": $q, "pageNumber": $page_number, "sort": $qp_sort, "order": $order} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"q": $q, "pageNumber": $page_number, "sort": $qp_sort, "order": $order} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the caseStatusGroup information for the given caseStatusGroupId.
@@ -1985,10 +2736,21 @@ export def "master-data-case-status-group get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($case_status_group_id | is-empty) { error make --unspanned { msg: "path parameter 'caseStatusGroupId' must be non-empty" } }
-  let full_url = (build-url $base ({case_status_group_id: (encode-path-segment $case_status_group_id)} | format pattern "/masterData/caseStatusGroup/{case_status_group_id}"))
+  let full_url = (build-url $base ({case_status_group_id: (encode-path-segment $case_status_group_id)} | format pattern "/masterData/caseStatusGroup/{case_status_group_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Case Type Object.
@@ -2013,10 +2775,21 @@ export def "master-data-case-type list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/masterData/caseType" $qp)
+  let full_url = (build-url $base "/masterData/caseType" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"q": $q, "pageNumber": $page_number, "sort": $qp_sort, "order": $order} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"q": $q, "pageNumber": $page_number, "sort": $qp_sort, "order": $order} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # CaseType Object for given Case Type Id.
@@ -2038,10 +2811,21 @@ export def "master-data-case-type get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($case_type_id | is-empty) { error make --unspanned { msg: "path parameter 'caseTypeId' must be non-empty" } }
-  let full_url = (build-url $base ({case_type_id: (encode-path-segment $case_type_id)} | format pattern "/masterData/caseType/{case_type_id}"))
+  let full_url = (build-url $base ({case_type_id: (encode-path-segment $case_type_id)} | format pattern "/masterData/caseType/{case_type_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # CaseTypeGroup Object.
@@ -2066,10 +2850,21 @@ export def "master-data-case-type-group list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/masterData/caseTypeGroup" $qp)
+  let full_url = (build-url $base "/masterData/caseTypeGroup" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"q": $q, "pageNumber": $page_number, "sort": $qp_sort, "order": $order} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"q": $q, "pageNumber": $page_number, "sort": $qp_sort, "order": $order} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # CaseType Group for the given CaseType Group Id.
@@ -2091,10 +2886,21 @@ export def "master-data-case-type-group get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($case_type_group_id | is-empty) { error make --unspanned { msg: "path parameter 'caseTypeGroupId' must be non-empty" } }
-  let full_url = (build-url $base ({case_type_group_id: (encode-path-segment $case_type_group_id)} | format pattern "/masterData/caseTypeGroup/{case_type_group_id}"))
+  let full_url = (build-url $base ({case_type_group_id: (encode-path-segment $case_type_group_id)} | format pattern "/masterData/caseTypeGroup/{case_type_group_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # CauseOfAction Object.
@@ -2119,10 +2925,21 @@ export def "master-data-cause-of-action list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/masterData/causeOfAction" $qp)
+  let full_url = (build-url $base "/masterData/causeOfAction" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"q": $q, "pageNumber": $page_number, "sort": $qp_sort, "order": $order} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"q": $q, "pageNumber": $page_number, "sort": $qp_sort, "order": $order} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # CauseOfAction Object for the given causeOfActionId.
@@ -2144,10 +2961,21 @@ export def "master-data-cause-of-action get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($cause_of_action_id | is-empty) { error make --unspanned { msg: "path parameter 'causeOfActionId' must be non-empty" } }
-  let full_url = (build-url $base ({cause_of_action_id: (encode-path-segment $cause_of_action_id)} | format pattern "/masterData/causeOfAction/{cause_of_action_id}"))
+  let full_url = (build-url $base ({cause_of_action_id: (encode-path-segment $cause_of_action_id)} | format pattern "/masterData/causeOfAction/{cause_of_action_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # CauseOfActionAdditionaData Object.
@@ -2172,10 +3000,21 @@ export def "master-data-cause-of-action-additional-data list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/masterData/causeOfActionAdditionalData" $qp)
+  let full_url = (build-url $base "/masterData/causeOfActionAdditionalData" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"q": $q, "pageNumber": $page_number, "sort": $qp_sort, "order": $order} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"q": $q, "pageNumber": $page_number, "sort": $qp_sort, "order": $order} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # CauseOfActionAdditionalData Object for the given causeOfActionAdditionalDataId.
@@ -2197,10 +3036,21 @@ export def "master-data-cause-of-action-additional-data get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($cause_of_action_additional_data_id | is-empty) { error make --unspanned { msg: "path parameter 'causeOfActionAdditionalDataId' must be non-empty" } }
-  let full_url = (build-url $base ({cause_of_action_additional_data_id: (encode-path-segment $cause_of_action_additional_data_id)} | format pattern "/masterData/causeOfActionAdditionalData/{cause_of_action_additional_data_id}"))
+  let full_url = (build-url $base ({cause_of_action_additional_data_id: (encode-path-segment $cause_of_action_additional_data_id)} | format pattern "/masterData/causeOfActionAdditionalData/{cause_of_action_additional_data_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # CauseOfActionGroup Object.
@@ -2225,10 +3075,21 @@ export def "master-data-cause-of-action-group list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/masterData/causeOfActionGroup" $qp)
+  let full_url = (build-url $base "/masterData/causeOfActionGroup" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"q": $q, "pageNumber": $page_number, "sort": $qp_sort, "order": $order} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"q": $q, "pageNumber": $page_number, "sort": $qp_sort, "order": $order} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # CauseOfActionGroup Object for the given causeOfActionGroupId.
@@ -2250,10 +3111,21 @@ export def "master-data-cause-of-action-group get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($cause_of_action_group_id | is-empty) { error make --unspanned { msg: "path parameter 'causeOfActionGroupId' must be non-empty" } }
-  let full_url = (build-url $base ({cause_of_action_group_id: (encode-path-segment $cause_of_action_group_id)} | format pattern "/masterData/causeOfActionGroup/{cause_of_action_group_id}"))
+  let full_url = (build-url $base ({cause_of_action_group_id: (encode-path-segment $cause_of_action_group_id)} | format pattern "/masterData/causeOfActionGroup/{cause_of_action_group_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Charge Object.
@@ -2278,10 +3150,21 @@ export def "master-data-charge list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/masterData/charge" $qp)
+  let full_url = (build-url $base "/masterData/charge" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"q": $q, "pageNumber": $page_number, "sort": $qp_sort, "order": $order} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"q": $q, "pageNumber": $page_number, "sort": $qp_sort, "order": $order} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Charge Object for the given chargeId.
@@ -2303,10 +3186,21 @@ export def "master-data-charge get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($charge_id | is-empty) { error make --unspanned { msg: "path parameter 'chargeId' must be non-empty" } }
-  let full_url = (build-url $base ({charge_id: (encode-path-segment $charge_id)} | format pattern "/masterData/charge/{charge_id}"))
+  let full_url = (build-url $base ({charge_id: (encode-path-segment $charge_id)} | format pattern "/masterData/charge/{charge_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Charge Additional Data Object.
@@ -2331,10 +3225,21 @@ export def "master-data-charge-additional-data list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/masterData/chargeAdditionalData" $qp)
+  let full_url = (build-url $base "/masterData/chargeAdditionalData" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"q": $q, "pageNumber": $page_number, "sort": $qp_sort, "order": $order} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"q": $q, "pageNumber": $page_number, "sort": $qp_sort, "order": $order} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Charge Additional Data Object for the given chargeAdditionalDataId.
@@ -2356,10 +3261,21 @@ export def "master-data-charge-additional-data get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($charge_additional_data_id | is-empty) { error make --unspanned { msg: "path parameter 'chargeAdditionalDataId' must be non-empty" } }
-  let full_url = (build-url $base ({charge_additional_data_id: (encode-path-segment $charge_additional_data_id)} | format pattern "/masterData/chargeAdditionalData/{charge_additional_data_id}"))
+  let full_url = (build-url $base ({charge_additional_data_id: (encode-path-segment $charge_additional_data_id)} | format pattern "/masterData/chargeAdditionalData/{charge_additional_data_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # ChargeDegree Object.
@@ -2384,10 +3300,21 @@ export def "master-data-charge-degree list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/masterData/chargeDegree" $qp)
+  let full_url = (build-url $base "/masterData/chargeDegree" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"q": $q, "pageNumber": $page_number, "sort": $qp_sort, "order": $order} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"q": $q, "pageNumber": $page_number, "sort": $qp_sort, "order": $order} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # ChargeDegree Object for the given chargeDegreeId.
@@ -2409,10 +3336,21 @@ export def "master-data-charge-degree get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($charge_degree_id | is-empty) { error make --unspanned { msg: "path parameter 'chargeDegreeId' must be non-empty" } }
-  let full_url = (build-url $base ({charge_degree_id: (encode-path-segment $charge_degree_id)} | format pattern "/masterData/chargeDegree/{charge_degree_id}"))
+  let full_url = (build-url $base ({charge_degree_id: (encode-path-segment $charge_degree_id)} | format pattern "/masterData/chargeDegree/{charge_degree_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Charge Group Object.
@@ -2437,10 +3375,21 @@ export def "master-data-charge-group list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/masterData/chargeGroup" $qp)
+  let full_url = (build-url $base "/masterData/chargeGroup" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"q": $q, "pageNumber": $page_number, "sort": $qp_sort, "order": $order} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"q": $q, "pageNumber": $page_number, "sort": $qp_sort, "order": $order} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Charge Group Object for the given chargeGroupId.
@@ -2462,10 +3411,21 @@ export def "master-data-charge-group get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($charge_group_id | is-empty) { error make --unspanned { msg: "path parameter 'chargeGroupId' must be non-empty" } }
-  let full_url = (build-url $base ({charge_group_id: (encode-path-segment $charge_group_id)} | format pattern "/masterData/chargeGroup/{charge_group_id}"))
+  let full_url = (build-url $base ({charge_group_id: (encode-path-segment $charge_group_id)} | format pattern "/masterData/chargeGroup/{charge_group_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # ChargeSeverity Object.
@@ -2490,10 +3450,21 @@ export def "master-data-charge-severity list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/masterData/chargeSeverity" $qp)
+  let full_url = (build-url $base "/masterData/chargeSeverity" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"q": $q, "pageNumber": $page_number, "sort": $qp_sort, "order": $order} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"q": $q, "pageNumber": $page_number, "sort": $qp_sort, "order": $order} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # ChargeSeverity Object for the given chargeSeverityId.
@@ -2515,10 +3486,21 @@ export def "master-data-charge-severity get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($charge_severity_id | is-empty) { error make --unspanned { msg: "path parameter 'chargeSeverityId' must be non-empty" } }
-  let full_url = (build-url $base ({charge_severity_id: (encode-path-segment $charge_severity_id)} | format pattern "/masterData/chargeSeverity/{charge_severity_id}"))
+  let full_url = (build-url $base ({charge_severity_id: (encode-path-segment $charge_severity_id)} | format pattern "/masterData/chargeSeverity/{charge_severity_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Court Objects.
@@ -2543,10 +3525,21 @@ export def "master-data-court list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/masterData/court" $qp)
+  let full_url = (build-url $base "/masterData/court" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"q": $q, "pageNumber": $page_number, "sort": $qp_sort, "order": $order} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"q": $q, "pageNumber": $page_number, "sort": $qp_sort, "order": $order} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Court Object for given courtId.
@@ -2568,10 +3561,21 @@ export def "master-data-court get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($court_id | is-empty) { error make --unspanned { msg: "path parameter 'courtId' must be non-empty" } }
-  let full_url = (build-url $base ({court_id: (encode-path-segment $court_id)} | format pattern "/masterData/court/{court_id}"))
+  let full_url = (build-url $base ({court_id: (encode-path-segment $court_id)} | format pattern "/masterData/court/{court_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Appeal Court Objects for given courtId.
@@ -2597,10 +3601,21 @@ export def "master-data-court-appeal-courts get" [
   let base = ($base_url | default $BASE_URL)
   if ($court_id | is-empty) { error make --unspanned { msg: "path parameter 'courtId' must be non-empty" } }
   let qp = [(serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({court_id: (encode-path-segment $court_id)} | format pattern "/masterData/court/{court_id}/appealCourts") $qp)
+  let full_url = (build-url $base ({court_id: (encode-path-segment $court_id)} | format pattern "/masterData/court/{court_id}/appealCourts") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"pageNumber": $page_number, "sort": $qp_sort, "order": $order} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"pageNumber": $page_number, "sort": $qp_sort, "order": $order} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Associated Court Location for given courtId.
@@ -2626,10 +3641,21 @@ export def "master-data-court-court-locations get" [
   let base = ($base_url | default $BASE_URL)
   if ($court_id | is-empty) { error make --unspanned { msg: "path parameter 'courtId' must be non-empty" } }
   let qp = [(serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({court_id: (encode-path-segment $court_id)} | format pattern "/masterData/court/{court_id}/courtLocations") $qp)
+  let full_url = (build-url $base ({court_id: (encode-path-segment $court_id)} | format pattern "/masterData/court/{court_id}/courtLocations") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"pageNumber": $page_number, "sort": $qp_sort, "order": $order} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"pageNumber": $page_number, "sort": $qp_sort, "order": $order} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Jurisdiction Geo Objects for given courtId.
@@ -2655,10 +3681,21 @@ export def "master-data-court-jurisdiction-geo get" [
   let base = ($base_url | default $BASE_URL)
   if ($court_id | is-empty) { error make --unspanned { msg: "path parameter 'courtId' must be non-empty" } }
   let qp = [(serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({court_id: (encode-path-segment $court_id)} | format pattern "/masterData/court/{court_id}/jurisdictionGeo") $qp)
+  let full_url = (build-url $base ({court_id: (encode-path-segment $court_id)} | format pattern "/masterData/court/{court_id}/jurisdictionGeo") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"pageNumber": $page_number, "sort": $qp_sort, "order": $order} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"pageNumber": $page_number, "sort": $qp_sort, "order": $order} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Courthouse Object.
@@ -2683,10 +3720,21 @@ export def "master-data-court-location list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/masterData/courtLocation" $qp)
+  let full_url = (build-url $base "/masterData/courtLocation" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"q": $q, "pageNumber": $page_number, "sort": $qp_sort, "order": $order} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"q": $q, "pageNumber": $page_number, "sort": $qp_sort, "order": $order} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Courthouse Object for given Court Location Id.
@@ -2708,10 +3756,21 @@ export def "master-data-court-location get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($court_location_id | is-empty) { error make --unspanned { msg: "path parameter 'courtLocationId' must be non-empty" } }
-  let full_url = (build-url $base ({court_location_id: (encode-path-segment $court_location_id)} | format pattern "/masterData/courtLocation/{court_location_id}"))
+  let full_url = (build-url $base ({court_location_id: (encode-path-segment $court_location_id)} | format pattern "/masterData/courtLocation/{court_location_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Associated Court for given Court Location.
@@ -2737,10 +3796,21 @@ export def "master-data-court-location-courts get" [
   let base = ($base_url | default $BASE_URL)
   if ($court_location_id | is-empty) { error make --unspanned { msg: "path parameter 'courtLocationId' must be non-empty" } }
   let qp = [(serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({court_location_id: (encode-path-segment $court_location_id)} | format pattern "/masterData/courtLocation/{court_location_id}/courts") $qp)
+  let full_url = (build-url $base ({court_location_id: (encode-path-segment $court_location_id)} | format pattern "/masterData/courtLocation/{court_location_id}/courts") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"pageNumber": $page_number, "sort": $qp_sort, "order": $order} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"pageNumber": $page_number, "sort": $qp_sort, "order": $order} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Court Service Status Object.
@@ -2765,10 +3835,21 @@ export def "master-data-court-service-status list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/masterData/courtServiceStatus" $qp)
+  let full_url = (build-url $base "/masterData/courtServiceStatus" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"q": $q, "pageNumber": $page_number, "sort": $qp_sort, "order": $order} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"q": $q, "pageNumber": $page_number, "sort": $qp_sort, "order": $order} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Court Service Status Object for the given courtServiceStatusId.
@@ -2790,10 +3871,21 @@ export def "master-data-court-service-status get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($court_service_status_id | is-empty) { error make --unspanned { msg: "path parameter 'courtServiceStatusId' must be non-empty" } }
-  let full_url = (build-url $base ({court_service_status_id: (encode-path-segment $court_service_status_id)} | format pattern "/masterData/courtServiceStatus/{court_service_status_id}"))
+  let full_url = (build-url $base ({court_service_status_id: (encode-path-segment $court_service_status_id)} | format pattern "/masterData/courtServiceStatus/{court_service_status_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Court System Objects.
@@ -2818,10 +3910,21 @@ export def "master-data-court-system list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/masterData/courtSystem" $qp)
+  let full_url = (build-url $base "/masterData/courtSystem" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"q": $q, "pageNumber": $page_number, "sort": $qp_sort, "order": $order} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"q": $q, "pageNumber": $page_number, "sort": $qp_sort, "order": $order} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Court System Object for given courtSystemId.
@@ -2843,10 +3946,21 @@ export def "master-data-court-system get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($court_system_id | is-empty) { error make --unspanned { msg: "path parameter 'courtSystemId' must be non-empty" } }
-  let full_url = (build-url $base ({court_system_id: (encode-path-segment $court_system_id)} | format pattern "/masterData/courtSystem/{court_system_id}"))
+  let full_url = (build-url $base ({court_system_id: (encode-path-segment $court_system_id)} | format pattern "/masterData/courtSystem/{court_system_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Court Type Objects.
@@ -2871,10 +3985,21 @@ export def "master-data-court-type list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/masterData/courtType" $qp)
+  let full_url = (build-url $base "/masterData/courtType" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"q": $q, "pageNumber": $page_number, "sort": $qp_sort, "order": $order} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"q": $q, "pageNumber": $page_number, "sort": $qp_sort, "order": $order} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Court Type Object for given courtTypeId.
@@ -2896,10 +4021,21 @@ export def "master-data-court-type get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($court_type_id | is-empty) { error make --unspanned { msg: "path parameter 'courtTypeId' must be non-empty" } }
-  let full_url = (build-url $base ({court_type_id: (encode-path-segment $court_type_id)} | format pattern "/masterData/courtType/{court_type_id}"))
+  let full_url = (build-url $base ({court_type_id: (encode-path-segment $court_type_id)} | format pattern "/masterData/courtType/{court_type_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Judge Type Object.
@@ -2924,10 +4060,21 @@ export def "master-data-judge-type list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/masterData/judgeType" $qp)
+  let full_url = (build-url $base "/masterData/judgeType" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"q": $q, "pageNumber": $page_number, "sort": $qp_sort, "order": $order} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"q": $q, "pageNumber": $page_number, "sort": $qp_sort, "order": $order} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Judge Type Object for the given judgeTypeId.
@@ -2949,10 +4096,21 @@ export def "master-data-judge-type get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($judge_type_id | is-empty) { error make --unspanned { msg: "path parameter 'judgeTypeId' must be non-empty" } }
-  let full_url = (build-url $base ({judge_type_id: (encode-path-segment $judge_type_id)} | format pattern "/masterData/judgeType/{judge_type_id}"))
+  let full_url = (build-url $base ({judge_type_id: (encode-path-segment $judge_type_id)} | format pattern "/masterData/judgeType/{judge_type_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Jurisdiction Geo Object.
@@ -2977,10 +4135,21 @@ export def "master-data-jurisdiction-geo list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/masterData/jurisdictionGeo" $qp)
+  let full_url = (build-url $base "/masterData/jurisdictionGeo" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"q": $q, "pageNumber": $page_number, "sort": $qp_sort, "order": $order} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"q": $q, "pageNumber": $page_number, "sort": $qp_sort, "order": $order} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Jurisdiction Geo Object for given Jurisdiction Geo Id.
@@ -3002,10 +4171,21 @@ export def "master-data-jurisdiction-geo get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($jurisdiction_geo_id | is-empty) { error make --unspanned { msg: "path parameter 'jurisdictionGeoId' must be non-empty" } }
-  let full_url = (build-url $base ({jurisdiction_geo_id: (encode-path-segment $jurisdiction_geo_id)} | format pattern "/masterData/jurisdictionGeo/{jurisdiction_geo_id}"))
+  let full_url = (build-url $base ({jurisdiction_geo_id: (encode-path-segment $jurisdiction_geo_id)} | format pattern "/masterData/jurisdictionGeo/{jurisdiction_geo_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Associated Court for given Jurisdiction Geo.
@@ -3031,10 +4211,21 @@ export def "master-data-jurisdiction-geo-courts get" [
   let base = ($base_url | default $BASE_URL)
   if ($jurisdiction_geo_id | is-empty) { error make --unspanned { msg: "path parameter 'jurisdictionGeoId' must be non-empty" } }
   let qp = [(serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({jurisdiction_geo_id: (encode-path-segment $jurisdiction_geo_id)} | format pattern "/masterData/jurisdictionGeo/{jurisdiction_geo_id}/courts") $qp)
+  let full_url = (build-url $base ({jurisdiction_geo_id: (encode-path-segment $jurisdiction_geo_id)} | format pattern "/masterData/jurisdictionGeo/{jurisdiction_geo_id}/courts") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"pageNumber": $page_number, "sort": $qp_sort, "order": $order} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"pageNumber": $page_number, "sort": $qp_sort, "order": $order} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Party Role Object.
@@ -3059,10 +4250,21 @@ export def "master-data-party-role list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/masterData/partyRole" $qp)
+  let full_url = (build-url $base "/masterData/partyRole" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"q": $q, "pageNumber": $page_number, "sort": $qp_sort, "order": $order} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"q": $q, "pageNumber": $page_number, "sort": $qp_sort, "order": $order} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Party Role Object.
@@ -3084,10 +4286,21 @@ export def "master-data-party-role get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($party_role_id | is-empty) { error make --unspanned { msg: "path parameter 'partyRoleId' must be non-empty" } }
-  let full_url = (build-url $base ({party_role_id: (encode-path-segment $party_role_id)} | format pattern "/masterData/partyRole/{party_role_id}"))
+  let full_url = (build-url $base ({party_role_id: (encode-path-segment $party_role_id)} | format pattern "/masterData/partyRole/{party_role_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Party Role Group Object.
@@ -3112,10 +4325,21 @@ export def "master-data-party-role-group list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/masterData/partyRoleGroup" $qp)
+  let full_url = (build-url $base "/masterData/partyRoleGroup" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"q": $q, "pageNumber": $page_number, "sort": $qp_sort, "order": $order} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"q": $q, "pageNumber": $page_number, "sort": $qp_sort, "order": $order} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Party Role Group Object.
@@ -3137,10 +4361,21 @@ export def "master-data-party-role-group get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($party_role_group_id | is-empty) { error make --unspanned { msg: "path parameter 'partyRoleGroupId' must be non-empty" } }
-  let full_url = (build-url $base ({party_role_group_id: (encode-path-segment $party_role_group_id)} | format pattern "/masterData/partyRoleGroup/{party_role_group_id}"))
+  let full_url = (build-url $base ({party_role_group_id: (encode-path-segment $party_role_group_id)} | format pattern "/masterData/partyRoleGroup/{party_role_group_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Norm Attorney Details.
@@ -3162,10 +4397,21 @@ export def "norm-attorney get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($norm_attorney_id | is-empty) { error make --unspanned { msg: "path parameter 'normAttorneyId' must be non-empty" } }
-  let full_url = (build-url $base ({norm_attorney_id: (encode-path-segment $norm_attorney_id)} | format pattern "/normAttorney/{norm_attorney_id}"))
+  let full_url = (build-url $base ({norm_attorney_id: (encode-path-segment $norm_attorney_id)} | format pattern "/normAttorney/{norm_attorney_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Judges faced by the Attorney.
@@ -3190,10 +4436,21 @@ export def "norm-attorney-associated-norm-judges get" [
   let base = ($base_url | default $BASE_URL)
   if ($norm_attorney_id | is-empty) { error make --unspanned { msg: "path parameter 'normAttorneyId' must be non-empty" } }
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({norm_attorney_id: (encode-path-segment $norm_attorney_id)} | format pattern "/normAttorney/{norm_attorney_id}/associatedNormJudges") $qp)
+  let full_url = (build-url $base ({norm_attorney_id: (encode-path-segment $norm_attorney_id)} | format pattern "/normAttorney/{norm_attorney_id}/associatedNormJudges") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"q": $q, "pageNumber": $page_number} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"q": $q, "pageNumber": $page_number} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Law Firms the attorney has worked for.
@@ -3218,10 +4475,21 @@ export def "norm-attorney-associated-norm-law-firms get" [
   let base = ($base_url | default $BASE_URL)
   if ($norm_attorney_id | is-empty) { error make --unspanned { msg: "path parameter 'normAttorneyId' must be non-empty" } }
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({norm_attorney_id: (encode-path-segment $norm_attorney_id)} | format pattern "/normAttorney/{norm_attorney_id}/associatedNormLawFirms") $qp)
+  let full_url = (build-url $base ({norm_attorney_id: (encode-path-segment $norm_attorney_id)} | format pattern "/normAttorney/{norm_attorney_id}/associatedNormLawFirms") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"q": $q, "pageNumber": $page_number} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"q": $q, "pageNumber": $page_number} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Parties Represented By the Attorney.
@@ -3246,10 +4514,21 @@ export def "norm-attorney-associated-norm-parties get" [
   let base = ($base_url | default $BASE_URL)
   if ($norm_attorney_id | is-empty) { error make --unspanned { msg: "path parameter 'normAttorneyId' must be non-empty" } }
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({norm_attorney_id: (encode-path-segment $norm_attorney_id)} | format pattern "/normAttorney/{norm_attorney_id}/associatedNormParties") $qp)
+  let full_url = (build-url $base ({norm_attorney_id: (encode-path-segment $norm_attorney_id)} | format pattern "/normAttorney/{norm_attorney_id}/associatedNormParties") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"q": $q, "pageNumber": $page_number} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"q": $q, "pageNumber": $page_number} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Case Count Analytics by Opposing Norm Attorney.
@@ -3274,10 +4553,21 @@ export def "norm-attorney-case-count-analytics-by-opposing-norm-attorney get" [
   let base = ($base_url | default $BASE_URL)
   if ($norm_attorney_id | is-empty) { error make --unspanned { msg: "path parameter 'normAttorneyId' must be non-empty" } }
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({norm_attorney_id: (encode-path-segment $norm_attorney_id)} | format pattern "/normAttorney/{norm_attorney_id}/caseCountAnalyticsByOpposingNormAttorney") $qp)
+  let full_url = (build-url $base ({norm_attorney_id: (encode-path-segment $norm_attorney_id)} | format pattern "/normAttorney/{norm_attorney_id}/caseCountAnalyticsByOpposingNormAttorney") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"q": $q, "pageNumber": $page_number} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"q": $q, "pageNumber": $page_number} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Attorney search.
@@ -3300,10 +4590,21 @@ export def "norm-attorney-search list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/normAttorneySearch" $qp)
+  let full_url = (build-url $base "/normAttorneySearch" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"q": $q, "pageNumber": $page_number} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"q": $q, "pageNumber": $page_number} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Norm attorney search results for a given normAttorneySearchId.
@@ -3327,10 +4628,21 @@ export def "norm-attorney-search list-normalized" [
   let base = ($base_url | default $BASE_URL)
   if ($norm_attorney_search_id | is-empty) { error make --unspanned { msg: "path parameter 'normAttorneySearchId' must be non-empty" } }
   let qp = [(serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({norm_attorney_search_id: (encode-path-segment $norm_attorney_search_id)} | format pattern "/normAttorneySearch/{norm_attorney_search_id}") $qp)
+  let full_url = (build-url $base ({norm_attorney_search_id: (encode-path-segment $norm_attorney_search_id)} | format pattern "/normAttorneySearch/{norm_attorney_search_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"pageNumber": $page_number} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"pageNumber": $page_number} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Norm Judge Details.
@@ -3352,10 +4664,21 @@ export def "norm-judge get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($norm_judge_id | is-empty) { error make --unspanned { msg: "path parameter 'normJudgeId' must be non-empty" } }
-  let full_url = (build-url $base ({norm_judge_id: (encode-path-segment $norm_judge_id)} | format pattern "/normJudge/{norm_judge_id}"))
+  let full_url = (build-url $base ({norm_judge_id: (encode-path-segment $norm_judge_id)} | format pattern "/normJudge/{norm_judge_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Attorneys Associated with the Judge.
@@ -3380,10 +4703,21 @@ export def "norm-judge-associated-norm-attorneys get" [
   let base = ($base_url | default $BASE_URL)
   if ($norm_judge_id | is-empty) { error make --unspanned { msg: "path parameter 'normJudgeId' must be non-empty" } }
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({norm_judge_id: (encode-path-segment $norm_judge_id)} | format pattern "/normJudge/{norm_judge_id}/associatedNormAttorneys") $qp)
+  let full_url = (build-url $base ({norm_judge_id: (encode-path-segment $norm_judge_id)} | format pattern "/normJudge/{norm_judge_id}/associatedNormAttorneys") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"q": $q, "pageNumber": $page_number} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"q": $q, "pageNumber": $page_number} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Law Firms Associated With the Judge.
@@ -3408,10 +4742,21 @@ export def "norm-judge-associated-norm-law-firms get" [
   let base = ($base_url | default $BASE_URL)
   if ($norm_judge_id | is-empty) { error make --unspanned { msg: "path parameter 'normJudgeId' must be non-empty" } }
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({norm_judge_id: (encode-path-segment $norm_judge_id)} | format pattern "/normJudge/{norm_judge_id}/associatedNormLawFirms") $qp)
+  let full_url = (build-url $base ({norm_judge_id: (encode-path-segment $norm_judge_id)} | format pattern "/normJudge/{norm_judge_id}/associatedNormLawFirms") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"q": $q, "pageNumber": $page_number} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"q": $q, "pageNumber": $page_number} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Parties Associated with the Judge.
@@ -3436,10 +4781,21 @@ export def "norm-judge-associated-norm-parties get" [
   let base = ($base_url | default $BASE_URL)
   if ($norm_judge_id | is-empty) { error make --unspanned { msg: "path parameter 'normJudgeId' must be non-empty" } }
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({norm_judge_id: (encode-path-segment $norm_judge_id)} | format pattern "/normJudge/{norm_judge_id}/associatedNormParties") $qp)
+  let full_url = (build-url $base ({norm_judge_id: (encode-path-segment $norm_judge_id)} | format pattern "/normJudge/{norm_judge_id}/associatedNormParties") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"q": $q, "pageNumber": $page_number} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"q": $q, "pageNumber": $page_number} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Judge search.
@@ -3462,10 +4818,21 @@ export def "norm-judge-search list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/normJudgeSearch" $qp)
+  let full_url = (build-url $base "/normJudgeSearch" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"q": $q, "pageNumber": $page_number} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"q": $q, "pageNumber": $page_number} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Norm judge search results for a given normJudgeSearchId.
@@ -3489,10 +4856,21 @@ export def "norm-judge-search list-normalized" [
   let base = ($base_url | default $BASE_URL)
   if ($norm_judge_search_id | is-empty) { error make --unspanned { msg: "path parameter 'normJudgeSearchId' must be non-empty" } }
   let qp = [(serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({norm_judge_search_id: (encode-path-segment $norm_judge_search_id)} | format pattern "/normJudgeSearch/{norm_judge_search_id}") $qp)
+  let full_url = (build-url $base ({norm_judge_search_id: (encode-path-segment $norm_judge_search_id)} | format pattern "/normJudgeSearch/{norm_judge_search_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"pageNumber": $page_number} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"pageNumber": $page_number} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Norm LawFirm Details.
@@ -3514,10 +4892,21 @@ export def "norm-law-firm get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($norm_law_firm_id | is-empty) { error make --unspanned { msg: "path parameter 'normLawFirmId' must be non-empty" } }
-  let full_url = (build-url $base ({norm_law_firm_id: (encode-path-segment $norm_law_firm_id)} | format pattern "/normLawFirm/{norm_law_firm_id}"))
+  let full_url = (build-url $base ({norm_law_firm_id: (encode-path-segment $norm_law_firm_id)} | format pattern "/normLawFirm/{norm_law_firm_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Attorneys working for the Law Firm.
@@ -3542,10 +4931,21 @@ export def "norm-law-firm-associated-norm-attorneys get" [
   let base = ($base_url | default $BASE_URL)
   if ($norm_law_firm_id | is-empty) { error make --unspanned { msg: "path parameter 'normLawFirmId' must be non-empty" } }
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({norm_law_firm_id: (encode-path-segment $norm_law_firm_id)} | format pattern "/normLawFirm/{norm_law_firm_id}/associatedNormAttorneys") $qp)
+  let full_url = (build-url $base ({norm_law_firm_id: (encode-path-segment $norm_law_firm_id)} | format pattern "/normLawFirm/{norm_law_firm_id}/associatedNormAttorneys") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"q": $q, "pageNumber": $page_number} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"q": $q, "pageNumber": $page_number} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Judges Faced By the Law Firm.
@@ -3570,10 +4970,21 @@ export def "norm-law-firm-associated-norm-judges get" [
   let base = ($base_url | default $BASE_URL)
   if ($norm_law_firm_id | is-empty) { error make --unspanned { msg: "path parameter 'normLawFirmId' must be non-empty" } }
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({norm_law_firm_id: (encode-path-segment $norm_law_firm_id)} | format pattern "/normLawFirm/{norm_law_firm_id}/associatedNormJudges") $qp)
+  let full_url = (build-url $base ({norm_law_firm_id: (encode-path-segment $norm_law_firm_id)} | format pattern "/normLawFirm/{norm_law_firm_id}/associatedNormJudges") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"q": $q, "pageNumber": $page_number} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"q": $q, "pageNumber": $page_number} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Parties Represented by the Law Firm.
@@ -3598,10 +5009,21 @@ export def "norm-law-firm-associated-norm-parties get" [
   let base = ($base_url | default $BASE_URL)
   if ($norm_law_firm_id | is-empty) { error make --unspanned { msg: "path parameter 'normLawFirmId' must be non-empty" } }
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({norm_law_firm_id: (encode-path-segment $norm_law_firm_id)} | format pattern "/normLawFirm/{norm_law_firm_id}/associatedNormParties") $qp)
+  let full_url = (build-url $base ({norm_law_firm_id: (encode-path-segment $norm_law_firm_id)} | format pattern "/normLawFirm/{norm_law_firm_id}/associatedNormParties") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"q": $q, "pageNumber": $page_number} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"q": $q, "pageNumber": $page_number} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Case Count Analytics by Opposing Norm Law Firm.
@@ -3626,10 +5048,21 @@ export def "norm-law-firm-case-count-analytics-by-opposing-norm-law-firm get" [
   let base = ($base_url | default $BASE_URL)
   if ($norm_law_firm_id | is-empty) { error make --unspanned { msg: "path parameter 'normLawFirmId' must be non-empty" } }
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({norm_law_firm_id: (encode-path-segment $norm_law_firm_id)} | format pattern "/normLawFirm/{norm_law_firm_id}/caseCountAnalyticsByOpposingNormLawFirm") $qp)
+  let full_url = (build-url $base ({norm_law_firm_id: (encode-path-segment $norm_law_firm_id)} | format pattern "/normLawFirm/{norm_law_firm_id}/caseCountAnalyticsByOpposingNormLawFirm") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"q": $q, "pageNumber": $page_number} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"q": $q, "pageNumber": $page_number} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Law firm search.
@@ -3652,10 +5085,21 @@ export def "norm-law-firm-search list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/normLawFirmSearch" $qp)
+  let full_url = (build-url $base "/normLawFirmSearch" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"q": $q, "pageNumber": $page_number} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"q": $q, "pageNumber": $page_number} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Norm law firm search result for a given normLawFirmSearchId.
@@ -3679,10 +5123,21 @@ export def "norm-law-firm-search list-normalized" [
   let base = ($base_url | default $BASE_URL)
   if ($norm_law_firm_search_id | is-empty) { error make --unspanned { msg: "path parameter 'normLawFirmSearchId' must be non-empty" } }
   let qp = [(serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({norm_law_firm_search_id: (encode-path-segment $norm_law_firm_search_id)} | format pattern "/normLawFirmSearch/{norm_law_firm_search_id}") $qp)
+  let full_url = (build-url $base ({norm_law_firm_search_id: (encode-path-segment $norm_law_firm_search_id)} | format pattern "/normLawFirmSearch/{norm_law_firm_search_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"pageNumber": $page_number} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"pageNumber": $page_number} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Norm Party Details.
@@ -3704,10 +5159,21 @@ export def "norm-party get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($norm_party_id | is-empty) { error make --unspanned { msg: "path parameter 'normPartyId' must be non-empty" } }
-  let full_url = (build-url $base ({norm_party_id: (encode-path-segment $norm_party_id)} | format pattern "/normParty/{norm_party_id}"))
+  let full_url = (build-url $base ({norm_party_id: (encode-path-segment $norm_party_id)} | format pattern "/normParty/{norm_party_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Attorneys that represented the Party.
@@ -3732,10 +5198,21 @@ export def "norm-party-associated-norm-attorneys get" [
   let base = ($base_url | default $BASE_URL)
   if ($norm_party_id | is-empty) { error make --unspanned { msg: "path parameter 'normPartyId' must be non-empty" } }
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({norm_party_id: (encode-path-segment $norm_party_id)} | format pattern "/normParty/{norm_party_id}/associatedNormAttorneys") $qp)
+  let full_url = (build-url $base ({norm_party_id: (encode-path-segment $norm_party_id)} | format pattern "/normParty/{norm_party_id}/associatedNormAttorneys") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"q": $q, "pageNumber": $page_number} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"q": $q, "pageNumber": $page_number} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Judges Faced By the Party.
@@ -3760,10 +5237,21 @@ export def "norm-party-associated-norm-judges get" [
   let base = ($base_url | default $BASE_URL)
   if ($norm_party_id | is-empty) { error make --unspanned { msg: "path parameter 'normPartyId' must be non-empty" } }
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({norm_party_id: (encode-path-segment $norm_party_id)} | format pattern "/normParty/{norm_party_id}/associatedNormJudges") $qp)
+  let full_url = (build-url $base ({norm_party_id: (encode-path-segment $norm_party_id)} | format pattern "/normParty/{norm_party_id}/associatedNormJudges") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"q": $q, "pageNumber": $page_number} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"q": $q, "pageNumber": $page_number} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Law Firms that represented the Party.
@@ -3788,10 +5276,21 @@ export def "norm-party-associated-norm-law-firms get" [
   let base = ($base_url | default $BASE_URL)
   if ($norm_party_id | is-empty) { error make --unspanned { msg: "path parameter 'normPartyId' must be non-empty" } }
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({norm_party_id: (encode-path-segment $norm_party_id)} | format pattern "/normParty/{norm_party_id}/associatedNormLawFirms") $qp)
+  let full_url = (build-url $base ({norm_party_id: (encode-path-segment $norm_party_id)} | format pattern "/normParty/{norm_party_id}/associatedNormLawFirms") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"q": $q, "pageNumber": $page_number} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"q": $q, "pageNumber": $page_number} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Case Count Analytics by Opposing Norm Party.
@@ -3816,10 +5315,21 @@ export def "norm-party-case-count-analytics-by-opposing-norm-party get" [
   let base = ($base_url | default $BASE_URL)
   if ($norm_party_id | is-empty) { error make --unspanned { msg: "path parameter 'normPartyId' must be non-empty" } }
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({norm_party_id: (encode-path-segment $norm_party_id)} | format pattern "/normParty/{norm_party_id}/caseCountAnalyticsByOpposingNormParty") $qp)
+  let full_url = (build-url $base ({norm_party_id: (encode-path-segment $norm_party_id)} | format pattern "/normParty/{norm_party_id}/caseCountAnalyticsByOpposingNormParty") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"q": $q, "pageNumber": $page_number} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"q": $q, "pageNumber": $page_number} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Party search.
@@ -3842,10 +5352,21 @@ export def "norm-party-search list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/normPartySearch" $qp)
+  let full_url = (build-url $base "/normPartySearch" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"q": $q, "pageNumber": $page_number} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"q": $q, "pageNumber": $page_number} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Norm party search results for a given normPartySearchId.
@@ -3869,10 +5390,21 @@ export def "norm-party-search list-normalized-parties" [
   let base = ($base_url | default $BASE_URL)
   if ($norm_party_search_id | is-empty) { error make --unspanned { msg: "path parameter 'normPartySearchId' must be non-empty" } }
   let qp = [(serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({norm_party_search_id: (encode-path-segment $norm_party_search_id)} | format pattern "/normPartySearch/{norm_party_search_id}") $qp)
+  let full_url = (build-url $base ({norm_party_search_id: (encode-path-segment $norm_party_search_id)} | format pattern "/normPartySearch/{norm_party_search_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"pageNumber": $page_number} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"pageNumber": $page_number} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Find PACER Case for a requested Case Number and Court.
@@ -3897,10 +5429,21 @@ export def "pacer-import-case-by-court-using-case-number import" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pacerUserId" $pacer_user_id "scalar") (serialize-qp "pacerClientCode" $pacer_client_code "scalar") (serialize-qp "caseNumber" $case_number "scalar") (serialize-qp "courtId" $court_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/pacer/importCaseByCourtUsingCaseNumber" $qp)
+  let full_url = (build-url $base "/pacer/importCaseByCourtUsingCaseNumber" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"pacerUserId": $pacer_user_id, "pacerClientCode": $pacer_client_code, "caseNumber": $case_number, "courtId": $court_id} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"pacerUserId": $pacer_user_id, "pacerClientCode": $pacer_client_code, "caseNumber": $case_number, "courtId": $court_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # PACER Case Locator Search API for All Courts.
@@ -3938,10 +5481,21 @@ export def "pacer-case-locator-case-search-all-courts list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pacerUserId" $pacer_user_id "scalar") (serialize-qp "pacerClientCode" $pacer_client_code "scalar") (serialize-qp "caseNumber" $case_number "scalar") (serialize-qp "pacerCaseId" $pacer_case_id "scalar") (serialize-qp "caseTitle" $case_title "scalar") (serialize-qp "caseOffice" $case_office "scalar") (serialize-qp "caseSequenceNumber" $case_sequence_number "scalar") (serialize-qp "caseYear" $case_year "scalar") (serialize-qp "caseTypeArray" $case_type_array "multi") (serialize-qp "courtRegionIdArray" $court_region_id_array "multi") (serialize-qp "caseFiledStartDate" $case_filed_start_date "scalar") (serialize-qp "caseFiledEndDate" $case_filed_end_date "scalar") (serialize-qp "caseTerminatedStartDate" $case_terminated_start_date "scalar") (serialize-qp "caseTerminatedEndDate" $case_terminated_end_date "scalar") (serialize-qp "sortParameterQuery" $sort_parameter_query "scalar") (serialize-qp "caseStatus" $case_status "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/pacerCaseLocator/caseSearch/allCourts" $qp)
+  let full_url = (build-url $base "/pacerCaseLocator/caseSearch/allCourts" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"pacerUserId": $pacer_user_id, "pacerClientCode": $pacer_client_code, "caseNumber": $case_number, "pacerCaseId": $pacer_case_id, "caseTitle": $case_title, "caseOffice": $case_office, "caseSequenceNumber": $case_sequence_number, "caseYear": $case_year, "caseTypeArray": $case_type_array, "courtRegionIdArray": $court_region_id_array, "caseFiledStartDate": $case_filed_start_date, "caseFiledEndDate": $case_filed_end_date, "caseTerminatedStartDate": $case_terminated_start_date, "caseTerminatedEndDate": $case_terminated_end_date, "sortParameterQuery": $sort_parameter_query, "caseStatus": $case_status, "pageNumber": $page_number} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"pacerUserId": $pacer_user_id, "pacerClientCode": $pacer_client_code, "caseNumber": $case_number, "pacerCaseId": $pacer_case_id, "caseTitle": $case_title, "caseOffice": $case_office, "caseSequenceNumber": $case_sequence_number, "caseYear": $case_year, "caseTypeArray": $case_type_array, "courtRegionIdArray": $court_region_id_array, "caseFiledStartDate": $case_filed_start_date, "caseFiledEndDate": $case_filed_end_date, "caseTerminatedStartDate": $case_terminated_start_date, "caseTerminatedEndDate": $case_terminated_end_date, "sortParameterQuery": $sort_parameter_query, "caseStatus": $case_status, "pageNumber": $page_number} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # PACER Case Locator Search API for All Courts.
@@ -3980,10 +5534,21 @@ export def "pacer-case-locator-case-search-appeal-courts list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pacerUserId" $pacer_user_id "scalar") (serialize-qp "pacerClientCode" $pacer_client_code "scalar") (serialize-qp "caseNumber" $case_number "scalar") (serialize-qp "pacerCaseId" $pacer_case_id "scalar") (serialize-qp "caseTitle" $case_title "scalar") (serialize-qp "caseOffice" $case_office "scalar") (serialize-qp "caseSequenceNumber" $case_sequence_number "scalar") (serialize-qp "caseYear" $case_year "scalar") (serialize-qp "caseTypeArray" $case_type_array "multi") (serialize-qp "natureOfSuitsArray" $nature_of_suits_array "multi") (serialize-qp "courtRegionIdArray" $court_region_id_array "multi") (serialize-qp "caseFiledStartDate" $case_filed_start_date "scalar") (serialize-qp "caseFiledEndDate" $case_filed_end_date "scalar") (serialize-qp "caseTerminatedStartDate" $case_terminated_start_date "scalar") (serialize-qp "caseTerminatedEndDate" $case_terminated_end_date "scalar") (serialize-qp "sortParameterQuery" $sort_parameter_query "scalar") (serialize-qp "caseStatus" $case_status "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/pacerCaseLocator/caseSearch/appealCourts" $qp)
+  let full_url = (build-url $base "/pacerCaseLocator/caseSearch/appealCourts" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"pacerUserId": $pacer_user_id, "pacerClientCode": $pacer_client_code, "caseNumber": $case_number, "pacerCaseId": $pacer_case_id, "caseTitle": $case_title, "caseOffice": $case_office, "caseSequenceNumber": $case_sequence_number, "caseYear": $case_year, "caseTypeArray": $case_type_array, "natureOfSuitsArray": $nature_of_suits_array, "courtRegionIdArray": $court_region_id_array, "caseFiledStartDate": $case_filed_start_date, "caseFiledEndDate": $case_filed_end_date, "caseTerminatedStartDate": $case_terminated_start_date, "caseTerminatedEndDate": $case_terminated_end_date, "sortParameterQuery": $sort_parameter_query, "caseStatus": $case_status, "pageNumber": $page_number} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"pacerUserId": $pacer_user_id, "pacerClientCode": $pacer_client_code, "caseNumber": $case_number, "pacerCaseId": $pacer_case_id, "caseTitle": $case_title, "caseOffice": $case_office, "caseSequenceNumber": $case_sequence_number, "caseYear": $case_year, "caseTypeArray": $case_type_array, "natureOfSuitsArray": $nature_of_suits_array, "courtRegionIdArray": $court_region_id_array, "caseFiledStartDate": $case_filed_start_date, "caseFiledEndDate": $case_filed_end_date, "caseTerminatedStartDate": $case_terminated_start_date, "caseTerminatedEndDate": $case_terminated_end_date, "sortParameterQuery": $sort_parameter_query, "caseStatus": $case_status, "pageNumber": $page_number} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # PACER Case Locator Search API for Bankruptcy Courts.
@@ -4026,10 +5591,21 @@ export def "pacer-case-locator-case-search-bankruptcy-courts list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pacerUserId" $pacer_user_id "scalar") (serialize-qp "pacerClientCode" $pacer_client_code "scalar") (serialize-qp "caseNumber" $case_number "scalar") (serialize-qp "pacerCaseId" $pacer_case_id "scalar") (serialize-qp "caseTitle" $case_title "scalar") (serialize-qp "caseOffice" $case_office "scalar") (serialize-qp "caseSequenceNumber" $case_sequence_number "scalar") (serialize-qp "caseYear" $case_year "scalar") (serialize-qp "caseTypeArray" $case_type_array "multi") (serialize-qp "federalBankruptcyChapterArray" $federal_bankruptcy_chapter_array "multi") (serialize-qp "courtRegionIdArray" $court_region_id_array "multi") (serialize-qp "caseFiledStartDate" $case_filed_start_date "scalar") (serialize-qp "caseFiledEndDate" $case_filed_end_date "scalar") (serialize-qp "caseTerminatedStartDate" $case_terminated_start_date "scalar") (serialize-qp "caseTerminatedEndDate" $case_terminated_end_date "scalar") (serialize-qp "caseDischargedStartDate" $case_discharged_start_date "scalar") (serialize-qp "caseDischargedEndDate" $case_discharged_end_date "scalar") (serialize-qp "caseDismissedStartDate" $case_dismissed_start_date "scalar") (serialize-qp "caseDismissedEndDate" $case_dismissed_end_date "scalar") (serialize-qp "sortParameterQuery" $sort_parameter_query "scalar") (serialize-qp "caseStatus" $case_status "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/pacerCaseLocator/caseSearch/bankruptcyCourts" $qp)
+  let full_url = (build-url $base "/pacerCaseLocator/caseSearch/bankruptcyCourts" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"pacerUserId": $pacer_user_id, "pacerClientCode": $pacer_client_code, "caseNumber": $case_number, "pacerCaseId": $pacer_case_id, "caseTitle": $case_title, "caseOffice": $case_office, "caseSequenceNumber": $case_sequence_number, "caseYear": $case_year, "caseTypeArray": $case_type_array, "federalBankruptcyChapterArray": $federal_bankruptcy_chapter_array, "courtRegionIdArray": $court_region_id_array, "caseFiledStartDate": $case_filed_start_date, "caseFiledEndDate": $case_filed_end_date, "caseTerminatedStartDate": $case_terminated_start_date, "caseTerminatedEndDate": $case_terminated_end_date, "caseDischargedStartDate": $case_discharged_start_date, "caseDischargedEndDate": $case_discharged_end_date, "caseDismissedStartDate": $case_dismissed_start_date, "caseDismissedEndDate": $case_dismissed_end_date, "sortParameterQuery": $sort_parameter_query, "caseStatus": $case_status, "pageNumber": $page_number} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"pacerUserId": $pacer_user_id, "pacerClientCode": $pacer_client_code, "caseNumber": $case_number, "pacerCaseId": $pacer_case_id, "caseTitle": $case_title, "caseOffice": $case_office, "caseSequenceNumber": $case_sequence_number, "caseYear": $case_year, "caseTypeArray": $case_type_array, "federalBankruptcyChapterArray": $federal_bankruptcy_chapter_array, "courtRegionIdArray": $court_region_id_array, "caseFiledStartDate": $case_filed_start_date, "caseFiledEndDate": $case_filed_end_date, "caseTerminatedStartDate": $case_terminated_start_date, "caseTerminatedEndDate": $case_terminated_end_date, "caseDischargedStartDate": $case_discharged_start_date, "caseDischargedEndDate": $case_discharged_end_date, "caseDismissedStartDate": $case_dismissed_start_date, "caseDismissedEndDate": $case_dismissed_end_date, "sortParameterQuery": $sort_parameter_query, "caseStatus": $case_status, "pageNumber": $page_number} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # PACER Case Locator Search API for All Courts.
@@ -4068,10 +5644,21 @@ export def "pacer-case-locator-case-search-civil-courts list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pacerUserId" $pacer_user_id "scalar") (serialize-qp "pacerClientCode" $pacer_client_code "scalar") (serialize-qp "caseNumber" $case_number "scalar") (serialize-qp "pacerCaseId" $pacer_case_id "scalar") (serialize-qp "caseTitle" $case_title "scalar") (serialize-qp "caseOffice" $case_office "scalar") (serialize-qp "caseSequenceNumber" $case_sequence_number "scalar") (serialize-qp "caseYear" $case_year "scalar") (serialize-qp "caseTypeArray" $case_type_array "multi") (serialize-qp "natureOfSuitsArray" $nature_of_suits_array "multi") (serialize-qp "courtRegionIdArray" $court_region_id_array "multi") (serialize-qp "caseFiledStartDate" $case_filed_start_date "scalar") (serialize-qp "caseFiledEndDate" $case_filed_end_date "scalar") (serialize-qp "caseTerminatedStartDate" $case_terminated_start_date "scalar") (serialize-qp "caseTerminatedEndDate" $case_terminated_end_date "scalar") (serialize-qp "sortParameterQuery" $sort_parameter_query "scalar") (serialize-qp "caseStatus" $case_status "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/pacerCaseLocator/caseSearch/civilCourts" $qp)
+  let full_url = (build-url $base "/pacerCaseLocator/caseSearch/civilCourts" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"pacerUserId": $pacer_user_id, "pacerClientCode": $pacer_client_code, "caseNumber": $case_number, "pacerCaseId": $pacer_case_id, "caseTitle": $case_title, "caseOffice": $case_office, "caseSequenceNumber": $case_sequence_number, "caseYear": $case_year, "caseTypeArray": $case_type_array, "natureOfSuitsArray": $nature_of_suits_array, "courtRegionIdArray": $court_region_id_array, "caseFiledStartDate": $case_filed_start_date, "caseFiledEndDate": $case_filed_end_date, "caseTerminatedStartDate": $case_terminated_start_date, "caseTerminatedEndDate": $case_terminated_end_date, "sortParameterQuery": $sort_parameter_query, "caseStatus": $case_status, "pageNumber": $page_number} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"pacerUserId": $pacer_user_id, "pacerClientCode": $pacer_client_code, "caseNumber": $case_number, "pacerCaseId": $pacer_case_id, "caseTitle": $case_title, "caseOffice": $case_office, "caseSequenceNumber": $case_sequence_number, "caseYear": $case_year, "caseTypeArray": $case_type_array, "natureOfSuitsArray": $nature_of_suits_array, "courtRegionIdArray": $court_region_id_array, "caseFiledStartDate": $case_filed_start_date, "caseFiledEndDate": $case_filed_end_date, "caseTerminatedStartDate": $case_terminated_start_date, "caseTerminatedEndDate": $case_terminated_end_date, "sortParameterQuery": $sort_parameter_query, "caseStatus": $case_status, "pageNumber": $page_number} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # PACER Case Locator Search API for All Courts.
@@ -4109,10 +5696,21 @@ export def "pacer-case-locator-case-search-criminal-courts list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pacerUserId" $pacer_user_id "scalar") (serialize-qp "pacerClientCode" $pacer_client_code "scalar") (serialize-qp "caseNumber" $case_number "scalar") (serialize-qp "pacerCaseId" $pacer_case_id "scalar") (serialize-qp "caseTitle" $case_title "scalar") (serialize-qp "caseOffice" $case_office "scalar") (serialize-qp "caseSequenceNumber" $case_sequence_number "scalar") (serialize-qp "caseYear" $case_year "scalar") (serialize-qp "caseTypeArray" $case_type_array "multi") (serialize-qp "courtRegionIdArray" $court_region_id_array "multi") (serialize-qp "caseFiledStartDate" $case_filed_start_date "scalar") (serialize-qp "caseFiledEndDate" $case_filed_end_date "scalar") (serialize-qp "caseTerminatedStartDate" $case_terminated_start_date "scalar") (serialize-qp "caseTerminatedEndDate" $case_terminated_end_date "scalar") (serialize-qp "sortParameterQuery" $sort_parameter_query "scalar") (serialize-qp "caseStatus" $case_status "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/pacerCaseLocator/caseSearch/criminalCourts" $qp)
+  let full_url = (build-url $base "/pacerCaseLocator/caseSearch/criminalCourts" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"pacerUserId": $pacer_user_id, "pacerClientCode": $pacer_client_code, "caseNumber": $case_number, "pacerCaseId": $pacer_case_id, "caseTitle": $case_title, "caseOffice": $case_office, "caseSequenceNumber": $case_sequence_number, "caseYear": $case_year, "caseTypeArray": $case_type_array, "courtRegionIdArray": $court_region_id_array, "caseFiledStartDate": $case_filed_start_date, "caseFiledEndDate": $case_filed_end_date, "caseTerminatedStartDate": $case_terminated_start_date, "caseTerminatedEndDate": $case_terminated_end_date, "sortParameterQuery": $sort_parameter_query, "caseStatus": $case_status, "pageNumber": $page_number} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"pacerUserId": $pacer_user_id, "pacerClientCode": $pacer_client_code, "caseNumber": $case_number, "pacerCaseId": $pacer_case_id, "caseTitle": $case_title, "caseOffice": $case_office, "caseSequenceNumber": $case_sequence_number, "caseYear": $case_year, "caseTypeArray": $case_type_array, "courtRegionIdArray": $court_region_id_array, "caseFiledStartDate": $case_filed_start_date, "caseFiledEndDate": $case_filed_end_date, "caseTerminatedStartDate": $case_terminated_start_date, "caseTerminatedEndDate": $case_terminated_end_date, "sortParameterQuery": $sort_parameter_query, "caseStatus": $case_status, "pageNumber": $page_number} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # PACER Case Locator Search API for All Courts.
@@ -4151,10 +5749,21 @@ export def "pacer-case-locator-case-search-multi-district-courts list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pacerUserId" $pacer_user_id "scalar") (serialize-qp "pacerClientCode" $pacer_client_code "scalar") (serialize-qp "caseNumber" $case_number "scalar") (serialize-qp "jpmlNumber" $jpml_number "scalar") (serialize-qp "pacerCaseId" $pacer_case_id "scalar") (serialize-qp "caseTitle" $case_title "scalar") (serialize-qp "caseOffice" $case_office "scalar") (serialize-qp "caseSequenceNumber" $case_sequence_number "scalar") (serialize-qp "caseYear" $case_year "scalar") (serialize-qp "caseTypeArray" $case_type_array "multi") (serialize-qp "courtRegionIdArray" $court_region_id_array "multi") (serialize-qp "caseFiledStartDate" $case_filed_start_date "scalar") (serialize-qp "caseFiledEndDate" $case_filed_end_date "scalar") (serialize-qp "caseTerminatedStartDate" $case_terminated_start_date "scalar") (serialize-qp "caseTerminatedEndDate" $case_terminated_end_date "scalar") (serialize-qp "sortParameterQuery" $sort_parameter_query "scalar") (serialize-qp "caseStatus" $case_status "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/pacerCaseLocator/caseSearch/multiDistrictCourts" $qp)
+  let full_url = (build-url $base "/pacerCaseLocator/caseSearch/multiDistrictCourts" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"pacerUserId": $pacer_user_id, "pacerClientCode": $pacer_client_code, "caseNumber": $case_number, "jpmlNumber": $jpml_number, "pacerCaseId": $pacer_case_id, "caseTitle": $case_title, "caseOffice": $case_office, "caseSequenceNumber": $case_sequence_number, "caseYear": $case_year, "caseTypeArray": $case_type_array, "courtRegionIdArray": $court_region_id_array, "caseFiledStartDate": $case_filed_start_date, "caseFiledEndDate": $case_filed_end_date, "caseTerminatedStartDate": $case_terminated_start_date, "caseTerminatedEndDate": $case_terminated_end_date, "sortParameterQuery": $sort_parameter_query, "caseStatus": $case_status, "pageNumber": $page_number} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"pacerUserId": $pacer_user_id, "pacerClientCode": $pacer_client_code, "caseNumber": $case_number, "jpmlNumber": $jpml_number, "pacerCaseId": $pacer_case_id, "caseTitle": $case_title, "caseOffice": $case_office, "caseSequenceNumber": $case_sequence_number, "caseYear": $case_year, "caseTypeArray": $case_type_array, "courtRegionIdArray": $court_region_id_array, "caseFiledStartDate": $case_filed_start_date, "caseFiledEndDate": $case_filed_end_date, "caseTerminatedStartDate": $case_terminated_start_date, "caseTerminatedEndDate": $case_terminated_end_date, "sortParameterQuery": $sort_parameter_query, "caseStatus": $case_status, "pageNumber": $page_number} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # PACER Case Locator Search API for All Courts.
@@ -4201,10 +5810,21 @@ export def "pacer-case-locator-party-search-all-courts list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pacerUserId" $pacer_user_id "scalar") (serialize-qp "pacerClientCode" $pacer_client_code "scalar") (serialize-qp "caseNumber" $case_number "scalar") (serialize-qp "pacerCaseId" $pacer_case_id "scalar") (serialize-qp "lastName" $last_name "scalar") (serialize-qp "firstName" $first_name "scalar") (serialize-qp "middleName" $middle_name "scalar") (serialize-qp "generation" $generation "scalar") (serialize-qp "partyType" $party_type "scalar") (serialize-qp "partyExactNameMatch" $party_exact_name_match "scalar") (serialize-qp "partyRoleArray" $party_role_array "multi") (serialize-qp "caseTitle" $case_title "scalar") (serialize-qp "caseOffice" $case_office "scalar") (serialize-qp "caseSequenceNumber" $case_sequence_number "scalar") (serialize-qp "caseYear" $case_year "scalar") (serialize-qp "caseTypeArray" $case_type_array "multi") (serialize-qp "courtRegionIdArray" $court_region_id_array "multi") (serialize-qp "caseYearFrom" $case_year_from "scalar") (serialize-qp "caseYearTo" $case_year_to "scalar") (serialize-qp "caseFiledStartDate" $case_filed_start_date "scalar") (serialize-qp "caseFiledEndDate" $case_filed_end_date "scalar") (serialize-qp "caseTerminatedStartDate" $case_terminated_start_date "scalar") (serialize-qp "caseTerminatedEndDate" $case_terminated_end_date "scalar") (serialize-qp "sortParameterQuery" $sort_parameter_query "scalar") (serialize-qp "caseStatus" $case_status "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/pacerCaseLocator/partySearch/allCourts" $qp)
+  let full_url = (build-url $base "/pacerCaseLocator/partySearch/allCourts" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"pacerUserId": $pacer_user_id, "pacerClientCode": $pacer_client_code, "caseNumber": $case_number, "pacerCaseId": $pacer_case_id, "lastName": $last_name, "firstName": $first_name, "middleName": $middle_name, "generation": $generation, "partyType": $party_type, "partyExactNameMatch": $party_exact_name_match, "partyRoleArray": $party_role_array, "caseTitle": $case_title, "caseOffice": $case_office, "caseSequenceNumber": $case_sequence_number, "caseYear": $case_year, "caseTypeArray": $case_type_array, "courtRegionIdArray": $court_region_id_array, "caseYearFrom": $case_year_from, "caseYearTo": $case_year_to, "caseFiledStartDate": $case_filed_start_date, "caseFiledEndDate": $case_filed_end_date, "caseTerminatedStartDate": $case_terminated_start_date, "caseTerminatedEndDate": $case_terminated_end_date, "sortParameterQuery": $sort_parameter_query, "caseStatus": $case_status, "pageNumber": $page_number} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"pacerUserId": $pacer_user_id, "pacerClientCode": $pacer_client_code, "caseNumber": $case_number, "pacerCaseId": $pacer_case_id, "lastName": $last_name, "firstName": $first_name, "middleName": $middle_name, "generation": $generation, "partyType": $party_type, "partyExactNameMatch": $party_exact_name_match, "partyRoleArray": $party_role_array, "caseTitle": $case_title, "caseOffice": $case_office, "caseSequenceNumber": $case_sequence_number, "caseYear": $case_year, "caseTypeArray": $case_type_array, "courtRegionIdArray": $court_region_id_array, "caseYearFrom": $case_year_from, "caseYearTo": $case_year_to, "caseFiledStartDate": $case_filed_start_date, "caseFiledEndDate": $case_filed_end_date, "caseTerminatedStartDate": $case_terminated_start_date, "caseTerminatedEndDate": $case_terminated_end_date, "sortParameterQuery": $sort_parameter_query, "caseStatus": $case_status, "pageNumber": $page_number} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # PACER Case Locator Search API for All Courts.
@@ -4251,10 +5871,21 @@ export def "pacer-case-locator-party-search-appeal-courts list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pacerUserId" $pacer_user_id "scalar") (serialize-qp "pacerClientCode" $pacer_client_code "scalar") (serialize-qp "caseNumber" $case_number "scalar") (serialize-qp "pacerCaseId" $pacer_case_id "scalar") (serialize-qp "lastName" $last_name "scalar") (serialize-qp "firstName" $first_name "scalar") (serialize-qp "middleName" $middle_name "scalar") (serialize-qp "generation" $generation "scalar") (serialize-qp "partyType" $party_type "scalar") (serialize-qp "partyExactNameMatch" $party_exact_name_match "scalar") (serialize-qp "partyRoleArray" $party_role_array "multi") (serialize-qp "caseTitle" $case_title "scalar") (serialize-qp "caseOffice" $case_office "scalar") (serialize-qp "caseSequenceNumber" $case_sequence_number "scalar") (serialize-qp "caseYear" $case_year "scalar") (serialize-qp "caseTypeArray" $case_type_array "multi") (serialize-qp "courtRegionIdArray" $court_region_id_array "multi") (serialize-qp "caseYearFrom" $case_year_from "scalar") (serialize-qp "caseYearTo" $case_year_to "scalar") (serialize-qp "caseFiledStartDate" $case_filed_start_date "scalar") (serialize-qp "caseFiledEndDate" $case_filed_end_date "scalar") (serialize-qp "caseTerminatedStartDate" $case_terminated_start_date "scalar") (serialize-qp "caseTerminatedEndDate" $case_terminated_end_date "scalar") (serialize-qp "sortParameterQuery" $sort_parameter_query "scalar") (serialize-qp "caseStatus" $case_status "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/pacerCaseLocator/partySearch/appealCourts" $qp)
+  let full_url = (build-url $base "/pacerCaseLocator/partySearch/appealCourts" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"pacerUserId": $pacer_user_id, "pacerClientCode": $pacer_client_code, "caseNumber": $case_number, "pacerCaseId": $pacer_case_id, "lastName": $last_name, "firstName": $first_name, "middleName": $middle_name, "generation": $generation, "partyType": $party_type, "partyExactNameMatch": $party_exact_name_match, "partyRoleArray": $party_role_array, "caseTitle": $case_title, "caseOffice": $case_office, "caseSequenceNumber": $case_sequence_number, "caseYear": $case_year, "caseTypeArray": $case_type_array, "courtRegionIdArray": $court_region_id_array, "caseYearFrom": $case_year_from, "caseYearTo": $case_year_to, "caseFiledStartDate": $case_filed_start_date, "caseFiledEndDate": $case_filed_end_date, "caseTerminatedStartDate": $case_terminated_start_date, "caseTerminatedEndDate": $case_terminated_end_date, "sortParameterQuery": $sort_parameter_query, "caseStatus": $case_status, "pageNumber": $page_number} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"pacerUserId": $pacer_user_id, "pacerClientCode": $pacer_client_code, "caseNumber": $case_number, "pacerCaseId": $pacer_case_id, "lastName": $last_name, "firstName": $first_name, "middleName": $middle_name, "generation": $generation, "partyType": $party_type, "partyExactNameMatch": $party_exact_name_match, "partyRoleArray": $party_role_array, "caseTitle": $case_title, "caseOffice": $case_office, "caseSequenceNumber": $case_sequence_number, "caseYear": $case_year, "caseTypeArray": $case_type_array, "courtRegionIdArray": $court_region_id_array, "caseYearFrom": $case_year_from, "caseYearTo": $case_year_to, "caseFiledStartDate": $case_filed_start_date, "caseFiledEndDate": $case_filed_end_date, "caseTerminatedStartDate": $case_terminated_start_date, "caseTerminatedEndDate": $case_terminated_end_date, "sortParameterQuery": $sort_parameter_query, "caseStatus": $case_status, "pageNumber": $page_number} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # PACER Case Locator Search API for All Courts.
@@ -4307,10 +5938,21 @@ export def "pacer-case-locator-party-search-bankruptcy-courts list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pacerUserId" $pacer_user_id "scalar") (serialize-qp "pacerClientCode" $pacer_client_code "scalar") (serialize-qp "caseNumber" $case_number "scalar") (serialize-qp "pacerCaseId" $pacer_case_id "scalar") (serialize-qp "lastName" $last_name "scalar") (serialize-qp "firstName" $first_name "scalar") (serialize-qp "middleName" $middle_name "scalar") (serialize-qp "generation" $generation "scalar") (serialize-qp "partyType" $party_type "scalar") (serialize-qp "partyExactNameMatch" $party_exact_name_match "scalar") (serialize-qp "partyRoleArray" $party_role_array "multi") (serialize-qp "caseTitle" $case_title "scalar") (serialize-qp "caseOffice" $case_office "scalar") (serialize-qp "caseSequenceNumber" $case_sequence_number "scalar") (serialize-qp "caseYear" $case_year "scalar") (serialize-qp "caseTypeArray" $case_type_array "multi") (serialize-qp "courtRegionIdArray" $court_region_id_array "multi") (serialize-qp "caseYearFrom" $case_year_from "scalar") (serialize-qp "caseYearTo" $case_year_to "scalar") (serialize-qp "ssnOrEin" $ssn_or_ein "scalar") (serialize-qp "fourDigitSsn" $four_digit_ssn "scalar") (serialize-qp "caseFiledStartDate" $case_filed_start_date "scalar") (serialize-qp "caseFiledEndDate" $case_filed_end_date "scalar") (serialize-qp "caseTerminatedStartDate" $case_terminated_start_date "scalar") (serialize-qp "caseTerminatedEndDate" $case_terminated_end_date "scalar") (serialize-qp "caseDischargedStartDate" $case_discharged_start_date "scalar") (serialize-qp "caseDischargedEndDate" $case_discharged_end_date "scalar") (serialize-qp "caseDismissedStartDate" $case_dismissed_start_date "scalar") (serialize-qp "caseDismissedEndDate" $case_dismissed_end_date "scalar") (serialize-qp "sortParameterQuery" $sort_parameter_query "scalar") (serialize-qp "caseStatus" $case_status "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/pacerCaseLocator/partySearch/bankruptcyCourts" $qp)
+  let full_url = (build-url $base "/pacerCaseLocator/partySearch/bankruptcyCourts" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"pacerUserId": $pacer_user_id, "pacerClientCode": $pacer_client_code, "caseNumber": $case_number, "pacerCaseId": $pacer_case_id, "lastName": $last_name, "firstName": $first_name, "middleName": $middle_name, "generation": $generation, "partyType": $party_type, "partyExactNameMatch": $party_exact_name_match, "partyRoleArray": $party_role_array, "caseTitle": $case_title, "caseOffice": $case_office, "caseSequenceNumber": $case_sequence_number, "caseYear": $case_year, "caseTypeArray": $case_type_array, "courtRegionIdArray": $court_region_id_array, "caseYearFrom": $case_year_from, "caseYearTo": $case_year_to, "ssnOrEin": $ssn_or_ein, "fourDigitSsn": $four_digit_ssn, "caseFiledStartDate": $case_filed_start_date, "caseFiledEndDate": $case_filed_end_date, "caseTerminatedStartDate": $case_terminated_start_date, "caseTerminatedEndDate": $case_terminated_end_date, "caseDischargedStartDate": $case_discharged_start_date, "caseDischargedEndDate": $case_discharged_end_date, "caseDismissedStartDate": $case_dismissed_start_date, "caseDismissedEndDate": $case_dismissed_end_date, "sortParameterQuery": $sort_parameter_query, "caseStatus": $case_status, "pageNumber": $page_number} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"pacerUserId": $pacer_user_id, "pacerClientCode": $pacer_client_code, "caseNumber": $case_number, "pacerCaseId": $pacer_case_id, "lastName": $last_name, "firstName": $first_name, "middleName": $middle_name, "generation": $generation, "partyType": $party_type, "partyExactNameMatch": $party_exact_name_match, "partyRoleArray": $party_role_array, "caseTitle": $case_title, "caseOffice": $case_office, "caseSequenceNumber": $case_sequence_number, "caseYear": $case_year, "caseTypeArray": $case_type_array, "courtRegionIdArray": $court_region_id_array, "caseYearFrom": $case_year_from, "caseYearTo": $case_year_to, "ssnOrEin": $ssn_or_ein, "fourDigitSsn": $four_digit_ssn, "caseFiledStartDate": $case_filed_start_date, "caseFiledEndDate": $case_filed_end_date, "caseTerminatedStartDate": $case_terminated_start_date, "caseTerminatedEndDate": $case_terminated_end_date, "caseDischargedStartDate": $case_discharged_start_date, "caseDischargedEndDate": $case_discharged_end_date, "caseDismissedStartDate": $case_dismissed_start_date, "caseDismissedEndDate": $case_dismissed_end_date, "sortParameterQuery": $sort_parameter_query, "caseStatus": $case_status, "pageNumber": $page_number} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # PACER Case Locator Search API for All Courts.
@@ -4357,10 +5999,21 @@ export def "pacer-case-locator-party-search-civil-courts list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pacerUserId" $pacer_user_id "scalar") (serialize-qp "pacerClientCode" $pacer_client_code "scalar") (serialize-qp "caseNumber" $case_number "scalar") (serialize-qp "pacerCaseId" $pacer_case_id "scalar") (serialize-qp "lastName" $last_name "scalar") (serialize-qp "firstName" $first_name "scalar") (serialize-qp "middleName" $middle_name "scalar") (serialize-qp "generation" $generation "scalar") (serialize-qp "partyType" $party_type "scalar") (serialize-qp "partyExactNameMatch" $party_exact_name_match "scalar") (serialize-qp "partyRoleArray" $party_role_array "multi") (serialize-qp "caseTitle" $case_title "scalar") (serialize-qp "caseOffice" $case_office "scalar") (serialize-qp "caseSequenceNumber" $case_sequence_number "scalar") (serialize-qp "caseYear" $case_year "scalar") (serialize-qp "caseTypeArray" $case_type_array "multi") (serialize-qp "courtRegionIdArray" $court_region_id_array "multi") (serialize-qp "caseYearFrom" $case_year_from "scalar") (serialize-qp "caseYearTo" $case_year_to "scalar") (serialize-qp "caseFiledStartDate" $case_filed_start_date "scalar") (serialize-qp "caseFiledEndDate" $case_filed_end_date "scalar") (serialize-qp "caseTerminatedStartDate" $case_terminated_start_date "scalar") (serialize-qp "caseTerminatedEndDate" $case_terminated_end_date "scalar") (serialize-qp "sortParameterQuery" $sort_parameter_query "scalar") (serialize-qp "caseStatus" $case_status "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/pacerCaseLocator/partySearch/civilCourts" $qp)
+  let full_url = (build-url $base "/pacerCaseLocator/partySearch/civilCourts" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"pacerUserId": $pacer_user_id, "pacerClientCode": $pacer_client_code, "caseNumber": $case_number, "pacerCaseId": $pacer_case_id, "lastName": $last_name, "firstName": $first_name, "middleName": $middle_name, "generation": $generation, "partyType": $party_type, "partyExactNameMatch": $party_exact_name_match, "partyRoleArray": $party_role_array, "caseTitle": $case_title, "caseOffice": $case_office, "caseSequenceNumber": $case_sequence_number, "caseYear": $case_year, "caseTypeArray": $case_type_array, "courtRegionIdArray": $court_region_id_array, "caseYearFrom": $case_year_from, "caseYearTo": $case_year_to, "caseFiledStartDate": $case_filed_start_date, "caseFiledEndDate": $case_filed_end_date, "caseTerminatedStartDate": $case_terminated_start_date, "caseTerminatedEndDate": $case_terminated_end_date, "sortParameterQuery": $sort_parameter_query, "caseStatus": $case_status, "pageNumber": $page_number} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"pacerUserId": $pacer_user_id, "pacerClientCode": $pacer_client_code, "caseNumber": $case_number, "pacerCaseId": $pacer_case_id, "lastName": $last_name, "firstName": $first_name, "middleName": $middle_name, "generation": $generation, "partyType": $party_type, "partyExactNameMatch": $party_exact_name_match, "partyRoleArray": $party_role_array, "caseTitle": $case_title, "caseOffice": $case_office, "caseSequenceNumber": $case_sequence_number, "caseYear": $case_year, "caseTypeArray": $case_type_array, "courtRegionIdArray": $court_region_id_array, "caseYearFrom": $case_year_from, "caseYearTo": $case_year_to, "caseFiledStartDate": $case_filed_start_date, "caseFiledEndDate": $case_filed_end_date, "caseTerminatedStartDate": $case_terminated_start_date, "caseTerminatedEndDate": $case_terminated_end_date, "sortParameterQuery": $sort_parameter_query, "caseStatus": $case_status, "pageNumber": $page_number} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # PACER Case Locator Search API for All Courts.
@@ -4407,10 +6060,21 @@ export def "pacer-case-locator-party-search-criminal-courts list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pacerUserId" $pacer_user_id "scalar") (serialize-qp "pacerClientCode" $pacer_client_code "scalar") (serialize-qp "caseNumber" $case_number "scalar") (serialize-qp "pacerCaseId" $pacer_case_id "scalar") (serialize-qp "lastName" $last_name "scalar") (serialize-qp "firstName" $first_name "scalar") (serialize-qp "middleName" $middle_name "scalar") (serialize-qp "generation" $generation "scalar") (serialize-qp "partyType" $party_type "scalar") (serialize-qp "partyExactNameMatch" $party_exact_name_match "scalar") (serialize-qp "partyRoleArray" $party_role_array "multi") (serialize-qp "caseTitle" $case_title "scalar") (serialize-qp "caseOffice" $case_office "scalar") (serialize-qp "caseSequenceNumber" $case_sequence_number "scalar") (serialize-qp "caseYear" $case_year "scalar") (serialize-qp "caseTypeArray" $case_type_array "multi") (serialize-qp "courtRegionIdArray" $court_region_id_array "multi") (serialize-qp "caseYearFrom" $case_year_from "scalar") (serialize-qp "caseYearTo" $case_year_to "scalar") (serialize-qp "caseFiledStartDate" $case_filed_start_date "scalar") (serialize-qp "caseFiledEndDate" $case_filed_end_date "scalar") (serialize-qp "caseTerminatedStartDate" $case_terminated_start_date "scalar") (serialize-qp "caseTerminatedEndDate" $case_terminated_end_date "scalar") (serialize-qp "sortParameterQuery" $sort_parameter_query "scalar") (serialize-qp "caseStatus" $case_status "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/pacerCaseLocator/partySearch/criminalCourts" $qp)
+  let full_url = (build-url $base "/pacerCaseLocator/partySearch/criminalCourts" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"pacerUserId": $pacer_user_id, "pacerClientCode": $pacer_client_code, "caseNumber": $case_number, "pacerCaseId": $pacer_case_id, "lastName": $last_name, "firstName": $first_name, "middleName": $middle_name, "generation": $generation, "partyType": $party_type, "partyExactNameMatch": $party_exact_name_match, "partyRoleArray": $party_role_array, "caseTitle": $case_title, "caseOffice": $case_office, "caseSequenceNumber": $case_sequence_number, "caseYear": $case_year, "caseTypeArray": $case_type_array, "courtRegionIdArray": $court_region_id_array, "caseYearFrom": $case_year_from, "caseYearTo": $case_year_to, "caseFiledStartDate": $case_filed_start_date, "caseFiledEndDate": $case_filed_end_date, "caseTerminatedStartDate": $case_terminated_start_date, "caseTerminatedEndDate": $case_terminated_end_date, "sortParameterQuery": $sort_parameter_query, "caseStatus": $case_status, "pageNumber": $page_number} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"pacerUserId": $pacer_user_id, "pacerClientCode": $pacer_client_code, "caseNumber": $case_number, "pacerCaseId": $pacer_case_id, "lastName": $last_name, "firstName": $first_name, "middleName": $middle_name, "generation": $generation, "partyType": $party_type, "partyExactNameMatch": $party_exact_name_match, "partyRoleArray": $party_role_array, "caseTitle": $case_title, "caseOffice": $case_office, "caseSequenceNumber": $case_sequence_number, "caseYear": $case_year, "caseTypeArray": $case_type_array, "courtRegionIdArray": $court_region_id_array, "caseYearFrom": $case_year_from, "caseYearTo": $case_year_to, "caseFiledStartDate": $case_filed_start_date, "caseFiledEndDate": $case_filed_end_date, "caseTerminatedStartDate": $case_terminated_start_date, "caseTerminatedEndDate": $case_terminated_end_date, "sortParameterQuery": $sort_parameter_query, "caseStatus": $case_status, "pageNumber": $page_number} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # PACER Case Locator Search API for All Courts.
@@ -4458,10 +6122,21 @@ export def "pacer-case-locator-party-search-multi-district-courts list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pacerUserId" $pacer_user_id "scalar") (serialize-qp "pacerClientCode" $pacer_client_code "scalar") (serialize-qp "caseNumber" $case_number "scalar") (serialize-qp "jpmlNumber" $jpml_number "scalar") (serialize-qp "pacerCaseId" $pacer_case_id "scalar") (serialize-qp "lastName" $last_name "scalar") (serialize-qp "firstName" $first_name "scalar") (serialize-qp "middleName" $middle_name "scalar") (serialize-qp "generation" $generation "scalar") (serialize-qp "partyType" $party_type "scalar") (serialize-qp "partyExactNameMatch" $party_exact_name_match "scalar") (serialize-qp "partyRoleArray" $party_role_array "multi") (serialize-qp "caseTitle" $case_title "scalar") (serialize-qp "caseOffice" $case_office "scalar") (serialize-qp "caseSequenceNumber" $case_sequence_number "scalar") (serialize-qp "caseYear" $case_year "scalar") (serialize-qp "caseTypeArray" $case_type_array "multi") (serialize-qp "courtRegionIdArray" $court_region_id_array "multi") (serialize-qp "caseYearFrom" $case_year_from "scalar") (serialize-qp "caseYearTo" $case_year_to "scalar") (serialize-qp "caseFiledStartDate" $case_filed_start_date "scalar") (serialize-qp "caseFiledEndDate" $case_filed_end_date "scalar") (serialize-qp "caseTerminatedStartDate" $case_terminated_start_date "scalar") (serialize-qp "caseTerminatedEndDate" $case_terminated_end_date "scalar") (serialize-qp "sortParameterQuery" $sort_parameter_query "scalar") (serialize-qp "caseStatus" $case_status "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/pacerCaseLocator/partySearch/multiDistrictCourts" $qp)
+  let full_url = (build-url $base "/pacerCaseLocator/partySearch/multiDistrictCourts" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"pacerUserId": $pacer_user_id, "pacerClientCode": $pacer_client_code, "caseNumber": $case_number, "jpmlNumber": $jpml_number, "pacerCaseId": $pacer_case_id, "lastName": $last_name, "firstName": $first_name, "middleName": $middle_name, "generation": $generation, "partyType": $party_type, "partyExactNameMatch": $party_exact_name_match, "partyRoleArray": $party_role_array, "caseTitle": $case_title, "caseOffice": $case_office, "caseSequenceNumber": $case_sequence_number, "caseYear": $case_year, "caseTypeArray": $case_type_array, "courtRegionIdArray": $court_region_id_array, "caseYearFrom": $case_year_from, "caseYearTo": $case_year_to, "caseFiledStartDate": $case_filed_start_date, "caseFiledEndDate": $case_filed_end_date, "caseTerminatedStartDate": $case_terminated_start_date, "caseTerminatedEndDate": $case_terminated_end_date, "sortParameterQuery": $sort_parameter_query, "caseStatus": $case_status, "pageNumber": $page_number} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"pacerUserId": $pacer_user_id, "pacerClientCode": $pacer_client_code, "caseNumber": $case_number, "jpmlNumber": $jpml_number, "pacerCaseId": $pacer_case_id, "lastName": $last_name, "firstName": $first_name, "middleName": $middle_name, "generation": $generation, "partyType": $party_type, "partyExactNameMatch": $party_exact_name_match, "partyRoleArray": $party_role_array, "caseTitle": $case_title, "caseOffice": $case_office, "caseSequenceNumber": $case_sequence_number, "caseYear": $case_year, "caseTypeArray": $case_type_array, "courtRegionIdArray": $court_region_id_array, "caseYearFrom": $case_year_from, "caseYearTo": $case_year_to, "caseFiledStartDate": $case_filed_start_date, "caseFiledEndDate": $case_filed_end_date, "caseTerminatedStartDate": $case_terminated_start_date, "caseTerminatedEndDate": $case_terminated_end_date, "sortParameterQuery": $sort_parameter_query, "caseStatus": $case_status, "pageNumber": $page_number} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get Pacer Credential List.
@@ -4483,10 +6158,21 @@ export def "pacer-credential list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/pacerCredential" $qp)
+  let full_url = (build-url $base "/pacerCredential" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"pageNumber": $page_number} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"pageNumber": $page_number} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Add Pacer Credential.
@@ -4510,12 +6196,23 @@ export def "pacer-credential create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/pacerCredential")
+  let full_url = (build-url $base "/pacerCredential" $auth.query)
   let req_body = {"defaultPacerClientCode": $default_pacer_client_code, "pacerUserId": $pacer_user_id, "password": $password} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Remove Pacer credential for a specific Pacer User Id.
@@ -4537,10 +6234,21 @@ export def "pacer-credential delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($pacer_user_id | is-empty) { error make --unspanned { msg: "path parameter 'pacerUserId' must be non-empty" } }
-  let full_url = (build-url $base ({pacer_user_id: (encode-path-segment $pacer_user_id)} | format pattern "/pacerCredential/{pacer_user_id}"))
+  let full_url = (build-url $base ({pacer_user_id: (encode-path-segment $pacer_user_id)} | format pattern "/pacerCredential/{pacer_user_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Get Pacer Credential for a requested pacer User Id.
@@ -4562,10 +6270,21 @@ export def "pacer-credential get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($pacer_user_id | is-empty) { error make --unspanned { msg: "path parameter 'pacerUserId' must be non-empty" } }
-  let full_url = (build-url $base ({pacer_user_id: (encode-path-segment $pacer_user_id)} | format pattern "/pacerCredential/{pacer_user_id}"))
+  let full_url = (build-url $base ({pacer_user_id: (encode-path-segment $pacer_user_id)} | format pattern "/pacerCredential/{pacer_user_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets details for a requested Party ID.
@@ -4587,10 +6306,21 @@ export def "party get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($party_id | is-empty) { error make --unspanned { msg: "path parameter 'partyId' must be non-empty" } }
-  let full_url = (build-url $base ({party_id: (encode-path-segment $party_id)} | format pattern "/party/{party_id}"))
+  let full_url = (build-url $base ({party_id: (encode-path-segment $party_id)} | format pattern "/party/{party_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets Associated Attorney details for a requested Party ID.
@@ -4614,8 +6344,19 @@ export def "party-associated-attorneys get" [
   let base = ($base_url | default $BASE_URL)
   if ($party_id | is-empty) { error make --unspanned { msg: "path parameter 'partyId' must be non-empty" } }
   let qp = [(serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({party_id: (encode-path-segment $party_id)} | format pattern "/party/{party_id}/associatedAttorneys") $qp)
+  let full_url = (build-url $base ({party_id: (encode-path-segment $party_id)} | format pattern "/party/{party_id}/associatedAttorneys") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"pageNumber": $page_number} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"pageNumber": $page_number} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }

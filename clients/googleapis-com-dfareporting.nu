@@ -8,7 +8,7 @@ const BASE_URL = "https://dfareporting.googleapis.com/dfareporting/v3.4"
 # `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
 # where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o CAMPAIGN_MANAGER_360_API_TOKEN | default "" }
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o CAMPAIGN_MANAGER_360_API_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
@@ -51,14 +51,11 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
-# Trick: `url encode --all` over-encodes, then we decode the four unreserved
-# punctuation chars back. Pre-existing %XX sequences in the input survive
-# because `url encode --all` first turns their % into %25.
 def encode-path-segment [v: any]: nothing -> string {
   $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
-# Serialize an array-typed path parameter (issue 49.A). OpenAPI 3 `style: simple`
+# Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
 # (the default for path params) and Swagger 2 `collectionFormat: csv` both join
 # the elements with a literal comma WITHIN the single path segment, each element
 # RFC-3986-encoded individually (so a comma inside an element stays %2C). Without
@@ -69,51 +66,63 @@ def encode-path-array [v: any]: nothing -> string {
   if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
 }
 
-# Build URL from base, path, and optional query string
-def build-url [base: string, path: string, query?: string]: nothing -> string {
+# Build the request URL from base, path, and any number of pre-encoded query
+# fragments (param serializer output and/or the auth query). Each fragment is an
+# `&`-joinable `key=value` string already percent-encoded by its producer; empty
+# fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
+# delimiters are hand-spliced — and any query already on the base URL is merged in.
+def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
   let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
-  let result = ($parsed | upsert path $full_path)
-  if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
+  let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
+  $parsed | upsert path $full_path | upsert query $query | url join
 }
 
-# Build the dry-run record returned by --dry-run. Shape:
-#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
-#    auth: {scheme, location}}
-# `meta` carries logical-form data (the query record by spec name, the pre-serialization
-# body) that do-request itself cannot reconstruct from its wire-format args.
-def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
-  let m = ($meta | default {})
-  {
-    dry_run: true
-    method: $method
-    url: $url
-    query: ($m | get -o query | default {})
-    headers: $auth.headers
-    body: ($m | get -o body)
-    content_type: $content_type
-    timeout: $timeout
-    auth: {scheme: $auth.scheme, location: $auth.location}
-  }
+# Success policy: did this response succeed? Single source of truth, consulted by
+# handle-response and the HEAD header-unwrap. Empty ok_codes means the spec listed
+# none, so fall back to < 400. Otherwise: any 2xx, plus documented success codes.
+def status-ok [status: int, ok_codes: list<int>]: nothing -> bool {
+  if ($ok_codes | is-empty) { $status < 400 } else { ($status >= 200 and $status < 300) or ($status in $ok_codes) }
 }
 
-# Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
-  let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
-  let timeout = ($max_time | default 30min)
-  let ct = ($content_type | default "application/json")
-  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
-  let resp = match $method {
-    "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
-  }
-  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
-  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
+# Unwrap a `--full` HTTP response into the user-facing value. Response arrives
+# via pipeline; ok_codes gates the error throw (see status-ok).
+def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: record -> any {
+  let resp = $in
+  if $allow_errors { return $resp }
+  if not (status-ok $resp.status $ok_codes) { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } }
+  if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
+  if $resp.status == 204 { return null }
+  $resp.body
+}
+
+# GET — bodyless, honours --raw
+def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+}
+
+# POST — body + content-type
+def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# PUT — body + content-type
+def send-put [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http put --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http put --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# PATCH — body + content-type
+def send-patch [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http patch --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http patch --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# DELETE — body via --data
+def send-delete [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http delete --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url } else { http delete --headers $req.headers --content-type $req.content_type --data $body --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url }
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 def base-url-completer [] { ["https://dfareporting.googleapis.com/dfareporting/v3.4"] }
@@ -220,10 +229,21 @@ export def "reports-files get" [
   if ($report_id | is-empty) { error make --unspanned { msg: "path parameter 'reportId' must be non-empty" } }
   if ($file_id | is-empty) { error make --unspanned { msg: "path parameter 'fileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({report_id: (encode-path-segment $report_id), file_id: (encode-path-segment $file_id)} | format pattern "/reports/{report_id}/files/{file_id}") $qp)
+  let full_url = (build-url $base ({report_id: (encode-path-segment $report_id), file_id: (encode-path-segment $file_id)} | format pattern "/reports/{report_id}/files/{file_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieves list of user profiles for a user.
@@ -255,10 +275,21 @@ export def "userprofiles list" [
   let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/userprofiles" $qp)
+  let full_url = (build-url $base "/userprofiles" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets one user profile by ID.
@@ -292,10 +323,21 @@ export def "userprofiles get" [
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the account's active ad summary by account ID.
@@ -331,10 +373,21 @@ export def "userprofiles-account-active-ad-summaries get" [
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($summary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'summaryAccountId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), summary_account_id: (encode-path-segment $summary_account_id)} | format pattern "/userprofiles/{profile_id}/accountActiveAdSummaries/{summary_account_id}") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), summary_account_id: (encode-path-segment $summary_account_id)} | format pattern "/userprofiles/{profile_id}/accountActiveAdSummaries/{summary_account_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieves the list of account permission groups.
@@ -368,10 +421,21 @@ export def "userprofiles-account-permission-groups list" [
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/accountPermissionGroups") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/accountPermissionGroups") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets one account permission group by ID.
@@ -407,10 +471,21 @@ export def "userprofiles-account-permission-groups get" [
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/accountPermissionGroups/{id}") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/accountPermissionGroups/{id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieves the list of account permissions.
@@ -444,10 +519,21 @@ export def "userprofiles-account-permissions list" [
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/accountPermissions") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/accountPermissions") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets one account permission by ID.
@@ -483,10 +569,21 @@ export def "userprofiles-account-permissions get" [
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/accountPermissions/{id}") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/accountPermissions/{id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieves a list of account user profiles, possibly filtered. This method supports paging.
@@ -529,10 +626,21 @@ export def "userprofiles-account-user-profiles list" [
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "active" $active "scalar") (serialize-qp "ids" $ids "multi") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "searchString" $search_string "scalar") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "subaccountId" $subaccount_id "scalar") (serialize-qp "userRoleId" $user_role_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/accountUserProfiles") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/accountUserProfiles") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "active": $active, "ids": $ids, "maxResults": $max_results, "pageToken": $page_token, "searchString": $search_string, "sortField": $sort_field, "sortOrder": $sort_order, "subaccountId": $subaccount_id, "userRoleId": $user_role_id} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "active": $active, "ids": $ids, "maxResults": $max_results, "pageToken": $page_token, "searchString": $search_string, "sortField": $sort_field, "sortOrder": $sort_order, "subaccountId": $subaccount_id, "userRoleId": $user_role_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates an existing account user profile. This method supports patch semantics.
@@ -588,12 +696,23 @@ export def "userprofiles-account-user-profiles update-by-profile-id" [
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "id" $id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/accountUserProfiles") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/accountUserProfiles") $qp $auth.query)
   let req_body = {"accountId": $account_id, "active": $active, "advertiserFilter": $advertiser_filter, "campaignFilter": $campaign_filter, "comments": $comments, "email": $email, "id": $id_body, "kind": $kind, "locale": $locale, "name": $name, "siteFilter": $site_filter, "subaccountId": $subaccount_id, "traffickerType": $trafficker_type, "userAccessType": $user_access_type, "userRoleFilter": $user_role_filter, "userRoleId": $user_role_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "id": $id} | compact), body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "id": $id} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Inserts a new account user profile.
@@ -648,12 +767,23 @@ export def "userprofiles-account-user-profiles create" [
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/accountUserProfiles") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/accountUserProfiles") $qp $auth.query)
   let req_body = {"accountId": $account_id, "active": $active, "advertiserFilter": $advertiser_filter, "campaignFilter": $campaign_filter, "comments": $comments, "email": $email, "id": $id, "kind": $kind, "locale": $locale, "name": $name, "siteFilter": $site_filter, "subaccountId": $subaccount_id, "traffickerType": $trafficker_type, "userAccessType": $user_access_type, "userRoleFilter": $user_role_filter, "userRoleId": $user_role_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Updates an existing account user profile.
@@ -708,12 +838,23 @@ export def "userprofiles-account-user-profiles update-by-profile-id-1" [
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/accountUserProfiles") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/accountUserProfiles") $qp $auth.query)
   let req_body = {"accountId": $account_id, "active": $active, "advertiserFilter": $advertiser_filter, "campaignFilter": $campaign_filter, "comments": $comments, "email": $email, "id": $id, "kind": $kind, "locale": $locale, "name": $name, "siteFilter": $site_filter, "subaccountId": $subaccount_id, "traffickerType": $trafficker_type, "userAccessType": $user_access_type, "userRoleFilter": $user_role_filter, "userRoleId": $user_role_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Gets one account user profile by ID.
@@ -749,10 +890,21 @@ export def "userprofiles-account-user-profiles get" [
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/accountUserProfiles/{id}") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/accountUserProfiles/{id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieves the list of accounts, possibly filtered. This method supports paging.
@@ -793,10 +945,21 @@ export def "userprofiles-accounts list" [
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "active" $active "scalar") (serialize-qp "ids" $ids "multi") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "searchString" $search_string "scalar") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/accounts") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/accounts") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "active": $active, "ids": $ids, "maxResults": $max_results, "pageToken": $page_token, "searchString": $search_string, "sortField": $sort_field, "sortOrder": $sort_order} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "active": $active, "ids": $ids, "maxResults": $max_results, "pageToken": $page_token, "searchString": $search_string, "sortField": $sort_field, "sortOrder": $sort_order} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates an existing account. This method supports patch semantics.
@@ -852,12 +1015,23 @@ export def "userprofiles-accounts update-by-profile-id" [
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "id" $id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/accounts") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/accounts") $qp $auth.query)
   let req_body = {"accountPermissionIds": $account_permission_ids, "accountProfile": $account_profile, "active": $active, "activeAdsLimitTier": $active_ads_limit_tier, "activeViewOptOut": $active_view_opt_out, "availablePermissionIds": $available_permission_ids, "countryId": $country_id, "currencyId": $currency_id, "defaultCreativeSizeId": $default_creative_size_id, "description": $description, "id": $id_body, "kind": $kind, "locale": $locale, "maximumImageSize": $maximum_image_size, "name": $name, "nielsenOcrEnabled": $nielsen_ocr_enabled, "reportsConfiguration": $reports_configuration, "shareReportsWithTwitter": $share_reports_with_twitter, "teaserSizeLimit": $teaser_size_limit} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "id": $id} | compact), body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "id": $id} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Updates an existing account.
@@ -912,12 +1086,23 @@ export def "userprofiles-accounts update-by-profile-id-1" [
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/accounts") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/accounts") $qp $auth.query)
   let req_body = {"accountPermissionIds": $account_permission_ids, "accountProfile": $account_profile, "active": $active, "activeAdsLimitTier": $active_ads_limit_tier, "activeViewOptOut": $active_view_opt_out, "availablePermissionIds": $available_permission_ids, "countryId": $country_id, "currencyId": $currency_id, "defaultCreativeSizeId": $default_creative_size_id, "description": $description, "id": $id, "kind": $kind, "locale": $locale, "maximumImageSize": $maximum_image_size, "name": $name, "nielsenOcrEnabled": $nielsen_ocr_enabled, "reportsConfiguration": $reports_configuration, "shareReportsWithTwitter": $share_reports_with_twitter, "teaserSizeLimit": $teaser_size_limit} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Gets one account by ID.
@@ -953,10 +1138,21 @@ export def "userprofiles-accounts get" [
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/accounts/{id}") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/accounts/{id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieves a list of ads, possibly filtered. This method supports paging.
@@ -1013,10 +1209,21 @@ export def "userprofiles-ads list" [
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "active" $active "scalar") (serialize-qp "advertiserId" $advertiser_id "scalar") (serialize-qp "archived" $archived "scalar") (serialize-qp "audienceSegmentIds" $audience_segment_ids "multi") (serialize-qp "campaignIds" $campaign_ids "multi") (serialize-qp "compatibility" $compatibility "scalar") (serialize-qp "creativeIds" $creative_ids "multi") (serialize-qp "creativeOptimizationConfigurationIds" $creative_optimization_configuration_ids "multi") (serialize-qp "dynamicClickTracker" $dynamic_click_tracker "scalar") (serialize-qp "ids" $ids "multi") (serialize-qp "landingPageIds" $landing_page_ids "multi") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "overriddenEventTagId" $overridden_event_tag_id "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "placementIds" $placement_ids "multi") (serialize-qp "remarketingListIds" $remarketing_list_ids "multi") (serialize-qp "searchString" $search_string "scalar") (serialize-qp "sizeIds" $size_ids "multi") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "sslCompliant" $ssl_compliant "scalar") (serialize-qp "sslRequired" $ssl_required "scalar") (serialize-qp "type" $type "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/ads") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/ads") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "active": $active, "advertiserId": $advertiser_id, "archived": $archived, "audienceSegmentIds": $audience_segment_ids, "campaignIds": $campaign_ids, "compatibility": $compatibility, "creativeIds": $creative_ids, "creativeOptimizationConfigurationIds": $creative_optimization_configuration_ids, "dynamicClickTracker": $dynamic_click_tracker, "ids": $ids, "landingPageIds": $landing_page_ids, "maxResults": $max_results, "overriddenEventTagId": $overridden_event_tag_id, "pageToken": $page_token, "placementIds": $placement_ids, "remarketingListIds": $remarketing_list_ids, "searchString": $search_string, "sizeIds": $size_ids, "sortField": $sort_field, "sortOrder": $sort_order, "sslCompliant": $ssl_compliant, "sslRequired": $ssl_required, "type": $type} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "active": $active, "advertiserId": $advertiser_id, "archived": $archived, "audienceSegmentIds": $audience_segment_ids, "campaignIds": $campaign_ids, "compatibility": $compatibility, "creativeIds": $creative_ids, "creativeOptimizationConfigurationIds": $creative_optimization_configuration_ids, "dynamicClickTracker": $dynamic_click_tracker, "ids": $ids, "landingPageIds": $landing_page_ids, "maxResults": $max_results, "overriddenEventTagId": $overridden_event_tag_id, "pageToken": $page_token, "placementIds": $placement_ids, "remarketingListIds": $remarketing_list_ids, "searchString": $search_string, "sizeIds": $size_ids, "sortField": $sort_field, "sortOrder": $sort_order, "sslCompliant": $ssl_compliant, "sslRequired": $ssl_required, "type": $type} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates an existing ad. This method supports patch semantics.
@@ -1111,12 +1318,23 @@ export def "userprofiles-ads update-by-profile-id" [
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "id" $id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/ads") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/ads") $qp $auth.query)
   let req_body = {"accountId": $account_id, "active": $active, "advertiserId": $advertiser_id, "advertiserIdDimensionValue": $advertiser_id_dimension_value, "archived": $archived, "audienceSegmentId": $audience_segment_id, "campaignId": $campaign_id, "campaignIdDimensionValue": $campaign_id_dimension_value, "clickThroughUrl": $click_through_url, "clickThroughUrlSuffixProperties": $click_through_url_suffix_properties, "comments": $comments, "compatibility": $compatibility, "createInfo": $create_info, "creativeGroupAssignments": $creative_group_assignments, "creativeRotation": $creative_rotation, "dayPartTargeting": $day_part_targeting, "defaultClickThroughEventTagProperties": $default_click_through_event_tag_properties, "deliverySchedule": $delivery_schedule, "dynamicClickTracker": $dynamic_click_tracker, "endTime": $end_time, "eventTagOverrides": $event_tag_overrides, "geoTargeting": $geo_targeting, "id": $id_body, "idDimensionValue": $id_dimension_value, "keyValueTargetingExpression": $key_value_targeting_expression, "kind": $kind, "languageTargeting": $language_targeting, "lastModifiedInfo": $last_modified_info, "name": $name, "placementAssignments": $placement_assignments, "remarketingListExpression": $remarketing_list_expression, "size": $size, "sslCompliant": $ssl_compliant, "sslRequired": $ssl_required, "startTime": $start_time, "subaccountId": $subaccount_id, "targetingTemplateId": $targeting_template_id, "technologyTargeting": $technology_targeting, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "id": $id} | compact), body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "id": $id} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Inserts a new ad.
@@ -1210,12 +1428,23 @@ export def "userprofiles-ads create" [
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/ads") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/ads") $qp $auth.query)
   let req_body = {"accountId": $account_id, "active": $active, "advertiserId": $advertiser_id, "advertiserIdDimensionValue": $advertiser_id_dimension_value, "archived": $archived, "audienceSegmentId": $audience_segment_id, "campaignId": $campaign_id, "campaignIdDimensionValue": $campaign_id_dimension_value, "clickThroughUrl": $click_through_url, "clickThroughUrlSuffixProperties": $click_through_url_suffix_properties, "comments": $comments, "compatibility": $compatibility, "createInfo": $create_info, "creativeGroupAssignments": $creative_group_assignments, "creativeRotation": $creative_rotation, "dayPartTargeting": $day_part_targeting, "defaultClickThroughEventTagProperties": $default_click_through_event_tag_properties, "deliverySchedule": $delivery_schedule, "dynamicClickTracker": $dynamic_click_tracker, "endTime": $end_time, "eventTagOverrides": $event_tag_overrides, "geoTargeting": $geo_targeting, "id": $id, "idDimensionValue": $id_dimension_value, "keyValueTargetingExpression": $key_value_targeting_expression, "kind": $kind, "languageTargeting": $language_targeting, "lastModifiedInfo": $last_modified_info, "name": $name, "placementAssignments": $placement_assignments, "remarketingListExpression": $remarketing_list_expression, "size": $size, "sslCompliant": $ssl_compliant, "sslRequired": $ssl_required, "startTime": $start_time, "subaccountId": $subaccount_id, "targetingTemplateId": $targeting_template_id, "technologyTargeting": $technology_targeting, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Updates an existing ad.
@@ -1309,12 +1538,23 @@ export def "userprofiles-ads update-by-profile-id-1" [
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/ads") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/ads") $qp $auth.query)
   let req_body = {"accountId": $account_id, "active": $active, "advertiserId": $advertiser_id, "advertiserIdDimensionValue": $advertiser_id_dimension_value, "archived": $archived, "audienceSegmentId": $audience_segment_id, "campaignId": $campaign_id, "campaignIdDimensionValue": $campaign_id_dimension_value, "clickThroughUrl": $click_through_url, "clickThroughUrlSuffixProperties": $click_through_url_suffix_properties, "comments": $comments, "compatibility": $compatibility, "createInfo": $create_info, "creativeGroupAssignments": $creative_group_assignments, "creativeRotation": $creative_rotation, "dayPartTargeting": $day_part_targeting, "defaultClickThroughEventTagProperties": $default_click_through_event_tag_properties, "deliverySchedule": $delivery_schedule, "dynamicClickTracker": $dynamic_click_tracker, "endTime": $end_time, "eventTagOverrides": $event_tag_overrides, "geoTargeting": $geo_targeting, "id": $id, "idDimensionValue": $id_dimension_value, "keyValueTargetingExpression": $key_value_targeting_expression, "kind": $kind, "languageTargeting": $language_targeting, "lastModifiedInfo": $last_modified_info, "name": $name, "placementAssignments": $placement_assignments, "remarketingListExpression": $remarketing_list_expression, "size": $size, "sslCompliant": $ssl_compliant, "sslRequired": $ssl_required, "startTime": $start_time, "subaccountId": $subaccount_id, "targetingTemplateId": $targeting_template_id, "technologyTargeting": $technology_targeting, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Gets one ad by ID.
@@ -1350,10 +1590,21 @@ export def "userprofiles-ads get" [
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/ads/{id}") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/ads/{id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieves a list of advertiser groups, possibly filtered. This method supports paging.
@@ -1393,10 +1644,21 @@ export def "userprofiles-advertiser-groups list" [
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "ids" $ids "multi") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "searchString" $search_string "scalar") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/advertiserGroups") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/advertiserGroups") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "ids": $ids, "maxResults": $max_results, "pageToken": $page_token, "searchString": $search_string, "sortField": $sort_field, "sortOrder": $sort_order} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "ids": $ids, "maxResults": $max_results, "pageToken": $page_token, "searchString": $search_string, "sortField": $sort_field, "sortOrder": $sort_order} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates an existing advertiser group. This method supports patch semantics.
@@ -1436,12 +1698,23 @@ export def "userprofiles-advertiser-groups update-by-profile-id" [
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "id" $id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/advertiserGroups") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/advertiserGroups") $qp $auth.query)
   let req_body = {"accountId": $account_id, "id": $id_body, "kind": $kind, "name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "id": $id} | compact), body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "id": $id} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Inserts a new advertiser group.
@@ -1480,12 +1753,23 @@ export def "userprofiles-advertiser-groups create" [
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/advertiserGroups") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/advertiserGroups") $qp $auth.query)
   let req_body = {"accountId": $account_id, "id": $id, "kind": $kind, "name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Updates an existing advertiser group.
@@ -1524,12 +1808,23 @@ export def "userprofiles-advertiser-groups update-by-profile-id-1" [
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/advertiserGroups") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/advertiserGroups") $qp $auth.query)
   let req_body = {"accountId": $account_id, "id": $id, "kind": $kind, "name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes an existing advertiser group.
@@ -1565,10 +1860,21 @@ export def "userprofiles-advertiser-groups delete" [
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/advertiserGroups/{id}") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/advertiserGroups/{id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Gets one advertiser group by ID.
@@ -1604,10 +1910,21 @@ export def "userprofiles-advertiser-groups get" [
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/advertiserGroups/{id}") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/advertiserGroups/{id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieves a list of landing pages.
@@ -1651,10 +1968,21 @@ export def "userprofiles-advertiser-landing-pages list" [
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "advertiserIds" $advertiser_ids "multi") (serialize-qp "archived" $archived "scalar") (serialize-qp "campaignIds" $campaign_ids "multi") (serialize-qp "ids" $ids "multi") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "searchString" $search_string "scalar") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "subaccountId" $subaccount_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/advertiserLandingPages") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/advertiserLandingPages") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "advertiserIds": $advertiser_ids, "archived": $archived, "campaignIds": $campaign_ids, "ids": $ids, "maxResults": $max_results, "pageToken": $page_token, "searchString": $search_string, "sortField": $sort_field, "sortOrder": $sort_order, "subaccountId": $subaccount_id} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "advertiserIds": $advertiser_ids, "archived": $archived, "campaignIds": $campaign_ids, "ids": $ids, "maxResults": $max_results, "pageToken": $page_token, "searchString": $search_string, "sortField": $sort_field, "sortOrder": $sort_order, "subaccountId": $subaccount_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates an existing advertiser landing page. This method supports patch semantics.
@@ -1698,12 +2026,23 @@ export def "userprofiles-advertiser-landing-pages update-by-profile-id" [
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "id" $id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/advertiserLandingPages") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/advertiserLandingPages") $qp $auth.query)
   let req_body = {"advertiserId": $advertiser_id, "archived": $archived, "deepLinks": $deep_links, "id": $id_body, "kind": $kind, "name": $name, "url": $url} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "id": $id} | compact), body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "id": $id} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Inserts a new landing page.
@@ -1746,12 +2085,23 @@ export def "userprofiles-advertiser-landing-pages create" [
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/advertiserLandingPages") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/advertiserLandingPages") $qp $auth.query)
   let req_body = {"advertiserId": $advertiser_id, "archived": $archived, "deepLinks": $deep_links, "id": $id, "kind": $kind, "name": $name, "url": $url} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Updates an existing landing page.
@@ -1794,12 +2144,23 @@ export def "userprofiles-advertiser-landing-pages update-by-profile-id-1" [
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/advertiserLandingPages") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/advertiserLandingPages") $qp $auth.query)
   let req_body = {"advertiserId": $advertiser_id, "archived": $archived, "deepLinks": $deep_links, "id": $id, "kind": $kind, "name": $name, "url": $url} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Gets one landing page by ID.
@@ -1835,10 +2196,21 @@ export def "userprofiles-advertiser-landing-pages get" [
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/advertiserLandingPages/{id}") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/advertiserLandingPages/{id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieves a list of advertisers, possibly filtered. This method supports paging.
@@ -1884,10 +2256,21 @@ export def "userprofiles-advertisers list" [
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "advertiserGroupIds" $advertiser_group_ids "multi") (serialize-qp "floodlightConfigurationIds" $floodlight_configuration_ids "multi") (serialize-qp "ids" $ids "multi") (serialize-qp "includeAdvertisersWithoutGroupsOnly" $include_advertisers_without_groups_only "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "onlyParent" $only_parent "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "searchString" $search_string "scalar") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "subaccountId" $subaccount_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/advertisers") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/advertisers") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "advertiserGroupIds": $advertiser_group_ids, "floodlightConfigurationIds": $floodlight_configuration_ids, "ids": $ids, "includeAdvertisersWithoutGroupsOnly": $include_advertisers_without_groups_only, "maxResults": $max_results, "onlyParent": $only_parent, "pageToken": $page_token, "searchString": $search_string, "sortField": $sort_field, "sortOrder": $sort_order, "status": $status, "subaccountId": $subaccount_id} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "advertiserGroupIds": $advertiser_group_ids, "floodlightConfigurationIds": $floodlight_configuration_ids, "ids": $ids, "includeAdvertisersWithoutGroupsOnly": $include_advertisers_without_groups_only, "maxResults": $max_results, "onlyParent": $only_parent, "pageToken": $page_token, "searchString": $search_string, "sortField": $sort_field, "sortOrder": $sort_order, "status": $status, "subaccountId": $subaccount_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates an existing advertiser. This method supports patch semantics.
@@ -1940,12 +2323,23 @@ export def "userprofiles-advertisers update-by-profile-id" [
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "id" $id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/advertisers") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/advertisers") $qp $auth.query)
   let req_body = {"accountId": $account_id, "advertiserGroupId": $advertiser_group_id, "clickThroughUrlSuffix": $click_through_url_suffix, "defaultClickThroughEventTagId": $default_click_through_event_tag_id, "defaultEmail": $default_email, "floodlightConfigurationId": $floodlight_configuration_id, "floodlightConfigurationIdDimensionValue": $floodlight_configuration_id_dimension_value, "id": $id_body, "idDimensionValue": $id_dimension_value, "kind": $kind, "name": $name, "originalFloodlightConfigurationId": $original_floodlight_configuration_id, "status": $status, "subaccountId": $subaccount_id, "suspended": $suspended} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "id": $id} | compact), body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "id": $id} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Inserts a new advertiser.
@@ -1997,12 +2391,23 @@ export def "userprofiles-advertisers create" [
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/advertisers") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/advertisers") $qp $auth.query)
   let req_body = {"accountId": $account_id, "advertiserGroupId": $advertiser_group_id, "clickThroughUrlSuffix": $click_through_url_suffix, "defaultClickThroughEventTagId": $default_click_through_event_tag_id, "defaultEmail": $default_email, "floodlightConfigurationId": $floodlight_configuration_id, "floodlightConfigurationIdDimensionValue": $floodlight_configuration_id_dimension_value, "id": $id, "idDimensionValue": $id_dimension_value, "kind": $kind, "name": $name, "originalFloodlightConfigurationId": $original_floodlight_configuration_id, "status": $status, "subaccountId": $subaccount_id, "suspended": $suspended} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Updates an existing advertiser.
@@ -2054,12 +2459,23 @@ export def "userprofiles-advertisers update-by-profile-id-1" [
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/advertisers") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/advertisers") $qp $auth.query)
   let req_body = {"accountId": $account_id, "advertiserGroupId": $advertiser_group_id, "clickThroughUrlSuffix": $click_through_url_suffix, "defaultClickThroughEventTagId": $default_click_through_event_tag_id, "defaultEmail": $default_email, "floodlightConfigurationId": $floodlight_configuration_id, "floodlightConfigurationIdDimensionValue": $floodlight_configuration_id_dimension_value, "id": $id, "idDimensionValue": $id_dimension_value, "kind": $kind, "name": $name, "originalFloodlightConfigurationId": $original_floodlight_configuration_id, "status": $status, "subaccountId": $subaccount_id, "suspended": $suspended} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Gets one advertiser by ID.
@@ -2095,10 +2511,21 @@ export def "userprofiles-advertisers get" [
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/advertisers/{id}") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/advertisers/{id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieves a list of browsers.
@@ -2132,10 +2559,21 @@ export def "userprofiles-browsers list" [
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/browsers") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/browsers") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieves a list of campaigns, possibly filtered. This method supports paging.
@@ -2182,10 +2620,21 @@ export def "userprofiles-campaigns list" [
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "advertiserGroupIds" $advertiser_group_ids "multi") (serialize-qp "advertiserIds" $advertiser_ids "multi") (serialize-qp "archived" $archived "scalar") (serialize-qp "atLeastOneOptimizationActivity" $at_least_one_optimization_activity "scalar") (serialize-qp "excludedIds" $excluded_ids "multi") (serialize-qp "ids" $ids "multi") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "overriddenEventTagId" $overridden_event_tag_id "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "searchString" $search_string "scalar") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "subaccountId" $subaccount_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/campaigns") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/campaigns") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "advertiserGroupIds": $advertiser_group_ids, "advertiserIds": $advertiser_ids, "archived": $archived, "atLeastOneOptimizationActivity": $at_least_one_optimization_activity, "excludedIds": $excluded_ids, "ids": $ids, "maxResults": $max_results, "overriddenEventTagId": $overridden_event_tag_id, "pageToken": $page_token, "searchString": $search_string, "sortField": $sort_field, "sortOrder": $sort_order, "subaccountId": $subaccount_id} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "advertiserGroupIds": $advertiser_group_ids, "advertiserIds": $advertiser_ids, "archived": $archived, "atLeastOneOptimizationActivity": $at_least_one_optimization_activity, "excludedIds": $excluded_ids, "ids": $ids, "maxResults": $max_results, "overriddenEventTagId": $overridden_event_tag_id, "pageToken": $page_token, "searchString": $search_string, "sortField": $sort_field, "sortOrder": $sort_order, "subaccountId": $subaccount_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates an existing campaign. This method supports patch semantics.
@@ -2260,12 +2709,23 @@ export def "userprofiles-campaigns update-by-profile-id" [
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "id" $id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/campaigns") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/campaigns") $qp $auth.query)
   let req_body = {"accountId": $account_id, "adBlockingConfiguration": $ad_blocking_configuration, "additionalCreativeOptimizationConfigurations": $additional_creative_optimization_configurations, "advertiserGroupId": $advertiser_group_id, "advertiserId": $advertiser_id, "advertiserIdDimensionValue": $advertiser_id_dimension_value, "archived": $archived, "audienceSegmentGroups": $audience_segment_groups, "billingInvoiceCode": $billing_invoice_code, "clickThroughUrlSuffixProperties": $click_through_url_suffix_properties, "comment": $comment, "createInfo": $create_info, "creativeGroupIds": $creative_group_ids, "creativeOptimizationConfiguration": $creative_optimization_configuration, "defaultClickThroughEventTagProperties": $default_click_through_event_tag_properties, "defaultLandingPageId": $default_landing_page_id, "endDate": $end_date, "eventTagOverrides": $event_tag_overrides, "externalId": $external_id, "id": $id_body, "idDimensionValue": $id_dimension_value, "kind": $kind, "lastModifiedInfo": $last_modified_info, "name": $name, "nielsenOcrEnabled": $nielsen_ocr_enabled, "startDate": $start_date, "subaccountId": $subaccount_id, "traffickerEmails": $trafficker_emails} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "id": $id} | compact), body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "id": $id} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Inserts a new campaign.
@@ -2339,12 +2799,23 @@ export def "userprofiles-campaigns create" [
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/campaigns") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/campaigns") $qp $auth.query)
   let req_body = {"accountId": $account_id, "adBlockingConfiguration": $ad_blocking_configuration, "additionalCreativeOptimizationConfigurations": $additional_creative_optimization_configurations, "advertiserGroupId": $advertiser_group_id, "advertiserId": $advertiser_id, "advertiserIdDimensionValue": $advertiser_id_dimension_value, "archived": $archived, "audienceSegmentGroups": $audience_segment_groups, "billingInvoiceCode": $billing_invoice_code, "clickThroughUrlSuffixProperties": $click_through_url_suffix_properties, "comment": $comment, "createInfo": $create_info, "creativeGroupIds": $creative_group_ids, "creativeOptimizationConfiguration": $creative_optimization_configuration, "defaultClickThroughEventTagProperties": $default_click_through_event_tag_properties, "defaultLandingPageId": $default_landing_page_id, "endDate": $end_date, "eventTagOverrides": $event_tag_overrides, "externalId": $external_id, "id": $id, "idDimensionValue": $id_dimension_value, "kind": $kind, "lastModifiedInfo": $last_modified_info, "name": $name, "nielsenOcrEnabled": $nielsen_ocr_enabled, "startDate": $start_date, "subaccountId": $subaccount_id, "traffickerEmails": $trafficker_emails} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Updates an existing campaign.
@@ -2418,12 +2889,23 @@ export def "userprofiles-campaigns update-by-profile-id-1" [
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/campaigns") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/campaigns") $qp $auth.query)
   let req_body = {"accountId": $account_id, "adBlockingConfiguration": $ad_blocking_configuration, "additionalCreativeOptimizationConfigurations": $additional_creative_optimization_configurations, "advertiserGroupId": $advertiser_group_id, "advertiserId": $advertiser_id, "advertiserIdDimensionValue": $advertiser_id_dimension_value, "archived": $archived, "audienceSegmentGroups": $audience_segment_groups, "billingInvoiceCode": $billing_invoice_code, "clickThroughUrlSuffixProperties": $click_through_url_suffix_properties, "comment": $comment, "createInfo": $create_info, "creativeGroupIds": $creative_group_ids, "creativeOptimizationConfiguration": $creative_optimization_configuration, "defaultClickThroughEventTagProperties": $default_click_through_event_tag_properties, "defaultLandingPageId": $default_landing_page_id, "endDate": $end_date, "eventTagOverrides": $event_tag_overrides, "externalId": $external_id, "id": $id, "idDimensionValue": $id_dimension_value, "kind": $kind, "lastModifiedInfo": $last_modified_info, "name": $name, "nielsenOcrEnabled": $nielsen_ocr_enabled, "startDate": $start_date, "subaccountId": $subaccount_id, "traffickerEmails": $trafficker_emails} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieves the list of creative IDs associated with the specified campaign. This method supports paging.
@@ -2462,10 +2944,21 @@ export def "userprofiles-campaigns-campaign-creative-associations list" [
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($campaign_id | is-empty) { error make --unspanned { msg: "path parameter 'campaignId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "sortOrder" $sort_order "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), campaign_id: (encode-path-segment $campaign_id)} | format pattern "/userprofiles/{profile_id}/campaigns/{campaign_id}/campaignCreativeAssociations") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), campaign_id: (encode-path-segment $campaign_id)} | format pattern "/userprofiles/{profile_id}/campaigns/{campaign_id}/campaignCreativeAssociations") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "maxResults": $max_results, "pageToken": $page_token, "sortOrder": $sort_order} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "maxResults": $max_results, "pageToken": $page_token, "sortOrder": $sort_order} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Associates a creative with the specified campaign. This method creates a default ad with dimensions matching the creative in the campaign if such a default ad does not exist already.
@@ -2504,12 +2997,23 @@ export def "userprofiles-campaigns-campaign-creative-associations create" [
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($campaign_id | is-empty) { error make --unspanned { msg: "path parameter 'campaignId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), campaign_id: (encode-path-segment $campaign_id)} | format pattern "/userprofiles/{profile_id}/campaigns/{campaign_id}/campaignCreativeAssociations") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), campaign_id: (encode-path-segment $campaign_id)} | format pattern "/userprofiles/{profile_id}/campaigns/{campaign_id}/campaignCreativeAssociations") $qp $auth.query)
   let req_body = {"creativeId": $creative_id, "kind": $kind} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Gets one campaign by ID.
@@ -2545,10 +3049,21 @@ export def "userprofiles-campaigns get" [
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/campaigns/{id}") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/campaigns/{id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieves a list of change logs. This method supports paging.
@@ -2592,10 +3107,21 @@ export def "userprofiles-change-logs list" [
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "action" $action "scalar") (serialize-qp "ids" $ids "multi") (serialize-qp "maxChangeTime" $max_change_time "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "minChangeTime" $min_change_time "scalar") (serialize-qp "objectIds" $object_ids "multi") (serialize-qp "objectType" $object_type "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "searchString" $search_string "scalar") (serialize-qp "userProfileIds" $user_profile_ids "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/changeLogs") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/changeLogs") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "action": $action, "ids": $ids, "maxChangeTime": $max_change_time, "maxResults": $max_results, "minChangeTime": $min_change_time, "objectIds": $object_ids, "objectType": $object_type, "pageToken": $page_token, "searchString": $search_string, "userProfileIds": $user_profile_ids} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "action": $action, "ids": $ids, "maxChangeTime": $max_change_time, "maxResults": $max_results, "minChangeTime": $min_change_time, "objectIds": $object_ids, "objectType": $object_type, "pageToken": $page_token, "searchString": $search_string, "userProfileIds": $user_profile_ids} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets one change log by ID.
@@ -2631,10 +3157,21 @@ export def "userprofiles-change-logs get" [
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/changeLogs/{id}") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/changeLogs/{id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieves a list of cities, possibly filtered.
@@ -2672,10 +3209,21 @@ export def "userprofiles-cities list" [
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "countryDartIds" $country_dart_ids "multi") (serialize-qp "dartIds" $dart_ids "multi") (serialize-qp "namePrefix" $name_prefix "scalar") (serialize-qp "regionDartIds" $region_dart_ids "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/cities") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/cities") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "countryDartIds": $country_dart_ids, "dartIds": $dart_ids, "namePrefix": $name_prefix, "regionDartIds": $region_dart_ids} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "countryDartIds": $country_dart_ids, "dartIds": $dart_ids, "namePrefix": $name_prefix, "regionDartIds": $region_dart_ids} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieves a list of connection types.
@@ -2709,10 +3257,21 @@ export def "userprofiles-connection-types list" [
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/connectionTypes") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/connectionTypes") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets one connection type by ID.
@@ -2748,10 +3307,21 @@ export def "userprofiles-connection-types get" [
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/connectionTypes/{id}") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/connectionTypes/{id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieves a list of content categories, possibly filtered. This method supports paging.
@@ -2791,10 +3361,21 @@ export def "userprofiles-content-categories list" [
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "ids" $ids "multi") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "searchString" $search_string "scalar") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/contentCategories") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/contentCategories") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "ids": $ids, "maxResults": $max_results, "pageToken": $page_token, "searchString": $search_string, "sortField": $sort_field, "sortOrder": $sort_order} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "ids": $ids, "maxResults": $max_results, "pageToken": $page_token, "searchString": $search_string, "sortField": $sort_field, "sortOrder": $sort_order} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates an existing content category. This method supports patch semantics.
@@ -2834,12 +3415,23 @@ export def "userprofiles-content-categories update-by-profile-id" [
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "id" $id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/contentCategories") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/contentCategories") $qp $auth.query)
   let req_body = {"accountId": $account_id, "id": $id_body, "kind": $kind, "name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "id": $id} | compact), body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "id": $id} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Inserts a new content category.
@@ -2878,12 +3470,23 @@ export def "userprofiles-content-categories create" [
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/contentCategories") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/contentCategories") $qp $auth.query)
   let req_body = {"accountId": $account_id, "id": $id, "kind": $kind, "name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Updates an existing content category.
@@ -2922,12 +3525,23 @@ export def "userprofiles-content-categories update-by-profile-id-1" [
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/contentCategories") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/contentCategories") $qp $auth.query)
   let req_body = {"accountId": $account_id, "id": $id, "kind": $kind, "name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes an existing content category.
@@ -2963,10 +3577,21 @@ export def "userprofiles-content-categories delete" [
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/contentCategories/{id}") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/contentCategories/{id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Gets one content category by ID.
@@ -3002,10 +3627,21 @@ export def "userprofiles-content-categories get" [
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/contentCategories/{id}") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/contentCategories/{id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Inserts conversions.
@@ -3045,12 +3681,23 @@ export def "userprofiles-conversions-batchinsert create" [
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/conversions/batchinsert") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/conversions/batchinsert") $qp $auth.query)
   let req_body = {"conversions": $conversions, "encryptionInfo": $encryption_info, "kind": $kind} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Updates existing conversions.
@@ -3090,12 +3737,23 @@ export def "userprofiles-conversions-batchupdate create" [
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/conversions/batchupdate") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/conversions/batchupdate") $qp $auth.query)
   let req_body = {"conversions": $conversions, "encryptionInfo": $encryption_info, "kind": $kind} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieves a list of countries.
@@ -3129,10 +3787,21 @@ export def "userprofiles-countries list" [
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/countries") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/countries") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets one country by ID.
@@ -3168,10 +3837,21 @@ export def "userprofiles-countries get" [
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($dart_id | is-empty) { error make --unspanned { msg: "path parameter 'dartId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), dart_id: (encode-path-segment $dart_id)} | format pattern "/userprofiles/{profile_id}/countries/{dart_id}") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), dart_id: (encode-path-segment $dart_id)} | format pattern "/userprofiles/{profile_id}/countries/{dart_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Inserts a new creative asset.
@@ -3209,12 +3889,23 @@ export def "userprofiles-creative-assets-creative-assets create" [
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), advertiser_id: (encode-path-segment $advertiser_id)} | format pattern "/userprofiles/{profile_id}/creativeAssets/{advertiser_id}/creativeAssets") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), advertiser_id: (encode-path-segment $advertiser_id)} | format pattern "/userprofiles/{profile_id}/creativeAssets/{advertiser_id}/creativeAssets") $qp $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/octet-stream" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/octet-stream"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieves a list of creative fields, possibly filtered. This method supports paging.
@@ -3255,10 +3946,21 @@ export def "userprofiles-creative-fields list" [
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "advertiserIds" $advertiser_ids "multi") (serialize-qp "ids" $ids "multi") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "searchString" $search_string "scalar") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/creativeFields") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/creativeFields") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "advertiserIds": $advertiser_ids, "ids": $ids, "maxResults": $max_results, "pageToken": $page_token, "searchString": $search_string, "sortField": $sort_field, "sortOrder": $sort_order} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "advertiserIds": $advertiser_ids, "ids": $ids, "maxResults": $max_results, "pageToken": $page_token, "searchString": $search_string, "sortField": $sort_field, "sortOrder": $sort_order} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates an existing creative field. This method supports patch semantics.
@@ -3302,12 +4004,23 @@ export def "userprofiles-creative-fields update-by-profile-id" [
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "id" $id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/creativeFields") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/creativeFields") $qp $auth.query)
   let req_body = {"accountId": $account_id, "advertiserId": $advertiser_id, "advertiserIdDimensionValue": $advertiser_id_dimension_value, "id": $id_body, "kind": $kind, "name": $name, "subaccountId": $subaccount_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "id": $id} | compact), body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "id": $id} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Inserts a new creative field.
@@ -3350,12 +4063,23 @@ export def "userprofiles-creative-fields create" [
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/creativeFields") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/creativeFields") $qp $auth.query)
   let req_body = {"accountId": $account_id, "advertiserId": $advertiser_id, "advertiserIdDimensionValue": $advertiser_id_dimension_value, "id": $id, "kind": $kind, "name": $name, "subaccountId": $subaccount_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Updates an existing creative field.
@@ -3398,12 +4122,23 @@ export def "userprofiles-creative-fields update-by-profile-id-1" [
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/creativeFields") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/creativeFields") $qp $auth.query)
   let req_body = {"accountId": $account_id, "advertiserId": $advertiser_id, "advertiserIdDimensionValue": $advertiser_id_dimension_value, "id": $id, "kind": $kind, "name": $name, "subaccountId": $subaccount_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieves a list of creative field values, possibly filtered. This method supports paging.
@@ -3445,10 +4180,21 @@ export def "userprofiles-creative-fields-creative-field-values list" [
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($creative_field_id | is-empty) { error make --unspanned { msg: "path parameter 'creativeFieldId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "ids" $ids "multi") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "searchString" $search_string "scalar") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), creative_field_id: (encode-path-segment $creative_field_id)} | format pattern "/userprofiles/{profile_id}/creativeFields/{creative_field_id}/creativeFieldValues") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), creative_field_id: (encode-path-segment $creative_field_id)} | format pattern "/userprofiles/{profile_id}/creativeFields/{creative_field_id}/creativeFieldValues") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "ids": $ids, "maxResults": $max_results, "pageToken": $page_token, "searchString": $search_string, "sortField": $sort_field, "sortOrder": $sort_order} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "ids": $ids, "maxResults": $max_results, "pageToken": $page_token, "searchString": $search_string, "sortField": $sort_field, "sortOrder": $sort_order} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates an existing creative field value. This method supports patch semantics.
@@ -3489,12 +4235,23 @@ export def "userprofiles-creative-fields-creative-field-values update-by-profile
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($creative_field_id | is-empty) { error make --unspanned { msg: "path parameter 'creativeFieldId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "id" $id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), creative_field_id: (encode-path-segment $creative_field_id)} | format pattern "/userprofiles/{profile_id}/creativeFields/{creative_field_id}/creativeFieldValues") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), creative_field_id: (encode-path-segment $creative_field_id)} | format pattern "/userprofiles/{profile_id}/creativeFields/{creative_field_id}/creativeFieldValues") $qp $auth.query)
   let req_body = {"id": $id_body, "kind": $kind, "value": $value} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "id": $id} | compact), body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "id": $id} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Inserts a new creative field value.
@@ -3534,12 +4291,23 @@ export def "userprofiles-creative-fields-creative-field-values create" [
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($creative_field_id | is-empty) { error make --unspanned { msg: "path parameter 'creativeFieldId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), creative_field_id: (encode-path-segment $creative_field_id)} | format pattern "/userprofiles/{profile_id}/creativeFields/{creative_field_id}/creativeFieldValues") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), creative_field_id: (encode-path-segment $creative_field_id)} | format pattern "/userprofiles/{profile_id}/creativeFields/{creative_field_id}/creativeFieldValues") $qp $auth.query)
   let req_body = {"id": $id, "kind": $kind, "value": $value} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Updates an existing creative field value.
@@ -3579,12 +4347,23 @@ export def "userprofiles-creative-fields-creative-field-values update-by-profile
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($creative_field_id | is-empty) { error make --unspanned { msg: "path parameter 'creativeFieldId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), creative_field_id: (encode-path-segment $creative_field_id)} | format pattern "/userprofiles/{profile_id}/creativeFields/{creative_field_id}/creativeFieldValues") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), creative_field_id: (encode-path-segment $creative_field_id)} | format pattern "/userprofiles/{profile_id}/creativeFields/{creative_field_id}/creativeFieldValues") $qp $auth.query)
   let req_body = {"id": $id, "kind": $kind, "value": $value} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes an existing creative field value.
@@ -3622,10 +4401,21 @@ export def "userprofiles-creative-fields-creative-field-values delete" [
   if ($creative_field_id | is-empty) { error make --unspanned { msg: "path parameter 'creativeFieldId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), creative_field_id: (encode-path-segment $creative_field_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/creativeFields/{creative_field_id}/creativeFieldValues/{id}") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), creative_field_id: (encode-path-segment $creative_field_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/creativeFields/{creative_field_id}/creativeFieldValues/{id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Gets one creative field value by ID.
@@ -3663,10 +4453,21 @@ export def "userprofiles-creative-fields-creative-field-values get" [
   if ($creative_field_id | is-empty) { error make --unspanned { msg: "path parameter 'creativeFieldId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), creative_field_id: (encode-path-segment $creative_field_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/creativeFields/{creative_field_id}/creativeFieldValues/{id}") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), creative_field_id: (encode-path-segment $creative_field_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/creativeFields/{creative_field_id}/creativeFieldValues/{id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes an existing creative field.
@@ -3702,10 +4503,21 @@ export def "userprofiles-creative-fields delete" [
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/creativeFields/{id}") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/creativeFields/{id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Gets one creative field by ID.
@@ -3741,10 +4553,21 @@ export def "userprofiles-creative-fields get" [
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/creativeFields/{id}") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/creativeFields/{id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieves a list of creative groups, possibly filtered. This method supports paging.
@@ -3786,10 +4609,21 @@ export def "userprofiles-creative-groups list" [
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "advertiserIds" $advertiser_ids "multi") (serialize-qp "groupNumber" $group_number "scalar") (serialize-qp "ids" $ids "multi") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "searchString" $search_string "scalar") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/creativeGroups") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/creativeGroups") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "advertiserIds": $advertiser_ids, "groupNumber": $group_number, "ids": $ids, "maxResults": $max_results, "pageToken": $page_token, "searchString": $search_string, "sortField": $sort_field, "sortOrder": $sort_order} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "advertiserIds": $advertiser_ids, "groupNumber": $group_number, "ids": $ids, "maxResults": $max_results, "pageToken": $page_token, "searchString": $search_string, "sortField": $sort_field, "sortOrder": $sort_order} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates an existing creative group. This method supports patch semantics.
@@ -3834,12 +4668,23 @@ export def "userprofiles-creative-groups update-by-profile-id" [
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "id" $id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/creativeGroups") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/creativeGroups") $qp $auth.query)
   let req_body = {"accountId": $account_id, "advertiserId": $advertiser_id, "advertiserIdDimensionValue": $advertiser_id_dimension_value, "groupNumber": $group_number, "id": $id_body, "kind": $kind, "name": $name, "subaccountId": $subaccount_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "id": $id} | compact), body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "id": $id} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Inserts a new creative group.
@@ -3883,12 +4728,23 @@ export def "userprofiles-creative-groups create" [
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/creativeGroups") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/creativeGroups") $qp $auth.query)
   let req_body = {"accountId": $account_id, "advertiserId": $advertiser_id, "advertiserIdDimensionValue": $advertiser_id_dimension_value, "groupNumber": $group_number, "id": $id, "kind": $kind, "name": $name, "subaccountId": $subaccount_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Updates an existing creative group.
@@ -3932,12 +4788,23 @@ export def "userprofiles-creative-groups update-by-profile-id-1" [
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/creativeGroups") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/creativeGroups") $qp $auth.query)
   let req_body = {"accountId": $account_id, "advertiserId": $advertiser_id, "advertiserIdDimensionValue": $advertiser_id_dimension_value, "groupNumber": $group_number, "id": $id, "kind": $kind, "name": $name, "subaccountId": $subaccount_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Gets one creative group by ID.
@@ -3973,10 +4840,21 @@ export def "userprofiles-creative-groups get" [
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/creativeGroups/{id}") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/creativeGroups/{id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieves a list of creatives, possibly filtered. This method supports paging.
@@ -4026,10 +4904,21 @@ export def "userprofiles-creatives list" [
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "active" $active "scalar") (serialize-qp "advertiserId" $advertiser_id "scalar") (serialize-qp "archived" $archived "scalar") (serialize-qp "campaignId" $campaign_id "scalar") (serialize-qp "companionCreativeIds" $companion_creative_ids "multi") (serialize-qp "creativeFieldIds" $creative_field_ids "multi") (serialize-qp "ids" $ids "multi") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "renderingIds" $rendering_ids "multi") (serialize-qp "searchString" $search_string "scalar") (serialize-qp "sizeIds" $size_ids "multi") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "studioCreativeId" $studio_creative_id "scalar") (serialize-qp "types" $types "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/creatives") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/creatives") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "active": $active, "advertiserId": $advertiser_id, "archived": $archived, "campaignId": $campaign_id, "companionCreativeIds": $companion_creative_ids, "creativeFieldIds": $creative_field_ids, "ids": $ids, "maxResults": $max_results, "pageToken": $page_token, "renderingIds": $rendering_ids, "searchString": $search_string, "sizeIds": $size_ids, "sortField": $sort_field, "sortOrder": $sort_order, "studioCreativeId": $studio_creative_id, "types": $types} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "active": $active, "advertiserId": $advertiser_id, "archived": $archived, "campaignId": $campaign_id, "companionCreativeIds": $companion_creative_ids, "creativeFieldIds": $creative_field_ids, "ids": $ids, "maxResults": $max_results, "pageToken": $page_token, "renderingIds": $rendering_ids, "searchString": $search_string, "sizeIds": $size_ids, "sortField": $sort_field, "sortOrder": $sort_order, "studioCreativeId": $studio_creative_id, "types": $types} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates an existing creative. This method supports patch semantics.
@@ -4150,12 +5039,23 @@ export def "userprofiles-creatives update-by-profile-id" [
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "id" $id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/creatives") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/creatives") $qp $auth.query)
   let req_body = {"accountId": $account_id, "active": $active, "adParameters": $ad_parameters, "adTagKeys": $ad_tag_keys, "additionalSizes": $additional_sizes, "advertiserId": $advertiser_id, "allowScriptAccess": $allow_script_access, "archived": $archived, "artworkType": $artwork_type, "authoringSource": $authoring_source, "authoringTool": $authoring_tool, "autoAdvanceImages": $auto_advance_images, "backgroundColor": $background_color, "backupImageClickThroughUrl": $backup_image_click_through_url, "backupImageFeatures": $backup_image_features, "backupImageReportingLabel": $backup_image_reporting_label, "backupImageTargetWindow": $backup_image_target_window, "clickTags": $click_tags, "commercialId": $commercial_id, "companionCreatives": $companion_creatives, "compatibility": $compatibility, "convertFlashToHtml5": $convert_flash_to_html5, "counterCustomEvents": $counter_custom_events, "creativeAssetSelection": $creative_asset_selection, "creativeAssets": $creative_assets, "creativeFieldAssignments": $creative_field_assignments, "customKeyValues": $custom_key_values, "dynamicAssetSelection": $dynamic_asset_selection, "exitCustomEvents": $exit_custom_events, "fsCommand": $fs_command, "htmlCode": $html_code, "htmlCodeLocked": $html_code_locked, "id": $id_body, "idDimensionValue": $id_dimension_value, "kind": $kind, "lastModifiedInfo": $last_modified_info, "latestTraffickedCreativeId": $latest_trafficked_creative_id, "mediaDescription": $media_description, "mediaDuration": $media_duration, "name": $name, "obaIcon": $oba_icon, "overrideCss": $override_css, "progressOffset": $progress_offset, "redirectUrl": $redirect_url, "renderingId": $rendering_id, "renderingIdDimensionValue": $rendering_id_dimension_value, "requiredFlashPluginVersion": $required_flash_plugin_version, "requiredFlashVersion": $required_flash_version, "size": $size, "skipOffset": $skip_offset, "skippable": $skippable, "sslCompliant": $ssl_compliant, "sslOverride": $ssl_override, "studioAdvertiserId": $studio_advertiser_id, "studioCreativeId": $studio_creative_id, "studioTraffickedCreativeId": $studio_trafficked_creative_id, "subaccountId": $subaccount_id, "thirdPartyBackupImageImpressionsUrl": $third_party_backup_image_impressions_url, "thirdPartyRichMediaImpressionsUrl": $third_party_rich_media_impressions_url, "thirdPartyUrls": $third_party_urls, "timerCustomEvents": $timer_custom_events, "totalFileSize": $total_file_size, "type": $type, "universalAdId": $universal_ad_id, "version": $version} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "id": $id} | compact), body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "id": $id} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Inserts a new creative.
@@ -4275,12 +5175,23 @@ export def "userprofiles-creatives create" [
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/creatives") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/creatives") $qp $auth.query)
   let req_body = {"accountId": $account_id, "active": $active, "adParameters": $ad_parameters, "adTagKeys": $ad_tag_keys, "additionalSizes": $additional_sizes, "advertiserId": $advertiser_id, "allowScriptAccess": $allow_script_access, "archived": $archived, "artworkType": $artwork_type, "authoringSource": $authoring_source, "authoringTool": $authoring_tool, "autoAdvanceImages": $auto_advance_images, "backgroundColor": $background_color, "backupImageClickThroughUrl": $backup_image_click_through_url, "backupImageFeatures": $backup_image_features, "backupImageReportingLabel": $backup_image_reporting_label, "backupImageTargetWindow": $backup_image_target_window, "clickTags": $click_tags, "commercialId": $commercial_id, "companionCreatives": $companion_creatives, "compatibility": $compatibility, "convertFlashToHtml5": $convert_flash_to_html5, "counterCustomEvents": $counter_custom_events, "creativeAssetSelection": $creative_asset_selection, "creativeAssets": $creative_assets, "creativeFieldAssignments": $creative_field_assignments, "customKeyValues": $custom_key_values, "dynamicAssetSelection": $dynamic_asset_selection, "exitCustomEvents": $exit_custom_events, "fsCommand": $fs_command, "htmlCode": $html_code, "htmlCodeLocked": $html_code_locked, "id": $id, "idDimensionValue": $id_dimension_value, "kind": $kind, "lastModifiedInfo": $last_modified_info, "latestTraffickedCreativeId": $latest_trafficked_creative_id, "mediaDescription": $media_description, "mediaDuration": $media_duration, "name": $name, "obaIcon": $oba_icon, "overrideCss": $override_css, "progressOffset": $progress_offset, "redirectUrl": $redirect_url, "renderingId": $rendering_id, "renderingIdDimensionValue": $rendering_id_dimension_value, "requiredFlashPluginVersion": $required_flash_plugin_version, "requiredFlashVersion": $required_flash_version, "size": $size, "skipOffset": $skip_offset, "skippable": $skippable, "sslCompliant": $ssl_compliant, "sslOverride": $ssl_override, "studioAdvertiserId": $studio_advertiser_id, "studioCreativeId": $studio_creative_id, "studioTraffickedCreativeId": $studio_trafficked_creative_id, "subaccountId": $subaccount_id, "thirdPartyBackupImageImpressionsUrl": $third_party_backup_image_impressions_url, "thirdPartyRichMediaImpressionsUrl": $third_party_rich_media_impressions_url, "thirdPartyUrls": $third_party_urls, "timerCustomEvents": $timer_custom_events, "totalFileSize": $total_file_size, "type": $type, "universalAdId": $universal_ad_id, "version": $version} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Updates an existing creative.
@@ -4400,12 +5311,23 @@ export def "userprofiles-creatives update-by-profile-id-1" [
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/creatives") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/creatives") $qp $auth.query)
   let req_body = {"accountId": $account_id, "active": $active, "adParameters": $ad_parameters, "adTagKeys": $ad_tag_keys, "additionalSizes": $additional_sizes, "advertiserId": $advertiser_id, "allowScriptAccess": $allow_script_access, "archived": $archived, "artworkType": $artwork_type, "authoringSource": $authoring_source, "authoringTool": $authoring_tool, "autoAdvanceImages": $auto_advance_images, "backgroundColor": $background_color, "backupImageClickThroughUrl": $backup_image_click_through_url, "backupImageFeatures": $backup_image_features, "backupImageReportingLabel": $backup_image_reporting_label, "backupImageTargetWindow": $backup_image_target_window, "clickTags": $click_tags, "commercialId": $commercial_id, "companionCreatives": $companion_creatives, "compatibility": $compatibility, "convertFlashToHtml5": $convert_flash_to_html5, "counterCustomEvents": $counter_custom_events, "creativeAssetSelection": $creative_asset_selection, "creativeAssets": $creative_assets, "creativeFieldAssignments": $creative_field_assignments, "customKeyValues": $custom_key_values, "dynamicAssetSelection": $dynamic_asset_selection, "exitCustomEvents": $exit_custom_events, "fsCommand": $fs_command, "htmlCode": $html_code, "htmlCodeLocked": $html_code_locked, "id": $id, "idDimensionValue": $id_dimension_value, "kind": $kind, "lastModifiedInfo": $last_modified_info, "latestTraffickedCreativeId": $latest_trafficked_creative_id, "mediaDescription": $media_description, "mediaDuration": $media_duration, "name": $name, "obaIcon": $oba_icon, "overrideCss": $override_css, "progressOffset": $progress_offset, "redirectUrl": $redirect_url, "renderingId": $rendering_id, "renderingIdDimensionValue": $rendering_id_dimension_value, "requiredFlashPluginVersion": $required_flash_plugin_version, "requiredFlashVersion": $required_flash_version, "size": $size, "skipOffset": $skip_offset, "skippable": $skippable, "sslCompliant": $ssl_compliant, "sslOverride": $ssl_override, "studioAdvertiserId": $studio_advertiser_id, "studioCreativeId": $studio_creative_id, "studioTraffickedCreativeId": $studio_trafficked_creative_id, "subaccountId": $subaccount_id, "thirdPartyBackupImageImpressionsUrl": $third_party_backup_image_impressions_url, "thirdPartyRichMediaImpressionsUrl": $third_party_rich_media_impressions_url, "thirdPartyUrls": $third_party_urls, "timerCustomEvents": $timer_custom_events, "totalFileSize": $total_file_size, "type": $type, "universalAdId": $universal_ad_id, "version": $version} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Gets one creative by ID.
@@ -4441,10 +5363,21 @@ export def "userprofiles-creatives get" [
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/creatives/{id}") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/creatives/{id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Inserts custom events.
@@ -4482,12 +5415,23 @@ export def "userprofiles-custom-events-batchinsert create" [
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/customEvents/batchinsert") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/customEvents/batchinsert") $qp $auth.query)
   let req_body = {"customEvents": $custom_events, "kind": $kind} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieves list of report dimension values for a list of filters.
@@ -4530,12 +5474,23 @@ export def "userprofiles-dimensionvalues-query list" [
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/dimensionvalues/query") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/dimensionvalues/query") $qp $auth.query)
   let req_body = {"dimensionName": $dimension_name, "endDate": $end_date, "filters": $filters, "kind": $kind, "startDate": $start_date} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "maxResults": $max_results, "pageToken": $page_token} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "maxResults": $max_results, "pageToken": $page_token} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieves a list of directory sites, possibly filtered. This method supports paging.
@@ -4580,10 +5535,21 @@ export def "userprofiles-directory-sites list" [
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "acceptsInStreamVideoPlacements" $accepts_in_stream_video_placements "scalar") (serialize-qp "acceptsInterstitialPlacements" $accepts_interstitial_placements "scalar") (serialize-qp "acceptsPublisherPaidPlacements" $accepts_publisher_paid_placements "scalar") (serialize-qp "active" $active "scalar") (serialize-qp "dfpNetworkCode" $dfp_network_code "scalar") (serialize-qp "ids" $ids "multi") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "searchString" $search_string "scalar") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/directorySites") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/directorySites") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "acceptsInStreamVideoPlacements": $accepts_in_stream_video_placements, "acceptsInterstitialPlacements": $accepts_interstitial_placements, "acceptsPublisherPaidPlacements": $accepts_publisher_paid_placements, "active": $active, "dfpNetworkCode": $dfp_network_code, "ids": $ids, "maxResults": $max_results, "pageToken": $page_token, "searchString": $search_string, "sortField": $sort_field, "sortOrder": $sort_order} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "acceptsInStreamVideoPlacements": $accepts_in_stream_video_placements, "acceptsInterstitialPlacements": $accepts_interstitial_placements, "acceptsPublisherPaidPlacements": $accepts_publisher_paid_placements, "active": $active, "dfpNetworkCode": $dfp_network_code, "ids": $ids, "maxResults": $max_results, "pageToken": $page_token, "searchString": $search_string, "sortField": $sort_field, "sortOrder": $sort_order} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Inserts a new directory site.
@@ -4628,12 +5594,23 @@ export def "userprofiles-directory-sites create" [
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/directorySites") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/directorySites") $qp $auth.query)
   let req_body = {"id": $id, "idDimensionValue": $id_dimension_value, "inpageTagFormats": $inpage_tag_formats, "interstitialTagFormats": $interstitial_tag_formats, "kind": $kind, "name": $name, "settings": $settings, "url": $url} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Gets one directory site by ID.
@@ -4669,10 +5646,21 @@ export def "userprofiles-directory-sites get" [
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/directorySites/{id}") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/directorySites/{id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieves a list of dynamic targeting keys.
@@ -4710,10 +5698,21 @@ export def "userprofiles-dynamic-targeting-keys list" [
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "advertiserId" $advertiser_id "scalar") (serialize-qp "names" $names "multi") (serialize-qp "objectId" $object_id "scalar") (serialize-qp "objectType" $object_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/dynamicTargetingKeys") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/dynamicTargetingKeys") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "advertiserId": $advertiser_id, "names": $names, "objectId": $object_id, "objectType": $object_type} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "advertiserId": $advertiser_id, "names": $names, "objectId": $object_id, "objectType": $object_type} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Inserts a new dynamic targeting key. Keys must be created at the advertiser level before being assigned to the advertiser's ads, creatives, or placements. There is a maximum of 1000 keys per advertiser, out of which a maximum of 20 keys can be assigned per ad, creative, or placement.
@@ -4752,12 +5751,23 @@ export def "userprofiles-dynamic-targeting-keys create" [
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/dynamicTargetingKeys") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/dynamicTargetingKeys") $qp $auth.query)
   let req_body = {"kind": $kind, "name": $name, "objectId": $object_id, "objectType": $object_type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes an existing dynamic targeting key.
@@ -4795,10 +5805,21 @@ export def "userprofiles-dynamic-targeting-keys delete" [
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($object_id | is-empty) { error make --unspanned { msg: "path parameter 'objectId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "objectType" $object_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), object_id: (encode-path-segment $object_id)} | format pattern "/userprofiles/{profile_id}/dynamicTargetingKeys/{object_id}") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), object_id: (encode-path-segment $object_id)} | format pattern "/userprofiles/{profile_id}/dynamicTargetingKeys/{object_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "name": $name, "objectType": $object_type} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "name": $name, "objectType": $object_type} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieves a list of event tags, possibly filtered.
@@ -4842,10 +5863,21 @@ export def "userprofiles-event-tags list" [
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "adId" $ad_id "scalar") (serialize-qp "advertiserId" $advertiser_id "scalar") (serialize-qp "campaignId" $campaign_id "scalar") (serialize-qp "definitionsOnly" $definitions_only "scalar") (serialize-qp "enabled" $enabled "scalar") (serialize-qp "eventTagTypes" $event_tag_types "multi") (serialize-qp "ids" $ids "multi") (serialize-qp "searchString" $search_string "scalar") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/eventTags") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/eventTags") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "adId": $ad_id, "advertiserId": $advertiser_id, "campaignId": $campaign_id, "definitionsOnly": $definitions_only, "enabled": $enabled, "eventTagTypes": $event_tag_types, "ids": $ids, "searchString": $search_string, "sortField": $sort_field, "sortOrder": $sort_order} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "adId": $ad_id, "advertiserId": $advertiser_id, "campaignId": $campaign_id, "definitionsOnly": $definitions_only, "enabled": $enabled, "eventTagTypes": $event_tag_types, "ids": $ids, "searchString": $search_string, "sortField": $sort_field, "sortOrder": $sort_order} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates an existing event tag. This method supports patch semantics.
@@ -4901,12 +5933,23 @@ export def "userprofiles-event-tags update-by-profile-id" [
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "id" $id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/eventTags") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/eventTags") $qp $auth.query)
   let req_body = {"accountId": $account_id, "advertiserId": $advertiser_id, "advertiserIdDimensionValue": $advertiser_id_dimension_value, "campaignId": $campaign_id, "campaignIdDimensionValue": $campaign_id_dimension_value, "enabledByDefault": $enabled_by_default, "excludeFromAdxRequests": $exclude_from_adx_requests, "id": $id_body, "kind": $kind, "name": $name, "siteFilterType": $site_filter_type, "siteIds": $site_ids, "sslCompliant": $ssl_compliant, "status": $status, "subaccountId": $subaccount_id, "type": $type, "url": $url, "urlEscapeLevels": $url_escape_levels} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "id": $id} | compact), body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "id": $id} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Inserts a new event tag.
@@ -4961,12 +6004,23 @@ export def "userprofiles-event-tags create" [
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/eventTags") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/eventTags") $qp $auth.query)
   let req_body = {"accountId": $account_id, "advertiserId": $advertiser_id, "advertiserIdDimensionValue": $advertiser_id_dimension_value, "campaignId": $campaign_id, "campaignIdDimensionValue": $campaign_id_dimension_value, "enabledByDefault": $enabled_by_default, "excludeFromAdxRequests": $exclude_from_adx_requests, "id": $id, "kind": $kind, "name": $name, "siteFilterType": $site_filter_type, "siteIds": $site_ids, "sslCompliant": $ssl_compliant, "status": $status, "subaccountId": $subaccount_id, "type": $type, "url": $url, "urlEscapeLevels": $url_escape_levels} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Updates an existing event tag.
@@ -5021,12 +6075,23 @@ export def "userprofiles-event-tags update-by-profile-id-1" [
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/eventTags") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/eventTags") $qp $auth.query)
   let req_body = {"accountId": $account_id, "advertiserId": $advertiser_id, "advertiserIdDimensionValue": $advertiser_id_dimension_value, "campaignId": $campaign_id, "campaignIdDimensionValue": $campaign_id_dimension_value, "enabledByDefault": $enabled_by_default, "excludeFromAdxRequests": $exclude_from_adx_requests, "id": $id, "kind": $kind, "name": $name, "siteFilterType": $site_filter_type, "siteIds": $site_ids, "sslCompliant": $ssl_compliant, "status": $status, "subaccountId": $subaccount_id, "type": $type, "url": $url, "urlEscapeLevels": $url_escape_levels} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes an existing event tag.
@@ -5062,10 +6127,21 @@ export def "userprofiles-event-tags delete" [
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/eventTags/{id}") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/eventTags/{id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Gets one event tag by ID.
@@ -5101,10 +6177,21 @@ export def "userprofiles-event-tags get" [
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/eventTags/{id}") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/eventTags/{id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Lists files for a user profile.
@@ -5143,10 +6230,21 @@ export def "userprofiles-files list" [
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "scope" $scope "scalar") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/files") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/files") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "maxResults": $max_results, "pageToken": $page_token, "scope": $scope, "sortField": $sort_field, "sortOrder": $sort_order} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "maxResults": $max_results, "pageToken": $page_token, "scope": $scope, "sortField": $sort_field, "sortOrder": $sort_order} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieves a list of floodlight activities, possibly filtered. This method supports paging.
@@ -5193,10 +6291,21 @@ export def "userprofiles-floodlight-activities list" [
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "advertiserId" $advertiser_id "scalar") (serialize-qp "floodlightActivityGroupIds" $floodlight_activity_group_ids "multi") (serialize-qp "floodlightActivityGroupName" $floodlight_activity_group_name "scalar") (serialize-qp "floodlightActivityGroupTagString" $floodlight_activity_group_tag_string "scalar") (serialize-qp "floodlightActivityGroupType" $floodlight_activity_group_type "scalar") (serialize-qp "floodlightConfigurationId" $floodlight_configuration_id "scalar") (serialize-qp "ids" $ids "multi") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "searchString" $search_string "scalar") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "tagString" $tag_string "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/floodlightActivities") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/floodlightActivities") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "advertiserId": $advertiser_id, "floodlightActivityGroupIds": $floodlight_activity_group_ids, "floodlightActivityGroupName": $floodlight_activity_group_name, "floodlightActivityGroupTagString": $floodlight_activity_group_tag_string, "floodlightActivityGroupType": $floodlight_activity_group_type, "floodlightConfigurationId": $floodlight_configuration_id, "ids": $ids, "maxResults": $max_results, "pageToken": $page_token, "searchString": $search_string, "sortField": $sort_field, "sortOrder": $sort_order, "tagString": $tag_string} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "advertiserId": $advertiser_id, "floodlightActivityGroupIds": $floodlight_activity_group_ids, "floodlightActivityGroupName": $floodlight_activity_group_name, "floodlightActivityGroupTagString": $floodlight_activity_group_tag_string, "floodlightActivityGroupType": $floodlight_activity_group_type, "floodlightConfigurationId": $floodlight_configuration_id, "ids": $ids, "maxResults": $max_results, "pageToken": $page_token, "searchString": $search_string, "sortField": $sort_field, "sortOrder": $sort_order, "tagString": $tag_string} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates an existing floodlight activity. This method supports patch semantics.
@@ -5266,12 +6375,23 @@ export def "userprofiles-floodlight-activities update-by-profile-id" [
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "id" $id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/floodlightActivities") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/floodlightActivities") $qp $auth.query)
   let req_body = {"accountId": $account_id, "advertiserId": $advertiser_id, "advertiserIdDimensionValue": $advertiser_id_dimension_value, "attributionEnabled": $attribution_enabled, "cacheBustingType": $cache_busting_type, "countingMethod": $counting_method, "defaultTags": $default_tags, "expectedUrl": $expected_url, "floodlightActivityGroupId": $floodlight_activity_group_id, "floodlightActivityGroupName": $floodlight_activity_group_name, "floodlightActivityGroupTagString": $floodlight_activity_group_tag_string, "floodlightActivityGroupType": $floodlight_activity_group_type, "floodlightConfigurationId": $floodlight_configuration_id, "floodlightConfigurationIdDimensionValue": $floodlight_configuration_id_dimension_value, "floodlightTagType": $floodlight_tag_type, "id": $id_body, "idDimensionValue": $id_dimension_value, "kind": $kind, "name": $name, "notes": $notes, "publisherTags": $publisher_tags, "secure": $secure, "sslCompliant": $ssl_compliant, "sslRequired": $ssl_required, "status": $status, "subaccountId": $subaccount_id, "tagFormat": $tag_format, "tagString": $tag_string, "userDefinedVariableTypes": $user_defined_variable_types} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "id": $id} | compact), body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "id": $id} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Inserts a new floodlight activity.
@@ -5340,12 +6460,23 @@ export def "userprofiles-floodlight-activities create" [
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/floodlightActivities") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/floodlightActivities") $qp $auth.query)
   let req_body = {"accountId": $account_id, "advertiserId": $advertiser_id, "advertiserIdDimensionValue": $advertiser_id_dimension_value, "attributionEnabled": $attribution_enabled, "cacheBustingType": $cache_busting_type, "countingMethod": $counting_method, "defaultTags": $default_tags, "expectedUrl": $expected_url, "floodlightActivityGroupId": $floodlight_activity_group_id, "floodlightActivityGroupName": $floodlight_activity_group_name, "floodlightActivityGroupTagString": $floodlight_activity_group_tag_string, "floodlightActivityGroupType": $floodlight_activity_group_type, "floodlightConfigurationId": $floodlight_configuration_id, "floodlightConfigurationIdDimensionValue": $floodlight_configuration_id_dimension_value, "floodlightTagType": $floodlight_tag_type, "id": $id, "idDimensionValue": $id_dimension_value, "kind": $kind, "name": $name, "notes": $notes, "publisherTags": $publisher_tags, "secure": $secure, "sslCompliant": $ssl_compliant, "sslRequired": $ssl_required, "status": $status, "subaccountId": $subaccount_id, "tagFormat": $tag_format, "tagString": $tag_string, "userDefinedVariableTypes": $user_defined_variable_types} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Updates an existing floodlight activity.
@@ -5414,12 +6545,23 @@ export def "userprofiles-floodlight-activities update-by-profile-id-1" [
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/floodlightActivities") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/floodlightActivities") $qp $auth.query)
   let req_body = {"accountId": $account_id, "advertiserId": $advertiser_id, "advertiserIdDimensionValue": $advertiser_id_dimension_value, "attributionEnabled": $attribution_enabled, "cacheBustingType": $cache_busting_type, "countingMethod": $counting_method, "defaultTags": $default_tags, "expectedUrl": $expected_url, "floodlightActivityGroupId": $floodlight_activity_group_id, "floodlightActivityGroupName": $floodlight_activity_group_name, "floodlightActivityGroupTagString": $floodlight_activity_group_tag_string, "floodlightActivityGroupType": $floodlight_activity_group_type, "floodlightConfigurationId": $floodlight_configuration_id, "floodlightConfigurationIdDimensionValue": $floodlight_configuration_id_dimension_value, "floodlightTagType": $floodlight_tag_type, "id": $id, "idDimensionValue": $id_dimension_value, "kind": $kind, "name": $name, "notes": $notes, "publisherTags": $publisher_tags, "secure": $secure, "sslCompliant": $ssl_compliant, "sslRequired": $ssl_required, "status": $status, "subaccountId": $subaccount_id, "tagFormat": $tag_format, "tagString": $tag_string, "userDefinedVariableTypes": $user_defined_variable_types} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Generates a tag for a floodlight activity.
@@ -5454,10 +6596,21 @@ export def "userprofiles-floodlight-activities-generatetag create" [
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "floodlightActivityId" $floodlight_activity_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/floodlightActivities/generatetag") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/floodlightActivities/generatetag") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "floodlightActivityId": $floodlight_activity_id} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "floodlightActivityId": $floodlight_activity_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes an existing floodlight activity.
@@ -5493,10 +6646,21 @@ export def "userprofiles-floodlight-activities delete" [
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/floodlightActivities/{id}") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/floodlightActivities/{id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Gets one floodlight activity by ID.
@@ -5532,10 +6696,21 @@ export def "userprofiles-floodlight-activities get" [
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/floodlightActivities/{id}") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/floodlightActivities/{id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieves a list of floodlight activity groups, possibly filtered. This method supports paging.
@@ -5578,10 +6753,21 @@ export def "userprofiles-floodlight-activity-groups list" [
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "advertiserId" $advertiser_id "scalar") (serialize-qp "floodlightConfigurationId" $floodlight_configuration_id "scalar") (serialize-qp "ids" $ids "multi") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "searchString" $search_string "scalar") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "type" $type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/floodlightActivityGroups") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/floodlightActivityGroups") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "advertiserId": $advertiser_id, "floodlightConfigurationId": $floodlight_configuration_id, "ids": $ids, "maxResults": $max_results, "pageToken": $page_token, "searchString": $search_string, "sortField": $sort_field, "sortOrder": $sort_order, "type": $type} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "advertiserId": $advertiser_id, "floodlightConfigurationId": $floodlight_configuration_id, "ids": $ids, "maxResults": $max_results, "pageToken": $page_token, "searchString": $search_string, "sortField": $sort_field, "sortOrder": $sort_order, "type": $type} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates an existing floodlight activity group. This method supports patch semantics.
@@ -5632,12 +6818,23 @@ export def "userprofiles-floodlight-activity-groups update-by-profile-id" [
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "id" $id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/floodlightActivityGroups") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/floodlightActivityGroups") $qp $auth.query)
   let req_body = {"accountId": $account_id, "advertiserId": $advertiser_id, "advertiserIdDimensionValue": $advertiser_id_dimension_value, "floodlightConfigurationId": $floodlight_configuration_id, "floodlightConfigurationIdDimensionValue": $floodlight_configuration_id_dimension_value, "id": $id_body, "idDimensionValue": $id_dimension_value, "kind": $kind, "name": $name, "subaccountId": $subaccount_id, "tagString": $tag_string, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "id": $id} | compact), body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "id": $id} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Inserts a new floodlight activity group.
@@ -5687,12 +6884,23 @@ export def "userprofiles-floodlight-activity-groups create" [
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/floodlightActivityGroups") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/floodlightActivityGroups") $qp $auth.query)
   let req_body = {"accountId": $account_id, "advertiserId": $advertiser_id, "advertiserIdDimensionValue": $advertiser_id_dimension_value, "floodlightConfigurationId": $floodlight_configuration_id, "floodlightConfigurationIdDimensionValue": $floodlight_configuration_id_dimension_value, "id": $id, "idDimensionValue": $id_dimension_value, "kind": $kind, "name": $name, "subaccountId": $subaccount_id, "tagString": $tag_string, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Updates an existing floodlight activity group.
@@ -5742,12 +6950,23 @@ export def "userprofiles-floodlight-activity-groups update-by-profile-id-1" [
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/floodlightActivityGroups") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/floodlightActivityGroups") $qp $auth.query)
   let req_body = {"accountId": $account_id, "advertiserId": $advertiser_id, "advertiserIdDimensionValue": $advertiser_id_dimension_value, "floodlightConfigurationId": $floodlight_configuration_id, "floodlightConfigurationIdDimensionValue": $floodlight_configuration_id_dimension_value, "id": $id, "idDimensionValue": $id_dimension_value, "kind": $kind, "name": $name, "subaccountId": $subaccount_id, "tagString": $tag_string, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Gets one floodlight activity group by ID.
@@ -5783,10 +7002,21 @@ export def "userprofiles-floodlight-activity-groups get" [
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/floodlightActivityGroups/{id}") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/floodlightActivityGroups/{id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieves a list of floodlight configurations, possibly filtered.
@@ -5821,10 +7051,21 @@ export def "userprofiles-floodlight-configurations list" [
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "ids" $ids "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/floodlightConfigurations") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/floodlightConfigurations") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "ids": $ids} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "ids": $ids} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates an existing floodlight configuration. This method supports patch semantics.
@@ -5886,12 +7127,23 @@ export def "userprofiles-floodlight-configurations update-by-profile-id" [
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "id" $id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/floodlightConfigurations") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/floodlightConfigurations") $qp $auth.query)
   let req_body = {"accountId": $account_id, "advertiserId": $advertiser_id, "advertiserIdDimensionValue": $advertiser_id_dimension_value, "analyticsDataSharingEnabled": $analytics_data_sharing_enabled, "customViewabilityMetric": $custom_viewability_metric, "exposureToConversionEnabled": $exposure_to_conversion_enabled, "firstDayOfWeek": $first_day_of_week, "id": $id_body, "idDimensionValue": $id_dimension_value, "inAppAttributionTrackingEnabled": $in_app_attribution_tracking_enabled, "kind": $kind, "lookbackConfiguration": $lookback_configuration, "naturalSearchConversionAttributionOption": $natural_search_conversion_attribution_option, "omnitureSettings": $omniture_settings, "subaccountId": $subaccount_id, "tagSettings": $tag_settings, "thirdPartyAuthenticationTokens": $third_party_authentication_tokens, "userDefinedVariableConfigurations": $user_defined_variable_configurations} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "id": $id} | compact), body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "id": $id} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Updates an existing floodlight configuration.
@@ -5952,12 +7204,23 @@ export def "userprofiles-floodlight-configurations update-by-profile-id-1" [
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/floodlightConfigurations") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/floodlightConfigurations") $qp $auth.query)
   let req_body = {"accountId": $account_id, "advertiserId": $advertiser_id, "advertiserIdDimensionValue": $advertiser_id_dimension_value, "analyticsDataSharingEnabled": $analytics_data_sharing_enabled, "customViewabilityMetric": $custom_viewability_metric, "exposureToConversionEnabled": $exposure_to_conversion_enabled, "firstDayOfWeek": $first_day_of_week, "id": $id, "idDimensionValue": $id_dimension_value, "inAppAttributionTrackingEnabled": $in_app_attribution_tracking_enabled, "kind": $kind, "lookbackConfiguration": $lookback_configuration, "naturalSearchConversionAttributionOption": $natural_search_conversion_attribution_option, "omnitureSettings": $omniture_settings, "subaccountId": $subaccount_id, "tagSettings": $tag_settings, "thirdPartyAuthenticationTokens": $third_party_authentication_tokens, "userDefinedVariableConfigurations": $user_defined_variable_configurations} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Gets one floodlight configuration by ID.
@@ -5993,10 +7256,21 @@ export def "userprofiles-floodlight-configurations get" [
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/floodlightConfigurations/{id}") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/floodlightConfigurations/{id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieves a list of languages.
@@ -6030,10 +7304,21 @@ export def "userprofiles-languages list" [
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/languages") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/languages") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieves a list of metros.
@@ -6067,10 +7352,21 @@ export def "userprofiles-metros list" [
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/metros") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/metros") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieves list of available mobile apps.
@@ -6109,10 +7405,21 @@ export def "userprofiles-mobile-apps list" [
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "directories" $directories "multi") (serialize-qp "ids" $ids "multi") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "searchString" $search_string "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/mobileApps") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/mobileApps") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "directories": $directories, "ids": $ids, "maxResults": $max_results, "pageToken": $page_token, "searchString": $search_string} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "directories": $directories, "ids": $ids, "maxResults": $max_results, "pageToken": $page_token, "searchString": $search_string} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets one mobile app by ID.
@@ -6148,10 +7455,21 @@ export def "userprofiles-mobile-apps get" [
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/mobileApps/{id}") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/mobileApps/{id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieves a list of mobile carriers.
@@ -6185,10 +7503,21 @@ export def "userprofiles-mobile-carriers list" [
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/mobileCarriers") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/mobileCarriers") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets one mobile carrier by ID.
@@ -6224,10 +7553,21 @@ export def "userprofiles-mobile-carriers get" [
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/mobileCarriers/{id}") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/mobileCarriers/{id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieves a list of operating system versions.
@@ -6261,10 +7601,21 @@ export def "userprofiles-operating-system-versions list" [
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/operatingSystemVersions") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/operatingSystemVersions") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets one operating system version by ID.
@@ -6300,10 +7651,21 @@ export def "userprofiles-operating-system-versions get" [
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/operatingSystemVersions/{id}") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/operatingSystemVersions/{id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieves a list of operating systems.
@@ -6337,10 +7699,21 @@ export def "userprofiles-operating-systems list" [
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/operatingSystems") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/operatingSystems") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets one operating system by DART ID.
@@ -6376,10 +7749,21 @@ export def "userprofiles-operating-systems get" [
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($dart_id | is-empty) { error make --unspanned { msg: "path parameter 'dartId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), dart_id: (encode-path-segment $dart_id)} | format pattern "/userprofiles/{profile_id}/operatingSystems/{dart_id}") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), dart_id: (encode-path-segment $dart_id)} | format pattern "/userprofiles/{profile_id}/operatingSystems/{dart_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieves a list of placement groups, possibly filtered. This method supports paging.
@@ -6432,10 +7816,21 @@ export def "userprofiles-placement-groups list" [
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "advertiserIds" $advertiser_ids "multi") (serialize-qp "archived" $archived "scalar") (serialize-qp "campaignIds" $campaign_ids "multi") (serialize-qp "contentCategoryIds" $content_category_ids "multi") (serialize-qp "directorySiteIds" $directory_site_ids "multi") (serialize-qp "ids" $ids "multi") (serialize-qp "maxEndDate" $max_end_date "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "maxStartDate" $max_start_date "scalar") (serialize-qp "minEndDate" $min_end_date "scalar") (serialize-qp "minStartDate" $min_start_date "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "placementGroupType" $placement_group_type "scalar") (serialize-qp "placementStrategyIds" $placement_strategy_ids "multi") (serialize-qp "pricingTypes" $pricing_types "multi") (serialize-qp "searchString" $search_string "scalar") (serialize-qp "siteIds" $site_ids "multi") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/placementGroups") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/placementGroups") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "advertiserIds": $advertiser_ids, "archived": $archived, "campaignIds": $campaign_ids, "contentCategoryIds": $content_category_ids, "directorySiteIds": $directory_site_ids, "ids": $ids, "maxEndDate": $max_end_date, "maxResults": $max_results, "maxStartDate": $max_start_date, "minEndDate": $min_end_date, "minStartDate": $min_start_date, "pageToken": $page_token, "placementGroupType": $placement_group_type, "placementStrategyIds": $placement_strategy_ids, "pricingTypes": $pricing_types, "searchString": $search_string, "siteIds": $site_ids, "sortField": $sort_field, "sortOrder": $sort_order} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "advertiserIds": $advertiser_ids, "archived": $archived, "campaignIds": $campaign_ids, "contentCategoryIds": $content_category_ids, "directorySiteIds": $directory_site_ids, "ids": $ids, "maxEndDate": $max_end_date, "maxResults": $max_results, "maxStartDate": $max_start_date, "minEndDate": $min_end_date, "minStartDate": $min_start_date, "pageToken": $page_token, "placementGroupType": $placement_group_type, "placementStrategyIds": $placement_strategy_ids, "pricingTypes": $pricing_types, "searchString": $search_string, "siteIds": $site_ids, "sortField": $sort_field, "sortOrder": $sort_order} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates an existing placement group. This method supports patch semantics.
@@ -6506,12 +7901,23 @@ export def "userprofiles-placement-groups update-by-profile-id" [
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "id" $id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/placementGroups") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/placementGroups") $qp $auth.query)
   let req_body = {"accountId": $account_id, "advertiserId": $advertiser_id, "advertiserIdDimensionValue": $advertiser_id_dimension_value, "archived": $archived, "campaignId": $campaign_id, "campaignIdDimensionValue": $campaign_id_dimension_value, "childPlacementIds": $child_placement_ids, "comment": $comment, "contentCategoryId": $content_category_id, "createInfo": $create_info, "directorySiteId": $directory_site_id, "directorySiteIdDimensionValue": $directory_site_id_dimension_value, "externalId": $external_id, "id": $id_body, "idDimensionValue": $id_dimension_value, "kind": $kind, "lastModifiedInfo": $last_modified_info, "name": $name, "placementGroupType": $placement_group_type, "placementStrategyId": $placement_strategy_id, "pricingSchedule": $pricing_schedule, "primaryPlacementId": $primary_placement_id, "primaryPlacementIdDimensionValue": $primary_placement_id_dimension_value, "siteId": $site_id, "siteIdDimensionValue": $site_id_dimension_value, "subaccountId": $subaccount_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "id": $id} | compact), body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "id": $id} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Inserts a new placement group.
@@ -6581,12 +7987,23 @@ export def "userprofiles-placement-groups create" [
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/placementGroups") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/placementGroups") $qp $auth.query)
   let req_body = {"accountId": $account_id, "advertiserId": $advertiser_id, "advertiserIdDimensionValue": $advertiser_id_dimension_value, "archived": $archived, "campaignId": $campaign_id, "campaignIdDimensionValue": $campaign_id_dimension_value, "childPlacementIds": $child_placement_ids, "comment": $comment, "contentCategoryId": $content_category_id, "createInfo": $create_info, "directorySiteId": $directory_site_id, "directorySiteIdDimensionValue": $directory_site_id_dimension_value, "externalId": $external_id, "id": $id, "idDimensionValue": $id_dimension_value, "kind": $kind, "lastModifiedInfo": $last_modified_info, "name": $name, "placementGroupType": $placement_group_type, "placementStrategyId": $placement_strategy_id, "pricingSchedule": $pricing_schedule, "primaryPlacementId": $primary_placement_id, "primaryPlacementIdDimensionValue": $primary_placement_id_dimension_value, "siteId": $site_id, "siteIdDimensionValue": $site_id_dimension_value, "subaccountId": $subaccount_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Updates an existing placement group.
@@ -6656,12 +8073,23 @@ export def "userprofiles-placement-groups update-by-profile-id-1" [
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/placementGroups") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/placementGroups") $qp $auth.query)
   let req_body = {"accountId": $account_id, "advertiserId": $advertiser_id, "advertiserIdDimensionValue": $advertiser_id_dimension_value, "archived": $archived, "campaignId": $campaign_id, "campaignIdDimensionValue": $campaign_id_dimension_value, "childPlacementIds": $child_placement_ids, "comment": $comment, "contentCategoryId": $content_category_id, "createInfo": $create_info, "directorySiteId": $directory_site_id, "directorySiteIdDimensionValue": $directory_site_id_dimension_value, "externalId": $external_id, "id": $id, "idDimensionValue": $id_dimension_value, "kind": $kind, "lastModifiedInfo": $last_modified_info, "name": $name, "placementGroupType": $placement_group_type, "placementStrategyId": $placement_strategy_id, "pricingSchedule": $pricing_schedule, "primaryPlacementId": $primary_placement_id, "primaryPlacementIdDimensionValue": $primary_placement_id_dimension_value, "siteId": $site_id, "siteIdDimensionValue": $site_id_dimension_value, "subaccountId": $subaccount_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Gets one placement group by ID.
@@ -6697,10 +8125,21 @@ export def "userprofiles-placement-groups get" [
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/placementGroups/{id}") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/placementGroups/{id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieves a list of placement strategies, possibly filtered. This method supports paging.
@@ -6740,10 +8179,21 @@ export def "userprofiles-placement-strategies list" [
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "ids" $ids "multi") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "searchString" $search_string "scalar") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/placementStrategies") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/placementStrategies") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "ids": $ids, "maxResults": $max_results, "pageToken": $page_token, "searchString": $search_string, "sortField": $sort_field, "sortOrder": $sort_order} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "ids": $ids, "maxResults": $max_results, "pageToken": $page_token, "searchString": $search_string, "sortField": $sort_field, "sortOrder": $sort_order} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates an existing placement strategy. This method supports patch semantics.
@@ -6783,12 +8233,23 @@ export def "userprofiles-placement-strategies update-by-profile-id" [
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "id" $id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/placementStrategies") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/placementStrategies") $qp $auth.query)
   let req_body = {"accountId": $account_id, "id": $id_body, "kind": $kind, "name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "id": $id} | compact), body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "id": $id} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Inserts a new placement strategy.
@@ -6827,12 +8288,23 @@ export def "userprofiles-placement-strategies create" [
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/placementStrategies") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/placementStrategies") $qp $auth.query)
   let req_body = {"accountId": $account_id, "id": $id, "kind": $kind, "name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Updates an existing placement strategy.
@@ -6871,12 +8343,23 @@ export def "userprofiles-placement-strategies update-by-profile-id-1" [
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/placementStrategies") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/placementStrategies") $qp $auth.query)
   let req_body = {"accountId": $account_id, "id": $id, "kind": $kind, "name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes an existing placement strategy.
@@ -6912,10 +8395,21 @@ export def "userprofiles-placement-strategies delete" [
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/placementStrategies/{id}") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/placementStrategies/{id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Gets one placement strategy by ID.
@@ -6951,10 +8445,21 @@ export def "userprofiles-placement-strategies get" [
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/placementStrategies/{id}") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/placementStrategies/{id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieves a list of placements, possibly filtered. This method supports paging.
@@ -7010,10 +8515,21 @@ export def "userprofiles-placements list" [
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "advertiserIds" $advertiser_ids "multi") (serialize-qp "archived" $archived "scalar") (serialize-qp "campaignIds" $campaign_ids "multi") (serialize-qp "compatibilities" $compatibilities "multi") (serialize-qp "contentCategoryIds" $content_category_ids "multi") (serialize-qp "directorySiteIds" $directory_site_ids "multi") (serialize-qp "groupIds" $group_ids "multi") (serialize-qp "ids" $ids "multi") (serialize-qp "maxEndDate" $max_end_date "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "maxStartDate" $max_start_date "scalar") (serialize-qp "minEndDate" $min_end_date "scalar") (serialize-qp "minStartDate" $min_start_date "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "paymentSource" $payment_source "scalar") (serialize-qp "placementStrategyIds" $placement_strategy_ids "multi") (serialize-qp "pricingTypes" $pricing_types "multi") (serialize-qp "searchString" $search_string "scalar") (serialize-qp "siteIds" $site_ids "multi") (serialize-qp "sizeIds" $size_ids "multi") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/placements") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/placements") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "advertiserIds": $advertiser_ids, "archived": $archived, "campaignIds": $campaign_ids, "compatibilities": $compatibilities, "contentCategoryIds": $content_category_ids, "directorySiteIds": $directory_site_ids, "groupIds": $group_ids, "ids": $ids, "maxEndDate": $max_end_date, "maxResults": $max_results, "maxStartDate": $max_start_date, "minEndDate": $min_end_date, "minStartDate": $min_start_date, "pageToken": $page_token, "paymentSource": $payment_source, "placementStrategyIds": $placement_strategy_ids, "pricingTypes": $pricing_types, "searchString": $search_string, "siteIds": $site_ids, "sizeIds": $size_ids, "sortField": $sort_field, "sortOrder": $sort_order} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "advertiserIds": $advertiser_ids, "archived": $archived, "campaignIds": $campaign_ids, "compatibilities": $compatibilities, "contentCategoryIds": $content_category_ids, "directorySiteIds": $directory_site_ids, "groupIds": $group_ids, "ids": $ids, "maxEndDate": $max_end_date, "maxResults": $max_results, "maxStartDate": $max_start_date, "minEndDate": $min_end_date, "minStartDate": $min_start_date, "pageToken": $page_token, "paymentSource": $payment_source, "placementStrategyIds": $placement_strategy_ids, "pricingTypes": $pricing_types, "searchString": $search_string, "siteIds": $site_ids, "sizeIds": $size_ids, "sortField": $sort_field, "sortOrder": $sort_order} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates an existing placement. This method supports patch semantics.
@@ -7105,12 +8621,23 @@ export def "userprofiles-placements update-by-profile-id" [
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "id" $id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/placements") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/placements") $qp $auth.query)
   let req_body = {"accountId": $account_id, "adBlockingOptOut": $ad_blocking_opt_out, "additionalSizes": $additional_sizes, "advertiserId": $advertiser_id, "advertiserIdDimensionValue": $advertiser_id_dimension_value, "archived": $archived, "campaignId": $campaign_id, "campaignIdDimensionValue": $campaign_id_dimension_value, "comment": $comment, "compatibility": $compatibility, "contentCategoryId": $content_category_id, "createInfo": $create_info, "directorySiteId": $directory_site_id, "directorySiteIdDimensionValue": $directory_site_id_dimension_value, "externalId": $external_id, "id": $id_body, "idDimensionValue": $id_dimension_value, "keyName": $key_name, "kind": $kind, "lastModifiedInfo": $last_modified_info, "lookbackConfiguration": $lookback_configuration, "name": $name, "paymentApproved": $payment_approved, "paymentSource": $payment_source, "placementGroupId": $placement_group_id, "placementGroupIdDimensionValue": $placement_group_id_dimension_value, "placementStrategyId": $placement_strategy_id, "pricingSchedule": $pricing_schedule, "primary": $primary, "publisherUpdateInfo": $publisher_update_info, "siteId": $site_id, "siteIdDimensionValue": $site_id_dimension_value, "size": $size, "sslRequired": $ssl_required, "status": $status, "subaccountId": $subaccount_id, "tagFormats": $tag_formats, "tagSetting": $tag_setting, "videoActiveViewOptOut": $video_active_view_opt_out, "videoSettings": $video_settings, "vpaidAdapterChoice": $vpaid_adapter_choice} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "id": $id} | compact), body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "id": $id} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Inserts a new placement.
@@ -7201,12 +8728,23 @@ export def "userprofiles-placements create" [
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/placements") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/placements") $qp $auth.query)
   let req_body = {"accountId": $account_id, "adBlockingOptOut": $ad_blocking_opt_out, "additionalSizes": $additional_sizes, "advertiserId": $advertiser_id, "advertiserIdDimensionValue": $advertiser_id_dimension_value, "archived": $archived, "campaignId": $campaign_id, "campaignIdDimensionValue": $campaign_id_dimension_value, "comment": $comment, "compatibility": $compatibility, "contentCategoryId": $content_category_id, "createInfo": $create_info, "directorySiteId": $directory_site_id, "directorySiteIdDimensionValue": $directory_site_id_dimension_value, "externalId": $external_id, "id": $id, "idDimensionValue": $id_dimension_value, "keyName": $key_name, "kind": $kind, "lastModifiedInfo": $last_modified_info, "lookbackConfiguration": $lookback_configuration, "name": $name, "paymentApproved": $payment_approved, "paymentSource": $payment_source, "placementGroupId": $placement_group_id, "placementGroupIdDimensionValue": $placement_group_id_dimension_value, "placementStrategyId": $placement_strategy_id, "pricingSchedule": $pricing_schedule, "primary": $primary, "publisherUpdateInfo": $publisher_update_info, "siteId": $site_id, "siteIdDimensionValue": $site_id_dimension_value, "size": $size, "sslRequired": $ssl_required, "status": $status, "subaccountId": $subaccount_id, "tagFormats": $tag_formats, "tagSetting": $tag_setting, "videoActiveViewOptOut": $video_active_view_opt_out, "videoSettings": $video_settings, "vpaidAdapterChoice": $vpaid_adapter_choice} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Updates an existing placement.
@@ -7297,12 +8835,23 @@ export def "userprofiles-placements update-by-profile-id-1" [
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/placements") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/placements") $qp $auth.query)
   let req_body = {"accountId": $account_id, "adBlockingOptOut": $ad_blocking_opt_out, "additionalSizes": $additional_sizes, "advertiserId": $advertiser_id, "advertiserIdDimensionValue": $advertiser_id_dimension_value, "archived": $archived, "campaignId": $campaign_id, "campaignIdDimensionValue": $campaign_id_dimension_value, "comment": $comment, "compatibility": $compatibility, "contentCategoryId": $content_category_id, "createInfo": $create_info, "directorySiteId": $directory_site_id, "directorySiteIdDimensionValue": $directory_site_id_dimension_value, "externalId": $external_id, "id": $id, "idDimensionValue": $id_dimension_value, "keyName": $key_name, "kind": $kind, "lastModifiedInfo": $last_modified_info, "lookbackConfiguration": $lookback_configuration, "name": $name, "paymentApproved": $payment_approved, "paymentSource": $payment_source, "placementGroupId": $placement_group_id, "placementGroupIdDimensionValue": $placement_group_id_dimension_value, "placementStrategyId": $placement_strategy_id, "pricingSchedule": $pricing_schedule, "primary": $primary, "publisherUpdateInfo": $publisher_update_info, "siteId": $site_id, "siteIdDimensionValue": $site_id_dimension_value, "size": $size, "sslRequired": $ssl_required, "status": $status, "subaccountId": $subaccount_id, "tagFormats": $tag_formats, "tagSetting": $tag_setting, "videoActiveViewOptOut": $video_active_view_opt_out, "videoSettings": $video_settings, "vpaidAdapterChoice": $vpaid_adapter_choice} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Generates tags for a placement.
@@ -7339,10 +8888,21 @@ export def "userprofiles-placements-generatetags create" [
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "campaignId" $campaign_id "scalar") (serialize-qp "placementIds" $placement_ids "multi") (serialize-qp "tagFormats" $tag_formats "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/placements/generatetags") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/placements/generatetags") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "campaignId": $campaign_id, "placementIds": $placement_ids, "tagFormats": $tag_formats} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "campaignId": $campaign_id, "placementIds": $placement_ids, "tagFormats": $tag_formats} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Gets one placement by ID.
@@ -7378,10 +8938,21 @@ export def "userprofiles-placements get" [
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/placements/{id}") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/placements/{id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieves a list of platform types.
@@ -7415,10 +8986,21 @@ export def "userprofiles-platform-types list" [
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/platformTypes") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/platformTypes") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets one platform type by ID.
@@ -7454,10 +9036,21 @@ export def "userprofiles-platform-types get" [
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/platformTypes/{id}") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/platformTypes/{id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieves a list of postal codes.
@@ -7491,10 +9084,21 @@ export def "userprofiles-postal-codes list" [
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/postalCodes") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/postalCodes") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets one postal code by ID.
@@ -7530,10 +9134,21 @@ export def "userprofiles-postal-codes get" [
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($code | is-empty) { error make --unspanned { msg: "path parameter 'code' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), code: (encode-path-segment $code)} | format pattern "/userprofiles/{profile_id}/postalCodes/{code}") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), code: (encode-path-segment $code)} | format pattern "/userprofiles/{profile_id}/postalCodes/{code}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieves a list of projects, possibly filtered. This method supports paging .
@@ -7574,10 +9189,21 @@ export def "userprofiles-projects list" [
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "advertiserIds" $advertiser_ids "multi") (serialize-qp "ids" $ids "multi") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "searchString" $search_string "scalar") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/projects") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/projects") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "advertiserIds": $advertiser_ids, "ids": $ids, "maxResults": $max_results, "pageToken": $page_token, "searchString": $search_string, "sortField": $sort_field, "sortOrder": $sort_order} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "advertiserIds": $advertiser_ids, "ids": $ids, "maxResults": $max_results, "pageToken": $page_token, "searchString": $search_string, "sortField": $sort_field, "sortOrder": $sort_order} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets one project by ID.
@@ -7613,10 +9239,21 @@ export def "userprofiles-projects get" [
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/projects/{id}") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/projects/{id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieves a list of inventory items, possibly filtered. This method supports paging.
@@ -7661,10 +9298,21 @@ export def "userprofiles-projects-inventory-items list" [
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "ids" $ids "multi") (serialize-qp "inPlan" $in_plan "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "orderId" $order_id "multi") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "siteId" $site_id "multi") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "type" $type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), project_id: (encode-path-segment $project_id)} | format pattern "/userprofiles/{profile_id}/projects/{project_id}/inventoryItems") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), project_id: (encode-path-segment $project_id)} | format pattern "/userprofiles/{profile_id}/projects/{project_id}/inventoryItems") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "ids": $ids, "inPlan": $in_plan, "maxResults": $max_results, "orderId": $order_id, "pageToken": $page_token, "siteId": $site_id, "sortField": $sort_field, "sortOrder": $sort_order, "type": $type} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "ids": $ids, "inPlan": $in_plan, "maxResults": $max_results, "orderId": $order_id, "pageToken": $page_token, "siteId": $site_id, "sortField": $sort_field, "sortOrder": $sort_order, "type": $type} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets one inventory item by ID.
@@ -7702,10 +9350,21 @@ export def "userprofiles-projects-inventory-items get" [
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), project_id: (encode-path-segment $project_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/projects/{project_id}/inventoryItems/{id}") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), project_id: (encode-path-segment $project_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/projects/{project_id}/inventoryItems/{id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieves a list of order documents, possibly filtered. This method supports paging.
@@ -7750,10 +9409,21 @@ export def "userprofiles-projects-order-documents list" [
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "approved" $approved "scalar") (serialize-qp "ids" $ids "multi") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "orderId" $order_id "multi") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "searchString" $search_string "scalar") (serialize-qp "siteId" $site_id "multi") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), project_id: (encode-path-segment $project_id)} | format pattern "/userprofiles/{profile_id}/projects/{project_id}/orderDocuments") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), project_id: (encode-path-segment $project_id)} | format pattern "/userprofiles/{profile_id}/projects/{project_id}/orderDocuments") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "approved": $approved, "ids": $ids, "maxResults": $max_results, "orderId": $order_id, "pageToken": $page_token, "searchString": $search_string, "siteId": $site_id, "sortField": $sort_field, "sortOrder": $sort_order} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "approved": $approved, "ids": $ids, "maxResults": $max_results, "orderId": $order_id, "pageToken": $page_token, "searchString": $search_string, "siteId": $site_id, "sortField": $sort_field, "sortOrder": $sort_order} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets one order document by ID.
@@ -7791,10 +9461,21 @@ export def "userprofiles-projects-order-documents get" [
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), project_id: (encode-path-segment $project_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/projects/{project_id}/orderDocuments/{id}") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), project_id: (encode-path-segment $project_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/projects/{project_id}/orderDocuments/{id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieves a list of orders, possibly filtered. This method supports paging.
@@ -7837,10 +9518,21 @@ export def "userprofiles-projects-orders list" [
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "ids" $ids "multi") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "searchString" $search_string "scalar") (serialize-qp "siteId" $site_id "multi") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), project_id: (encode-path-segment $project_id)} | format pattern "/userprofiles/{profile_id}/projects/{project_id}/orders") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), project_id: (encode-path-segment $project_id)} | format pattern "/userprofiles/{profile_id}/projects/{project_id}/orders") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "ids": $ids, "maxResults": $max_results, "pageToken": $page_token, "searchString": $search_string, "siteId": $site_id, "sortField": $sort_field, "sortOrder": $sort_order} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "ids": $ids, "maxResults": $max_results, "pageToken": $page_token, "searchString": $search_string, "siteId": $site_id, "sortField": $sort_field, "sortOrder": $sort_order} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets one order by ID.
@@ -7878,10 +9570,21 @@ export def "userprofiles-projects-orders get" [
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), project_id: (encode-path-segment $project_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/projects/{project_id}/orders/{id}") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), project_id: (encode-path-segment $project_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/projects/{project_id}/orders/{id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieves a list of regions.
@@ -7915,10 +9618,21 @@ export def "userprofiles-regions list" [
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/regions") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/regions") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates an existing remarketing list share. This method supports patch semantics.
@@ -7958,12 +9672,23 @@ export def "userprofiles-remarketing-list-shares update-by-profile-id" [
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "id" $id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/remarketingListShares") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/remarketingListShares") $qp $auth.query)
   let req_body = {"kind": $kind, "remarketingListId": $remarketing_list_id, "sharedAccountIds": $shared_account_ids, "sharedAdvertiserIds": $shared_advertiser_ids} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "id": $id} | compact), body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "id": $id} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Updates an existing remarketing list share.
@@ -8002,12 +9727,23 @@ export def "userprofiles-remarketing-list-shares update-by-profile-id-1" [
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/remarketingListShares") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/remarketingListShares") $qp $auth.query)
   let req_body = {"kind": $kind, "remarketingListId": $remarketing_list_id, "sharedAccountIds": $shared_account_ids, "sharedAdvertiserIds": $shared_advertiser_ids} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Gets one remarketing list share by remarketing list ID.
@@ -8043,10 +9779,21 @@ export def "userprofiles-remarketing-list-shares get" [
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($remarketing_list_id | is-empty) { error make --unspanned { msg: "path parameter 'remarketingListId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), remarketing_list_id: (encode-path-segment $remarketing_list_id)} | format pattern "/userprofiles/{profile_id}/remarketingListShares/{remarketing_list_id}") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), remarketing_list_id: (encode-path-segment $remarketing_list_id)} | format pattern "/userprofiles/{profile_id}/remarketingListShares/{remarketing_list_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieves a list of remarketing lists, possibly filtered. This method supports paging.
@@ -8088,10 +9835,21 @@ export def "userprofiles-remarketing-lists list" [
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "advertiserId" $advertiser_id "scalar") (serialize-qp "active" $active "scalar") (serialize-qp "floodlightActivityId" $floodlight_activity_id "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/remarketingLists") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/remarketingLists") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "advertiserId": $advertiser_id, "active": $active, "floodlightActivityId": $floodlight_activity_id, "maxResults": $max_results, "name": $name, "pageToken": $page_token, "sortField": $sort_field, "sortOrder": $sort_order} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "advertiserId": $advertiser_id, "active": $active, "floodlightActivityId": $floodlight_activity_id, "maxResults": $max_results, "name": $name, "pageToken": $page_token, "sortField": $sort_field, "sortOrder": $sort_order} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates an existing remarketing list. This method supports patch semantics.
@@ -8142,12 +9900,23 @@ export def "userprofiles-remarketing-lists update-by-profile-id" [
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "id" $id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/remarketingLists") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/remarketingLists") $qp $auth.query)
   let req_body = {"accountId": $account_id, "active": $active, "advertiserId": $advertiser_id, "advertiserIdDimensionValue": $advertiser_id_dimension_value, "description": $description, "id": $id_body, "kind": $kind, "lifeSpan": $life_span, "listPopulationRule": $list_population_rule, "listSize": $list_size, "listSource": $list_source, "name": $name, "subaccountId": $subaccount_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "id": $id} | compact), body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "id": $id} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Inserts a new remarketing list.
@@ -8197,12 +9966,23 @@ export def "userprofiles-remarketing-lists create" [
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/remarketingLists") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/remarketingLists") $qp $auth.query)
   let req_body = {"accountId": $account_id, "active": $active, "advertiserId": $advertiser_id, "advertiserIdDimensionValue": $advertiser_id_dimension_value, "description": $description, "id": $id, "kind": $kind, "lifeSpan": $life_span, "listPopulationRule": $list_population_rule, "listSize": $list_size, "listSource": $list_source, "name": $name, "subaccountId": $subaccount_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Updates an existing remarketing list.
@@ -8252,12 +10032,23 @@ export def "userprofiles-remarketing-lists update-by-profile-id-1" [
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/remarketingLists") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/remarketingLists") $qp $auth.query)
   let req_body = {"accountId": $account_id, "active": $active, "advertiserId": $advertiser_id, "advertiserIdDimensionValue": $advertiser_id_dimension_value, "description": $description, "id": $id, "kind": $kind, "lifeSpan": $life_span, "listPopulationRule": $list_population_rule, "listSize": $list_size, "listSource": $list_source, "name": $name, "subaccountId": $subaccount_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Gets one remarketing list by ID.
@@ -8293,10 +10084,21 @@ export def "userprofiles-remarketing-lists get" [
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/remarketingLists/{id}") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/remarketingLists/{id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieves list of reports.
@@ -8335,10 +10137,21 @@ export def "userprofiles-reports list" [
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "scope" $scope "scalar") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/reports") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/reports") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "maxResults": $max_results, "pageToken": $page_token, "scope": $scope, "sortField": $sort_field, "sortOrder": $sort_order} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "maxResults": $max_results, "pageToken": $page_token, "scope": $scope, "sortField": $sort_field, "sortOrder": $sort_order} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Creates a report.
@@ -8402,12 +10215,23 @@ export def "userprofiles-reports create" [
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/reports") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/reports") $qp $auth.query)
   let req_body = {"accountId": $account_id, "criteria": $criteria, "crossDimensionReachCriteria": $cross_dimension_reach_criteria, "delivery": $delivery, "etag": $etag, "fileName": $file_name, "floodlightCriteria": $floodlight_criteria, "format": $format, "id": $id, "kind": $kind, "lastModifiedTime": $last_modified_time, "name": $name, "ownerProfileId": $owner_profile_id, "pathAttributionCriteria": $path_attribution_criteria, "pathCriteria": $path_criteria, "pathToConversionCriteria": $path_to_conversion_criteria, "reachCriteria": $reach_criteria, "schedule": $schedule, "subAccountId": $sub_account_id, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the fields that are compatible to be selected in the respective sections of a report criteria, given the fields already selected in the input report and user permissions.
@@ -8471,12 +10295,23 @@ export def "userprofiles-reports-compatiblefields-query list" [
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/reports/compatiblefields/query") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/reports/compatiblefields/query") $qp $auth.query)
   let req_body = {"accountId": $account_id, "criteria": $criteria, "crossDimensionReachCriteria": $cross_dimension_reach_criteria, "delivery": $delivery, "etag": $etag, "fileName": $file_name, "floodlightCriteria": $floodlight_criteria, "format": $format, "id": $id, "kind": $kind, "lastModifiedTime": $last_modified_time, "name": $name, "ownerProfileId": $owner_profile_id, "pathAttributionCriteria": $path_attribution_criteria, "pathCriteria": $path_criteria, "pathToConversionCriteria": $path_to_conversion_criteria, "reachCriteria": $reach_criteria, "schedule": $schedule, "subAccountId": $sub_account_id, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes a report by its ID.
@@ -8512,10 +10347,21 @@ export def "userprofiles-reports delete" [
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($report_id | is-empty) { error make --unspanned { msg: "path parameter 'reportId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), report_id: (encode-path-segment $report_id)} | format pattern "/userprofiles/{profile_id}/reports/{report_id}") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), report_id: (encode-path-segment $report_id)} | format pattern "/userprofiles/{profile_id}/reports/{report_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieves a report by its ID.
@@ -8551,10 +10397,21 @@ export def "userprofiles-reports get" [
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($report_id | is-empty) { error make --unspanned { msg: "path parameter 'reportId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), report_id: (encode-path-segment $report_id)} | format pattern "/userprofiles/{profile_id}/reports/{report_id}") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), report_id: (encode-path-segment $report_id)} | format pattern "/userprofiles/{profile_id}/reports/{report_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates an existing report. This method supports patch semantics.
@@ -8620,12 +10477,23 @@ export def "userprofiles-reports update-by-profile-id-report-id" [
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($report_id | is-empty) { error make --unspanned { msg: "path parameter 'reportId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), report_id: (encode-path-segment $report_id)} | format pattern "/userprofiles/{profile_id}/reports/{report_id}") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), report_id: (encode-path-segment $report_id)} | format pattern "/userprofiles/{profile_id}/reports/{report_id}") $qp $auth.query)
   let req_body = {"accountId": $account_id, "criteria": $criteria, "crossDimensionReachCriteria": $cross_dimension_reach_criteria, "delivery": $delivery, "etag": $etag, "fileName": $file_name, "floodlightCriteria": $floodlight_criteria, "format": $format, "id": $id, "kind": $kind, "lastModifiedTime": $last_modified_time, "name": $name, "ownerProfileId": $owner_profile_id, "pathAttributionCriteria": $path_attribution_criteria, "pathCriteria": $path_criteria, "pathToConversionCriteria": $path_to_conversion_criteria, "reachCriteria": $reach_criteria, "schedule": $schedule, "subAccountId": $sub_account_id, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Updates a report.
@@ -8691,12 +10559,23 @@ export def "userprofiles-reports update-by-profile-id-report-id-1" [
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($report_id | is-empty) { error make --unspanned { msg: "path parameter 'reportId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), report_id: (encode-path-segment $report_id)} | format pattern "/userprofiles/{profile_id}/reports/{report_id}") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), report_id: (encode-path-segment $report_id)} | format pattern "/userprofiles/{profile_id}/reports/{report_id}") $qp $auth.query)
   let req_body = {"accountId": $account_id, "criteria": $criteria, "crossDimensionReachCriteria": $cross_dimension_reach_criteria, "delivery": $delivery, "etag": $etag, "fileName": $file_name, "floodlightCriteria": $floodlight_criteria, "format": $format, "id": $id, "kind": $kind, "lastModifiedTime": $last_modified_time, "name": $name, "ownerProfileId": $owner_profile_id, "pathAttributionCriteria": $path_attribution_criteria, "pathCriteria": $path_criteria, "pathToConversionCriteria": $path_to_conversion_criteria, "reachCriteria": $reach_criteria, "schedule": $schedule, "subAccountId": $sub_account_id, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Lists files for a report.
@@ -8736,10 +10615,21 @@ export def "userprofiles-reports-files list" [
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($report_id | is-empty) { error make --unspanned { msg: "path parameter 'reportId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), report_id: (encode-path-segment $report_id)} | format pattern "/userprofiles/{profile_id}/reports/{report_id}/files") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), report_id: (encode-path-segment $report_id)} | format pattern "/userprofiles/{profile_id}/reports/{report_id}/files") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "maxResults": $max_results, "pageToken": $page_token, "sortField": $sort_field, "sortOrder": $sort_order} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "maxResults": $max_results, "pageToken": $page_token, "sortField": $sort_field, "sortOrder": $sort_order} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieves a report file by its report ID and file ID. This method supports media download.
@@ -8777,10 +10667,21 @@ export def "userprofiles-reports-files get" [
   if ($report_id | is-empty) { error make --unspanned { msg: "path parameter 'reportId' must be non-empty" } }
   if ($file_id | is-empty) { error make --unspanned { msg: "path parameter 'fileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), report_id: (encode-path-segment $report_id), file_id: (encode-path-segment $file_id)} | format pattern "/userprofiles/{profile_id}/reports/{report_id}/files/{file_id}") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), report_id: (encode-path-segment $report_id), file_id: (encode-path-segment $file_id)} | format pattern "/userprofiles/{profile_id}/reports/{report_id}/files/{file_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Runs a report.
@@ -8817,10 +10718,21 @@ export def "userprofiles-reports-run create" [
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($report_id | is-empty) { error make --unspanned { msg: "path parameter 'reportId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "synchronous" $synchronous "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), report_id: (encode-path-segment $report_id)} | format pattern "/userprofiles/{profile_id}/reports/{report_id}/run") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), report_id: (encode-path-segment $report_id)} | format pattern "/userprofiles/{profile_id}/reports/{report_id}/run") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "synchronous": $synchronous} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "synchronous": $synchronous} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieves a list of sites, possibly filtered. This method supports paging.
@@ -8869,10 +10781,21 @@ export def "userprofiles-sites list" [
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "acceptsInStreamVideoPlacements" $accepts_in_stream_video_placements "scalar") (serialize-qp "acceptsInterstitialPlacements" $accepts_interstitial_placements "scalar") (serialize-qp "acceptsPublisherPaidPlacements" $accepts_publisher_paid_placements "scalar") (serialize-qp "adWordsSite" $ad_words_site "scalar") (serialize-qp "approved" $approved "scalar") (serialize-qp "campaignIds" $campaign_ids "multi") (serialize-qp "directorySiteIds" $directory_site_ids "multi") (serialize-qp "ids" $ids "multi") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "searchString" $search_string "scalar") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "subaccountId" $subaccount_id "scalar") (serialize-qp "unmappedSite" $unmapped_site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/sites") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/sites") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "acceptsInStreamVideoPlacements": $accepts_in_stream_video_placements, "acceptsInterstitialPlacements": $accepts_interstitial_placements, "acceptsPublisherPaidPlacements": $accepts_publisher_paid_placements, "adWordsSite": $ad_words_site, "approved": $approved, "campaignIds": $campaign_ids, "directorySiteIds": $directory_site_ids, "ids": $ids, "maxResults": $max_results, "pageToken": $page_token, "searchString": $search_string, "sortField": $sort_field, "sortOrder": $sort_order, "subaccountId": $subaccount_id, "unmappedSite": $unmapped_site} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "acceptsInStreamVideoPlacements": $accepts_in_stream_video_placements, "acceptsInterstitialPlacements": $accepts_interstitial_placements, "acceptsPublisherPaidPlacements": $accepts_publisher_paid_placements, "adWordsSite": $ad_words_site, "approved": $approved, "campaignIds": $campaign_ids, "directorySiteIds": $directory_site_ids, "ids": $ids, "maxResults": $max_results, "pageToken": $page_token, "searchString": $search_string, "sortField": $sort_field, "sortOrder": $sort_order, "subaccountId": $subaccount_id, "unmappedSite": $unmapped_site} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates an existing site. This method supports patch semantics.
@@ -8926,12 +10849,23 @@ export def "userprofiles-sites update-by-profile-id" [
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "id" $id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/sites") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/sites") $qp $auth.query)
   let req_body = {"accountId": $account_id, "approved": $approved, "directorySiteId": $directory_site_id, "directorySiteIdDimensionValue": $directory_site_id_dimension_value, "id": $id_body, "idDimensionValue": $id_dimension_value, "keyName": $key_name, "kind": $kind, "name": $name, "siteContacts": $site_contacts, "siteSettings": $site_settings, "subaccountId": $subaccount_id, "videoSettings": $video_settings} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "id": $id} | compact), body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "id": $id} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Inserts a new site.
@@ -8984,12 +10918,23 @@ export def "userprofiles-sites create" [
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/sites") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/sites") $qp $auth.query)
   let req_body = {"accountId": $account_id, "approved": $approved, "directorySiteId": $directory_site_id, "directorySiteIdDimensionValue": $directory_site_id_dimension_value, "id": $id, "idDimensionValue": $id_dimension_value, "keyName": $key_name, "kind": $kind, "name": $name, "siteContacts": $site_contacts, "siteSettings": $site_settings, "subaccountId": $subaccount_id, "videoSettings": $video_settings} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Updates an existing site.
@@ -9042,12 +10987,23 @@ export def "userprofiles-sites update-by-profile-id-1" [
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/sites") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/sites") $qp $auth.query)
   let req_body = {"accountId": $account_id, "approved": $approved, "directorySiteId": $directory_site_id, "directorySiteIdDimensionValue": $directory_site_id_dimension_value, "id": $id, "idDimensionValue": $id_dimension_value, "keyName": $key_name, "kind": $kind, "name": $name, "siteContacts": $site_contacts, "siteSettings": $site_settings, "subaccountId": $subaccount_id, "videoSettings": $video_settings} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Gets one site by ID.
@@ -9083,10 +11039,21 @@ export def "userprofiles-sites get" [
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/sites/{id}") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/sites/{id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieves a list of sizes, possibly filtered. Retrieved sizes are globally unique and may include values not currently in use by your account. Due to this, the list of sizes returned by this method may differ from the list seen in the Trafficking UI.
@@ -9124,10 +11091,21 @@ export def "userprofiles-sizes list" [
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "height" $height "scalar") (serialize-qp "iabStandard" $iab_standard "scalar") (serialize-qp "ids" $ids "multi") (serialize-qp "width" $width "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/sizes") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/sizes") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "height": $height, "iabStandard": $iab_standard, "ids": $ids, "width": $width} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "height": $height, "iabStandard": $iab_standard, "ids": $ids, "width": $width} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Inserts a new size.
@@ -9167,12 +11145,23 @@ export def "userprofiles-sizes create" [
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/sizes") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/sizes") $qp $auth.query)
   let req_body = {"height": $height, "iab": $iab, "id": $id, "kind": $kind, "width": $width} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Gets one size by ID.
@@ -9208,10 +11197,21 @@ export def "userprofiles-sizes get" [
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/sizes/{id}") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/sizes/{id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets a list of subaccounts, possibly filtered. This method supports paging.
@@ -9251,10 +11251,21 @@ export def "userprofiles-subaccounts list" [
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "ids" $ids "multi") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "searchString" $search_string "scalar") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/subaccounts") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/subaccounts") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "ids": $ids, "maxResults": $max_results, "pageToken": $page_token, "searchString": $search_string, "sortField": $sort_field, "sortOrder": $sort_order} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "ids": $ids, "maxResults": $max_results, "pageToken": $page_token, "searchString": $search_string, "sortField": $sort_field, "sortOrder": $sort_order} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates an existing subaccount. This method supports patch semantics.
@@ -9295,12 +11306,23 @@ export def "userprofiles-subaccounts update-by-profile-id" [
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "id" $id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/subaccounts") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/subaccounts") $qp $auth.query)
   let req_body = {"accountId": $account_id, "availablePermissionIds": $available_permission_ids, "id": $id_body, "kind": $kind, "name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "id": $id} | compact), body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "id": $id} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Inserts a new subaccount.
@@ -9340,12 +11362,23 @@ export def "userprofiles-subaccounts create" [
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/subaccounts") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/subaccounts") $qp $auth.query)
   let req_body = {"accountId": $account_id, "availablePermissionIds": $available_permission_ids, "id": $id, "kind": $kind, "name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Updates an existing subaccount.
@@ -9385,12 +11418,23 @@ export def "userprofiles-subaccounts update-by-profile-id-1" [
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/subaccounts") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/subaccounts") $qp $auth.query)
   let req_body = {"accountId": $account_id, "availablePermissionIds": $available_permission_ids, "id": $id, "kind": $kind, "name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Gets one subaccount by ID.
@@ -9426,10 +11470,21 @@ export def "userprofiles-subaccounts get" [
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/subaccounts/{id}") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/subaccounts/{id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieves a list of targetable remarketing lists, possibly filtered. This method supports paging.
@@ -9470,10 +11525,21 @@ export def "userprofiles-targetable-remarketing-lists list" [
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "advertiserId" $advertiser_id "scalar") (serialize-qp "active" $active "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/targetableRemarketingLists") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/targetableRemarketingLists") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "advertiserId": $advertiser_id, "active": $active, "maxResults": $max_results, "name": $name, "pageToken": $page_token, "sortField": $sort_field, "sortOrder": $sort_order} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "advertiserId": $advertiser_id, "active": $active, "maxResults": $max_results, "name": $name, "pageToken": $page_token, "sortField": $sort_field, "sortOrder": $sort_order} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets one remarketing list by ID.
@@ -9509,10 +11575,21 @@ export def "userprofiles-targetable-remarketing-lists get" [
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/targetableRemarketingLists/{id}") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/targetableRemarketingLists/{id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieves a list of targeting templates, optionally filtered. This method supports paging.
@@ -9553,10 +11630,21 @@ export def "userprofiles-targeting-templates list" [
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "advertiserId" $advertiser_id "scalar") (serialize-qp "ids" $ids "multi") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "searchString" $search_string "scalar") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/targetingTemplates") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/targetingTemplates") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "advertiserId": $advertiser_id, "ids": $ids, "maxResults": $max_results, "pageToken": $page_token, "searchString": $search_string, "sortField": $sort_field, "sortOrder": $sort_order} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "advertiserId": $advertiser_id, "ids": $ids, "maxResults": $max_results, "pageToken": $page_token, "searchString": $search_string, "sortField": $sort_field, "sortOrder": $sort_order} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates an existing targeting template. This method supports patch semantics.
@@ -9612,12 +11700,23 @@ export def "userprofiles-targeting-templates update-by-profile-id" [
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "id" $id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/targetingTemplates") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/targetingTemplates") $qp $auth.query)
   let req_body = {"accountId": $account_id, "advertiserId": $advertiser_id, "advertiserIdDimensionValue": $advertiser_id_dimension_value, "dayPartTargeting": $day_part_targeting, "geoTargeting": $geo_targeting, "id": $id_body, "keyValueTargetingExpression": $key_value_targeting_expression, "kind": $kind, "languageTargeting": $language_targeting, "listTargetingExpression": $list_targeting_expression, "name": $name, "subaccountId": $subaccount_id, "technologyTargeting": $technology_targeting} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "id": $id} | compact), body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "id": $id} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Inserts a new targeting template.
@@ -9672,12 +11771,23 @@ export def "userprofiles-targeting-templates create" [
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/targetingTemplates") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/targetingTemplates") $qp $auth.query)
   let req_body = {"accountId": $account_id, "advertiserId": $advertiser_id, "advertiserIdDimensionValue": $advertiser_id_dimension_value, "dayPartTargeting": $day_part_targeting, "geoTargeting": $geo_targeting, "id": $id, "keyValueTargetingExpression": $key_value_targeting_expression, "kind": $kind, "languageTargeting": $language_targeting, "listTargetingExpression": $list_targeting_expression, "name": $name, "subaccountId": $subaccount_id, "technologyTargeting": $technology_targeting} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Updates an existing targeting template.
@@ -9732,12 +11842,23 @@ export def "userprofiles-targeting-templates update-by-profile-id-1" [
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/targetingTemplates") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/targetingTemplates") $qp $auth.query)
   let req_body = {"accountId": $account_id, "advertiserId": $advertiser_id, "advertiserIdDimensionValue": $advertiser_id_dimension_value, "dayPartTargeting": $day_part_targeting, "geoTargeting": $geo_targeting, "id": $id, "keyValueTargetingExpression": $key_value_targeting_expression, "kind": $kind, "languageTargeting": $language_targeting, "listTargetingExpression": $list_targeting_expression, "name": $name, "subaccountId": $subaccount_id, "technologyTargeting": $technology_targeting} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Gets one targeting template by ID.
@@ -9773,10 +11894,21 @@ export def "userprofiles-targeting-templates get" [
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/targetingTemplates/{id}") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/targetingTemplates/{id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets a list of all supported user role permission groups.
@@ -9810,10 +11942,21 @@ export def "userprofiles-user-role-permission-groups list" [
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/userRolePermissionGroups") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/userRolePermissionGroups") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets one user role permission group by ID.
@@ -9849,10 +11992,21 @@ export def "userprofiles-user-role-permission-groups get" [
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/userRolePermissionGroups/{id}") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/userRolePermissionGroups/{id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets a list of user role permissions, possibly filtered.
@@ -9887,10 +12041,21 @@ export def "userprofiles-user-role-permissions list" [
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "ids" $ids "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/userRolePermissions") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/userRolePermissions") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "ids": $ids} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "ids": $ids} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets one user role permission by ID.
@@ -9926,10 +12091,21 @@ export def "userprofiles-user-role-permissions get" [
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/userRolePermissions/{id}") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/userRolePermissions/{id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieves a list of user roles, possibly filtered. This method supports paging.
@@ -9971,10 +12147,21 @@ export def "userprofiles-user-roles list" [
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "accountUserRoleOnly" $account_user_role_only "scalar") (serialize-qp "ids" $ids "multi") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "searchString" $search_string "scalar") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "subaccountId" $subaccount_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/userRoles") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/userRoles") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "accountUserRoleOnly": $account_user_role_only, "ids": $ids, "maxResults": $max_results, "pageToken": $page_token, "searchString": $search_string, "sortField": $sort_field, "sortOrder": $sort_order, "subaccountId": $subaccount_id} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "accountUserRoleOnly": $account_user_role_only, "ids": $ids, "maxResults": $max_results, "pageToken": $page_token, "searchString": $search_string, "sortField": $sort_field, "sortOrder": $sort_order, "subaccountId": $subaccount_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates an existing user role. This method supports patch semantics.
@@ -10019,12 +12206,23 @@ export def "userprofiles-user-roles update-by-profile-id" [
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "id" $id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/userRoles") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/userRoles") $qp $auth.query)
   let req_body = {"accountId": $account_id, "defaultUserRole": $default_user_role, "id": $id_body, "kind": $kind, "name": $name, "parentUserRoleId": $parent_user_role_id, "permissions": $permissions, "subaccountId": $subaccount_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "id": $id} | compact), body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "id": $id} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Inserts a new user role.
@@ -10068,12 +12266,23 @@ export def "userprofiles-user-roles create" [
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/userRoles") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/userRoles") $qp $auth.query)
   let req_body = {"accountId": $account_id, "defaultUserRole": $default_user_role, "id": $id, "kind": $kind, "name": $name, "parentUserRoleId": $parent_user_role_id, "permissions": $permissions, "subaccountId": $subaccount_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Updates an existing user role.
@@ -10117,12 +12326,23 @@ export def "userprofiles-user-roles update-by-profile-id-1" [
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/userRoles") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/userRoles") $qp $auth.query)
   let req_body = {"accountId": $account_id, "defaultUserRole": $default_user_role, "id": $id, "kind": $kind, "name": $name, "parentUserRoleId": $parent_user_role_id, "permissions": $permissions, "subaccountId": $subaccount_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes an existing user role.
@@ -10158,10 +12378,21 @@ export def "userprofiles-user-roles delete" [
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/userRoles/{id}") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/userRoles/{id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Gets one user role by ID.
@@ -10197,10 +12428,21 @@ export def "userprofiles-user-roles get" [
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/userRoles/{id}") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/userRoles/{id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Lists available video formats.
@@ -10234,10 +12476,21 @@ export def "userprofiles-video-formats list" [
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/videoFormats") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/videoFormats") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets one video format by ID.
@@ -10273,8 +12526,19 @@ export def "userprofiles-video-formats get" [
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/videoFormats/{id}") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/videoFormats/{id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }

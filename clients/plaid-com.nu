@@ -8,7 +8,7 @@ const BASE_URL = "https://production.plaid.com"
 # `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
 # where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o THE_PLAID_API_TOKEN | default "" }
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o THE_PLAID_API_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
@@ -53,14 +53,11 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
-# Trick: `url encode --all` over-encodes, then we decode the four unreserved
-# punctuation chars back. Pre-existing %XX sequences in the input survive
-# because `url encode --all` first turns their % into %25.
 def encode-path-segment [v: any]: nothing -> string {
   $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
-# Serialize an array-typed path parameter (issue 49.A). OpenAPI 3 `style: simple`
+# Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
 # (the default for path params) and Swagger 2 `collectionFormat: csv` both join
 # the elements with a literal comma WITHIN the single path segment, each element
 # RFC-3986-encoded individually (so a comma inside an element stays %2C). Without
@@ -71,51 +68,40 @@ def encode-path-array [v: any]: nothing -> string {
   if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
 }
 
-# Build URL from base, path, and optional query string
-def build-url [base: string, path: string, query?: string]: nothing -> string {
+# Build the request URL from base, path, and any number of pre-encoded query
+# fragments (param serializer output and/or the auth query). Each fragment is an
+# `&`-joinable `key=value` string already percent-encoded by its producer; empty
+# fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
+# delimiters are hand-spliced — and any query already on the base URL is merged in.
+def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
   let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
-  let result = ($parsed | upsert path $full_path)
-  if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
+  let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
+  $parsed | upsert path $full_path | upsert query $query | url join
 }
 
-# Build the dry-run record returned by --dry-run. Shape:
-#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
-#    auth: {scheme, location}}
-# `meta` carries logical-form data (the query record by spec name, the pre-serialization
-# body) that do-request itself cannot reconstruct from its wire-format args.
-def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
-  let m = ($meta | default {})
-  {
-    dry_run: true
-    method: $method
-    url: $url
-    query: ($m | get -o query | default {})
-    headers: $auth.headers
-    body: ($m | get -o body)
-    content_type: $content_type
-    timeout: $timeout
-    auth: {scheme: $auth.scheme, location: $auth.location}
-  }
+# Success policy: did this response succeed? Single source of truth, consulted by
+# handle-response and the HEAD header-unwrap. Empty ok_codes means the spec listed
+# none, so fall back to < 400. Otherwise: any 2xx, plus documented success codes.
+def status-ok [status: int, ok_codes: list<int>]: nothing -> bool {
+  if ($ok_codes | is-empty) { $status < 400 } else { ($status >= 200 and $status < 300) or ($status in $ok_codes) }
 }
 
-# Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
-  let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
-  let timeout = ($max_time | default 30min)
-  let ct = ($content_type | default "application/json")
-  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
-  let resp = match $method {
-    "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
-  }
-  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
-  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
+# Unwrap a `--full` HTTP response into the user-facing value. Response arrives
+# via pipeline; ok_codes gates the error throw (see status-ok).
+def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: record -> any {
+  let resp = $in
+  if $allow_errors { return $resp }
+  if not (status-ok $resp.status $ok_codes) { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } }
+  if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
+  if $resp.status == 204 { return null }
+  $resp.body
+}
+
+# POST — body + content-type
+def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 def base-url-completer [] { ["https://production.plaid.com" "https://development.plaid.com" "https://sandbox.plaid.com"] }
@@ -198,12 +184,23 @@ export def "accounts-balance-get get" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/accounts/balance/get")
+  let full_url = (build-url $base "/accounts/balance/get" $auth.query)
   let req_body = {"access_token": $access_token, "client_id": $client_id, "options": $options, "secret": $secret} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve accounts
@@ -231,12 +228,23 @@ export def "accounts-get get" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/accounts/get")
+  let full_url = (build-url $base "/accounts/get" $auth.query)
   let req_body = {"access_token": $access_token, "client_id": $client_id, "options": $options, "secret": $secret} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve information about a Plaid application
@@ -261,12 +269,23 @@ export def "application-get get" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/get")
+  let full_url = (build-url $base "/application/get" $auth.query)
   let req_body = {"application_id": $application_id, "client_id": $client_id, "secret": $secret} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Create Asset Report Audit Copy
@@ -293,12 +312,23 @@ export def "asset-report-audit-copy-create copy" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/asset_report/audit_copy/create")
+  let full_url = (build-url $base "/asset_report/audit_copy/create" $auth.query)
   let req_body = {"asset_report_token": $asset_report_token, "auditor_id": $auditor_id, "client_id": $client_id, "secret": $secret} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve an Asset Report Audit Copy
@@ -324,12 +354,23 @@ export def "asset-report-audit-copy-get copy" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/asset_report/audit_copy/get")
+  let full_url = (build-url $base "/asset_report/audit_copy/get" $auth.query)
   let req_body = {"audit_copy_token": $audit_copy_token, "client_id": $client_id, "secret": $secret} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Remove Asset Report Audit Copy
@@ -355,12 +396,23 @@ export def "asset-report-audit-copy-remove copy" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/asset_report/audit_copy/remove")
+  let full_url = (build-url $base "/asset_report/audit_copy/remove" $auth.query)
   let req_body = {"audit_copy_token": $audit_copy_token, "client_id": $client_id, "secret": $secret} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Create an Asset Report
@@ -390,12 +442,23 @@ export def "asset-report-create create" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/asset_report/create")
+  let full_url = (build-url $base "/asset_report/create" $auth.query)
   let req_body = {"access_tokens": $access_tokens, "client_id": $client_id, "days_requested": $days_requested, "options": $options, "report_type": $report_type, "secret": $secret} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Filter Asset Report
@@ -422,12 +485,23 @@ export def "asset-report-filter create" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/asset_report/filter")
+  let full_url = (build-url $base "/asset_report/filter" $auth.query)
   let req_body = {"account_ids_to_exclude": $account_ids_to_exclude, "asset_report_token": $asset_report_token, "client_id": $client_id, "secret": $secret} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve an Asset Report
@@ -457,12 +531,23 @@ export def "asset-report-get get" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/asset_report/get")
+  let full_url = (build-url $base "/asset_report/get" $auth.query)
   let req_body = {"asset_report_token": $asset_report_token, "client_id": $client_id, "fast_report": $fast_report, "include_insights": $include_insights, "options": $options, "secret": $secret} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve a PDF Asset Report
@@ -490,12 +575,23 @@ export def "asset-report-pdf-get get" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/asset_report/pdf/get")
+  let full_url = (build-url $base "/asset_report/pdf/get" $auth.query)
   let req_body = {"asset_report_token": $asset_report_token, "client_id": $client_id, "options": $options, "secret": $secret} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Refresh an Asset Report
@@ -524,12 +620,23 @@ export def "asset-report-refresh refresh" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/asset_report/refresh")
+  let full_url = (build-url $base "/asset_report/refresh" $auth.query)
   let req_body = {"asset_report_token": $asset_report_token, "client_id": $client_id, "days_requested": $days_requested, "options": $options, "secret": $secret} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Delete an Asset Report
@@ -555,12 +662,23 @@ export def "asset-report-remove delete" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/asset_report/remove")
+  let full_url = (build-url $base "/asset_report/remove" $auth.query)
   let req_body = {"asset_report_token": $asset_report_token, "client_id": $client_id, "secret": $secret} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve auth data
@@ -588,12 +706,23 @@ export def "auth-get get" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/auth/get")
+  let full_url = (build-url $base "/auth/get" $auth.query)
   let req_body = {"access_token": $access_token, "client_id": $client_id, "options": $options, "secret": $secret} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get balance of your Bank Transfer account
@@ -619,12 +748,23 @@ export def "bank-transfer-balance-get get" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/bank_transfer/balance/get")
+  let full_url = (build-url $base "/bank_transfer/balance/get" $auth.query)
   let req_body = {"client_id": $client_id, "origination_account_id": $origination_account_id, "secret": $secret} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Cancel a bank transfer
@@ -650,12 +790,23 @@ export def "bank-transfer-cancel cancel" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/bank_transfer/cancel")
+  let full_url = (build-url $base "/bank_transfer/cancel" $auth.query)
   let req_body = {"bank_transfer_id": $bank_transfer_id, "client_id": $client_id, "secret": $secret} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Create a bank transfer
@@ -694,12 +845,23 @@ export def "bank-transfer-create create" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/bank_transfer/create")
+  let full_url = (build-url $base "/bank_transfer/create" $auth.query)
   let req_body = {"access_token": $access_token, "account_id": $account_id, "ach_class": $ach_class, "amount": $amount, "client_id": $client_id, "custom_tag": $custom_tag, "description": $description, "idempotency_key": $idempotency_key, "iso_currency_code": $iso_currency_code, "metadata": $metadata, "network": $network, "origination_account_id": $origination_account_id, "secret": $secret, "type": $type, "user": $user} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # List bank transfer events
@@ -734,12 +896,23 @@ export def "bank-transfer-event-list list" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/bank_transfer/event/list")
+  let full_url = (build-url $base "/bank_transfer/event/list" $auth.query)
   let req_body = {"account_id": $account_id, "bank_transfer_id": $bank_transfer_id, "bank_transfer_type": $bank_transfer_type, "client_id": $client_id, "count": $count, "direction": $direction, "end_date": $end_date, "event_types": $event_types, "offset": $offset, "origination_account_id": $origination_account_id, "secret": $secret, "start_date": $start_date} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Sync bank transfer events
@@ -766,12 +939,23 @@ export def "bank-transfer-event-sync sync" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/bank_transfer/event/sync")
+  let full_url = (build-url $base "/bank_transfer/event/sync" $auth.query)
   let req_body = {"after_id": $after_id, "client_id": $client_id, "count": $count, "secret": $secret} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve a bank transfer
@@ -797,12 +981,23 @@ export def "bank-transfer-get get" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/bank_transfer/get")
+  let full_url = (build-url $base "/bank_transfer/get" $auth.query)
   let req_body = {"bank_transfer_id": $bank_transfer_id, "client_id": $client_id, "secret": $secret} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # List bank transfers
@@ -833,12 +1028,23 @@ export def "bank-transfer-list list" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/bank_transfer/list")
+  let full_url = (build-url $base "/bank_transfer/list" $auth.query)
   let req_body = {"client_id": $client_id, "count": $count, "direction": $direction, "end_date": $end_date, "offset": $offset, "origination_account_id": $origination_account_id, "secret": $secret, "start_date": $start_date} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Migrate account into Bank Transfers
@@ -867,12 +1073,23 @@ export def "bank-transfer-migrate-account create" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/bank_transfer/migrate_account")
+  let full_url = (build-url $base "/bank_transfer/migrate_account" $auth.query)
   let req_body = {"account_number": $account_number, "account_type": $account_type, "client_id": $client_id, "routing_number": $routing_number, "secret": $secret, "wire_routing_number": $wire_routing_number} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve a sweep
@@ -898,12 +1115,23 @@ export def "bank-transfer-sweep-get get" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/bank_transfer/sweep/get")
+  let full_url = (build-url $base "/bank_transfer/sweep/get" $auth.query)
   let req_body = {"client_id": $client_id, "secret": $secret, "sweep_id": $sweep_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # List sweeps
@@ -932,12 +1160,23 @@ export def "bank-transfer-sweep-list list" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/bank_transfer/sweep/list")
+  let full_url = (build-url $base "/bank_transfer/sweep/list" $auth.query)
   let req_body = {"client_id": $client_id, "count": $count, "end_time": $end_time, "origination_account_id": $origination_account_id, "secret": $secret, "start_time": $start_time} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve information from the bank accounts used for employment verification
@@ -963,12 +1202,23 @@ export def "beta-credit-bank-employment-get get" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/beta/credit/v1/bank_employment/get")
+  let full_url = (build-url $base "/beta/credit/v1/bank_employment/get" $auth.query)
   let req_body = {"client_id": $client_id, "secret": $secret, "user_token": $user_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Create transaction category rule
@@ -996,12 +1246,23 @@ export def "beta-transactions-rules-create create" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/beta/transactions/rules/v1/create")
+  let full_url = (build-url $base "/beta/transactions/rules/v1/create" $auth.query)
   let req_body = {"access_token": $access_token, "client_id": $client_id, "personal_finance_category": $personal_finance_category, "rule_details": $rule_details, "secret": $secret} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Return a list of rules created for the Item associated with the access token.
@@ -1026,12 +1287,23 @@ export def "beta-transactions-rules-list list" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/beta/transactions/rules/v1/list")
+  let full_url = (build-url $base "/beta/transactions/rules/v1/list" $auth.query)
   let req_body = {"access_token": $access_token, "client_id": $client_id, "secret": $secret} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Remove transaction rule
@@ -1057,12 +1329,23 @@ export def "beta-transactions-rules-remove delete" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/beta/transactions/rules/v1/remove")
+  let full_url = (build-url $base "/beta/transactions/rules/v1/remove" $auth.query)
   let req_body = {"access_token": $access_token, "client_id": $client_id, "rule_id": $rule_id, "secret": $secret} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # enhance locally-held transaction data
@@ -1089,12 +1372,23 @@ export def "beta-transactions-enhance create" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/beta/transactions/v1/enhance")
+  let full_url = (build-url $base "/beta/transactions/v1/enhance" $auth.query)
   let req_body = {"account_type": $account_type, "client_id": $client_id, "secret": $secret, "transactions": $transactions} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get Categories
@@ -1117,12 +1411,23 @@ export def "categories-get get" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/categories/get")
+  let full_url = (build-url $base "/categories/get" $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve an Asset Report with Freddie Mac format. Only Freddie Mac can use this endpoint.
@@ -1148,12 +1453,23 @@ export def "credit-asset-report-freddie-mac-get get" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/credit/asset_report/freddie_mac/get")
+  let full_url = (build-url $base "/credit/asset_report/freddie_mac/get" $auth.query)
   let req_body = {"audit_copy_token": $audit_copy_token, "client_id": $client_id, "secret": $secret} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Create Asset or Income Report Audit Copy Token
@@ -1179,12 +1495,23 @@ export def "credit-audit-copy-token-create copy" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/credit/audit_copy_token/create")
+  let full_url = (build-url $base "/credit/audit_copy_token/create" $auth.query)
   let req_body = {"client_id": $client_id, "report_tokens": $report_tokens, "secret": $secret} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Remove an Audit Copy token
@@ -1210,12 +1537,23 @@ export def "credit-audit-copy-token-remove copy-report" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/credit/audit_copy_token/remove")
+  let full_url = (build-url $base "/credit/audit_copy_token/remove" $auth.query)
   let req_body = {"audit_copy_token": $audit_copy_token, "client_id": $client_id, "secret": $secret} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Update an Audit Copy Token
@@ -1242,12 +1580,23 @@ export def "credit-audit-copy-token-update copy" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/credit/audit_copy_token/update")
+  let full_url = (build-url $base "/credit/audit_copy_token/update" $auth.query)
   let req_body = {"audit_copy_token": $audit_copy_token, "client_id": $client_id, "report_tokens": $report_tokens, "secret": $secret} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve information from the bank accounts used for income verification
@@ -1275,12 +1624,23 @@ export def "credit-bank-income-get get" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/credit/bank_income/get")
+  let full_url = (build-url $base "/credit/bank_income/get" $auth.query)
   let req_body = {"client_id": $client_id, "options": $options, "secret": $secret, "user_token": $user_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve information from the bank accounts used for income verification in PDF format
@@ -1306,12 +1666,23 @@ export def "credit-bank-income-pdf-get get" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/credit/bank_income/pdf/get")
+  let full_url = (build-url $base "/credit/bank_income/pdf/get" $auth.query)
   let req_body = {"client_id": $client_id, "secret": $secret, "user_token": $user_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Refresh a user's bank income information
@@ -1339,12 +1710,23 @@ export def "credit-bank-income-refresh refresh" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/credit/bank_income/refresh")
+  let full_url = (build-url $base "/credit/bank_income/refresh" $auth.query)
   let req_body = {"client_id": $client_id, "options": $options, "secret": $secret, "user_token": $user_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve a summary of an individual's employment information
@@ -1370,12 +1752,23 @@ export def "credit-employment-get get" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/credit/employment/get")
+  let full_url = (build-url $base "/credit/employment/get" $auth.query)
   let req_body = {"client_id": $client_id, "secret": $secret, "user_token": $user_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve an Asset Report with Freddie Mac format (aka VOA - Verification Of Assets), and a Verification Of Employment (VOE) report if this one is available. Only Freddie Mac can use this endpoint.
@@ -1401,12 +1794,23 @@ export def "credit-freddie-mac-reports-get get" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/credit/freddie_mac/reports/get")
+  let full_url = (build-url $base "/credit/freddie_mac/reports/get" $auth.query)
   let req_body = {"audit_copy_token": $audit_copy_token, "client_id": $client_id, "secret": $secret} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve a user's payroll information
@@ -1432,12 +1836,23 @@ export def "credit-payroll-income-get get" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/credit/payroll_income/get")
+  let full_url = (build-url $base "/credit/payroll_income/get" $auth.query)
   let req_body = {"client_id": $client_id, "secret": $secret, "user_token": $user_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Check income verification eligibility and optimize conversion
@@ -1470,12 +1885,23 @@ export def "credit-payroll-income-precheck create" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/credit/payroll_income/precheck")
+  let full_url = (build-url $base "/credit/payroll_income/precheck" $auth.query)
   let req_body = {"access_tokens": $access_tokens, "client_id": $client_id, "employer": $employer, "payroll_institution": $payroll_institution, "secret": $secret, "us_military_info": $us_military_info, "user_token": $user_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Refresh a digital payroll income verification
@@ -1501,12 +1927,23 @@ export def "credit-payroll-income-refresh refresh" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/credit/payroll_income/refresh")
+  let full_url = (build-url $base "/credit/payroll_income/refresh" $auth.query)
   let req_body = {"client_id": $client_id, "secret": $secret, "user_token": $user_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Create a relay token to share an Asset Report with a partner client (beta)
@@ -1534,12 +1971,23 @@ export def "credit-relay-create create" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/credit/relay/create")
+  let full_url = (build-url $base "/credit/relay/create" $auth.query)
   let req_body = {"client_id": $client_id, "report_tokens": $report_tokens, "secondary_client_id": $secondary_client_id, "secret": $secret, "webhook": $webhook} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve the reports associated with a relay token that was shared with you (beta)
@@ -1566,12 +2014,23 @@ export def "credit-relay-get get" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/credit/relay/get")
+  let full_url = (build-url $base "/credit/relay/get" $auth.query)
   let req_body = {"client_id": $client_id, "relay_token": $relay_token, "report_type": $report_type, "secret": $secret} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Refresh a report of a relay token (beta)
@@ -1599,12 +2058,23 @@ export def "credit-relay-refresh refresh" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/credit/relay/refresh")
+  let full_url = (build-url $base "/credit/relay/refresh" $auth.query)
   let req_body = {"client_id": $client_id, "relay_token": $relay_token, "report_type": $report_type, "secret": $secret, "webhook": $webhook} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Remove relay token (beta)
@@ -1630,12 +2100,23 @@ export def "credit-relay-remove delete" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/credit/relay/remove")
+  let full_url = (build-url $base "/credit/relay/remove" $auth.query)
   let req_body = {"client_id": $client_id, "relay_token": $relay_token, "secret": $secret} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve Link sessions for your user
@@ -1661,12 +2142,23 @@ export def "credit-sessions-get get" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/credit/sessions/get")
+  let full_url = (build-url $base "/credit/sessions/get" $auth.query)
   let req_body = {"client_id": $client_id, "secret": $secret, "user_token": $user_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve a dashboard user
@@ -1692,12 +2184,23 @@ export def "dashboard-user-get get" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/dashboard_user/get")
+  let full_url = (build-url $base "/dashboard_user/get" $auth.query)
   let req_body = {"client_id": $client_id, "dashboard_user_id": $dashboard_user_id, "secret": $secret} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # List dashboard users
@@ -1723,12 +2226,23 @@ export def "dashboard-user-list list" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/dashboard_user/list")
+  let full_url = (build-url $base "/dashboard_user/list" $auth.query)
   let req_body = {"client_id": $client_id, "cursor": $cursor, "secret": $secret} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Create a deposit switch without using Plaid Exchange
@@ -1760,12 +2274,23 @@ export def "deposit-switch-alt-create create" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/deposit_switch/alt/create")
+  let full_url = (build-url $base "/deposit_switch/alt/create" $auth.query)
   let req_body = {"client_id": $client_id, "country_code": $country_code, "options": $options, "secret": $secret, "target_account": $target_account, "target_user": $target_user} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Create a deposit switch
@@ -1795,12 +2320,23 @@ export def "deposit-switch-create create" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/deposit_switch/create")
+  let full_url = (build-url $base "/deposit_switch/create" $auth.query)
   let req_body = {"client_id": $client_id, "country_code": $country_code, "options": $options, "secret": $secret, "target_access_token": $target_access_token, "target_account_id": $target_account_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve a deposit switch
@@ -1826,12 +2362,23 @@ export def "deposit-switch-get get" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/deposit_switch/get")
+  let full_url = (build-url $base "/deposit_switch/get" $auth.query)
   let req_body = {"client_id": $client_id, "deposit_switch_id": $deposit_switch_id, "secret": $secret} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Create a deposit switch token
@@ -1857,12 +2404,23 @@ export def "deposit-switch-token-create create" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/deposit_switch/token/create")
+  let full_url = (build-url $base "/deposit_switch/token/create" $auth.query)
   let req_body = {"client_id": $client_id, "deposit_switch_id": $deposit_switch_id, "secret": $secret} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Search employer database
@@ -1889,12 +2447,23 @@ export def "employers-search list" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/employers/search")
+  let full_url = (build-url $base "/employers/search" $auth.query)
   let req_body = {"client_id": $client_id, "products": $products, "query": $query, "secret": $secret} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # (Deprecated) Retrieve a summary of an individual's employment information
@@ -1922,12 +2491,23 @@ export def "employment-verification-get get" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/employment/verification/get")
+  let full_url = (build-url $base "/employment/verification/get" $auth.query)
   let req_body = {"access_token": $access_token, "client_id": $client_id, "secret": $secret} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Webhook receiver for fdx notifications
@@ -1964,12 +2544,23 @@ export def "fdx-notifications create" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/fdx/notifications")
+  let full_url = (build-url $base "/fdx/notifications" $auth.query)
   let req_body = {"category": $category, "notificationId": $notification_id, "notificationPayload": $notification_payload, "priority": $priority, "publisher": $publisher, "sentOn": $sent_on, "severity": $severity, "subscriber": $subscriber, "type": $type, "url": $url} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve identity data
@@ -1997,12 +2588,23 @@ export def "identity-get get" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/identity/get")
+  let full_url = (build-url $base "/identity/get" $auth.query)
   let req_body = {"access_token": $access_token, "client_id": $client_id, "options": $options, "secret": $secret} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve identity match score
@@ -2032,12 +2634,23 @@ export def "identity-match create" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/identity/match")
+  let full_url = (build-url $base "/identity/match" $auth.query)
   let req_body = {"access_token": $access_token, "client_id": $client_id, "options": $options, "secret": $secret, "user": $user} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Create a new identity verification
@@ -2068,12 +2681,23 @@ export def "identity-verification-create create" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/identity_verification/create")
+  let full_url = (build-url $base "/identity_verification/create" $auth.query)
   let req_body = {"client_id": $client_id, "gave_consent": $gave_consent, "is_idempotent": $is_idempotent, "is_shareable": $is_shareable, "secret": $secret, "template_id": $template_id, "user": $user} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve Identity Verification
@@ -2099,12 +2723,23 @@ export def "identity-verification-get get" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/identity_verification/get")
+  let full_url = (build-url $base "/identity_verification/get" $auth.query)
   let req_body = {"client_id": $client_id, "identity_verification_id": $identity_verification_id, "secret": $secret} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # List Identity Verifications
@@ -2132,12 +2767,23 @@ export def "identity-verification-list list" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/identity_verification/list")
+  let full_url = (build-url $base "/identity_verification/list" $auth.query)
   let req_body = {"client_id": $client_id, "client_user_id": $client_user_id, "cursor": $cursor, "secret": $secret, "template_id": $template_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Retry an Identity Verification
@@ -2167,12 +2813,23 @@ export def "identity-verification-retry create" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/identity_verification/retry")
+  let full_url = (build-url $base "/identity_verification/retry" $auth.query)
   let req_body = {"client_id": $client_id, "client_user_id": $client_user_id, "secret": $secret, "steps": $steps, "strategy": $strategy, "template_id": $template_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # (Deprecated) Create an income verification instance
@@ -2203,12 +2860,23 @@ export def "income-verification-create create" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/income/verification/create")
+  let full_url = (build-url $base "/income/verification/create" $auth.query)
   let req_body = {"client_id": $client_id, "options": $options, "precheck_id": $precheck_id, "secret": $secret, "webhook": $webhook} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # (Deprecated) Download the original documents used for income verification
@@ -2239,12 +2907,23 @@ export def "income-verification-documents-download download" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/income/verification/documents/download")
+  let full_url = (build-url $base "/income/verification/documents/download" $auth.query)
   let req_body = {"access_token": $access_token, "client_id": $client_id, "document_id": $document_id, "income_verification_id": $income_verification_id, "secret": $secret} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/zip"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # (Deprecated) Retrieve information from the paystubs used for income verification
@@ -2274,12 +2953,23 @@ export def "income-verification-paystubs-get get" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/income/verification/paystubs/get")
+  let full_url = (build-url $base "/income/verification/paystubs/get" $auth.query)
   let req_body = {"access_token": $access_token, "client_id": $client_id, "income_verification_id": $income_verification_id, "secret": $secret} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # (Deprecated) Check digital income verification eligibility and optimize conversion
@@ -2317,12 +3007,23 @@ export def "income-verification-precheck create" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/income/verification/precheck")
+  let full_url = (build-url $base "/income/verification/precheck" $auth.query)
   let req_body = {"client_id": $client_id, "employer": $employer, "payroll_institution": $payroll_institution, "secret": $secret, "transactions_access_token": $transactions_access_token, "transactions_access_tokens": $transactions_access_tokens, "us_military_info": $us_military_info, "user": $user} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # (Deprecated) Retrieve information from the tax documents used for income verification
@@ -2352,12 +3053,23 @@ export def "income-verification-taxforms-get get" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/income/verification/taxforms/get")
+  let full_url = (build-url $base "/income/verification/taxforms/get" $auth.query)
   let req_body = {"access_token": $access_token, "client_id": $client_id, "income_verification_id": $income_verification_id, "secret": $secret} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get details of all supported institutions
@@ -2387,12 +3099,23 @@ export def "institutions-get get" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/institutions/get")
+  let full_url = (build-url $base "/institutions/get" $auth.query)
   let req_body = {"client_id": $client_id, "count": $count, "country_codes": $country_codes, "offset": $offset, "options": $options, "secret": $secret} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get details of an institution
@@ -2421,12 +3144,23 @@ export def "institutions-get-by-id get" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/institutions/get_by_id")
+  let full_url = (build-url $base "/institutions/get_by_id" $auth.query)
   let req_body = {"client_id": $client_id, "country_codes": $country_codes, "institution_id": $institution_id, "options": $options, "secret": $secret} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Search institutions
@@ -2456,12 +3190,23 @@ export def "institutions-search list" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/institutions/search")
+  let full_url = (build-url $base "/institutions/search" $auth.query)
   let req_body = {"client_id": $client_id, "country_codes": $country_codes, "options": $options, "products": $products, "query": $query, "secret": $secret} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get Investment holdings
@@ -2489,12 +3234,23 @@ export def "investments-holdings-get get" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/investments/holdings/get")
+  let full_url = (build-url $base "/investments/holdings/get" $auth.query)
   let req_body = {"access_token": $access_token, "client_id": $client_id, "options": $options, "secret": $secret} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get investment transactions
@@ -2524,12 +3280,23 @@ export def "investments-transactions-get get" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/investments/transactions/get")
+  let full_url = (build-url $base "/investments/transactions/get" $auth.query)
   let req_body = {"access_token": $access_token, "client_id": $client_id, "end_date": $end_date, "options": $options, "secret": $secret, "start_date": $start_date} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Invalidate access_token
@@ -2555,12 +3322,23 @@ export def "item-access-token-invalidate create" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/item/access_token/invalidate")
+  let full_url = (build-url $base "/item/access_token/invalidate" $auth.query)
   let req_body = {"access_token": $access_token, "client_id": $client_id, "secret": $secret} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # List a historical log of user consent events
@@ -2587,12 +3365,23 @@ export def "item-activity-list list" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/item/activity/list")
+  let full_url = (build-url $base "/item/activity/list" $auth.query)
   let req_body = {"access_token": $access_token, "client_id": $client_id, "count": $count, "cursor": $cursor, "secret": $secret} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # List a user’s connected applications
@@ -2617,12 +3406,23 @@ export def "item-application-list list" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/item/application/list")
+  let full_url = (build-url $base "/item/application/list" $auth.query)
   let req_body = {"access_token": $access_token, "client_id": $client_id, "secret": $secret} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Update the scopes of access for a particular application
@@ -2652,12 +3452,23 @@ export def "item-application-scopes-update update" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/item/application/scopes/update")
+  let full_url = (build-url $base "/item/application/scopes/update" $auth.query)
   let req_body = {"access_token": $access_token, "application_id": $application_id, "client_id": $client_id, "context": $context, "scopes": $scopes, "secret": $secret, "state": $state} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve an Item
@@ -2683,12 +3494,23 @@ export def "item-get get" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/item/get")
+  let full_url = (build-url $base "/item/get" $auth.query)
   let req_body = {"access_token": $access_token, "client_id": $client_id, "secret": $secret} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Import Item
@@ -2717,12 +3539,23 @@ export def "item-import import" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/item/import")
+  let full_url = (build-url $base "/item/import" $auth.query)
   let req_body = {"client_id": $client_id, "options": $options, "products": $products, "secret": $secret, "user_auth": $user_auth} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Create public token
@@ -2748,12 +3581,23 @@ export def "item-public-token-create create" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/item/public_token/create")
+  let full_url = (build-url $base "/item/public_token/create" $auth.query)
   let req_body = {"access_token": $access_token, "client_id": $client_id, "secret": $secret} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Exchange public token for an access token
@@ -2779,12 +3623,23 @@ export def "item-public-token-exchange create" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/item/public_token/exchange")
+  let full_url = (build-url $base "/item/public_token/exchange" $auth.query)
   let req_body = {"client_id": $client_id, "public_token": $public_token, "secret": $secret} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Remove an Item
@@ -2810,12 +3665,23 @@ export def "item-remove delete" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/item/remove")
+  let full_url = (build-url $base "/item/remove" $auth.query)
   let req_body = {"access_token": $access_token, "client_id": $client_id, "secret": $secret} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Update Webhook URL
@@ -2842,12 +3708,23 @@ export def "item-webhook-update update" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/item/webhook/update")
+  let full_url = (build-url $base "/item/webhook/update" $auth.query)
   let req_body = {"access_token": $access_token, "client_id": $client_id, "secret": $secret, "webhook": $webhook} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve Liabilities data
@@ -2875,12 +3752,23 @@ export def "liabilities-get get" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/liabilities/get")
+  let full_url = (build-url $base "/liabilities/get" $auth.query)
   let req_body = {"access_token": $access_token, "client_id": $client_id, "options": $options, "secret": $secret} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Exchange the Link Correlation Id for a Link Token
@@ -2906,12 +3794,23 @@ export def "link-oauth-correlation-id-exchange create" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/link/oauth/correlation_id/exchange")
+  let full_url = (build-url $base "/link/oauth/correlation_id/exchange" $auth.query)
   let req_body = {"client_id": $client_id, "link_correlation_id": $link_correlation_id, "secret": $secret} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Create Link Token
@@ -2974,12 +3873,23 @@ export def "link-token-create create" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/link/token/create")
+  let full_url = (build-url $base "/link/token/create" $auth.query)
   let req_body = {"access_token": $access_token, "account_filters": $account_filters, "additional_consented_products": $additional_consented_products, "android_package_name": $android_package_name, "auth": $body_auth, "client_id": $client_id, "client_name": $client_name, "country_codes": $country_codes, "deposit_switch": $deposit_switch, "employment": $employment, "eu_config": $eu_config, "identity_verification": $identity_verification, "income_verification": $income_verification, "institution_data": $institution_data, "institution_id": $institution_id, "investments": $investments, "language": $language, "link_customization_name": $link_customization_name, "payment_initiation": $payment_initiation, "products": $products, "redirect_uri": $redirect_uri, "secret": $secret, "transfer": $transfer, "update": $update, "user": $user, "user_token": $user_token, "webhook": $webhook} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get Link Token
@@ -3005,12 +3915,23 @@ export def "link-token-get get" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/link/token/get")
+  let full_url = (build-url $base "/link/token/get" $auth.query)
   let req_body = {"client_id": $client_id, "link_token": $link_token, "secret": $secret} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Create Link Delivery session
@@ -3038,12 +3959,23 @@ export def "link-delivery-create create" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/link_delivery/create")
+  let full_url = (build-url $base "/link_delivery/create" $auth.query)
   let req_body = {"client_id": $client_id, "communication_methods": $communication_methods, "link_token": $link_token, "secret": $secret} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get Link Delivery session
@@ -3069,12 +4001,23 @@ export def "link-delivery-get get" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/link_delivery/get")
+  let full_url = (build-url $base "/link_delivery/get" $auth.query)
   let req_body = {"client_id": $client_id, "link_delivery_session_id": $link_delivery_session_id, "secret": $secret} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Creates a new end customer for a Plaid reseller.
@@ -3119,12 +4062,23 @@ export def "partner-customer-create create" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/partner/customer/create")
+  let full_url = (build-url $base "/partner/customer/create" $auth.query)
   let req_body = {"address": $address, "application_name": $application_name, "assets_under_management": $assets_under_management, "billing_contact": $billing_contact, "client_id": $client_id, "company_name": $company_name, "create_link_customization": $create_link_customization, "customer_support_info": $customer_support_info, "is_bank_addendum_completed": $is_bank_addendum_completed, "is_diligence_attested": $is_diligence_attested, "legal_entity_name": $legal_entity_name, "logo": $logo, "products": $products, "redirect_uris": $redirect_uris, "secret": $secret, "technical_contact": $technical_contact, "website": $website} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Enables a Plaid reseller's end customer in the Production environment.
@@ -3150,12 +4104,23 @@ export def "partner-customer-enable enable" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/partner/customer/enable")
+  let full_url = (build-url $base "/partner/customer/enable" $auth.query)
   let req_body = {"client_id": $client_id, "end_customer_client_id": $end_customer_client_id, "secret": $secret} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Returns a Plaid reseller's end customer.
@@ -3181,12 +4146,23 @@ export def "partner-customer-get get" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/partner/customer/get")
+  let full_url = (build-url $base "/partner/customer/get" $auth.query)
   let req_body = {"client_id": $client_id, "end_customer_client_id": $end_customer_client_id, "secret": $secret} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Returns OAuth-institution registration information for a given end customer.
@@ -3212,12 +4188,23 @@ export def "partner-customer-oauth-institutions-get get" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/partner/customer/oauth_institutions/get")
+  let full_url = (build-url $base "/partner/customer/oauth_institutions/get" $auth.query)
   let req_body = {"client_id": $client_id, "end_customer_client_id": $end_customer_client_id, "secret": $secret} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Removes a Plaid reseller's end customer.
@@ -3243,12 +4230,23 @@ export def "partner-customer-remove delete" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/partner/customer/remove")
+  let full_url = (build-url $base "/partner/customer/remove" $auth.query)
   let req_body = {"client_id": $client_id, "end_customer_client_id": $end_customer_client_id, "secret": $secret} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Create payment consent
@@ -3280,12 +4278,23 @@ export def "payment-initiation-consent-create create" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/payment_initiation/consent/create")
+  let full_url = (build-url $base "/payment_initiation/consent/create" $auth.query)
   let req_body = {"client_id": $client_id, "constraints": $constraints, "options": $options, "recipient_id": $recipient_id, "reference": $reference, "scopes": $scopes, "secret": $secret} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get payment consent
@@ -3311,12 +4320,23 @@ export def "payment-initiation-consent-get get" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/payment_initiation/consent/get")
+  let full_url = (build-url $base "/payment_initiation/consent/get" $auth.query)
   let req_body = {"client_id": $client_id, "consent_id": $consent_id, "secret": $secret} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Execute a single payment using consent
@@ -3345,12 +4365,23 @@ export def "payment-initiation-consent-payment-execute create" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/payment_initiation/consent/payment/execute")
+  let full_url = (build-url $base "/payment_initiation/consent/payment/execute" $auth.query)
   let req_body = {"amount": $amount, "client_id": $client_id, "consent_id": $consent_id, "idempotency_key": $idempotency_key, "secret": $secret} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Revoke payment consent
@@ -3376,12 +4407,23 @@ export def "payment-initiation-consent-revoke delete" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/payment_initiation/consent/revoke")
+  let full_url = (build-url $base "/payment_initiation/consent/revoke" $auth.query)
   let req_body = {"client_id": $client_id, "consent_id": $consent_id, "secret": $secret} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Create a payment
@@ -3413,12 +4455,23 @@ export def "payment-initiation-payment-create create" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/payment_initiation/payment/create")
+  let full_url = (build-url $base "/payment_initiation/payment/create" $auth.query)
   let req_body = {"amount": $amount, "client_id": $client_id, "options": $options, "recipient_id": $recipient_id, "reference": $reference, "schedule": $schedule, "secret": $secret} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get payment details
@@ -3444,12 +4497,23 @@ export def "payment-initiation-payment-get get" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/payment_initiation/payment/get")
+  let full_url = (build-url $base "/payment_initiation/payment/get" $auth.query)
   let req_body = {"client_id": $client_id, "payment_id": $payment_id, "secret": $secret} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # List payments
@@ -3477,12 +4541,23 @@ export def "payment-initiation-payment-list list" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/payment_initiation/payment/list")
+  let full_url = (build-url $base "/payment_initiation/payment/list" $auth.query)
   let req_body = {"client_id": $client_id, "consent_id": $consent_id, "count": $count, "cursor": $cursor, "secret": $secret} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Reverse an existing payment
@@ -3511,12 +4586,23 @@ export def "payment-initiation-payment-reverse create" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/payment_initiation/payment/reverse")
+  let full_url = (build-url $base "/payment_initiation/payment/reverse" $auth.query)
   let req_body = {"amount": $amount, "client_id": $client_id, "idempotency_key": $idempotency_key, "payment_id": $payment_id, "reference": $reference, "secret": $secret} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Create payment token
@@ -3544,12 +4630,23 @@ export def "payment-initiation-payment-token-create create" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/payment_initiation/payment/token/create")
+  let full_url = (build-url $base "/payment_initiation/payment/token/create" $auth.query)
   let req_body = {"client_id": $client_id, "payment_id": $payment_id, "secret": $secret} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Create payment recipient
@@ -3579,12 +4676,23 @@ export def "payment-initiation-recipient-create create" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/payment_initiation/recipient/create")
+  let full_url = (build-url $base "/payment_initiation/recipient/create" $auth.query)
   let req_body = {"address": $address, "bacs": $bacs, "client_id": $client_id, "iban": $iban, "name": $name, "secret": $secret} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get payment recipient
@@ -3610,12 +4718,23 @@ export def "payment-initiation-recipient-get get" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/payment_initiation/recipient/get")
+  let full_url = (build-url $base "/payment_initiation/recipient/get" $auth.query)
   let req_body = {"client_id": $client_id, "recipient_id": $recipient_id, "secret": $secret} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # List payment recipients
@@ -3640,12 +4759,23 @@ export def "payment-initiation-recipient-list list" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/payment_initiation/recipient/list")
+  let full_url = (build-url $base "/payment_initiation/recipient/list" $auth.query)
   let req_body = {"client_id": $client_id, "secret": $secret} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Create payment profile
@@ -3670,12 +4800,23 @@ export def "payment-profile-create create" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/payment_profile/create")
+  let full_url = (build-url $base "/payment_profile/create" $auth.query)
   let req_body = {"client_id": $client_id, "secret": $secret} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get payment profile
@@ -3701,12 +4842,23 @@ export def "payment-profile-get get" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/payment_profile/get")
+  let full_url = (build-url $base "/payment_profile/get" $auth.query)
   let req_body = {"client_id": $client_id, "payment_profile_token": $payment_profile_token, "secret": $secret} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Remove payment profile
@@ -3732,12 +4884,23 @@ export def "payment-profile-remove delete" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/payment_profile/remove")
+  let full_url = (build-url $base "/payment_profile/remove" $auth.query)
   let req_body = {"client_id": $client_id, "payment_profile_token": $payment_profile_token, "secret": $secret} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Create Apex bank account token
@@ -3764,12 +4927,23 @@ export def "processor-apex-processor-token-create create" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/processor/apex/processor_token/create")
+  let full_url = (build-url $base "/processor/apex/processor_token/create" $auth.query)
   let req_body = {"access_token": $access_token, "account_id": $account_id, "client_id": $client_id, "secret": $secret} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve Auth data
@@ -3795,12 +4969,23 @@ export def "processor-auth-get get" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/processor/auth/get")
+  let full_url = (build-url $base "/processor/auth/get" $auth.query)
   let req_body = {"client_id": $client_id, "processor_token": $processor_token, "secret": $secret} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve Balance data
@@ -3828,12 +5013,23 @@ export def "processor-balance-get get" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/processor/balance/get")
+  let full_url = (build-url $base "/processor/balance/get" $auth.query)
   let req_body = {"client_id": $client_id, "options": $options, "processor_token": $processor_token, "secret": $secret} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Create a bank transfer as a processor
@@ -3871,12 +5067,23 @@ export def "processor-bank-transfer-create create" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/processor/bank_transfer/create")
+  let full_url = (build-url $base "/processor/bank_transfer/create" $auth.query)
   let req_body = {"ach_class": $ach_class, "amount": $amount, "client_id": $client_id, "custom_tag": $custom_tag, "description": $description, "idempotency_key": $idempotency_key, "iso_currency_code": $iso_currency_code, "metadata": $metadata, "network": $network, "origination_account_id": $origination_account_id, "processor_token": $processor_token, "secret": $secret, "type": $type, "user": $user} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve Identity data
@@ -3902,12 +5109,23 @@ export def "processor-identity-get get" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/processor/identity/get")
+  let full_url = (build-url $base "/processor/identity/get" $auth.query)
   let req_body = {"client_id": $client_id, "processor_token": $processor_token, "secret": $secret} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Report whether you initiated an ACH transaction
@@ -3939,12 +5157,23 @@ export def "processor-signal-decision-report create" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/processor/signal/decision/report")
+  let full_url = (build-url $base "/processor/signal/decision/report" $auth.query)
   let req_body = {"amount_instantly_available": $amount_instantly_available, "client_id": $client_id, "client_transaction_id": $client_transaction_id, "days_funds_on_hold": $days_funds_on_hold, "decision_outcome": $decision_outcome, "initiated": $initiated, "payment_method": $payment_method, "processor_token": $processor_token, "secret": $secret} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Evaluate a planned ACH transaction
@@ -3980,12 +5209,23 @@ export def "processor-signal-evaluate create" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/processor/signal/evaluate")
+  let full_url = (build-url $base "/processor/signal/evaluate" $auth.query)
   let req_body = {"amount": $amount, "client_id": $client_id, "client_transaction_id": $client_transaction_id, "client_user_id": $client_user_id, "default_payment_method": $default_payment_method, "device": $device, "is_recurring": $is_recurring, "processor_token": $processor_token, "secret": $secret, "user": $user, "user_present": $user_present} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Report a return for an ACH transaction
@@ -4014,12 +5254,23 @@ export def "processor-signal-return-report create" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/processor/signal/return/report")
+  let full_url = (build-url $base "/processor/signal/return/report" $auth.query)
   let req_body = {"client_id": $client_id, "client_transaction_id": $client_transaction_id, "processor_token": $processor_token, "return_code": $return_code, "returned_at": $returned_at, "secret": $secret} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Create Stripe bank account token
@@ -4046,12 +5297,23 @@ export def "processor-stripe-bank-account-token-create create" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/processor/stripe/bank_account_token/create")
+  let full_url = (build-url $base "/processor/stripe/bank_account_token/create" $auth.query)
   let req_body = {"access_token": $access_token, "account_id": $account_id, "client_id": $client_id, "secret": $secret} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Create processor token
@@ -4079,12 +5341,23 @@ export def "processor-token-create create" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/processor/token/create")
+  let full_url = (build-url $base "/processor/token/create" $auth.query)
   let req_body = {"access_token": $access_token, "account_id": $account_id, "client_id": $client_id, "processor": $processor, "secret": $secret} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Manually fire a Bank Transfer webhook
@@ -4110,12 +5383,23 @@ export def "sandbox-bank-transfer-fire-webhook create" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/sandbox/bank_transfer/fire_webhook")
+  let full_url = (build-url $base "/sandbox/bank_transfer/fire_webhook" $auth.query)
   let req_body = {"client_id": $client_id, "secret": $secret, "webhook": $webhook} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Simulate a bank transfer event in Sandbox
@@ -4144,12 +5428,23 @@ export def "sandbox-bank-transfer-simulate create" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/sandbox/bank_transfer/simulate")
+  let full_url = (build-url $base "/sandbox/bank_transfer/simulate" $auth.query)
   let req_body = {"bank_transfer_id": $bank_transfer_id, "client_id": $client_id, "event_type": $event_type, "failure_reason": $failure_reason, "secret": $secret} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Manually fire an Income webhook
@@ -4178,12 +5473,23 @@ export def "sandbox-income-fire-webhook create" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/sandbox/income/fire_webhook")
+  let full_url = (build-url $base "/sandbox/income/fire_webhook" $auth.query)
   let req_body = {"client_id": $client_id, "item_id": $item_id, "secret": $secret, "user_id": $user_id, "verification_status": $verification_status, "webhook": $webhook} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Fire a test webhook
@@ -4211,12 +5517,23 @@ export def "sandbox-item-fire-webhook create" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/sandbox/item/fire_webhook")
+  let full_url = (build-url $base "/sandbox/item/fire_webhook" $auth.query)
   let req_body = {"access_token": $access_token, "client_id": $client_id, "secret": $secret, "webhook_code": $webhook_code, "webhook_type": $webhook_type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Force a Sandbox Item into an error state
@@ -4242,12 +5559,23 @@ export def "sandbox-item-reset-login reset" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/sandbox/item/reset_login")
+  let full_url = (build-url $base "/sandbox/item/reset_login" $auth.query)
   let req_body = {"access_token": $access_token, "client_id": $client_id, "secret": $secret} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Set verification status for Sandbox account
@@ -4275,12 +5603,23 @@ export def "sandbox-item-set-verification-status update" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/sandbox/item/set_verification_status")
+  let full_url = (build-url $base "/sandbox/item/set_verification_status" $auth.query)
   let req_body = {"access_token": $access_token, "account_id": $account_id, "client_id": $client_id, "secret": $secret, "verification_status": $verification_status} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Save the selected accounts when connecting to the Platypus Oauth institution
@@ -4304,12 +5643,23 @@ export def "sandbox-oauth-select-accounts create" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/sandbox/oauth/select_accounts")
+  let full_url = (build-url $base "/sandbox/oauth/select_accounts" $auth.query)
   let req_body = {"accounts": $accounts, "oauth_state_id": $oauth_state_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Reset the login of a Payment Profile
@@ -4335,12 +5685,23 @@ export def "sandbox-payment-profile-reset-login reset" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/sandbox/payment_profile/reset_login")
+  let full_url = (build-url $base "/sandbox/payment_profile/reset_login" $auth.query)
   let req_body = {"client_id": $client_id, "payment_profile_token": $payment_profile_token, "secret": $secret} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Create a test Item and processor token
@@ -4368,12 +5729,23 @@ export def "sandbox-processor-token-create create" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/sandbox/processor_token/create")
+  let full_url = (build-url $base "/sandbox/processor_token/create" $auth.query)
   let req_body = {"client_id": $client_id, "institution_id": $institution_id, "options": $options, "secret": $secret} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Create a test Item
@@ -4403,12 +5775,23 @@ export def "sandbox-public-token-create create" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/sandbox/public_token/create")
+  let full_url = (build-url $base "/sandbox/public_token/create" $auth.query)
   let req_body = {"client_id": $client_id, "initial_products": $initial_products, "institution_id": $institution_id, "options": $options, "secret": $secret, "user_token": $user_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Manually fire a Transfer webhook
@@ -4434,12 +5817,23 @@ export def "sandbox-transfer-fire-webhook create" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/sandbox/transfer/fire_webhook")
+  let full_url = (build-url $base "/sandbox/transfer/fire_webhook" $auth.query)
   let req_body = {"client_id": $client_id, "secret": $secret, "webhook": $webhook} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Trigger the creation of a repayment
@@ -4464,12 +5858,23 @@ export def "sandbox-transfer-repayment-simulate create" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/sandbox/transfer/repayment/simulate")
+  let full_url = (build-url $base "/sandbox/transfer/repayment/simulate" $auth.query)
   let req_body = {"client_id": $client_id, "secret": $secret} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Simulate a transfer event in Sandbox
@@ -4498,12 +5903,23 @@ export def "sandbox-transfer-simulate create" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/sandbox/transfer/simulate")
+  let full_url = (build-url $base "/sandbox/transfer/simulate" $auth.query)
   let req_body = {"client_id": $client_id, "event_type": $event_type, "failure_reason": $failure_reason, "secret": $secret, "transfer_id": $transfer_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Simulate creating a sweep
@@ -4528,12 +5944,23 @@ export def "sandbox-transfer-sweep-simulate create" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/sandbox/transfer/sweep/simulate")
+  let full_url = (build-url $base "/sandbox/transfer/sweep/simulate" $auth.query)
   let req_body = {"client_id": $client_id, "secret": $secret} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Advance a test clock
@@ -4560,12 +5987,23 @@ export def "sandbox-transfer-test-clock-advance test" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/sandbox/transfer/test_clock/advance")
+  let full_url = (build-url $base "/sandbox/transfer/test_clock/advance" $auth.query)
   let req_body = {"client_id": $client_id, "new_virtual_time": $new_virtual_time, "secret": $secret, "test_clock_id": $test_clock_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Create a test clock
@@ -4591,12 +6029,23 @@ export def "sandbox-transfer-test-clock-create test" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/sandbox/transfer/test_clock/create")
+  let full_url = (build-url $base "/sandbox/transfer/test_clock/create" $auth.query)
   let req_body = {"client_id": $client_id, "secret": $secret, "virtual_time": $virtual_time} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get a test clock
@@ -4622,12 +6071,23 @@ export def "sandbox-transfer-test-clock-get test" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/sandbox/transfer/test_clock/get")
+  let full_url = (build-url $base "/sandbox/transfer/test_clock/get" $auth.query)
   let req_body = {"client_id": $client_id, "secret": $secret, "test_clock_id": $test_clock_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # List test clocks
@@ -4656,12 +6116,23 @@ export def "sandbox-transfer-test-clock-list test" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/sandbox/transfer/test_clock/list")
+  let full_url = (build-url $base "/sandbox/transfer/test_clock/list" $auth.query)
   let req_body = {"client_id": $client_id, "count": $count, "end_virtual_time": $end_virtual_time, "offset": $offset, "secret": $secret, "start_virtual_time": $start_virtual_time} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Report whether you initiated an ACH transaction
@@ -4692,12 +6163,23 @@ export def "signal-decision-report create" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/signal/decision/report")
+  let full_url = (build-url $base "/signal/decision/report" $auth.query)
   let req_body = {"amount_instantly_available": $amount_instantly_available, "client_id": $client_id, "client_transaction_id": $client_transaction_id, "days_funds_on_hold": $days_funds_on_hold, "decision_outcome": $decision_outcome, "initiated": $initiated, "payment_method": $payment_method, "secret": $secret} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Evaluate a planned ACH transaction
@@ -4734,12 +6216,23 @@ export def "signal-evaluate create" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/signal/evaluate")
+  let full_url = (build-url $base "/signal/evaluate" $auth.query)
   let req_body = {"access_token": $access_token, "account_id": $account_id, "amount": $amount, "client_id": $client_id, "client_transaction_id": $client_transaction_id, "client_user_id": $client_user_id, "default_payment_method": $default_payment_method, "device": $device, "is_recurring": $is_recurring, "secret": $secret, "user": $user, "user_present": $user_present} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Opt-in an Item to Signal
@@ -4765,12 +6258,23 @@ export def "signal-prepare create" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/signal/prepare")
+  let full_url = (build-url $base "/signal/prepare" $auth.query)
   let req_body = {"access_token": $access_token, "client_id": $client_id, "secret": $secret} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Report a return for an ACH transaction
@@ -4798,12 +6302,23 @@ export def "signal-return-report create" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/signal/return/report")
+  let full_url = (build-url $base "/signal/return/report" $auth.query)
   let req_body = {"client_id": $client_id, "client_transaction_id": $client_transaction_id, "return_code": $return_code, "returned_at": $returned_at, "secret": $secret} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Enrich locally-held transaction data
@@ -4833,12 +6348,23 @@ export def "transactions-enrich create" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/transactions/enrich")
+  let full_url = (build-url $base "/transactions/enrich" $auth.query)
   let req_body = {"account_type": $account_type, "client_id": $client_id, "options": $options, "secret": $secret, "transactions": $transactions} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get transaction data
@@ -4868,12 +6394,23 @@ export def "transactions-get get" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/transactions/get")
+  let full_url = (build-url $base "/transactions/get" $auth.query)
   let req_body = {"access_token": $access_token, "client_id": $client_id, "end_date": $end_date, "options": $options, "secret": $secret, "start_date": $start_date} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Fetch recurring transaction streams
@@ -4902,12 +6439,23 @@ export def "transactions-recurring-get get" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/transactions/recurring/get")
+  let full_url = (build-url $base "/transactions/recurring/get" $auth.query)
   let req_body = {"access_token": $access_token, "account_ids": $account_ids, "client_id": $client_id, "options": $options, "secret": $secret} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Refresh transaction data
@@ -4933,12 +6481,23 @@ export def "transactions-refresh refresh" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/transactions/refresh")
+  let full_url = (build-url $base "/transactions/refresh" $auth.query)
   let req_body = {"access_token": $access_token, "client_id": $client_id, "secret": $secret} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get incremental transaction updates on an Item
@@ -4968,12 +6527,23 @@ export def "transactions-sync sync" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/transactions/sync")
+  let full_url = (build-url $base "/transactions/sync" $auth.query)
   let req_body = {"access_token": $access_token, "client_id": $client_id, "count": $count, "cursor": $cursor, "options": $options, "secret": $secret} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Create a transfer authorization
@@ -5018,12 +6588,23 @@ export def "transfer-authorization-create create" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/transfer/authorization/create")
+  let full_url = (build-url $base "/transfer/authorization/create" $auth.query)
   let req_body = {"access_token": $access_token, "account_id": $account_id, "ach_class": $ach_class, "amount": $amount, "beacon_session_id": $beacon_session_id, "client_id": $client_id, "device": $device, "funding_account_id": $funding_account_id, "idempotency_key": $idempotency_key, "iso_currency_code": $iso_currency_code, "network": $network, "origination_account_id": $origination_account_id, "originator_client_id": $originator_client_id, "payment_profile_token": $payment_profile_token, "secret": $secret, "type": $type, "user": $user, "user_present": $user_present, "with_guarantee": $with_guarantee} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Cancel a transfer
@@ -5049,12 +6630,23 @@ export def "transfer-cancel cancel" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/transfer/cancel")
+  let full_url = (build-url $base "/transfer/cancel" $auth.query)
   let req_body = {"client_id": $client_id, "secret": $secret, "transfer_id": $transfer_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get RTP eligibility information of a transfer
@@ -5082,12 +6674,23 @@ export def "transfer-capabilities-get get" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/transfer/capabilities/get")
+  let full_url = (build-url $base "/transfer/capabilities/get" $auth.query)
   let req_body = {"access_token": $access_token, "account_id": $account_id, "client_id": $client_id, "payment_profile_token": $payment_profile_token, "secret": $secret} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Create a transfer
@@ -5134,12 +6737,23 @@ export def "transfer-create create" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/transfer/create")
+  let full_url = (build-url $base "/transfer/create" $auth.query)
   let req_body = {"access_token": $access_token, "account_id": $account_id, "ach_class": $ach_class, "amount": $amount, "authorization_id": $authorization_id, "client_id": $client_id, "description": $description, "idempotency_key": $idempotency_key, "iso_currency_code": $iso_currency_code, "metadata": $metadata, "network": $network, "origination_account_id": $origination_account_id, "payment_profile_token": $payment_profile_token, "secret": $secret, "type": $type, "user": $user} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # List transfer events
@@ -5177,12 +6791,23 @@ export def "transfer-event-list list" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/transfer/event/list")
+  let full_url = (build-url $base "/transfer/event/list" $auth.query)
   let req_body = {"account_id": $account_id, "client_id": $client_id, "count": $count, "end_date": $end_date, "event_types": $event_types, "funding_account_id": $funding_account_id, "offset": $offset, "origination_account_id": $origination_account_id, "originator_client_id": $originator_client_id, "secret": $secret, "start_date": $start_date, "sweep_id": $sweep_id, "transfer_id": $transfer_id, "transfer_type": $transfer_type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Sync transfer events
@@ -5209,12 +6834,23 @@ export def "transfer-event-sync sync" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/transfer/event/sync")
+  let full_url = (build-url $base "/transfer/event/sync" $auth.query)
   let req_body = {"after_id": $after_id, "client_id": $client_id, "count": $count, "secret": $secret} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve a transfer
@@ -5240,12 +6876,23 @@ export def "transfer-get get" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/transfer/get")
+  let full_url = (build-url $base "/transfer/get" $auth.query)
   let req_body = {"client_id": $client_id, "secret": $secret, "transfer_id": $transfer_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Create a transfer intent object to invoke the Transfer UI
@@ -5284,12 +6931,23 @@ export def "transfer-intent-create create" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/transfer/intent/create")
+  let full_url = (build-url $base "/transfer/intent/create" $auth.query)
   let req_body = {"account_id": $account_id, "ach_class": $ach_class, "amount": $amount, "client_id": $client_id, "description": $description, "funding_account_id": $funding_account_id, "iso_currency_code": $iso_currency_code, "metadata": $metadata, "mode": $mode, "network": $network, "origination_account_id": $origination_account_id, "require_guarantee": $require_guarantee, "secret": $secret, "user": $user} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve more information about a transfer intent
@@ -5315,12 +6973,23 @@ export def "transfer-intent-get get" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/transfer/intent/get")
+  let full_url = (build-url $base "/transfer/intent/get" $auth.query)
   let req_body = {"client_id": $client_id, "secret": $secret, "transfer_intent_id": $transfer_intent_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # List transfers
@@ -5353,12 +7022,23 @@ export def "transfer-list list" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/transfer/list")
+  let full_url = (build-url $base "/transfer/list" $auth.query)
   let req_body = {"client_id": $client_id, "count": $count, "end_date": $end_date, "funding_account_id": $funding_account_id, "offset": $offset, "origination_account_id": $origination_account_id, "originator_client_id": $originator_client_id, "secret": $secret, "start_date": $start_date} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Migrate account into Transfers
@@ -5387,12 +7067,23 @@ export def "transfer-migrate-account create" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/transfer/migrate_account")
+  let full_url = (build-url $base "/transfer/migrate_account" $auth.query)
   let req_body = {"account_number": $account_number, "account_type": $account_type, "client_id": $client_id, "routing_number": $routing_number, "secret": $secret, "wire_routing_number": $wire_routing_number} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Create a new originator
@@ -5418,12 +7109,23 @@ export def "transfer-originator-create create" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/transfer/originator/create")
+  let full_url = (build-url $base "/transfer/originator/create" $auth.query)
   let req_body = {"client_id": $client_id, "company_name": $company_name, "secret": $secret} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get status of an originator's onboarding
@@ -5449,12 +7151,23 @@ export def "transfer-originator-get get" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/transfer/originator/get")
+  let full_url = (build-url $base "/transfer/originator/get" $auth.query)
   let req_body = {"client_id": $client_id, "originator_client_id": $originator_client_id, "secret": $secret} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get status of all originators' onboarding
@@ -5481,12 +7194,23 @@ export def "transfer-originator-list list" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/transfer/originator/list")
+  let full_url = (build-url $base "/transfer/originator/list" $auth.query)
   let req_body = {"client_id": $client_id, "count": $count, "offset": $offset, "secret": $secret} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Generate a Plaid-hosted onboarding UI URL.
@@ -5513,12 +7237,23 @@ export def "transfer-questionnaire-create create" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/transfer/questionnaire/create")
+  let full_url = (build-url $base "/transfer/questionnaire/create" $auth.query)
   let req_body = {"client_id": $client_id, "originator_client_id": $originator_client_id, "redirect_uri": $redirect_uri, "secret": $secret} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Cancel a recurring transfer.
@@ -5544,12 +7279,23 @@ export def "transfer-recurring-cancel cancel" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/transfer/recurring/cancel")
+  let full_url = (build-url $base "/transfer/recurring/cancel" $auth.query)
   let req_body = {"client_id": $client_id, "recurring_transfer_id": $recurring_transfer_id, "secret": $secret} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Create a recurring transfer
@@ -5593,12 +7339,23 @@ export def "transfer-recurring-create create" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/transfer/recurring/create")
+  let full_url = (build-url $base "/transfer/recurring/create" $auth.query)
   let req_body = {"access_token": $access_token, "account_id": $account_id, "ach_class": $ach_class, "amount": $amount, "client_id": $client_id, "description": $description, "device": $device, "funding_account_id": $funding_account_id, "idempotency_key": $idempotency_key, "iso_currency_code": $iso_currency_code, "network": $network, "schedule": $schedule, "secret": $secret, "test_clock_id": $test_clock_id, "type": $type, "user": $user, "user_present": $user_present} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve a recurring transfer
@@ -5624,12 +7381,23 @@ export def "transfer-recurring-get get" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/transfer/recurring/get")
+  let full_url = (build-url $base "/transfer/recurring/get" $auth.query)
   let req_body = {"client_id": $client_id, "recurring_transfer_id": $recurring_transfer_id, "secret": $secret} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # List recurring transfers
@@ -5659,12 +7427,23 @@ export def "transfer-recurring-list list" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/transfer/recurring/list")
+  let full_url = (build-url $base "/transfer/recurring/list" $auth.query)
   let req_body = {"client_id": $client_id, "count": $count, "end_time": $end_time, "funding_account_id": $funding_account_id, "offset": $offset, "secret": $secret, "start_time": $start_time} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Cancel a refund
@@ -5690,12 +7469,23 @@ export def "transfer-refund-cancel cancel" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/transfer/refund/cancel")
+  let full_url = (build-url $base "/transfer/refund/cancel" $auth.query)
   let req_body = {"client_id": $client_id, "refund_id": $refund_id, "secret": $secret} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Create a refund
@@ -5723,12 +7513,23 @@ export def "transfer-refund-create create" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/transfer/refund/create")
+  let full_url = (build-url $base "/transfer/refund/create" $auth.query)
   let req_body = {"amount": $amount, "client_id": $client_id, "idempotency_key": $idempotency_key, "secret": $secret, "transfer_id": $transfer_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve a refund
@@ -5754,12 +7555,23 @@ export def "transfer-refund-get get" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/transfer/refund/get")
+  let full_url = (build-url $base "/transfer/refund/get" $auth.query)
   let req_body = {"client_id": $client_id, "refund_id": $refund_id, "secret": $secret} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Lists historical repayments
@@ -5788,12 +7600,23 @@ export def "transfer-repayment-list list" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/transfer/repayment/list")
+  let full_url = (build-url $base "/transfer/repayment/list" $auth.query)
   let req_body = {"client_id": $client_id, "count": $count, "end_date": $end_date, "offset": $offset, "secret": $secret, "start_date": $start_date} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # List the returns included in a repayment
@@ -5821,12 +7644,23 @@ export def "transfer-repayment-return-list list" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/transfer/repayment/return/list")
+  let full_url = (build-url $base "/transfer/repayment/return/list" $auth.query)
   let req_body = {"client_id": $client_id, "count": $count, "offset": $offset, "repayment_id": $repayment_id, "secret": $secret} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve a sweep
@@ -5852,12 +7686,23 @@ export def "transfer-sweep-get get" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/transfer/sweep/get")
+  let full_url = (build-url $base "/transfer/sweep/get" $auth.query)
   let req_body = {"client_id": $client_id, "secret": $secret, "sweep_id": $sweep_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # List sweeps
@@ -5888,12 +7733,23 @@ export def "transfer-sweep-list list" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/transfer/sweep/list")
+  let full_url = (build-url $base "/transfer/sweep/list" $auth.query)
   let req_body = {"client_id": $client_id, "count": $count, "end_date": $end_date, "funding_account_id": $funding_account_id, "offset": $offset, "originator_client_id": $originator_client_id, "secret": $secret, "start_date": $start_date} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Create user
@@ -5919,12 +7775,23 @@ export def "user-create create" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/user/create")
+  let full_url = (build-url $base "/user/create" $auth.query)
   let req_body = {"client_id": $client_id, "client_user_id": $client_user_id, "secret": $secret} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Create an e-wallet
@@ -5950,12 +7817,23 @@ export def "wallet-create create" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/wallet/create")
+  let full_url = (build-url $base "/wallet/create" $auth.query)
   let req_body = {"client_id": $client_id, "iso_currency_code": $iso_currency_code, "secret": $secret} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Fetch an e-wallet
@@ -5981,12 +7859,23 @@ export def "wallet-get get" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/wallet/get")
+  let full_url = (build-url $base "/wallet/get" $auth.query)
   let req_body = {"client_id": $client_id, "secret": $secret, "wallet_id": $wallet_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Fetch a list of e-wallets
@@ -6014,12 +7903,23 @@ export def "wallet-list list" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/wallet/list")
+  let full_url = (build-url $base "/wallet/list" $auth.query)
   let req_body = {"client_id": $client_id, "count": $count, "cursor": $cursor, "iso_currency_code": $iso_currency_code, "secret": $secret} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Execute a transaction using an e-wallet
@@ -6051,12 +7951,23 @@ export def "wallet-transaction-execute create" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/wallet/transaction/execute")
+  let full_url = (build-url $base "/wallet/transaction/execute" $auth.query)
   let req_body = {"amount": $amount, "client_id": $client_id, "counterparty": $counterparty, "idempotency_key": $idempotency_key, "reference": $reference, "secret": $secret, "wallet_id": $wallet_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Fetch an e-wallet transaction
@@ -6082,12 +7993,23 @@ export def "wallet-transaction-get get" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/wallet/transaction/get")
+  let full_url = (build-url $base "/wallet/transaction/get" $auth.query)
   let req_body = {"client_id": $client_id, "secret": $secret, "transaction_id": $transaction_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # List e-wallet transactions
@@ -6117,12 +8039,23 @@ export def "wallet-transaction-list list" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/wallet/transaction/list")
+  let full_url = (build-url $base "/wallet/transaction/list" $auth.query)
   let req_body = {"client_id": $client_id, "count": $count, "cursor": $cursor, "options": $options, "secret": $secret, "wallet_id": $wallet_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Create a watchlist screening for an entity
@@ -6150,12 +8083,23 @@ export def "watchlist-screening-entity-create create" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/watchlist_screening/entity/create")
+  let full_url = (build-url $base "/watchlist_screening/entity/create" $auth.query)
   let req_body = {"client_id": $client_id, "client_user_id": $client_user_id, "search_terms": $search_terms, "secret": $secret} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get an entity screening
@@ -6181,12 +8125,23 @@ export def "watchlist-screening-entity-get get" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/watchlist_screening/entity/get")
+  let full_url = (build-url $base "/watchlist_screening/entity/get" $auth.query)
   let req_body = {"client_id": $client_id, "entity_watchlist_screening_id": $entity_watchlist_screening_id, "secret": $secret} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # List history for entity watchlist screenings
@@ -6213,12 +8168,23 @@ export def "watchlist-screening-entity-history-list list" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/watchlist_screening/entity/history/list")
+  let full_url = (build-url $base "/watchlist_screening/entity/history/list" $auth.query)
   let req_body = {"client_id": $client_id, "cursor": $cursor, "entity_watchlist_screening_id": $entity_watchlist_screening_id, "secret": $secret} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # List hits for entity watchlist screenings
@@ -6245,12 +8211,23 @@ export def "watchlist-screening-entity-hit-list list" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/watchlist_screening/entity/hit/list")
+  let full_url = (build-url $base "/watchlist_screening/entity/hit/list" $auth.query)
   let req_body = {"client_id": $client_id, "cursor": $cursor, "entity_watchlist_screening_id": $entity_watchlist_screening_id, "secret": $secret} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # List entity watchlist screenings
@@ -6280,12 +8257,23 @@ export def "watchlist-screening-entity-list list" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/watchlist_screening/entity/list")
+  let full_url = (build-url $base "/watchlist_screening/entity/list" $auth.query)
   let req_body = {"assignee": $assignee, "client_id": $client_id, "client_user_id": $client_user_id, "cursor": $cursor, "entity_watchlist_program_id": $entity_watchlist_program_id, "secret": $secret, "status": $status} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get entity watchlist screening program
@@ -6311,12 +8299,23 @@ export def "watchlist-screening-entity-program-get get" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/watchlist_screening/entity/program/get")
+  let full_url = (build-url $base "/watchlist_screening/entity/program/get" $auth.query)
   let req_body = {"client_id": $client_id, "entity_watchlist_program_id": $entity_watchlist_program_id, "secret": $secret} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # List entity watchlist screening programs
@@ -6342,12 +8341,23 @@ export def "watchlist-screening-entity-program-list list" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/watchlist_screening/entity/program/list")
+  let full_url = (build-url $base "/watchlist_screening/entity/program/list" $auth.query)
   let req_body = {"client_id": $client_id, "cursor": $cursor, "secret": $secret} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Create a review for an entity watchlist screening
@@ -6376,12 +8386,23 @@ export def "watchlist-screening-entity-review-create create" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/watchlist_screening/entity/review/create")
+  let full_url = (build-url $base "/watchlist_screening/entity/review/create" $auth.query)
   let req_body = {"client_id": $client_id, "comment": $comment, "confirmed_hits": $confirmed_hits, "dismissed_hits": $dismissed_hits, "entity_watchlist_screening_id": $entity_watchlist_screening_id, "secret": $secret} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # List reviews for entity watchlist screenings
@@ -6408,12 +8429,23 @@ export def "watchlist-screening-entity-review-list list" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/watchlist_screening/entity/review/list")
+  let full_url = (build-url $base "/watchlist_screening/entity/review/list" $auth.query)
   let req_body = {"client_id": $client_id, "cursor": $cursor, "entity_watchlist_screening_id": $entity_watchlist_screening_id, "secret": $secret} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Update an entity screening
@@ -6445,12 +8477,23 @@ export def "watchlist-screening-entity-update update" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/watchlist_screening/entity/update")
+  let full_url = (build-url $base "/watchlist_screening/entity/update" $auth.query)
   let req_body = {"assignee": $assignee, "client_id": $client_id, "client_user_id": $client_user_id, "entity_watchlist_screening_id": $entity_watchlist_screening_id, "reset_fields": $reset_fields, "search_terms": $search_terms, "secret": $secret, "status": $status} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Create a watchlist screening for a person
@@ -6478,12 +8521,23 @@ export def "watchlist-screening-individual-create create" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/watchlist_screening/individual/create")
+  let full_url = (build-url $base "/watchlist_screening/individual/create" $auth.query)
   let req_body = {"client_id": $client_id, "client_user_id": $client_user_id, "search_terms": $search_terms, "secret": $secret} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve an individual watchlist screening
@@ -6509,12 +8563,23 @@ export def "watchlist-screening-individual-get get" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/watchlist_screening/individual/get")
+  let full_url = (build-url $base "/watchlist_screening/individual/get" $auth.query)
   let req_body = {"client_id": $client_id, "secret": $secret, "watchlist_screening_id": $watchlist_screening_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # List history for individual watchlist screenings
@@ -6541,12 +8606,23 @@ export def "watchlist-screening-individual-history-list list" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/watchlist_screening/individual/history/list")
+  let full_url = (build-url $base "/watchlist_screening/individual/history/list" $auth.query)
   let req_body = {"client_id": $client_id, "cursor": $cursor, "secret": $secret, "watchlist_screening_id": $watchlist_screening_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # List hits for individual watchlist screening
@@ -6573,12 +8649,23 @@ export def "watchlist-screening-individual-hit-list list" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/watchlist_screening/individual/hit/list")
+  let full_url = (build-url $base "/watchlist_screening/individual/hit/list" $auth.query)
   let req_body = {"client_id": $client_id, "cursor": $cursor, "secret": $secret, "watchlist_screening_id": $watchlist_screening_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # List Individual Watchlist Screenings
@@ -6608,12 +8695,23 @@ export def "watchlist-screening-individual-list list" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/watchlist_screening/individual/list")
+  let full_url = (build-url $base "/watchlist_screening/individual/list" $auth.query)
   let req_body = {"assignee": $assignee, "client_id": $client_id, "client_user_id": $client_user_id, "cursor": $cursor, "secret": $secret, "status": $status, "watchlist_program_id": $watchlist_program_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get individual watchlist screening program
@@ -6639,12 +8737,23 @@ export def "watchlist-screening-individual-program-get get" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/watchlist_screening/individual/program/get")
+  let full_url = (build-url $base "/watchlist_screening/individual/program/get" $auth.query)
   let req_body = {"client_id": $client_id, "secret": $secret, "watchlist_program_id": $watchlist_program_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # List individual watchlist screening programs
@@ -6670,12 +8779,23 @@ export def "watchlist-screening-individual-program-list list" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/watchlist_screening/individual/program/list")
+  let full_url = (build-url $base "/watchlist_screening/individual/program/list" $auth.query)
   let req_body = {"client_id": $client_id, "cursor": $cursor, "secret": $secret} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Create a review for an individual watchlist screening
@@ -6704,12 +8824,23 @@ export def "watchlist-screening-individual-review-create create" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/watchlist_screening/individual/review/create")
+  let full_url = (build-url $base "/watchlist_screening/individual/review/create" $auth.query)
   let req_body = {"client_id": $client_id, "comment": $comment, "confirmed_hits": $confirmed_hits, "dismissed_hits": $dismissed_hits, "secret": $secret, "watchlist_screening_id": $watchlist_screening_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # List reviews for individual watchlist screenings
@@ -6736,12 +8867,23 @@ export def "watchlist-screening-individual-review-list list" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/watchlist_screening/individual/review/list")
+  let full_url = (build-url $base "/watchlist_screening/individual/review/list" $auth.query)
   let req_body = {"client_id": $client_id, "cursor": $cursor, "secret": $secret, "watchlist_screening_id": $watchlist_screening_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Update individual watchlist screening
@@ -6773,12 +8915,23 @@ export def "watchlist-screening-individual-update update" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/watchlist_screening/individual/update")
+  let full_url = (build-url $base "/watchlist_screening/individual/update" $auth.query)
   let req_body = {"assignee": $assignee, "client_id": $client_id, "client_user_id": $client_user_id, "reset_fields": $reset_fields, "search_terms": $search_terms, "secret": $secret, "status": $status, "watchlist_screening_id": $watchlist_screening_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get webhook verification key
@@ -6804,10 +8957,21 @@ export def "webhook-verification-key-get get" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/webhook_verification_key/get")
+  let full_url = (build-url $base "/webhook_verification_key/get" $auth.query)
   let req_body = {"client_id": $client_id, "key_id": $key_id, "secret": $secret} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }

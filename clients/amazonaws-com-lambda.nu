@@ -8,7 +8,7 @@ const BASE_URL = "http://lambda.us-east-1.amazonaws.com"
 # `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
 # where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o AWS_LAMBDA_TOKEN | default "" }
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o AWS_LAMBDA_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
@@ -41,14 +41,11 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
-# Trick: `url encode --all` over-encodes, then we decode the four unreserved
-# punctuation chars back. Pre-existing %XX sequences in the input survive
-# because `url encode --all` first turns their % into %25.
 def encode-path-segment [v: any]: nothing -> string {
   $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
-# Serialize an array-typed path parameter (issue 49.A). OpenAPI 3 `style: simple`
+# Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
 # (the default for path params) and Swagger 2 `collectionFormat: csv` both join
 # the elements with a literal comma WITHIN the single path segment, each element
 # RFC-3986-encoded individually (so a comma inside an element stays %2C). Without
@@ -59,51 +56,57 @@ def encode-path-array [v: any]: nothing -> string {
   if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
 }
 
-# Build URL from base, path, and optional query string
-def build-url [base: string, path: string, query?: string]: nothing -> string {
+# Build the request URL from base, path, and any number of pre-encoded query
+# fragments (param serializer output and/or the auth query). Each fragment is an
+# `&`-joinable `key=value` string already percent-encoded by its producer; empty
+# fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
+# delimiters are hand-spliced — and any query already on the base URL is merged in.
+def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
   let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
-  let result = ($parsed | upsert path $full_path)
-  if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
+  let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
+  $parsed | upsert path $full_path | upsert query $query | url join
 }
 
-# Build the dry-run record returned by --dry-run. Shape:
-#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
-#    auth: {scheme, location}}
-# `meta` carries logical-form data (the query record by spec name, the pre-serialization
-# body) that do-request itself cannot reconstruct from its wire-format args.
-def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
-  let m = ($meta | default {})
-  {
-    dry_run: true
-    method: $method
-    url: $url
-    query: ($m | get -o query | default {})
-    headers: $auth.headers
-    body: ($m | get -o body)
-    content_type: $content_type
-    timeout: $timeout
-    auth: {scheme: $auth.scheme, location: $auth.location}
-  }
+# Success policy: did this response succeed? Single source of truth, consulted by
+# handle-response and the HEAD header-unwrap. Empty ok_codes means the spec listed
+# none, so fall back to < 400. Otherwise: any 2xx, plus documented success codes.
+def status-ok [status: int, ok_codes: list<int>]: nothing -> bool {
+  if ($ok_codes | is-empty) { $status < 400 } else { ($status >= 200 and $status < 300) or ($status in $ok_codes) }
 }
 
-# Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
-  let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
-  let timeout = ($max_time | default 30min)
-  let ct = ($content_type | default "application/json")
-  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
-  let resp = match $method {
-    "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
-  }
-  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
-  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
+# Unwrap a `--full` HTTP response into the user-facing value. Response arrives
+# via pipeline; ok_codes gates the error throw (see status-ok).
+def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: record -> any {
+  let resp = $in
+  if $allow_errors { return $resp }
+  if not (status-ok $resp.status $ok_codes) { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } }
+  if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
+  if $resp.status == 204 { return null }
+  $resp.body
+}
+
+# GET — bodyless, honours --raw
+def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+}
+
+# POST — body + content-type
+def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# PUT — body + content-type
+def send-put [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http put --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http put --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# DELETE — body via --data
+def send-delete [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http delete --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url } else { http delete --headers $req.headers --content-type $req.content_type --data $body --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url }
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 def base-url-completer [] { ["http://lambda.us-east-1.amazonaws.com" "http://lambda.us-east-2.amazonaws.com" "http://lambda.us-west-1.amazonaws.com" "http://lambda.us-west-2.amazonaws.com" "http://lambda.us-gov-west-1.amazonaws.com" "http://lambda.us-gov-east-1.amazonaws.com" "http://lambda.ca-central-1.amazonaws.com" "http://lambda.eu-north-1.amazonaws.com" "http://lambda.eu-west-1.amazonaws.com" "http://lambda.eu-west-2.amazonaws.com" "http://lambda.eu-west-3.amazonaws.com" "http://lambda.eu-central-1.amazonaws.com" "http://lambda.eu-south-1.amazonaws.com" "http://lambda.af-south-1.amazonaws.com" "http://lambda.ap-northeast-1.amazonaws.com" "http://lambda.ap-northeast-2.amazonaws.com" "http://lambda.ap-northeast-3.amazonaws.com" "http://lambda.ap-southeast-1.amazonaws.com" "http://lambda.ap-southeast-2.amazonaws.com" "http://lambda.ap-east-1.amazonaws.com" "http://lambda.ap-south-1.amazonaws.com" "http://lambda.sa-east-1.amazonaws.com" "http://lambda.me-south-1.amazonaws.com" "https://lambda.us-east-1.amazonaws.com" "https://lambda.us-east-2.amazonaws.com" "https://lambda.us-west-1.amazonaws.com" "https://lambda.us-west-2.amazonaws.com" "https://lambda.us-gov-west-1.amazonaws.com" "https://lambda.us-gov-east-1.amazonaws.com" "https://lambda.ca-central-1.amazonaws.com" "https://lambda.eu-north-1.amazonaws.com" "https://lambda.eu-west-1.amazonaws.com" "https://lambda.eu-west-2.amazonaws.com" "https://lambda.eu-west-3.amazonaws.com" "https://lambda.eu-central-1.amazonaws.com" "https://lambda.eu-south-1.amazonaws.com" "https://lambda.af-south-1.amazonaws.com" "https://lambda.ap-northeast-1.amazonaws.com" "https://lambda.ap-northeast-2.amazonaws.com" "https://lambda.ap-northeast-3.amazonaws.com" "https://lambda.ap-southeast-1.amazonaws.com" "https://lambda.ap-southeast-2.amazonaws.com" "https://lambda.ap-east-1.amazonaws.com" "https://lambda.ap-south-1.amazonaws.com" "https://lambda.sa-east-1.amazonaws.com" "https://lambda.me-south-1.amazonaws.com" "http://lambda.cn-north-1.amazonaws.com.cn" "http://lambda.cn-northwest-1.amazonaws.com.cn" "https://lambda.cn-north-1.amazonaws.com.cn" "https://lambda.cn-northwest-1.amazonaws.com.cn"] }
@@ -184,14 +187,25 @@ export def "2018-10-31-layers-versions-policy create-permission" [
   if ($layer_name | is-empty) { error make --unspanned { msg: "path parameter 'LayerName' must be non-empty" } }
   if ($version_number | is-empty) { error make --unspanned { msg: "path parameter 'VersionNumber' must be non-empty" } }
   let qp = [(serialize-qp "RevisionId" $revision_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({layer_name: (encode-path-segment $layer_name), version_number: (encode-path-segment $version_number)} | format pattern "/2018-10-31/layers/{layer_name}/versions/{version_number}/policy") $qp)
+  let full_url = (build-url $base ({layer_name: (encode-path-segment $layer_name), version_number: (encode-path-segment $version_number)} | format pattern "/2018-10-31/layers/{layer_name}/versions/{version_number}/policy") $qp $auth.query)
   let req_body = {"StatementId": $statement_id, "Action": $action, "Principal": $principal, "OrganizationId": $organization_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"RevisionId": $revision_id} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"RevisionId": $revision_id} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Returns the permission policy for a version of an Lambda layer (https://docs.aws.amazon.com/lambda/latest/dg/configuration-layers.html). For more information, see AddLayerVersionPermission.
@@ -222,12 +236,23 @@ export def "2018-10-31-layers-versions-policy get" [
   let base = ($base_url | default $BASE_URL)
   if ($layer_name | is-empty) { error make --unspanned { msg: "path parameter 'LayerName' must be non-empty" } }
   if ($version_number | is-empty) { error make --unspanned { msg: "path parameter 'VersionNumber' must be non-empty" } }
-  let full_url = (build-url $base ({layer_name: (encode-path-segment $layer_name), version_number: (encode-path-segment $version_number)} | format pattern "/2018-10-31/layers/{layer_name}/versions/{version_number}/policy"))
+  let full_url = (build-url $base ({layer_name: (encode-path-segment $layer_name), version_number: (encode-path-segment $version_number)} | format pattern "/2018-10-31/layers/{layer_name}/versions/{version_number}/policy") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Grants an Amazon Web Service, Amazon Web Services account, or Amazon Web Services organization permission to use a function. You can apply the policy at the function level, or specify a qualifier to restrict access to a single version or alias. If you use a qualifier, the invoker must use the full Amazon Resource Name (ARN) of that version or alias to invoke the function. Note: Lambda does not support adding policies to version $LATEST. To grant permission to another account, specify the account ID as the Principal. To grant permission to an organization defined in Organizations, specify the organization ID as the PrincipalOrgID. For Amazon Web Services, the principal is a domain-style identifier that the service defines, such as s3.amazonaws.com or sns.amazonaws.com. For Amazon Web Services, you can also specify the ARN of the associated resource as the SourceArn. If you grant permission to a service principal without specifying the source, other accounts could potentially configure resources in their account to invoke your Lambda function. This operation adds a statement to a resource-based permissions policy for the function. For more information about function policies, see Using resource-based policies for Lambda (https://docs.aws.amazon.com/lambda/latest/dg/access-control-resource-based.html).
@@ -268,14 +293,25 @@ export def "2015-03-31-functions-policy create-permission" [
   let base = ($base_url | default $BASE_URL)
   if ($function_name | is-empty) { error make --unspanned { msg: "path parameter 'FunctionName' must be non-empty" } }
   let qp = [(serialize-qp "Qualifier" $qualifier "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({function_name: (encode-path-segment $function_name)} | format pattern "/2015-03-31/functions/{function_name}/policy") $qp)
+  let full_url = (build-url $base ({function_name: (encode-path-segment $function_name)} | format pattern "/2015-03-31/functions/{function_name}/policy") $qp $auth.query)
   let req_body = {"StatementId": $statement_id, "Action": $action, "Principal": $principal, "SourceArn": $source_arn, "SourceAccount": $source_account, "EventSourceToken": $event_source_token, "RevisionId": $revision_id, "PrincipalOrgID": $principal_org_id, "FunctionUrlAuthType": $function_url_auth_type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"Qualifier": $qualifier} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"Qualifier": $qualifier} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Returns the resource-based IAM policy (https://docs.aws.amazon.com/lambda/latest/dg/access-control-resource-based.html) for a function, version, or alias.
@@ -306,12 +342,23 @@ export def "2015-03-31-functions-policy get" [
   let base = ($base_url | default $BASE_URL)
   if ($function_name | is-empty) { error make --unspanned { msg: "path parameter 'FunctionName' must be non-empty" } }
   let qp = [(serialize-qp "Qualifier" $qualifier "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({function_name: (encode-path-segment $function_name)} | format pattern "/2015-03-31/functions/{function_name}/policy") $qp)
+  let full_url = (build-url $base ({function_name: (encode-path-segment $function_name)} | format pattern "/2015-03-31/functions/{function_name}/policy") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"Qualifier": $qualifier} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"Qualifier": $qualifier} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Creates an alias (https://docs.aws.amazon.com/lambda/latest/dg/configuration-aliases.html) for a Lambda function version. Use aliases to provide clients with a function identifier that you can update to invoke a different version. You can also map an alias to split invocation requests between two versions. Use the RoutingConfig parameter to specify a second version and the percentage of invocation requests that it receives.
@@ -346,14 +393,25 @@ export def "2015-03-31-functions-aliases create-alias" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($function_name | is-empty) { error make --unspanned { msg: "path parameter 'FunctionName' must be non-empty" } }
-  let full_url = (build-url $base ({function_name: (encode-path-segment $function_name)} | format pattern "/2015-03-31/functions/{function_name}/aliases"))
+  let full_url = (build-url $base ({function_name: (encode-path-segment $function_name)} | format pattern "/2015-03-31/functions/{function_name}/aliases") $auth.query)
   let req_body = {"Name": $name, "FunctionVersion": $function_version, "Description": $description, "RoutingConfig": $routing_config} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Returns a list of aliases (https://docs.aws.amazon.com/lambda/latest/dg/configuration-aliases.html) for a Lambda function.
@@ -386,12 +444,23 @@ export def "2015-03-31-functions-aliases list" [
   let base = ($base_url | default $BASE_URL)
   if ($function_name | is-empty) { error make --unspanned { msg: "path parameter 'FunctionName' must be non-empty" } }
   let qp = [(serialize-qp "FunctionVersion" $function_version "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "MaxItems" $max_items "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({function_name: (encode-path-segment $function_name)} | format pattern "/2015-03-31/functions/{function_name}/aliases") $qp)
+  let full_url = (build-url $base ({function_name: (encode-path-segment $function_name)} | format pattern "/2015-03-31/functions/{function_name}/aliases") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"FunctionVersion": $function_version, "Marker": $marker, "MaxItems": $max_items} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"FunctionVersion": $function_version, "Marker": $marker, "MaxItems": $max_items} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Creates a code signing configuration. A code signing configuration (https://docs.aws.amazon.com/lambda/latest/dg/configuration-codesigning.html) defines a list of allowed signing profiles and defines the code-signing validation policy (action to be taken if deployment validation checks fail).
@@ -424,14 +493,25 @@ export def "2020-04-22-code-signing-configs create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/2020-04-22/code-signing-configs/")
+  let full_url = (build-url $base "/2020-04-22/code-signing-configs/" $auth.query)
   let req_body = {"Description": $description, "AllowedPublishers": $allowed_publishers, "CodeSigningPolicies": $code_signing_policies} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Returns a list of code signing configurations (https://docs.aws.amazon.com/lambda/latest/dg/configuring-codesigning.html). A request returns up to 10,000 configurations per call. You can use the MaxItems parameter to return fewer configurations per call.
@@ -461,12 +541,23 @@ export def "2020-04-22-code-signing-configs list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "Marker" $marker "scalar") (serialize-qp "MaxItems" $max_items "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/2020-04-22/code-signing-configs/" $qp)
+  let full_url = (build-url $base "/2020-04-22/code-signing-configs/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"Marker": $marker, "MaxItems": $max_items} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"Marker": $marker, "MaxItems": $max_items} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Creates a mapping between an event source and an Lambda function. Lambda reads items from the event source and invokes the function. For details about how to configure different event sources, see the following topics. Amazon DynamoDB Streams (https://docs.aws.amazon.com/lambda/latest/dg/with-ddb.html#services-dynamodb-eventsourcemapping) Amazon Kinesis (https://docs.aws.amazon.com/lambda/latest/dg/with-kinesis.html#services-kinesis-eventsourcemapping) Amazon SQS (https://docs.aws.amazon.com/lambda/latest/dg/with-sqs.html#events-sqs-eventsource) Amazon MQ and RabbitMQ (https://docs.aws.amazon.com/lambda/latest/dg/with-mq.html#services-mq-eventsourcemapping) Amazon MSK (https://docs.aws.amazon.com/lambda/latest/dg/with-msk.html) Apache Kafka (https://docs.aws.amazon.com/lambda/latest/dg/kafka-smaa.html) Amazon DocumentDB (https://docs.aws.amazon.com/lambda/latest/dg/with-documentdb.html) The following error handling options are available only for stream sources (DynamoDB and Kinesis): BisectBatchOnFunctionError – If the function returns an error, split the batch in two and retry. DestinationConfig – Send discarded records to an Amazon SQS queue or Amazon SNS topic. MaximumRecordAgeInSeconds – Discard records older than the specified age. The default value is infinite (-1). When set to infinite (-1), failed records are retried until the record expires MaximumRetryAttempts – Discard records after the specified number of retries. The default value is infinite (-1). When set to infinite (-1), failed records are retried until the record expires. ParallelizationFactor – Process multiple batches from each shard concurrently. For information about which configuration parameters apply to each event source, see the following topics. Amazon DynamoDB Streams (https://docs.aws.amazon.com/lambda/latest/dg/with-ddb.html#services-ddb-params) Amazon Kinesis (https://docs.aws.amazon.com/lambda/latest/dg/with-kinesis.html#services-kinesis-params) Amazon SQS (https://docs.aws.amazon.com/lambda/latest/dg/with-sqs.html#services-sqs-params) Amazon MQ and RabbitMQ (https://docs.aws.amazon.com/lambda/latest/dg/with-mq.html#services-mq-params) Amazon MSK (https://docs.aws.amazon.com/lambda/latest/dg/with-msk.html#services-msk-parms) Apache Kafka (https://docs.aws.amazon.com/lambda/latest/dg/with-kafka.html#services-kafka-parms) Amazon DocumentDB (https://docs.aws.amazon.com/lambda/latest/dg/with-documentdb.html#docdb-configuration)
@@ -525,14 +616,25 @@ export def "2015-03-31-event-source-mappings create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/2015-03-31/event-source-mappings/")
+  let full_url = (build-url $base "/2015-03-31/event-source-mappings/" $auth.query)
   let req_body = {"EventSourceArn": $event_source_arn, "FunctionName": $function_name, "Enabled": $enabled, "BatchSize": $batch_size, "FilterCriteria": $filter_criteria, "MaximumBatchingWindowInSeconds": $maximum_batching_window_in_seconds, "ParallelizationFactor": $parallelization_factor, "StartingPosition": $starting_position, "StartingPositionTimestamp": $starting_position_timestamp, "DestinationConfig": $destination_config, "MaximumRecordAgeInSeconds": $maximum_record_age_in_seconds, "BisectBatchOnFunctionError": $bisect_batch_on_function_error, "MaximumRetryAttempts": $maximum_retry_attempts, "TumblingWindowInSeconds": $tumbling_window_in_seconds, "Topics": $topics, "Queues": $queues, "SourceAccessConfigurations": $source_access_configurations, "SelfManagedEventSource": $self_managed_event_source, "FunctionResponseTypes": $function_response_types, "AmazonManagedKafkaEventSourceConfig": $amazon_managed_kafka_event_source_config, "SelfManagedKafkaEventSourceConfig": $self_managed_kafka_event_source_config, "ScalingConfig": $scaling_config, "DocumentDBEventSourceConfig": $document_db_event_source_config} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [202]
 }
 
 # Lists event source mappings. Specify an EventSourceArn to show only event source mappings for a single event source.
@@ -564,12 +666,23 @@ export def "2015-03-31-event-source-mappings list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "EventSourceArn" $event_source_arn "scalar") (serialize-qp "FunctionName" $function_name "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "MaxItems" $max_items "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/2015-03-31/event-source-mappings/" $qp)
+  let full_url = (build-url $base "/2015-03-31/event-source-mappings/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"EventSourceArn": $event_source_arn, "FunctionName": $function_name, "Marker": $marker, "MaxItems": $max_items} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"EventSourceArn": $event_source_arn, "FunctionName": $function_name, "Marker": $marker, "MaxItems": $max_items} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Creates a Lambda function. To create a function, you need a deployment package (https://docs.aws.amazon.com/lambda/latest/dg/gettingstarted-package.html) and an execution role (https://docs.aws.amazon.com/lambda/latest/dg/intro-permission-model.html#lambda-intro-execution-role). The deployment package is a .zip file archive or container image that contains your function code. The execution role grants the function permission to use Amazon Web Services, such as Amazon CloudWatch Logs for log streaming and X-Ray for request tracing. If the deployment package is a container image (https://docs.aws.amazon.com/lambda/latest/dg/lambda-images.html), then you set the package type to Image. For a container image, the code property must include the URI of a container image in the Amazon ECR registry. You do not need to specify the handler and runtime properties. If the deployment package is a .zip file archive (https://docs.aws.amazon.com/lambda/latest/dg/gettingstarted-package.html#gettingstarted-package-zip), then you set the package type to Zip. For a .zip file archive, the code property specifies the location of the .zip file. You must also specify the handler and runtime properties. The code in the deployment package must be compatible with the target instruction set architecture of the function (x86-64 or arm64). If you do not specify the architecture, then the default value is x86-64. When you create a function, Lambda provisions an instance of the function and its supporting resources. If your function connects to a VPC, this process can take a minute or so. During this time, you can't invoke or modify the function. The State, StateReason, and StateReasonCode fields in the response from GetFunctionConfiguration indicate when the function is ready to invoke. For more information, see Lambda function states (https://docs.aws.amazon.com/lambda/latest/dg/functions-states.html). A function has an unpublished version, and can have published versions and aliases. The unpublished version changes when you update your function's code and configuration. A published version is a snapshot of your function code and configuration that can't be changed. An alias is a named resource that maps to a version, and can be changed to map to a different version. Use the Publish parameter to create version 1 of your function from its initial configuration. The other parameters let you configure version-specific and function-level settings. You can modify version-specific settings later with UpdateFunctionConfiguration. Function-level settings apply to both the unpublished and published versions of the function, and include tags (TagResource) and per-function concurrency limits (PutFunctionConcurrency). You can use code signing if your deployment package is a .zip file archive. To enable code signing for this function, specify the ARN of a code-signing configuration. When a user attempts to deploy a code package with UpdateFunctionCode, Lambda checks that the code package has a valid signature from a trusted publisher. The code-signing configuration includes set of signing profiles, which define the trusted publishers for this function. If another Amazon Web Services account or an Amazon Web Service invokes your function, use AddPermission to grant permission by creating a resource-based Identity and Access Management (IAM) policy. You can grant permissions at the function level, on a version, or on an alias. To invoke your function directly, use Invoke. To invoke your function in response to events in other Amazon Web Services, create an event source mapping (CreateEventSourceMapping), or configure a function trigger in the other service. For more information, see Invoking Lambda functions (https://docs.aws.amazon.com/lambda/latest/dg/lambda-invocation.html).
@@ -629,14 +742,25 @@ export def "2015-03-31-functions create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/2015-03-31/functions")
+  let full_url = (build-url $base "/2015-03-31/functions" $auth.query)
   let req_body = {"FunctionName": $function_name, "Runtime": $runtime, "Role": $role, "Handler": $handler, "Code": $code, "Description": $description, "Timeout": $timeout, "MemorySize": $memory_size, "Publish": $publish, "VpcConfig": $vpc_config, "PackageType": $package_type, "DeadLetterConfig": $dead_letter_config, "Environment": $environment, "KMSKeyArn": $kms_key_arn, "TracingConfig": $tracing_config, "Tags": $tags, "Layers": $layers, "FileSystemConfigs": $file_system_configs, "ImageConfig": $image_config, "CodeSigningConfigArn": $code_signing_config_arn, "Architectures": $architectures, "EphemeralStorage": $ephemeral_storage, "SnapStart": $snap_start} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Creates a Lambda function URL with the specified configuration parameters. A function URL is a dedicated HTTP(S) endpoint that you can use to invoke your function.
@@ -672,14 +796,25 @@ export def "2021-10-31-functions-url create-config" [
   let base = ($base_url | default $BASE_URL)
   if ($function_name | is-empty) { error make --unspanned { msg: "path parameter 'FunctionName' must be non-empty" } }
   let qp = [(serialize-qp "Qualifier" $qualifier "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({function_name: (encode-path-segment $function_name)} | format pattern "/2021-10-31/functions/{function_name}/url") $qp)
+  let full_url = (build-url $base ({function_name: (encode-path-segment $function_name)} | format pattern "/2021-10-31/functions/{function_name}/url") $qp $auth.query)
   let req_body = {"AuthType": $auth_type, "Cors": $cors, "InvokeMode": $invoke_mode} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"Qualifier": $qualifier} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"Qualifier": $qualifier} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Deletes a Lambda function URL. When you delete a function URL, you can't recover it. Creating a new function URL results in a different URL address.
@@ -710,12 +845,23 @@ export def "2021-10-31-functions-url delete-config" [
   let base = ($base_url | default $BASE_URL)
   if ($function_name | is-empty) { error make --unspanned { msg: "path parameter 'FunctionName' must be non-empty" } }
   let qp = [(serialize-qp "Qualifier" $qualifier "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({function_name: (encode-path-segment $function_name)} | format pattern "/2021-10-31/functions/{function_name}/url") $qp)
+  let full_url = (build-url $base ({function_name: (encode-path-segment $function_name)} | format pattern "/2021-10-31/functions/{function_name}/url") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"Qualifier": $qualifier} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"Qualifier": $qualifier} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Returns details about a Lambda function URL.
@@ -746,12 +892,23 @@ export def "2021-10-31-functions-url get-config" [
   let base = ($base_url | default $BASE_URL)
   if ($function_name | is-empty) { error make --unspanned { msg: "path parameter 'FunctionName' must be non-empty" } }
   let qp = [(serialize-qp "Qualifier" $qualifier "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({function_name: (encode-path-segment $function_name)} | format pattern "/2021-10-31/functions/{function_name}/url") $qp)
+  let full_url = (build-url $base ({function_name: (encode-path-segment $function_name)} | format pattern "/2021-10-31/functions/{function_name}/url") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"Qualifier": $qualifier} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"Qualifier": $qualifier} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates the configuration for a Lambda function URL.
@@ -787,14 +944,25 @@ export def "2021-10-31-functions-url update-config" [
   let base = ($base_url | default $BASE_URL)
   if ($function_name | is-empty) { error make --unspanned { msg: "path parameter 'FunctionName' must be non-empty" } }
   let qp = [(serialize-qp "Qualifier" $qualifier "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({function_name: (encode-path-segment $function_name)} | format pattern "/2021-10-31/functions/{function_name}/url") $qp)
+  let full_url = (build-url $base ({function_name: (encode-path-segment $function_name)} | format pattern "/2021-10-31/functions/{function_name}/url") $qp $auth.query)
   let req_body = {"AuthType": $auth_type, "Cors": $cors, "InvokeMode": $invoke_mode} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"Qualifier": $qualifier} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"Qualifier": $qualifier} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes a Lambda function alias (https://docs.aws.amazon.com/lambda/latest/dg/configuration-aliases.html).
@@ -825,12 +993,23 @@ export def "2015-03-31-functions-aliases delete-alias" [
   let base = ($base_url | default $BASE_URL)
   if ($function_name | is-empty) { error make --unspanned { msg: "path parameter 'FunctionName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'Name' must be non-empty" } }
-  let full_url = (build-url $base ({function_name: (encode-path-segment $function_name), name: (encode-path-segment $name)} | format pattern "/2015-03-31/functions/{function_name}/aliases/{name}"))
+  let full_url = (build-url $base ({function_name: (encode-path-segment $function_name), name: (encode-path-segment $name)} | format pattern "/2015-03-31/functions/{function_name}/aliases/{name}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Returns details about a Lambda function alias (https://docs.aws.amazon.com/lambda/latest/dg/configuration-aliases.html).
@@ -861,12 +1040,23 @@ export def "2015-03-31-functions-aliases get-alias" [
   let base = ($base_url | default $BASE_URL)
   if ($function_name | is-empty) { error make --unspanned { msg: "path parameter 'FunctionName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'Name' must be non-empty" } }
-  let full_url = (build-url $base ({function_name: (encode-path-segment $function_name), name: (encode-path-segment $name)} | format pattern "/2015-03-31/functions/{function_name}/aliases/{name}"))
+  let full_url = (build-url $base ({function_name: (encode-path-segment $function_name), name: (encode-path-segment $name)} | format pattern "/2015-03-31/functions/{function_name}/aliases/{name}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates the configuration of a Lambda function alias (https://docs.aws.amazon.com/lambda/latest/dg/configuration-aliases.html).
@@ -903,14 +1093,25 @@ export def "2015-03-31-functions-aliases update-alias" [
   let base = ($base_url | default $BASE_URL)
   if ($function_name | is-empty) { error make --unspanned { msg: "path parameter 'FunctionName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'Name' must be non-empty" } }
-  let full_url = (build-url $base ({function_name: (encode-path-segment $function_name), name: (encode-path-segment $name)} | format pattern "/2015-03-31/functions/{function_name}/aliases/{name}"))
+  let full_url = (build-url $base ({function_name: (encode-path-segment $function_name), name: (encode-path-segment $name)} | format pattern "/2015-03-31/functions/{function_name}/aliases/{name}") $auth.query)
   let req_body = {"FunctionVersion": $function_version, "Description": $description, "RoutingConfig": $routing_config, "RevisionId": $revision_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes the code signing configuration. You can delete the code signing configuration only if no function is using it.
@@ -939,12 +1140,23 @@ export def "2020-04-22-code-signing-configs delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($code_signing_config_arn | is-empty) { error make --unspanned { msg: "path parameter 'CodeSigningConfigArn' must be non-empty" } }
-  let full_url = (build-url $base ({code_signing_config_arn: (encode-path-segment $code_signing_config_arn)} | format pattern "/2020-04-22/code-signing-configs/{code_signing_config_arn}"))
+  let full_url = (build-url $base ({code_signing_config_arn: (encode-path-segment $code_signing_config_arn)} | format pattern "/2020-04-22/code-signing-configs/{code_signing_config_arn}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Returns information about the specified code signing configuration.
@@ -973,12 +1185,23 @@ export def "2020-04-22-code-signing-configs get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($code_signing_config_arn | is-empty) { error make --unspanned { msg: "path parameter 'CodeSigningConfigArn' must be non-empty" } }
-  let full_url = (build-url $base ({code_signing_config_arn: (encode-path-segment $code_signing_config_arn)} | format pattern "/2020-04-22/code-signing-configs/{code_signing_config_arn}"))
+  let full_url = (build-url $base ({code_signing_config_arn: (encode-path-segment $code_signing_config_arn)} | format pattern "/2020-04-22/code-signing-configs/{code_signing_config_arn}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update the code signing configuration. Changes to the code signing configuration take effect the next time a user tries to deploy a code package to the function.
@@ -1013,14 +1236,25 @@ export def "2020-04-22-code-signing-configs update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($code_signing_config_arn | is-empty) { error make --unspanned { msg: "path parameter 'CodeSigningConfigArn' must be non-empty" } }
-  let full_url = (build-url $base ({code_signing_config_arn: (encode-path-segment $code_signing_config_arn)} | format pattern "/2020-04-22/code-signing-configs/{code_signing_config_arn}"))
+  let full_url = (build-url $base ({code_signing_config_arn: (encode-path-segment $code_signing_config_arn)} | format pattern "/2020-04-22/code-signing-configs/{code_signing_config_arn}") $auth.query)
   let req_body = {"Description": $description, "AllowedPublishers": $allowed_publishers, "CodeSigningPolicies": $code_signing_policies} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes an event source mapping (https://docs.aws.amazon.com/lambda/latest/dg/intro-invocation-modes.html). You can get the identifier of a mapping from the output of ListEventSourceMappings. When you delete an event source mapping, it enters a Deleting state and might not be completely deleted for several seconds.
@@ -1049,12 +1283,23 @@ export def "2015-03-31-event-source-mappings delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($uuid | is-empty) { error make --unspanned { msg: "path parameter 'UUID' must be non-empty" } }
-  let full_url = (build-url $base ({uuid: (encode-path-segment $uuid)} | format pattern "/2015-03-31/event-source-mappings/{uuid}"))
+  let full_url = (build-url $base ({uuid: (encode-path-segment $uuid)} | format pattern "/2015-03-31/event-source-mappings/{uuid}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [202]
 }
 
 # Returns details about an event source mapping. You can get the identifier of a mapping from the output of ListEventSourceMappings.
@@ -1083,12 +1328,23 @@ export def "2015-03-31-event-source-mappings get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($uuid | is-empty) { error make --unspanned { msg: "path parameter 'UUID' must be non-empty" } }
-  let full_url = (build-url $base ({uuid: (encode-path-segment $uuid)} | format pattern "/2015-03-31/event-source-mappings/{uuid}"))
+  let full_url = (build-url $base ({uuid: (encode-path-segment $uuid)} | format pattern "/2015-03-31/event-source-mappings/{uuid}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates an event source mapping. You can change the function that Lambda invokes, or pause invocation and resume later from the same location. For details about how to configure different event sources, see the following topics. Amazon DynamoDB Streams (https://docs.aws.amazon.com/lambda/latest/dg/with-ddb.html#services-dynamodb-eventsourcemapping) Amazon Kinesis (https://docs.aws.amazon.com/lambda/latest/dg/with-kinesis.html#services-kinesis-eventsourcemapping) Amazon SQS (https://docs.aws.amazon.com/lambda/latest/dg/with-sqs.html#events-sqs-eventsource) Amazon MQ and RabbitMQ (https://docs.aws.amazon.com/lambda/latest/dg/with-mq.html#services-mq-eventsourcemapping) Amazon MSK (https://docs.aws.amazon.com/lambda/latest/dg/with-msk.html) Apache Kafka (https://docs.aws.amazon.com/lambda/latest/dg/kafka-smaa.html) Amazon DocumentDB (https://docs.aws.amazon.com/lambda/latest/dg/with-documentdb.html) The following error handling options are available only for stream sources (DynamoDB and Kinesis): BisectBatchOnFunctionError – If the function returns an error, split the batch in two and retry. DestinationConfig – Send discarded records to an Amazon SQS queue or Amazon SNS topic. MaximumRecordAgeInSeconds – Discard records older than the specified age. The default value is infinite (-1). When set to infinite (-1), failed records are retried until the record expires MaximumRetryAttempts – Discard records after the specified number of retries. The default value is infinite (-1). When set to infinite (-1), failed records are retried until the record expires. ParallelizationFactor – Process multiple batches from each shard concurrently. For information about which configuration parameters apply to each event source, see the following topics. Amazon DynamoDB Streams (https://docs.aws.amazon.com/lambda/latest/dg/with-ddb.html#services-ddb-params) Amazon Kinesis (https://docs.aws.amazon.com/lambda/latest/dg/with-kinesis.html#services-kinesis-params) Amazon SQS (https://docs.aws.amazon.com/lambda/latest/dg/with-sqs.html#services-sqs-params) Amazon MQ and RabbitMQ (https://docs.aws.amazon.com/lambda/latest/dg/with-mq.html#services-mq-params) Amazon MSK (https://docs.aws.amazon.com/lambda/latest/dg/with-msk.html#services-msk-parms) Apache Kafka (https://docs.aws.amazon.com/lambda/latest/dg/with-kafka.html#services-kafka-parms) Amazon DocumentDB (https://docs.aws.amazon.com/lambda/latest/dg/with-documentdb.html#docdb-configuration)
@@ -1138,14 +1394,25 @@ export def "2015-03-31-event-source-mappings update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($uuid | is-empty) { error make --unspanned { msg: "path parameter 'UUID' must be non-empty" } }
-  let full_url = (build-url $base ({uuid: (encode-path-segment $uuid)} | format pattern "/2015-03-31/event-source-mappings/{uuid}"))
+  let full_url = (build-url $base ({uuid: (encode-path-segment $uuid)} | format pattern "/2015-03-31/event-source-mappings/{uuid}") $auth.query)
   let req_body = {"FunctionName": $function_name, "Enabled": $enabled, "BatchSize": $batch_size, "FilterCriteria": $filter_criteria, "MaximumBatchingWindowInSeconds": $maximum_batching_window_in_seconds, "DestinationConfig": $destination_config, "MaximumRecordAgeInSeconds": $maximum_record_age_in_seconds, "BisectBatchOnFunctionError": $bisect_batch_on_function_error, "MaximumRetryAttempts": $maximum_retry_attempts, "ParallelizationFactor": $parallelization_factor, "SourceAccessConfigurations": $source_access_configurations, "TumblingWindowInSeconds": $tumbling_window_in_seconds, "FunctionResponseTypes": $function_response_types, "ScalingConfig": $scaling_config, "DocumentDBEventSourceConfig": $document_db_event_source_config} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [202]
 }
 
 # Deletes a Lambda function. To delete a specific function version, use the Qualifier parameter. Otherwise, all versions and aliases are deleted. To delete Lambda event source mappings that invoke a function, use DeleteEventSourceMapping. For Amazon Web Services and resources that invoke your function directly, delete the trigger in the service where you originally configured it.
@@ -1176,12 +1443,23 @@ export def "2015-03-31-functions delete" [
   let base = ($base_url | default $BASE_URL)
   if ($function_name | is-empty) { error make --unspanned { msg: "path parameter 'FunctionName' must be non-empty" } }
   let qp = [(serialize-qp "Qualifier" $qualifier "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({function_name: (encode-path-segment $function_name)} | format pattern "/2015-03-31/functions/{function_name}") $qp)
+  let full_url = (build-url $base ({function_name: (encode-path-segment $function_name)} | format pattern "/2015-03-31/functions/{function_name}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"Qualifier": $qualifier} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"Qualifier": $qualifier} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Returns information about the function or function version, with a link to download the deployment package that's valid for 10 minutes. If you specify a function version, only details that are specific to that version are returned.
@@ -1212,12 +1490,23 @@ export def "2015-03-31-functions get" [
   let base = ($base_url | default $BASE_URL)
   if ($function_name | is-empty) { error make --unspanned { msg: "path parameter 'FunctionName' must be non-empty" } }
   let qp = [(serialize-qp "Qualifier" $qualifier "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({function_name: (encode-path-segment $function_name)} | format pattern "/2015-03-31/functions/{function_name}") $qp)
+  let full_url = (build-url $base ({function_name: (encode-path-segment $function_name)} | format pattern "/2015-03-31/functions/{function_name}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"Qualifier": $qualifier} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"Qualifier": $qualifier} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Removes the code signing configuration from the function.
@@ -1246,12 +1535,23 @@ export def "2020-06-30-functions-code-signing-config delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($function_name | is-empty) { error make --unspanned { msg: "path parameter 'FunctionName' must be non-empty" } }
-  let full_url = (build-url $base ({function_name: (encode-path-segment $function_name)} | format pattern "/2020-06-30/functions/{function_name}/code-signing-config"))
+  let full_url = (build-url $base ({function_name: (encode-path-segment $function_name)} | format pattern "/2020-06-30/functions/{function_name}/code-signing-config") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Returns the code signing configuration for the specified function.
@@ -1280,12 +1580,23 @@ export def "2020-06-30-functions-code-signing-config get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($function_name | is-empty) { error make --unspanned { msg: "path parameter 'FunctionName' must be non-empty" } }
-  let full_url = (build-url $base ({function_name: (encode-path-segment $function_name)} | format pattern "/2020-06-30/functions/{function_name}/code-signing-config"))
+  let full_url = (build-url $base ({function_name: (encode-path-segment $function_name)} | format pattern "/2020-06-30/functions/{function_name}/code-signing-config") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update the code signing configuration for the function. Changes to the code signing configuration take effect the next time a user tries to deploy a code package to the function.
@@ -1316,14 +1627,25 @@ export def "2020-06-30-functions-code-signing-config update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($function_name | is-empty) { error make --unspanned { msg: "path parameter 'FunctionName' must be non-empty" } }
-  let full_url = (build-url $base ({function_name: (encode-path-segment $function_name)} | format pattern "/2020-06-30/functions/{function_name}/code-signing-config"))
+  let full_url = (build-url $base ({function_name: (encode-path-segment $function_name)} | format pattern "/2020-06-30/functions/{function_name}/code-signing-config") $auth.query)
   let req_body = {"CodeSigningConfigArn": $code_signing_config_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Removes a concurrent execution limit from a function.
@@ -1352,12 +1674,23 @@ export def "2017-10-31-functions-concurrency delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($function_name | is-empty) { error make --unspanned { msg: "path parameter 'FunctionName' must be non-empty" } }
-  let full_url = (build-url $base ({function_name: (encode-path-segment $function_name)} | format pattern "/2017-10-31/functions/{function_name}/concurrency"))
+  let full_url = (build-url $base ({function_name: (encode-path-segment $function_name)} | format pattern "/2017-10-31/functions/{function_name}/concurrency") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Sets the maximum number of simultaneous executions for a function, and reserves capacity for that concurrency level. Concurrency settings apply to the function as a whole, including all published versions and the unpublished version. Reserving concurrency both ensures that your function has capacity to process the specified number of events simultaneously, and prevents it from scaling beyond that level. Use GetFunction to see the current setting for a function. Use GetAccountSettings to see your Regional concurrency limit. You can reserve concurrency for as many functions as you like, as long as you leave at least 100 simultaneous executions unreserved for functions that aren't configured with a per-function limit. For more information, see Lambda function scaling (https://docs.aws.amazon.com/lambda/latest/dg/invocation-scaling.html).
@@ -1388,14 +1721,25 @@ export def "2017-10-31-functions-concurrency update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($function_name | is-empty) { error make --unspanned { msg: "path parameter 'FunctionName' must be non-empty" } }
-  let full_url = (build-url $base ({function_name: (encode-path-segment $function_name)} | format pattern "/2017-10-31/functions/{function_name}/concurrency"))
+  let full_url = (build-url $base ({function_name: (encode-path-segment $function_name)} | format pattern "/2017-10-31/functions/{function_name}/concurrency") $auth.query)
   let req_body = {"ReservedConcurrentExecutions": $reserved_concurrent_executions} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes the configuration for asynchronous invocation for a function, version, or alias. To configure options for asynchronous invocation, use PutFunctionEventInvokeConfig.
@@ -1426,12 +1770,23 @@ export def "2019-09-25-functions-event-invoke-config delete" [
   let base = ($base_url | default $BASE_URL)
   if ($function_name | is-empty) { error make --unspanned { msg: "path parameter 'FunctionName' must be non-empty" } }
   let qp = [(serialize-qp "Qualifier" $qualifier "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({function_name: (encode-path-segment $function_name)} | format pattern "/2019-09-25/functions/{function_name}/event-invoke-config") $qp)
+  let full_url = (build-url $base ({function_name: (encode-path-segment $function_name)} | format pattern "/2019-09-25/functions/{function_name}/event-invoke-config") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"Qualifier": $qualifier} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"Qualifier": $qualifier} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Retrieves the configuration for asynchronous invocation for a function, version, or alias. To configure options for asynchronous invocation, use PutFunctionEventInvokeConfig.
@@ -1462,12 +1817,23 @@ export def "2019-09-25-functions-event-invoke-config get" [
   let base = ($base_url | default $BASE_URL)
   if ($function_name | is-empty) { error make --unspanned { msg: "path parameter 'FunctionName' must be non-empty" } }
   let qp = [(serialize-qp "Qualifier" $qualifier "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({function_name: (encode-path-segment $function_name)} | format pattern "/2019-09-25/functions/{function_name}/event-invoke-config") $qp)
+  let full_url = (build-url $base ({function_name: (encode-path-segment $function_name)} | format pattern "/2019-09-25/functions/{function_name}/event-invoke-config") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"Qualifier": $qualifier} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"Qualifier": $qualifier} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Configures options for asynchronous invocation (https://docs.aws.amazon.com/lambda/latest/dg/invocation-async.html) on a function, version, or alias. If a configuration already exists for a function, version, or alias, this operation overwrites it. If you exclude any settings, they are removed. To set one option without affecting existing settings for other options, use UpdateFunctionEventInvokeConfig. By default, Lambda retries an asynchronous invocation twice if the function returns an error. It retains events in a queue for up to six hours. When an event fails all processing attempts or stays in the asynchronous invocation queue for too long, Lambda discards it. To retain discarded events, configure a dead-letter queue with UpdateFunctionConfiguration. To send an invocation record to a queue, topic, function, or event bus, specify a destination (https://docs.aws.amazon.com/lambda/latest/dg/invocation-async.html#invocation-async-destinations). You can configure separate destinations for successful invocations (on-success) and events that fail all processing attempts (on-failure). You can configure destinations in addition to or instead of a dead-letter queue.
@@ -1503,14 +1869,25 @@ export def "2019-09-25-functions-event-invoke-config update-by-function-name" [
   let base = ($base_url | default $BASE_URL)
   if ($function_name | is-empty) { error make --unspanned { msg: "path parameter 'FunctionName' must be non-empty" } }
   let qp = [(serialize-qp "Qualifier" $qualifier "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({function_name: (encode-path-segment $function_name)} | format pattern "/2019-09-25/functions/{function_name}/event-invoke-config") $qp)
+  let full_url = (build-url $base ({function_name: (encode-path-segment $function_name)} | format pattern "/2019-09-25/functions/{function_name}/event-invoke-config") $qp $auth.query)
   let req_body = {"MaximumRetryAttempts": $maximum_retry_attempts, "MaximumEventAgeInSeconds": $maximum_event_age_in_seconds, "DestinationConfig": $destination_config} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"Qualifier": $qualifier} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"Qualifier": $qualifier} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Updates the configuration for asynchronous invocation for a function, version, or alias. To configure options for asynchronous invocation, use PutFunctionEventInvokeConfig.
@@ -1546,14 +1923,25 @@ export def "2019-09-25-functions-event-invoke-config update-by-function-name-1" 
   let base = ($base_url | default $BASE_URL)
   if ($function_name | is-empty) { error make --unspanned { msg: "path parameter 'FunctionName' must be non-empty" } }
   let qp = [(serialize-qp "Qualifier" $qualifier "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({function_name: (encode-path-segment $function_name)} | format pattern "/2019-09-25/functions/{function_name}/event-invoke-config") $qp)
+  let full_url = (build-url $base ({function_name: (encode-path-segment $function_name)} | format pattern "/2019-09-25/functions/{function_name}/event-invoke-config") $qp $auth.query)
   let req_body = {"MaximumRetryAttempts": $maximum_retry_attempts, "MaximumEventAgeInSeconds": $maximum_event_age_in_seconds, "DestinationConfig": $destination_config} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"Qualifier": $qualifier} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"Qualifier": $qualifier} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes a version of an Lambda layer (https://docs.aws.amazon.com/lambda/latest/dg/configuration-layers.html). Deleted versions can no longer be viewed or added to functions. To avoid breaking functions, a copy of the version remains in Lambda until no functions refer to it.
@@ -1584,12 +1972,23 @@ export def "2018-10-31-layers-versions delete" [
   let base = ($base_url | default $BASE_URL)
   if ($layer_name | is-empty) { error make --unspanned { msg: "path parameter 'LayerName' must be non-empty" } }
   if ($version_number | is-empty) { error make --unspanned { msg: "path parameter 'VersionNumber' must be non-empty" } }
-  let full_url = (build-url $base ({layer_name: (encode-path-segment $layer_name), version_number: (encode-path-segment $version_number)} | format pattern "/2018-10-31/layers/{layer_name}/versions/{version_number}"))
+  let full_url = (build-url $base ({layer_name: (encode-path-segment $layer_name), version_number: (encode-path-segment $version_number)} | format pattern "/2018-10-31/layers/{layer_name}/versions/{version_number}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Returns information about a version of an Lambda layer (https://docs.aws.amazon.com/lambda/latest/dg/configuration-layers.html), with a link to download the layer archive that's valid for 10 minutes.
@@ -1620,12 +2019,23 @@ export def "2018-10-31-layers-versions get" [
   let base = ($base_url | default $BASE_URL)
   if ($layer_name | is-empty) { error make --unspanned { msg: "path parameter 'LayerName' must be non-empty" } }
   if ($version_number | is-empty) { error make --unspanned { msg: "path parameter 'VersionNumber' must be non-empty" } }
-  let full_url = (build-url $base ({layer_name: (encode-path-segment $layer_name), version_number: (encode-path-segment $version_number)} | format pattern "/2018-10-31/layers/{layer_name}/versions/{version_number}"))
+  let full_url = (build-url $base ({layer_name: (encode-path-segment $layer_name), version_number: (encode-path-segment $version_number)} | format pattern "/2018-10-31/layers/{layer_name}/versions/{version_number}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes the provisioned concurrency configuration for a function.
@@ -1656,12 +2066,23 @@ export def "2019-09-30-functions-provisioned-concurrency delete-config" [
   let base = ($base_url | default $BASE_URL)
   if ($function_name | is-empty) { error make --unspanned { msg: "path parameter 'FunctionName' must be non-empty" } }
   let qp = [(serialize-qp "Qualifier" $qualifier "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({function_name: (encode-path-segment $function_name)} | format pattern "/2019-09-30/functions/{function_name}/provisioned-concurrency") $qp)
+  let full_url = (build-url $base ({function_name: (encode-path-segment $function_name)} | format pattern "/2019-09-30/functions/{function_name}/provisioned-concurrency") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"Qualifier": $qualifier} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"Qualifier": $qualifier} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Retrieves the provisioned concurrency configuration for a function's alias or version.
@@ -1692,12 +2113,23 @@ export def "2019-09-30-functions-provisioned-concurrency get-config" [
   let base = ($base_url | default $BASE_URL)
   if ($function_name | is-empty) { error make --unspanned { msg: "path parameter 'FunctionName' must be non-empty" } }
   let qp = [(serialize-qp "Qualifier" $qualifier "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({function_name: (encode-path-segment $function_name)} | format pattern "/2019-09-30/functions/{function_name}/provisioned-concurrency") $qp)
+  let full_url = (build-url $base ({function_name: (encode-path-segment $function_name)} | format pattern "/2019-09-30/functions/{function_name}/provisioned-concurrency") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"Qualifier": $qualifier} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"Qualifier": $qualifier} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Adds a provisioned concurrency configuration to a function's alias or version.
@@ -1730,14 +2162,25 @@ export def "2019-09-30-functions-provisioned-concurrency update-config" [
   let base = ($base_url | default $BASE_URL)
   if ($function_name | is-empty) { error make --unspanned { msg: "path parameter 'FunctionName' must be non-empty" } }
   let qp = [(serialize-qp "Qualifier" $qualifier "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({function_name: (encode-path-segment $function_name)} | format pattern "/2019-09-30/functions/{function_name}/provisioned-concurrency") $qp)
+  let full_url = (build-url $base ({function_name: (encode-path-segment $function_name)} | format pattern "/2019-09-30/functions/{function_name}/provisioned-concurrency") $qp $auth.query)
   let req_body = {"ProvisionedConcurrentExecutions": $provisioned_concurrent_executions} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"Qualifier": $qualifier} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"Qualifier": $qualifier} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [202]
 }
 
 # Retrieves details about your account's limits (https://docs.aws.amazon.com/lambda/latest/dg/limits.html) and usage in an Amazon Web Services Region.
@@ -1764,12 +2207,23 @@ export def "2016-08-19-account-settings get" [
 ]: nothing -> record<AccountLimit: record<TotalCodeSize: record, CodeSizeUnzipped: record, CodeSizeZipped: record, ConcurrentExecutions: record, UnreservedConcurrentExecutions: record>, AccountUsage: record<TotalCodeSize: record, FunctionCount: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/2016-08-19/account-settings/")
+  let full_url = (build-url $base "/2016-08-19/account-settings/" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns details about the reserved concurrency configuration for a function. To set a concurrency limit for a function, use PutFunctionConcurrency.
@@ -1798,12 +2252,23 @@ export def "2019-09-30-functions-concurrency get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($function_name | is-empty) { error make --unspanned { msg: "path parameter 'FunctionName' must be non-empty" } }
-  let full_url = (build-url $base ({function_name: (encode-path-segment $function_name)} | format pattern "/2019-09-30/functions/{function_name}/concurrency"))
+  let full_url = (build-url $base ({function_name: (encode-path-segment $function_name)} | format pattern "/2019-09-30/functions/{function_name}/concurrency") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the version-specific settings of a Lambda function or version. The output includes only options that can vary between versions of a function. To modify these settings, use UpdateFunctionConfiguration. To get all of a function's details, including function-level settings, use GetFunction.
@@ -1834,12 +2299,23 @@ export def "2015-03-31-functions-configuration get" [
   let base = ($base_url | default $BASE_URL)
   if ($function_name | is-empty) { error make --unspanned { msg: "path parameter 'FunctionName' must be non-empty" } }
   let qp = [(serialize-qp "Qualifier" $qualifier "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({function_name: (encode-path-segment $function_name)} | format pattern "/2015-03-31/functions/{function_name}/configuration") $qp)
+  let full_url = (build-url $base ({function_name: (encode-path-segment $function_name)} | format pattern "/2015-03-31/functions/{function_name}/configuration") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"Qualifier": $qualifier} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"Qualifier": $qualifier} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Modify the version-specific settings of a Lambda function. When you update a function, Lambda provisions an instance of the function and its supporting resources. If your function connects to a VPC, this process can take a minute. During this time, you can't modify the function, but you can still invoke it. The LastUpdateStatus, LastUpdateStatusReason, and LastUpdateStatusReasonCode fields in the response from GetFunctionConfiguration indicate when the update is complete and the function is processing events with the new configuration. For more information, see Lambda function states (https://docs.aws.amazon.com/lambda/latest/dg/functions-states.html). These settings can vary between versions of a function and are locked when you publish a version. You can't modify the configuration of a published version, only the unpublished version. To configure function concurrency, use PutFunctionConcurrency. To grant invoke permissions to an Amazon Web Services account or Amazon Web Service, use AddPermission.
@@ -1894,14 +2370,25 @@ export def "2015-03-31-functions-configuration update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($function_name | is-empty) { error make --unspanned { msg: "path parameter 'FunctionName' must be non-empty" } }
-  let full_url = (build-url $base ({function_name: (encode-path-segment $function_name)} | format pattern "/2015-03-31/functions/{function_name}/configuration"))
+  let full_url = (build-url $base ({function_name: (encode-path-segment $function_name)} | format pattern "/2015-03-31/functions/{function_name}/configuration") $auth.query)
   let req_body = {"Role": $role, "Handler": $handler, "Description": $description, "Timeout": $timeout, "MemorySize": $memory_size, "VpcConfig": $vpc_config, "Environment": $environment, "Runtime": $runtime, "DeadLetterConfig": $dead_letter_config, "KMSKeyArn": $kms_key_arn, "TracingConfig": $tracing_config, "RevisionId": $revision_id, "Layers": $layers, "FileSystemConfigs": $file_system_configs, "ImageConfig": $image_config, "EphemeralStorage": $ephemeral_storage, "SnapStart": $snap_start} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Returns information about a version of an Lambda layer (https://docs.aws.amazon.com/lambda/latest/dg/configuration-layers.html), with a link to download the layer archive that's valid for 10 minutes.
@@ -1931,12 +2418,23 @@ export def "2018-10-31-layers get-version-by-arn" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "Arn" $arn "scalar") (serialize-qp "find" $find "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/2018-10-31/layers" $qp)
+  let full_url = (build-url $base "/2018-10-31/layers" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"Arn": $arn, "find": $find} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"Arn": $arn, "find": $find} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieves the runtime management configuration for a function's version. If the runtime update mode is Manual, this includes the ARN of the runtime version and the runtime update mode. If the runtime update mode is Auto or Function update, this includes the runtime update mode and null is returned for the ARN. For more information, see Runtime updates (https://docs.aws.amazon.com/lambda/latest/dg/runtimes-update.html).
@@ -1967,12 +2465,23 @@ export def "2021-07-20-functions-runtime-management-config get" [
   let base = ($base_url | default $BASE_URL)
   if ($function_name | is-empty) { error make --unspanned { msg: "path parameter 'FunctionName' must be non-empty" } }
   let qp = [(serialize-qp "Qualifier" $qualifier "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({function_name: (encode-path-segment $function_name)} | format pattern "/2021-07-20/functions/{function_name}/runtime-management-config") $qp)
+  let full_url = (build-url $base ({function_name: (encode-path-segment $function_name)} | format pattern "/2021-07-20/functions/{function_name}/runtime-management-config") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"Qualifier": $qualifier} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"Qualifier": $qualifier} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Sets the runtime management configuration for a function's version. For more information, see Runtime updates (https://docs.aws.amazon.com/lambda/latest/dg/runtimes-update.html).
@@ -2006,14 +2515,25 @@ export def "2021-07-20-functions-runtime-management-config update" [
   let base = ($base_url | default $BASE_URL)
   if ($function_name | is-empty) { error make --unspanned { msg: "path parameter 'FunctionName' must be non-empty" } }
   let qp = [(serialize-qp "Qualifier" $qualifier "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({function_name: (encode-path-segment $function_name)} | format pattern "/2021-07-20/functions/{function_name}/runtime-management-config") $qp)
+  let full_url = (build-url $base ({function_name: (encode-path-segment $function_name)} | format pattern "/2021-07-20/functions/{function_name}/runtime-management-config") $qp $auth.query)
   let req_body = {"UpdateRuntimeOn": $update_runtime_on, "RuntimeVersionArn": $runtime_version_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"Qualifier": $qualifier} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"Qualifier": $qualifier} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Invokes a Lambda function. You can invoke a function synchronously (and wait for the response), or asynchronously. To invoke a function asynchronously, set InvocationType to Event. For synchronous invocation (https://docs.aws.amazon.com/lambda/latest/dg/invocation-sync.html), details about the function response, including errors, are included in the response body and headers. For either invocation type, you can find more information in the execution log (https://docs.aws.amazon.com/lambda/latest/dg/monitoring-functions.html) and trace (https://docs.aws.amazon.com/lambda/latest/dg/lambda-x-ray.html). When an error occurs, your function may be invoked multiple times. Retry behavior varies by error type, client, event source, and invocation type. For example, if you invoke a function asynchronously and it returns an error, Lambda executes the function up to two more times. For more information, see Error handling and automatic retries in Lambda (https://docs.aws.amazon.com/lambda/latest/dg/invocation-retries.html). For asynchronous invocation (https://docs.aws.amazon.com/lambda/latest/dg/invocation-async.html), Lambda adds events to a queue before sending them to your function. If your function does not have enough capacity to keep up with the queue, events may be lost. Occasionally, your function may receive the same event multiple times, even if no error occurs. To retain events that were not processed, configure your function with a dead-letter queue (https://docs.aws.amazon.com/lambda/latest/dg/invocation-async.html#invocation-dlq). The status code in the API response doesn't reflect function errors. Error codes are reserved for errors that prevent your function from executing, such as permissions errors, quota (https://docs.aws.amazon.com/lambda/latest/dg/gettingstarted-limits.html) errors, or issues with your function's code and configuration. For example, Lambda returns TooManyRequestsException if running the function would cause you to exceed a concurrency limit at either the account level (ConcurrentInvocationLimitExceeded) or function level (ReservedFunctionConcurrentInvocationLimitExceeded). For functions with a long timeout, your client might disconnect during synchronous invocation while it waits for a response. Configure your HTTP client, SDK, firewall, proxy, or operating system to allow for long connections with timeout or keep-alive settings. This operation requires permission for the lambda:InvokeFunction (https://docs.aws.amazon.com/IAM/latest/UserGuide/list_awslambda.html) action. For details on how to set up permissions for cross-account invocations, see Granting function access to other accounts (https://docs.aws.amazon.com/lambda/latest/dg/access-control-resource-based.html#permissions-resource-xaccountinvoke).
@@ -2049,14 +2569,25 @@ export def "2015-03-31-functions-invocations create-invoke" [
   let base = ($base_url | default $BASE_URL)
   if ($function_name | is-empty) { error make --unspanned { msg: "path parameter 'FunctionName' must be non-empty" } }
   let qp = [(serialize-qp "Qualifier" $qualifier "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({function_name: (encode-path-segment $function_name)} | format pattern "/2015-03-31/functions/{function_name}/invocations") $qp)
+  let full_url = (build-url $base ({function_name: (encode-path-segment $function_name)} | format pattern "/2015-03-31/functions/{function_name}/invocations") $qp $auth.query)
   let req_body = {"Payload": $payload} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Invocation-Type": $x_amz_invocation_type, "X-Amz-Log-Type": $x_amz_log_type, "X-Amz-Client-Context": $x_amz_client_context} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"Qualifier": $qualifier} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"Qualifier": $qualifier} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # For asynchronous function invocation, use Invoke. Invokes a function asynchronously.
@@ -2089,14 +2620,25 @@ export def "2014-11-13-functions-invoke-async create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($function_name | is-empty) { error make --unspanned { msg: "path parameter 'FunctionName' must be non-empty" } }
-  let full_url = (build-url $base ({function_name: (encode-path-segment $function_name)} | format pattern "/2014-11-13/functions/{function_name}/invoke-async/"))
+  let full_url = (build-url $base ({function_name: (encode-path-segment $function_name)} | format pattern "/2014-11-13/functions/{function_name}/invoke-async/") $auth.query)
   let req_body = {"InvokeArgs": $invoke_args} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [202]
 }
 
 # Configure your Lambda functions to stream response payloads back to clients. For more information, see Configuring a Lambda function to stream responses (https://docs.aws.amazon.com/lambda/latest/dg/configuration-response-streaming.html). This operation requires permission for the lambda:InvokeFunction (https://docs.aws.amazon.com/IAM/latest/UserGuide/list_awslambda.html) action. For details on how to set up permissions for cross-account invocations, see Granting function access to other accounts (https://docs.aws.amazon.com/lambda/latest/dg/access-control-resource-based.html#permissions-resource-xaccountinvoke).
@@ -2132,14 +2674,25 @@ export def "2021-11-15-functions-response-streaming-invocations create-invoke-wi
   let base = ($base_url | default $BASE_URL)
   if ($function_name | is-empty) { error make --unspanned { msg: "path parameter 'FunctionName' must be non-empty" } }
   let qp = [(serialize-qp "Qualifier" $qualifier "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({function_name: (encode-path-segment $function_name)} | format pattern "/2021-11-15/functions/{function_name}/response-streaming-invocations") $qp)
+  let full_url = (build-url $base ({function_name: (encode-path-segment $function_name)} | format pattern "/2021-11-15/functions/{function_name}/response-streaming-invocations") $qp $auth.query)
   let req_body = {"Payload": $payload} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Invocation-Type": $x_amz_invocation_type, "X-Amz-Log-Type": $x_amz_log_type, "X-Amz-Client-Context": $x_amz_client_context} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"Qualifier": $qualifier} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"Qualifier": $qualifier} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieves a list of configurations for asynchronous invocation for a function. To configure options for asynchronous invocation, use PutFunctionEventInvokeConfig.
@@ -2171,12 +2724,23 @@ export def "2019-09-25-functions-event-invoke-config-list list" [
   let base = ($base_url | default $BASE_URL)
   if ($function_name | is-empty) { error make --unspanned { msg: "path parameter 'FunctionName' must be non-empty" } }
   let qp = [(serialize-qp "Marker" $marker "scalar") (serialize-qp "MaxItems" $max_items "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({function_name: (encode-path-segment $function_name)} | format pattern "/2019-09-25/functions/{function_name}/event-invoke-config/list") $qp)
+  let full_url = (build-url $base ({function_name: (encode-path-segment $function_name)} | format pattern "/2019-09-25/functions/{function_name}/event-invoke-config/list") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"Marker": $marker, "MaxItems": $max_items} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"Marker": $marker, "MaxItems": $max_items} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns a list of Lambda function URLs for the specified function.
@@ -2208,12 +2772,23 @@ export def "2021-10-31-functions-urls list-configs" [
   let base = ($base_url | default $BASE_URL)
   if ($function_name | is-empty) { error make --unspanned { msg: "path parameter 'FunctionName' must be non-empty" } }
   let qp = [(serialize-qp "Marker" $marker "scalar") (serialize-qp "MaxItems" $max_items "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({function_name: (encode-path-segment $function_name)} | format pattern "/2021-10-31/functions/{function_name}/urls") $qp)
+  let full_url = (build-url $base ({function_name: (encode-path-segment $function_name)} | format pattern "/2021-10-31/functions/{function_name}/urls") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"Marker": $marker, "MaxItems": $max_items} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"Marker": $marker, "MaxItems": $max_items} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns a list of Lambda functions, with the version-specific configuration of each. Lambda returns up to 50 functions per call. Set FunctionVersion to ALL to include all published versions of each function in addition to the unpublished version. The ListFunctions operation returns a subset of the FunctionConfiguration fields. To get the additional fields (State, StateReasonCode, StateReason, LastUpdateStatus, LastUpdateStatusReason, LastUpdateStatusReasonCode, RuntimeVersionConfig) for a function or version, use GetFunction.
@@ -2245,12 +2820,23 @@ export def "2015-03-31-functions list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "MasterRegion" $master_region "scalar") (serialize-qp "FunctionVersion" $function_version "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "MaxItems" $max_items "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/2015-03-31/functions/" $qp)
+  let full_url = (build-url $base "/2015-03-31/functions/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"MasterRegion": $master_region, "FunctionVersion": $function_version, "Marker": $marker, "MaxItems": $max_items} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"MasterRegion": $master_region, "FunctionVersion": $function_version, "Marker": $marker, "MaxItems": $max_items} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List the functions that use the specified code signing configuration. You can use this method prior to deleting a code signing configuration, to verify that no functions are using it.
@@ -2282,12 +2868,23 @@ export def "2020-04-22-code-signing-configs-functions list" [
   let base = ($base_url | default $BASE_URL)
   if ($code_signing_config_arn | is-empty) { error make --unspanned { msg: "path parameter 'CodeSigningConfigArn' must be non-empty" } }
   let qp = [(serialize-qp "Marker" $marker "scalar") (serialize-qp "MaxItems" $max_items "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({code_signing_config_arn: (encode-path-segment $code_signing_config_arn)} | format pattern "/2020-04-22/code-signing-configs/{code_signing_config_arn}/functions") $qp)
+  let full_url = (build-url $base ({code_signing_config_arn: (encode-path-segment $code_signing_config_arn)} | format pattern "/2020-04-22/code-signing-configs/{code_signing_config_arn}/functions") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"Marker": $marker, "MaxItems": $max_items} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"Marker": $marker, "MaxItems": $max_items} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Lists the versions of an Lambda layer (https://docs.aws.amazon.com/lambda/latest/dg/configuration-layers.html). Versions that have been deleted aren't listed. Specify a runtime identifier (https://docs.aws.amazon.com/lambda/latest/dg/lambda-runtimes.html) to list only versions that indicate that they're compatible with that runtime. Specify a compatible architecture to include only layer versions that are compatible with that architecture.
@@ -2321,12 +2918,23 @@ export def "2018-10-31-layers-versions list" [
   let base = ($base_url | default $BASE_URL)
   if ($layer_name | is-empty) { error make --unspanned { msg: "path parameter 'LayerName' must be non-empty" } }
   let qp = [(serialize-qp "CompatibleRuntime" $compatible_runtime "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "MaxItems" $max_items "scalar") (serialize-qp "CompatibleArchitecture" $compatible_architecture "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({layer_name: (encode-path-segment $layer_name)} | format pattern "/2018-10-31/layers/{layer_name}/versions") $qp)
+  let full_url = (build-url $base ({layer_name: (encode-path-segment $layer_name)} | format pattern "/2018-10-31/layers/{layer_name}/versions") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"CompatibleRuntime": $compatible_runtime, "Marker": $marker, "MaxItems": $max_items, "CompatibleArchitecture": $compatible_architecture} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"CompatibleRuntime": $compatible_runtime, "Marker": $marker, "MaxItems": $max_items, "CompatibleArchitecture": $compatible_architecture} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Creates an Lambda layer (https://docs.aws.amazon.com/lambda/latest/dg/configuration-layers.html) from a ZIP archive. Each time you call PublishLayerVersion with the same layer name, a new version is created. Add layers to your function with CreateFunction or UpdateFunctionConfiguration.
@@ -2362,14 +2970,25 @@ export def "2018-10-31-layers-versions publish" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($layer_name | is-empty) { error make --unspanned { msg: "path parameter 'LayerName' must be non-empty" } }
-  let full_url = (build-url $base ({layer_name: (encode-path-segment $layer_name)} | format pattern "/2018-10-31/layers/{layer_name}/versions"))
+  let full_url = (build-url $base ({layer_name: (encode-path-segment $layer_name)} | format pattern "/2018-10-31/layers/{layer_name}/versions") $auth.query)
   let req_body = {"Description": $description, "Content": $content, "CompatibleRuntimes": $compatible_runtimes, "LicenseInfo": $license_info, "CompatibleArchitectures": $compatible_architectures} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Lists Lambda layers (https://docs.aws.amazon.com/lambda/latest/dg/invocation-layers.html) and shows information about the latest version of each. Specify a runtime identifier (https://docs.aws.amazon.com/lambda/latest/dg/lambda-runtimes.html) to list only layers that indicate that they're compatible with that runtime. Specify a compatible architecture to include only layers that are compatible with that instruction set architecture (https://docs.aws.amazon.com/lambda/latest/dg/foundation-arch.html).
@@ -2401,12 +3020,23 @@ export def "2018-10-31-layers list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "CompatibleRuntime" $compatible_runtime "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "MaxItems" $max_items "scalar") (serialize-qp "CompatibleArchitecture" $compatible_architecture "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/2018-10-31/layers" $qp)
+  let full_url = (build-url $base "/2018-10-31/layers" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"CompatibleRuntime": $compatible_runtime, "Marker": $marker, "MaxItems": $max_items, "CompatibleArchitecture": $compatible_architecture} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"CompatibleRuntime": $compatible_runtime, "Marker": $marker, "MaxItems": $max_items, "CompatibleArchitecture": $compatible_architecture} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieves a list of provisioned concurrency configurations for a function.
@@ -2439,12 +3069,23 @@ export def "2019-09-30-functions-provisioned-concurrency list-configs" [
   let base = ($base_url | default $BASE_URL)
   if ($function_name | is-empty) { error make --unspanned { msg: "path parameter 'FunctionName' must be non-empty" } }
   let qp = [(serialize-qp "Marker" $marker "scalar") (serialize-qp "MaxItems" $max_items "scalar") (serialize-qp "List" $list "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({function_name: (encode-path-segment $function_name)} | format pattern "/2019-09-30/functions/{function_name}/provisioned-concurrency") $qp)
+  let full_url = (build-url $base ({function_name: (encode-path-segment $function_name)} | format pattern "/2019-09-30/functions/{function_name}/provisioned-concurrency") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"Marker": $marker, "MaxItems": $max_items, "List": $list} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"Marker": $marker, "MaxItems": $max_items, "List": $list} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns a function's tags (https://docs.aws.amazon.com/lambda/latest/dg/tagging.html). You can also view tags with GetFunction.
@@ -2473,12 +3114,23 @@ export def "2017-03-31-tags list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($arn | is-empty) { error make --unspanned { msg: "path parameter 'ARN' must be non-empty" } }
-  let full_url = (build-url $base ({arn: (encode-path-segment $arn)} | format pattern "/2017-03-31/tags/{arn}"))
+  let full_url = (build-url $base ({arn: (encode-path-segment $arn)} | format pattern "/2017-03-31/tags/{arn}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Adds tags (https://docs.aws.amazon.com/lambda/latest/dg/tagging.html) to a function.
@@ -2509,14 +3161,25 @@ export def "2017-03-31-tags tag-resource" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($arn | is-empty) { error make --unspanned { msg: "path parameter 'ARN' must be non-empty" } }
-  let full_url = (build-url $base ({arn: (encode-path-segment $arn)} | format pattern "/2017-03-31/tags/{arn}"))
+  let full_url = (build-url $base ({arn: (encode-path-segment $arn)} | format pattern "/2017-03-31/tags/{arn}") $auth.query)
   let req_body = {"Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Returns a list of versions (https://docs.aws.amazon.com/lambda/latest/dg/versioning-aliases.html), with the version-specific configuration of each. Lambda returns up to 50 versions per call.
@@ -2548,12 +3211,23 @@ export def "2015-03-31-functions-versions list" [
   let base = ($base_url | default $BASE_URL)
   if ($function_name | is-empty) { error make --unspanned { msg: "path parameter 'FunctionName' must be non-empty" } }
   let qp = [(serialize-qp "Marker" $marker "scalar") (serialize-qp "MaxItems" $max_items "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({function_name: (encode-path-segment $function_name)} | format pattern "/2015-03-31/functions/{function_name}/versions") $qp)
+  let full_url = (build-url $base ({function_name: (encode-path-segment $function_name)} | format pattern "/2015-03-31/functions/{function_name}/versions") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"Marker": $marker, "MaxItems": $max_items} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"Marker": $marker, "MaxItems": $max_items} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Creates a version (https://docs.aws.amazon.com/lambda/latest/dg/versioning-aliases.html) from the current code and configuration of a function. Use versions to create a snapshot of your function code and configuration that doesn't change. Lambda doesn't publish a version if the function's configuration and code haven't changed since the last version. Use UpdateFunctionCode or UpdateFunctionConfiguration to update the function before publishing a version. Clients can invoke versions directly or with an alias. To create an alias, use CreateAlias.
@@ -2586,14 +3260,25 @@ export def "2015-03-31-functions-versions publish" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($function_name | is-empty) { error make --unspanned { msg: "path parameter 'FunctionName' must be non-empty" } }
-  let full_url = (build-url $base ({function_name: (encode-path-segment $function_name)} | format pattern "/2015-03-31/functions/{function_name}/versions"))
+  let full_url = (build-url $base ({function_name: (encode-path-segment $function_name)} | format pattern "/2015-03-31/functions/{function_name}/versions") $auth.query)
   let req_body = {"CodeSha256": $code_sha256, "Description": $description, "RevisionId": $revision_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Removes a statement from the permissions policy for a version of an Lambda layer (https://docs.aws.amazon.com/lambda/latest/dg/configuration-layers.html). For more information, see AddLayerVersionPermission.
@@ -2628,12 +3313,23 @@ export def "2018-10-31-layers-versions-policy delete-permission" [
   if ($version_number | is-empty) { error make --unspanned { msg: "path parameter 'VersionNumber' must be non-empty" } }
   if ($statement_id | is-empty) { error make --unspanned { msg: "path parameter 'StatementId' must be non-empty" } }
   let qp = [(serialize-qp "RevisionId" $revision_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({layer_name: (encode-path-segment $layer_name), version_number: (encode-path-segment $version_number), statement_id: (encode-path-segment $statement_id)} | format pattern "/2018-10-31/layers/{layer_name}/versions/{version_number}/policy/{statement_id}") $qp)
+  let full_url = (build-url $base ({layer_name: (encode-path-segment $layer_name), version_number: (encode-path-segment $version_number), statement_id: (encode-path-segment $statement_id)} | format pattern "/2018-10-31/layers/{layer_name}/versions/{version_number}/policy/{statement_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"RevisionId": $revision_id} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"RevisionId": $revision_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Revokes function-use permission from an Amazon Web Service or another Amazon Web Services account. You can get the ID of the statement from the output of GetPolicy.
@@ -2667,12 +3363,23 @@ export def "2015-03-31-functions-policy delete-permission" [
   if ($function_name | is-empty) { error make --unspanned { msg: "path parameter 'FunctionName' must be non-empty" } }
   if ($statement_id | is-empty) { error make --unspanned { msg: "path parameter 'StatementId' must be non-empty" } }
   let qp = [(serialize-qp "Qualifier" $qualifier "scalar") (serialize-qp "RevisionId" $revision_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({function_name: (encode-path-segment $function_name), statement_id: (encode-path-segment $statement_id)} | format pattern "/2015-03-31/functions/{function_name}/policy/{statement_id}") $qp)
+  let full_url = (build-url $base ({function_name: (encode-path-segment $function_name), statement_id: (encode-path-segment $statement_id)} | format pattern "/2015-03-31/functions/{function_name}/policy/{statement_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"Qualifier": $qualifier, "RevisionId": $revision_id} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"Qualifier": $qualifier, "RevisionId": $revision_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Removes tags (https://docs.aws.amazon.com/lambda/latest/dg/tagging.html) from a function.
@@ -2703,12 +3410,23 @@ export def "2017-03-31-tags untag-resource" [
   let base = ($base_url | default $BASE_URL)
   if ($arn | is-empty) { error make --unspanned { msg: "path parameter 'ARN' must be non-empty" } }
   let qp = [(serialize-qp "tagKeys" $tag_keys "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({arn: (encode-path-segment $arn)} | format pattern "/2017-03-31/tags/{arn}") $qp)
+  let full_url = (build-url $base ({arn: (encode-path-segment $arn)} | format pattern "/2017-03-31/tags/{arn}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"tagKeys": $tag_keys} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"tagKeys": $tag_keys} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Updates a Lambda function's code. If code signing is enabled for the function, the code package must be signed by a trusted publisher. For more information, see Configuring code signing for Lambda (https://docs.aws.amazon.com/lambda/latest/dg/configuration-codesigning.html). If the function's package type is Image, then you must specify the code package in ImageUri as the URI of a container image (https://docs.aws.amazon.com/lambda/latest/dg/lambda-images.html) in the Amazon ECR registry. If the function's package type is Zip, then you must specify the deployment package as a .zip file archive (https://docs.aws.amazon.com/lambda/latest/dg/gettingstarted-package.html#gettingstarted-package-zip). Enter the Amazon S3 bucket and key of the code .zip file location. You can also provide the function code inline using the ZipFile field. The code in the deployment package must be compatible with the target instruction set architecture of the function (x86-64 or arm64). The function's code is locked when you publish a version. You can't modify the code of a published version, only the unpublished version. For a function defined as a container image, Lambda resolves the image tag to an image digest. In Amazon ECR, if you update the image tag to a new image, Lambda does not automatically update the function.
@@ -2747,12 +3465,23 @@ export def "2015-03-31-functions-code update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($function_name | is-empty) { error make --unspanned { msg: "path parameter 'FunctionName' must be non-empty" } }
-  let full_url = (build-url $base ({function_name: (encode-path-segment $function_name)} | format pattern "/2015-03-31/functions/{function_name}/code"))
+  let full_url = (build-url $base ({function_name: (encode-path-segment $function_name)} | format pattern "/2015-03-31/functions/{function_name}/code") $auth.query)
   let req_body = {"ZipFile": $zip_file, "S3Bucket": $s3_bucket, "S3Key": $s3_key, "S3ObjectVersion": $s3_object_version, "ImageUri": $image_uri, "Publish": $publish, "DryRun": $body_dry_run, "RevisionId": $revision_id, "Architectures": $architectures} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }

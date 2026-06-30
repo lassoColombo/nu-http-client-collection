@@ -8,7 +8,7 @@ const BASE_URL = "https://brain.intellifi.cloud/api"
 # `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
 # where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o BRAIN_WEB_API_TOKEN | default "" }
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o BRAIN_WEB_API_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
@@ -43,14 +43,11 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
-# Trick: `url encode --all` over-encodes, then we decode the four unreserved
-# punctuation chars back. Pre-existing %XX sequences in the input survive
-# because `url encode --all` first turns their % into %25.
 def encode-path-segment [v: any]: nothing -> string {
   $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
-# Serialize an array-typed path parameter (issue 49.A). OpenAPI 3 `style: simple`
+# Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
 # (the default for path params) and Swagger 2 `collectionFormat: csv` both join
 # the elements with a literal comma WITHIN the single path segment, each element
 # RFC-3986-encoded individually (so a comma inside an element stays %2C). Without
@@ -61,60 +58,66 @@ def encode-path-array [v: any]: nothing -> string {
   if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
 }
 
-# Build URL from base, path, and optional query string
-def build-url [base: string, path: string, query?: string]: nothing -> string {
+# Build the request URL from base, path, and any number of pre-encoded query
+# fragments (param serializer output and/or the auth query). Each fragment is an
+# `&`-joinable `key=value` string already percent-encoded by its producer; empty
+# fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
+# delimiters are hand-spliced — and any query already on the base URL is merged in.
+def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
   let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
-  let result = ($parsed | upsert path $full_path)
-  if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
+  let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
+  $parsed | upsert path $full_path | upsert query $query | url join
 }
 
-# Build the dry-run record returned by --dry-run. Shape:
-#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
-#    auth: {scheme, location}}
-# `meta` carries logical-form data (the query record by spec name, the pre-serialization
-# body) that do-request itself cannot reconstruct from its wire-format args.
-def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
-  let m = ($meta | default {})
-  {
-    dry_run: true
-    method: $method
-    url: $url
-    query: ($m | get -o query | default {})
-    headers: $auth.headers
-    body: ($m | get -o body)
-    content_type: $content_type
-    timeout: $timeout
-    auth: {scheme: $auth.scheme, location: $auth.location}
-  }
+# Success policy: did this response succeed? Single source of truth, consulted by
+# handle-response and the HEAD header-unwrap. Empty ok_codes means the spec listed
+# none, so fall back to < 400. Otherwise: any 2xx, plus documented success codes.
+def status-ok [status: int, ok_codes: list<int>]: nothing -> bool {
+  if ($ok_codes | is-empty) { $status < 400 } else { ($status >= 200 and $status < 300) or ($status in $ok_codes) }
 }
 
-# Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
-  let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
-  let timeout = ($max_time | default 30min)
-  let ct = ($content_type | default "application/json")
-  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
-  let resp = match $method {
-    "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
-  }
-  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
-  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
+# Unwrap a `--full` HTTP response into the user-facing value. Response arrives
+# via pipeline; ok_codes gates the error throw (see status-ok).
+def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: record -> any {
+  let resp = $in
+  if $allow_errors { return $resp }
+  if not (status-ok $resp.status $ok_codes) { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } }
+  if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
+  if $resp.status == 204 { return null }
+  $resp.body
+}
+
+# GET — bodyless, honours --raw
+def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+}
+
+# POST — body + content-type
+def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# PUT — body + content-type
+def send-put [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http put --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http put --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# DELETE — body via --data
+def send-delete [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http delete --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url } else { http delete --headers $req.headers --content-type $req.content_type --data $body --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url }
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # Build a `multipart/form-data` envelope per RFC 7578. `file_fields` lists
 # the field names whose value should be read from disk as bytes; every
 # other field is sent as a text part (records/lists JSON-stringified).
-# Returns {content_type, body} ready to pass to `do-request`.
+# Returns {content_type, body}.
 # When `$dry_run` is true, file fields are NOT read from disk — they emit
 # an empty-bytes placeholder so callers can inspect the request shape
-# without the file existing on disk (issue 11.B).
+# without the file existing on disk.
 def build-multipart-body [parts: record, file_fields: list<string>, dry_run: bool = false]: nothing -> record {
   let boundary = $"----nu-(random chars --length 24)"
   let crlf = "\r\n"
@@ -188,10 +191,21 @@ export def "authinfo get" [
 ]: nothing -> record<api_key_id: string, auth_method: string, authenticated: bool, permissions: record<mutate: bool>, url: string, user_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/authinfo")
+  let full_url = (build-url $base "/authinfo" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get all binary large objects (blob)
@@ -235,10 +249,21 @@ export def "blobs get" [
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "after" $after "scalar") (serialize-qp "after_id" $after_id "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "before_id" $before_id "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "from_id" $from_id "scalar") (serialize-qp "id_only" $id_only "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "populate" $populate "scalar") (serialize-qp "results_only" $results_only "scalar") (serialize-qp "select" $select "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "until" $until "scalar") (serialize-qp "until_id" $until_id "scalar") (serialize-qp "timeout_s" $timeout_s "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "time_created" $time_created "scalar") (serialize-qp "time_updated" $time_updated "scalar") (serialize-qp "hash" $hash "scalar") (serialize-qp "blob_key" $blob_key "scalar") (serialize-qp "content_type" $content_type "scalar") (serialize-qp "filename" $filename "scalar") (serialize-qp "time_last_accessed" $time_last_accessed "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/blobs" $qp)
+  let full_url = (build-url $base "/blobs" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"after": $after, "after_id": $after_id, "before": $before, "before_id": $before_id, "from": $qp_from, "from_id": $from_id, "id_only": $id_only, "limit": $limit, "populate": $populate, "results_only": $results_only, "select": $select, "sort": $qp_sort, "until": $until, "until_id": $until_id, "timeout_s": $timeout_s, "id": $id, "time_created": $time_created, "time_updated": $time_updated, "hash": $hash, "blob_key": $blob_key, "content_type": $content_type, "filename": $filename, "time_last_accessed": $time_last_accessed} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"after": $after, "after_id": $after_id, "before": $before, "before_id": $before_id, "from": $qp_from, "from_id": $from_id, "id_only": $id_only, "limit": $limit, "populate": $populate, "results_only": $results_only, "select": $select, "sort": $qp_sort, "until": $until, "until_id": $until_id, "timeout_s": $timeout_s, "id": $id, "time_created": $time_created, "time_updated": $time_updated, "hash": $hash, "blob_key": $blob_key, "content_type": $content_type, "filename": $filename, "time_last_accessed": $time_last_accessed} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create binary large object (blob) metadata
@@ -262,12 +287,23 @@ export def "blobs create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/blobs")
+  let full_url = (build-url $base "/blobs" $auth.query)
   let req_body = {"blob_key": $blob_key, "content_type": $content_type, "filename": $filename} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Delete binary large object (blob)
@@ -289,10 +325,21 @@ export def "blobs delete" [
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/blobs/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/blobs/{id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Get binary large object (blob)
@@ -314,10 +361,21 @@ export def "blobs get-metadata" [
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/blobs/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/blobs/{id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Download a binary large object (blob)
@@ -341,10 +399,21 @@ export def "blobs-download get" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($filename | is-empty) { error make --unspanned { msg: "path parameter 'filename' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), filename: (encode-path-segment $filename)} | format pattern "/blobs/{id}/download/{filename}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), filename: (encode-path-segment $filename)} | format pattern "/blobs/{id}/download/{filename}") $auth.query)
   let accept_val = "image/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create binary large object (blob)
@@ -368,14 +437,25 @@ export def "blobs-upload upload" [
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/blobs/{id}/upload"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/blobs/{id}/upload") $auth.query)
   let req_body = {"file": $file} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body ["file"] $dry_run)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: $mp.content_type
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $mp.body $insecure $raw $allow_errors $full [200]
 }
 
 # Get all events
@@ -417,10 +497,21 @@ export def "events list" [
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "after" $after "scalar") (serialize-qp "after_id" $after_id "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "before_id" $before_id "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "from_id" $from_id "scalar") (serialize-qp "id_only" $id_only "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "populate" $populate "scalar") (serialize-qp "results_only" $results_only "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "until" $until "scalar") (serialize-qp "until_id" $until_id "scalar") (serialize-qp "timeout_s" $timeout_s "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "time_created" $time_created "scalar") (serialize-qp "topic.resource_type" $topic_resource_type "scalar") (serialize-qp "topic.action" $topic_action "scalar") (serialize-qp "topic.resource" $topic_resource "scalar") (serialize-qp "time_event" $time_event "scalar") (serialize-qp "time_expire" $time_expire "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/events" $qp)
+  let full_url = (build-url $base "/events" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"after": $after, "after_id": $after_id, "before": $before, "before_id": $before_id, "from": $qp_from, "from_id": $from_id, "id_only": $id_only, "limit": $limit, "populate": $populate, "results_only": $results_only, "sort": $qp_sort, "until": $until, "until_id": $until_id, "timeout_s": $timeout_s, "id": $id, "time_created": $time_created, "topic.resource_type": $topic_resource_type, "topic.action": $topic_action, "topic.resource": $topic_resource, "time_event": $time_event, "time_expire": $time_expire} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"after": $after, "after_id": $after_id, "before": $before, "before_id": $before_id, "from": $qp_from, "from_id": $from_id, "id_only": $id_only, "limit": $limit, "populate": $populate, "results_only": $results_only, "sort": $qp_sort, "until": $until, "until_id": $until_id, "timeout_s": $timeout_s, "id": $id, "time_created": $time_created, "topic.resource_type": $topic_resource_type, "topic.action": $topic_action, "topic.resource": $topic_resource, "time_event": $time_event, "time_expire": $time_expire} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get event
@@ -442,10 +533,21 @@ export def "events get" [
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/events/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/events/{id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get all items
@@ -501,10 +603,21 @@ export def "items list" [
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "after" $after "scalar") (serialize-qp "after_id" $after_id "scalar") (serialize-qp "after_code" $after_code "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "before_id" $before_id "scalar") (serialize-qp "before_code" $before_code "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "from_id" $from_id "scalar") (serialize-qp "from_code" $from_code "scalar") (serialize-qp "id_only" $id_only "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "populate" $populate "scalar") (serialize-qp "results_only" $results_only "scalar") (serialize-qp "select" $select "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "until" $until "scalar") (serialize-qp "until_id" $until_id "scalar") (serialize-qp "timeout_s" $timeout_s "scalar") (serialize-qp "until_code" $until_code "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "time_created" $time_created "scalar") (serialize-qp "time_updated" $time_updated "scalar") (serialize-qp "code_hex" $code_hex "scalar") (serialize-qp "is_present" $is_present "scalar") (serialize-qp "label" $label "scalar") (serialize-qp "location" $location "scalar") (serialize-qp "metadata" $metadata "scalar") (serialize-qp "move_count" $move_count "scalar") (serialize-qp "protocol" $protocol "scalar") (serialize-qp "sets" $sets "scalar") (serialize-qp "technology" $technology "scalar") (serialize-qp "text" $text "scalar") (serialize-qp "time_last_present" $time_last_present "scalar") (serialize-qp "time_moved" $time_moved "scalar") (serialize-qp "type" $type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/items" $qp)
+  let full_url = (build-url $base "/items" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"after": $after, "after_id": $after_id, "after_code": $after_code, "before": $before, "before_id": $before_id, "before_code": $before_code, "from": $qp_from, "from_id": $from_id, "from_code": $from_code, "id_only": $id_only, "limit": $limit, "populate": $populate, "results_only": $results_only, "select": $select, "sort": $qp_sort, "until": $until, "until_id": $until_id, "timeout_s": $timeout_s, "until_code": $until_code, "id": $id, "time_created": $time_created, "time_updated": $time_updated, "code_hex": $code_hex, "is_present": $is_present, "label": $label, "location": $location, "metadata": $metadata, "move_count": $move_count, "protocol": $protocol, "sets": $sets, "technology": $technology, "text": $text, "time_last_present": $time_last_present, "time_moved": $time_moved, "type": $type} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"after": $after, "after_id": $after_id, "after_code": $after_code, "before": $before, "before_id": $before_id, "before_code": $before_code, "from": $qp_from, "from_id": $from_id, "from_code": $from_code, "id_only": $id_only, "limit": $limit, "populate": $populate, "results_only": $results_only, "select": $select, "sort": $qp_sort, "until": $until, "until_id": $until_id, "timeout_s": $timeout_s, "until_code": $until_code, "id": $id, "time_created": $time_created, "time_updated": $time_updated, "code_hex": $code_hex, "is_present": $is_present, "label": $label, "location": $location, "metadata": $metadata, "move_count": $move_count, "protocol": $protocol, "sets": $sets, "technology": $technology, "text": $text, "time_last_present": $time_last_present, "time_moved": $time_moved, "type": $type} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create item
@@ -534,12 +647,23 @@ export def "items create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/items")
+  let full_url = (build-url $base "/items" $auth.query)
   let req_body = {"config_request": $config_request, "custom": $custom, "label": $label, "location_request": $location_request, "metadata": $metadata, "code_hex": $code_hex, "protocol": $protocol, "technology": $technology, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Delete item
@@ -561,10 +685,21 @@ export def "items delete" [
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/items/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/items/{id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Get item
@@ -586,10 +721,21 @@ export def "items get" [
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/items/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/items/{id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update existing item
@@ -617,12 +763,23 @@ export def "items update" [
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/items/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/items/{id}") $auth.query)
   let req_body = {"config_request": $config_request, "custom": $custom, "label": $label, "location_request": $location_request, "metadata": $metadata} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get all keys
@@ -664,10 +821,21 @@ export def "keys list" [
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "after" $after "scalar") (serialize-qp "after_id" $after_id "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "before_id" $before_id "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "from_id" $from_id "scalar") (serialize-qp "id_only" $id_only "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "populate" $populate "scalar") (serialize-qp "results_only" $results_only "scalar") (serialize-qp "select" $select "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "until" $until "scalar") (serialize-qp "until_id" $until_id "scalar") (serialize-qp "timeout_s" $timeout_s "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "time_created" $time_created "scalar") (serialize-qp "time_updated" $time_updated "scalar") (serialize-qp "secret" $secret "scalar") (serialize-qp "label" $label "scalar") (serialize-qp "is_read_only" $is_read_only "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/keys" $qp)
+  let full_url = (build-url $base "/keys" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"after": $after, "after_id": $after_id, "before": $before, "before_id": $before_id, "from": $qp_from, "from_id": $from_id, "id_only": $id_only, "limit": $limit, "populate": $populate, "results_only": $results_only, "select": $select, "sort": $qp_sort, "until": $until, "until_id": $until_id, "timeout_s": $timeout_s, "id": $id, "time_created": $time_created, "time_updated": $time_updated, "secret": $secret, "label": $label, "is_read_only": $is_read_only} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"after": $after, "after_id": $after_id, "before": $before, "before_id": $before_id, "from": $qp_from, "from_id": $from_id, "id_only": $id_only, "limit": $limit, "populate": $populate, "results_only": $results_only, "select": $select, "sort": $qp_sort, "until": $until, "until_id": $until_id, "timeout_s": $timeout_s, "id": $id, "time_created": $time_created, "time_updated": $time_updated, "secret": $secret, "label": $label, "is_read_only": $is_read_only} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create key
@@ -690,12 +858,23 @@ export def "keys create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/keys")
+  let full_url = (build-url $base "/keys" $auth.query)
   let req_body = {"is_read_only": $is_read_only, "label": $label} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Delete key
@@ -717,10 +896,21 @@ export def "keys delete" [
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/keys/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/keys/{id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Get key
@@ -742,10 +932,21 @@ export def "keys get" [
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/keys/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/keys/{id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update existing key
@@ -770,12 +971,23 @@ export def "keys update" [
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/keys/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/keys/{id}") $auth.query)
   let req_body = {"is_read_only": $is_read_only, "label": $label} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get all key-value pairs
@@ -815,10 +1027,21 @@ export def "kvpairs list" [
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "after" $after "scalar") (serialize-qp "after_id" $after_id "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "before_id" $before_id "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "from_id" $from_id "scalar") (serialize-qp "id_only" $id_only "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "populate" $populate "scalar") (serialize-qp "results_only" $results_only "scalar") (serialize-qp "select" $select "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "until" $until "scalar") (serialize-qp "until_id" $until_id "scalar") (serialize-qp "timeout_s" $timeout_s "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "time_created" $time_created "scalar") (serialize-qp "time_updated" $time_updated "scalar") (serialize-qp "kv_key" $kv_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/kvpairs" $qp)
+  let full_url = (build-url $base "/kvpairs" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"after": $after, "after_id": $after_id, "before": $before, "before_id": $before_id, "from": $qp_from, "from_id": $from_id, "id_only": $id_only, "limit": $limit, "populate": $populate, "results_only": $results_only, "select": $select, "sort": $qp_sort, "until": $until, "until_id": $until_id, "timeout_s": $timeout_s, "id": $id, "time_created": $time_created, "time_updated": $time_updated, "kv_key": $kv_key} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"after": $after, "after_id": $after_id, "before": $before, "before_id": $before_id, "from": $qp_from, "from_id": $from_id, "id_only": $id_only, "limit": $limit, "populate": $populate, "results_only": $results_only, "select": $select, "sort": $qp_sort, "until": $until, "until_id": $until_id, "timeout_s": $timeout_s, "id": $id, "time_created": $time_created, "time_updated": $time_updated, "kv_key": $kv_key} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create key-value pair
@@ -841,12 +1064,23 @@ export def "kvpairs create-kv-pairs" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/kvpairs")
+  let full_url = (build-url $base "/kvpairs" $auth.query)
   let req_body = {"kv_value": $kv_value, "kv_key": $kv_key} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Delete key-value pair
@@ -868,10 +1102,21 @@ export def "kvpairs delete-kv-pair" [
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/kvpairs/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/kvpairs/{id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Get key-value pair
@@ -893,10 +1138,21 @@ export def "kvpairs get-kv-pairs" [
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/kvpairs/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/kvpairs/{id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update existing Key-value pair
@@ -920,12 +1176,23 @@ export def "kvpairs update-kv-pair" [
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/kvpairs/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/kvpairs/{id}") $auth.query)
   let req_body = {"kv_value": $kv_value} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get all location rules
@@ -967,10 +1234,21 @@ export def "locationrules get-location-rules" [
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "after" $after "scalar") (serialize-qp "after_id" $after_id "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "before_id" $before_id "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "from_id" $from_id "scalar") (serialize-qp "id_only" $id_only "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "populate" $populate "scalar") (serialize-qp "results_only" $results_only "scalar") (serialize-qp "select" $select "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "until" $until "scalar") (serialize-qp "until_id" $until_id "scalar") (serialize-qp "timeout_s" $timeout_s "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "time_created" $time_created "scalar") (serialize-qp "time_updated" $time_updated "scalar") (serialize-qp "label" $label "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "enabled" $enabled "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/locationrules" $qp)
+  let full_url = (build-url $base "/locationrules" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"after": $after, "after_id": $after_id, "before": $before, "before_id": $before_id, "from": $qp_from, "from_id": $from_id, "id_only": $id_only, "limit": $limit, "populate": $populate, "results_only": $results_only, "select": $select, "sort": $qp_sort, "until": $until, "until_id": $until_id, "timeout_s": $timeout_s, "id": $id, "time_created": $time_created, "time_updated": $time_updated, "label": $label, "type": $type, "enabled": $enabled} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"after": $after, "after_id": $after_id, "before": $before, "before_id": $before_id, "from": $qp_from, "from_id": $from_id, "id_only": $id_only, "limit": $limit, "populate": $populate, "results_only": $results_only, "select": $select, "sort": $qp_sort, "until": $until, "until_id": $until_id, "timeout_s": $timeout_s, "id": $id, "time_created": $time_created, "time_updated": $time_updated, "label": $label, "type": $type, "enabled": $enabled} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create location rule
@@ -997,12 +1275,23 @@ export def "locationrules create-location-rule" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/locationrules")
+  let full_url = (build-url $base "/locationrules" $auth.query)
   let req_body = {"conditions": $conditions, "enabled": $enabled, "label": $label, "parameters": $parameters, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Delete location rule
@@ -1024,10 +1313,21 @@ export def "locationrules delete-location-rule" [
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/locationrules/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/locationrules/{id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Get location rule
@@ -1049,10 +1349,21 @@ export def "locationrules get-location-rule" [
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/locationrules/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/locationrules/{id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update existing location rule
@@ -1081,12 +1392,23 @@ export def "locationrules update-location-rule" [
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/locationrules/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/locationrules/{id}") $auth.query)
   let req_body = {"conditions": $conditions, "enabled": $enabled, "label": $label, "parameters": $parameters, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get all locations
@@ -1128,10 +1450,21 @@ export def "locations list" [
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "after" $after "scalar") (serialize-qp "after_id" $after_id "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "before_id" $before_id "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "from_id" $from_id "scalar") (serialize-qp "id_only" $id_only "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "populate" $populate "scalar") (serialize-qp "results_only" $results_only "scalar") (serialize-qp "select" $select "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "until" $until "scalar") (serialize-qp "until_id" $until_id "scalar") (serialize-qp "timeout_s" $timeout_s "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "time_created" $time_created "scalar") (serialize-qp "time_updated" $time_updated "scalar") (serialize-qp "label" $label "scalar") (serialize-qp "metadata" $metadata "scalar") (serialize-qp "text" $text "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/locations" $qp)
+  let full_url = (build-url $base "/locations" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"after": $after, "after_id": $after_id, "before": $before, "before_id": $before_id, "from": $qp_from, "from_id": $from_id, "id_only": $id_only, "limit": $limit, "populate": $populate, "results_only": $results_only, "select": $select, "sort": $qp_sort, "until": $until, "until_id": $until_id, "timeout_s": $timeout_s, "id": $id, "time_created": $time_created, "time_updated": $time_updated, "label": $label, "metadata": $metadata, "text": $text} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"after": $after, "after_id": $after_id, "before": $before, "before_id": $before_id, "from": $qp_from, "from_id": $from_id, "id_only": $id_only, "limit": $limit, "populate": $populate, "results_only": $results_only, "select": $select, "sort": $qp_sort, "until": $until, "until_id": $until_id, "timeout_s": $timeout_s, "id": $id, "time_created": $time_created, "time_updated": $time_updated, "label": $label, "metadata": $metadata, "text": $text} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create location
@@ -1155,12 +1488,23 @@ export def "locations create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/locations")
+  let full_url = (build-url $base "/locations" $auth.query)
   let req_body = {"custom": $custom, "label": $label, "metadata": $metadata} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Delete location
@@ -1182,10 +1526,21 @@ export def "locations delete" [
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/locations/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/locations/{id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Get location
@@ -1207,10 +1562,21 @@ export def "locations get" [
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/locations/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/locations/{id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update existing location
@@ -1236,12 +1602,23 @@ export def "locations update" [
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/locations/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/locations/{id}") $auth.query)
   let req_body = {"custom": $custom, "label": $label, "metadata": $metadata} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get all presences
@@ -1284,10 +1661,21 @@ export def "presences list" [
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "after" $after "scalar") (serialize-qp "after_id" $after_id "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "before_id" $before_id "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "from_id" $from_id "scalar") (serialize-qp "id_only" $id_only "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "populate" $populate "scalar") (serialize-qp "results_only" $results_only "scalar") (serialize-qp "select" $select "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "until" $until "scalar") (serialize-qp "until_id" $until_id "scalar") (serialize-qp "timeout_s" $timeout_s "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "time_created" $time_created "scalar") (serialize-qp "time_updated" $time_updated "scalar") (serialize-qp "item" $item "scalar") (serialize-qp "location" $location "scalar") (serialize-qp "proximity" $proximity "scalar") (serialize-qp "technology" $technology "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/presences" $qp)
+  let full_url = (build-url $base "/presences" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"after": $after, "after_id": $after_id, "before": $before, "before_id": $before_id, "from": $qp_from, "from_id": $from_id, "id_only": $id_only, "limit": $limit, "populate": $populate, "results_only": $results_only, "select": $select, "sort": $qp_sort, "until": $until, "until_id": $until_id, "timeout_s": $timeout_s, "id": $id, "time_created": $time_created, "time_updated": $time_updated, "item": $item, "location": $location, "proximity": $proximity, "technology": $technology} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"after": $after, "after_id": $after_id, "before": $before, "before_id": $before_id, "from": $qp_from, "from_id": $from_id, "id_only": $id_only, "limit": $limit, "populate": $populate, "results_only": $results_only, "select": $select, "sort": $qp_sort, "until": $until, "until_id": $until_id, "timeout_s": $timeout_s, "id": $id, "time_created": $time_created, "time_updated": $time_updated, "item": $item, "location": $location, "proximity": $proximity, "technology": $technology} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get presence
@@ -1309,10 +1697,21 @@ export def "presences get" [
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/presences/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/presences/{id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get all services
@@ -1352,10 +1751,21 @@ export def "services list" [
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "after" $after "scalar") (serialize-qp "after_id" $after_id "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "before_id" $before_id "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "from_id" $from_id "scalar") (serialize-qp "id_only" $id_only "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "populate" $populate "scalar") (serialize-qp "results_only" $results_only "scalar") (serialize-qp "select" $select "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "until" $until "scalar") (serialize-qp "until_id" $until_id "scalar") (serialize-qp "timeout_s" $timeout_s "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "time_created" $time_created "scalar") (serialize-qp "time_updated" $time_updated "scalar") (serialize-qp "name" $name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/services" $qp)
+  let full_url = (build-url $base "/services" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"after": $after, "after_id": $after_id, "before": $before, "before_id": $before_id, "from": $qp_from, "from_id": $from_id, "id_only": $id_only, "limit": $limit, "populate": $populate, "results_only": $results_only, "select": $select, "sort": $qp_sort, "until": $until, "until_id": $until_id, "timeout_s": $timeout_s, "id": $id, "time_created": $time_created, "time_updated": $time_updated, "name": $name} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"after": $after, "after_id": $after_id, "before": $before, "before_id": $before_id, "from": $qp_from, "from_id": $from_id, "id_only": $id_only, "limit": $limit, "populate": $populate, "results_only": $results_only, "select": $select, "sort": $qp_sort, "until": $until, "until_id": $until_id, "timeout_s": $timeout_s, "id": $id, "time_created": $time_created, "time_updated": $time_updated, "name": $name} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get service
@@ -1377,10 +1787,21 @@ export def "services get" [
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/services/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/services/{id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update existing service
@@ -1405,12 +1826,23 @@ export def "services update" [
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/services/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/services/{id}") $auth.query)
   let req_body = {"config_request": $config_request, "restart_request": $restart_request} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get all item lists
@@ -1454,10 +1886,21 @@ export def "sets-itemlists get-item-lists" [
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "after" $after "scalar") (serialize-qp "after_id" $after_id "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "before_id" $before_id "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "from_id" $from_id "scalar") (serialize-qp "id_only" $id_only "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "populate" $populate "scalar") (serialize-qp "results_only" $results_only "scalar") (serialize-qp "select" $select "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "until" $until "scalar") (serialize-qp "until_id" $until_id "scalar") (serialize-qp "timeout_s" $timeout_s "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "time_created" $time_created "scalar") (serialize-qp "time_updated" $time_updated "scalar") (serialize-qp "label" $label "scalar") (serialize-qp "metadata" $metadata "scalar") (serialize-qp "text" $text "scalar") (serialize-qp "total" $total "scalar") (serialize-qp "sha1" $sha1 "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/sets/itemlists" $qp)
+  let full_url = (build-url $base "/sets/itemlists" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"after": $after, "after_id": $after_id, "before": $before, "before_id": $before_id, "from": $qp_from, "from_id": $from_id, "id_only": $id_only, "limit": $limit, "populate": $populate, "results_only": $results_only, "select": $select, "sort": $qp_sort, "until": $until, "until_id": $until_id, "timeout_s": $timeout_s, "id": $id, "time_created": $time_created, "time_updated": $time_updated, "label": $label, "metadata": $metadata, "text": $text, "total": $total, "sha1": $sha1} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"after": $after, "after_id": $after_id, "before": $before, "before_id": $before_id, "from": $qp_from, "from_id": $from_id, "id_only": $id_only, "limit": $limit, "populate": $populate, "results_only": $results_only, "select": $select, "sort": $qp_sort, "until": $until, "until_id": $until_id, "timeout_s": $timeout_s, "id": $id, "time_created": $time_created, "time_updated": $time_updated, "label": $label, "metadata": $metadata, "text": $text, "total": $total, "sha1": $sha1} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create item list
@@ -1481,12 +1924,23 @@ export def "sets-itemlists create-item-list" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/sets/itemlists")
+  let full_url = (build-url $base "/sets/itemlists" $auth.query)
   let req_body = {"custom": $custom, "label": $label, "metadata": $metadata} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Delete item list
@@ -1508,10 +1962,21 @@ export def "sets-itemlists delete-item" [
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/sets/itemlists/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/sets/itemlists/{id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Get item list
@@ -1533,10 +1998,21 @@ export def "sets-itemlists get-item-list" [
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/sets/itemlists/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/sets/itemlists/{id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update existing item list
@@ -1562,12 +2038,23 @@ export def "sets-itemlists update-item-list" [
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/sets/itemlists/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/sets/itemlists/{id}") $auth.query)
   let req_body = {"custom": $custom, "label": $label, "metadata": $metadata} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get item ids for this list
@@ -1589,10 +2076,21 @@ export def "sets-itemlists-ids get-item-list" [
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/sets/itemlists/{id}/ids"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/sets/itemlists/{id}/ids") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Add items to an existing list
@@ -1616,12 +2114,23 @@ export def "sets-itemlists-ids create-item-list" [
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/sets/itemlists/{id}/ids"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/sets/itemlists/{id}/ids") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Delete item from list
@@ -1645,10 +2154,21 @@ export def "sets-itemlists-ids delete-item-from-item-list" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), item_id: (encode-path-segment $item_id)} | format pattern "/sets/itemlists/{id}/ids/{item_id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), item_id: (encode-path-segment $item_id)} | format pattern "/sets/itemlists/{id}/ids/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Get all spot lists
@@ -1691,10 +2211,21 @@ export def "sets-spotlists get-spot-lists" [
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "after" $after "scalar") (serialize-qp "after_id" $after_id "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "before_id" $before_id "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "from_id" $from_id "scalar") (serialize-qp "id_only" $id_only "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "populate" $populate "scalar") (serialize-qp "results_only" $results_only "scalar") (serialize-qp "select" $select "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "until" $until "scalar") (serialize-qp "until_id" $until_id "scalar") (serialize-qp "timeout_s" $timeout_s "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "time_created" $time_created "scalar") (serialize-qp "time_updated" $time_updated "scalar") (serialize-qp "label" $label "scalar") (serialize-qp "metadata" $metadata "scalar") (serialize-qp "text" $text "scalar") (serialize-qp "total" $total "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/sets/spotlists" $qp)
+  let full_url = (build-url $base "/sets/spotlists" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"after": $after, "after_id": $after_id, "before": $before, "before_id": $before_id, "from": $qp_from, "from_id": $from_id, "id_only": $id_only, "limit": $limit, "populate": $populate, "results_only": $results_only, "select": $select, "sort": $qp_sort, "until": $until, "until_id": $until_id, "timeout_s": $timeout_s, "id": $id, "time_created": $time_created, "time_updated": $time_updated, "label": $label, "metadata": $metadata, "text": $text, "total": $total} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"after": $after, "after_id": $after_id, "before": $before, "before_id": $before_id, "from": $qp_from, "from_id": $from_id, "id_only": $id_only, "limit": $limit, "populate": $populate, "results_only": $results_only, "select": $select, "sort": $qp_sort, "until": $until, "until_id": $until_id, "timeout_s": $timeout_s, "id": $id, "time_created": $time_created, "time_updated": $time_updated, "label": $label, "metadata": $metadata, "text": $text, "total": $total} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create spot list
@@ -1718,12 +2249,23 @@ export def "sets-spotlists create-spot-list" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/sets/spotlists")
+  let full_url = (build-url $base "/sets/spotlists" $auth.query)
   let req_body = {"custom": $custom, "label": $label, "metadata": $metadata} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Delete spot list
@@ -1745,10 +2287,21 @@ export def "sets-spotlists delete-spot-list" [
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/sets/spotlists/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/sets/spotlists/{id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Info for a specific spot list
@@ -1770,10 +2323,21 @@ export def "sets-spotlists get-spot-list" [
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/sets/spotlists/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/sets/spotlists/{id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update existing spot list
@@ -1799,12 +2363,23 @@ export def "sets-spotlists update-spot-list" [
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/sets/spotlists/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/sets/spotlists/{id}") $auth.query)
   let req_body = {"custom": $custom, "label": $label, "metadata": $metadata} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get spot ids for this list
@@ -1826,10 +2401,21 @@ export def "sets-spotlists-ids get-spot-list" [
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/sets/spotlists/{id}/ids"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/sets/spotlists/{id}/ids") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Add spots to an existing list
@@ -1853,12 +2439,23 @@ export def "sets-spotlists-ids create-item-spot-list" [
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/sets/spotlists/{id}/ids"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/sets/spotlists/{id}/ids") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Delete spot from list
@@ -1882,10 +2479,21 @@ export def "sets-spotlists-ids delete-item-from-spot-list" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), item_id: (encode-path-segment $item_id)} | format pattern "/sets/spotlists/{id}/ids/{item_id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), item_id: (encode-path-segment $item_id)} | format pattern "/sets/spotlists/{id}/ids/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Get all spots
@@ -1927,10 +2535,21 @@ export def "spots list" [
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "after" $after "scalar") (serialize-qp "after_id" $after_id "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "before_id" $before_id "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "from_id" $from_id "scalar") (serialize-qp "id_only" $id_only "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "populate" $populate "scalar") (serialize-qp "results_only" $results_only "scalar") (serialize-qp "select" $select "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "until" $until "scalar") (serialize-qp "until_id" $until_id "scalar") (serialize-qp "timeout_s" $timeout_s "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "time_created" $time_created "scalar") (serialize-qp "time_updated" $time_updated "scalar") (serialize-qp "is_online" $is_online "scalar") (serialize-qp "request_counter" $request_counter "scalar") (serialize-qp "serial_number" $serial_number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/spots" $qp)
+  let full_url = (build-url $base "/spots" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"after": $after, "after_id": $after_id, "before": $before, "before_id": $before_id, "from": $qp_from, "from_id": $from_id, "id_only": $id_only, "limit": $limit, "populate": $populate, "results_only": $results_only, "select": $select, "sort": $qp_sort, "until": $until, "until_id": $until_id, "timeout_s": $timeout_s, "id": $id, "time_created": $time_created, "time_updated": $time_updated, "is_online": $is_online, "request_counter": $request_counter, "serial_number": $serial_number} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"after": $after, "after_id": $after_id, "before": $before, "before_id": $before_id, "from": $qp_from, "from_id": $from_id, "id_only": $id_only, "limit": $limit, "populate": $populate, "results_only": $results_only, "select": $select, "sort": $qp_sort, "until": $until, "until_id": $until_id, "timeout_s": $timeout_s, "id": $id, "time_created": $time_created, "time_updated": $time_updated, "is_online": $is_online, "request_counter": $request_counter, "serial_number": $serial_number} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get spot
@@ -1952,10 +2571,21 @@ export def "spots get" [
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/spots/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/spots/{id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update existing spot
@@ -1985,12 +2615,23 @@ export def "spots update" [
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/spots/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/spots/{id}") $auth.query)
   let req_body = {"antenna_report_locations": $antenna_report_locations, "config_request": $config_request, "geo_coords": $geo_coords, "senses_request": $senses_request, "report_location": $report_location} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get spotsets
@@ -2012,10 +2653,21 @@ export def "spots-sets list" [
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/spots/{id}/sets"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/spots/{id}/sets") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create spotset
@@ -2039,12 +2691,23 @@ export def "spots-sets create" [
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/spots/{id}/sets"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/spots/{id}/sets") $auth.query)
   let req_body = {"setid": $setid} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Get spotset
@@ -2068,10 +2731,21 @@ export def "spots-sets get" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($set_id | is-empty) { error make --unspanned { msg: "path parameter 'setId' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), set_id: (encode-path-segment $set_id)} | format pattern "/spots/{id}/sets/{set_id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), set_id: (encode-path-segment $set_id)} | format pattern "/spots/{id}/sets/{set_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update existing spotset
@@ -2097,12 +2771,23 @@ export def "spots-sets update" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($set_id | is-empty) { error make --unspanned { msg: "path parameter 'setId' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), set_id: (encode-path-segment $set_id)} | format pattern "/spots/{id}/sets/{set_id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), set_id: (encode-path-segment $set_id)} | format pattern "/spots/{id}/sets/{set_id}") $auth.query)
   let req_body = {"delete": $delete} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get spotsets
@@ -2121,10 +2806,21 @@ export def "spotsets list" [
 ]: nothing -> record<created_by: string, id: string, setid: int, spot_id: string, time_created: string, time_updated: string> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/spotsets")
+  let full_url = (build-url $base "/spotsets" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create spotset
@@ -2145,12 +2841,23 @@ export def "spotsets create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/spotsets")
+  let full_url = (build-url $base "/spotsets" $auth.query)
   let req_body = {"setid": $setid} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Get spotset
@@ -2171,10 +2878,21 @@ export def "spotsets get" [
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/spotsets/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/spotsets/{id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update existing spotset
@@ -2197,12 +2915,23 @@ export def "spotsets update" [
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/spotsets/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/spotsets/{id}") $auth.query)
   let req_body = {"delete": $delete} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get all subscriptions
@@ -2246,10 +2975,21 @@ export def "subscriptions list" [
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "after" $after "scalar") (serialize-qp "after_id" $after_id "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "before_id" $before_id "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "from_id" $from_id "scalar") (serialize-qp "id_only" $id_only "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "populate" $populate "scalar") (serialize-qp "results_only" $results_only "scalar") (serialize-qp "select" $select "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "until" $until "scalar") (serialize-qp "until_id" $until_id "scalar") (serialize-qp "timeout_s" $timeout_s "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "time_created" $time_created "scalar") (serialize-qp "time_updated" $time_updated "scalar") (serialize-qp "topic_filter" $topic_filter "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "database_hold_time_h" $database_hold_time_h "scalar") (serialize-qp "populate_events" $populate_events "scalar") (serialize-qp "verify_target_certificate" $verify_target_certificate "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/subscriptions" $qp)
+  let full_url = (build-url $base "/subscriptions" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"after": $after, "after_id": $after_id, "before": $before, "before_id": $before_id, "from": $qp_from, "from_id": $from_id, "id_only": $id_only, "limit": $limit, "populate": $populate, "results_only": $results_only, "select": $select, "sort": $qp_sort, "until": $until, "until_id": $until_id, "timeout_s": $timeout_s, "id": $id, "time_created": $time_created, "time_updated": $time_updated, "topic_filter": $topic_filter, "description": $description, "database_hold_time_h": $database_hold_time_h, "populate_events": $populate_events, "verify_target_certificate": $verify_target_certificate} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"after": $after, "after_id": $after_id, "before": $before, "before_id": $before_id, "from": $qp_from, "from_id": $from_id, "id_only": $id_only, "limit": $limit, "populate": $populate, "results_only": $results_only, "select": $select, "sort": $qp_sort, "until": $until, "until_id": $until_id, "timeout_s": $timeout_s, "id": $id, "time_created": $time_created, "time_updated": $time_updated, "topic_filter": $topic_filter, "description": $description, "database_hold_time_h": $database_hold_time_h, "populate_events": $populate_events, "verify_target_certificate": $verify_target_certificate} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create subscription
@@ -2278,12 +3018,23 @@ export def "subscriptions create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/subscriptions")
+  let full_url = (build-url $base "/subscriptions" $auth.query)
   let req_body = {"custom": $custom, "database_hold_time_h": $database_hold_time_h, "description": $description, "populate_events": $populate_events, "target_retry": $target_retry, "target_url": $target_url, "topic_filter": $topic_filter, "verify_target_certificate": $verify_target_certificate} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Delete subscription
@@ -2305,10 +3056,21 @@ export def "subscriptions delete" [
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/subscriptions/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/subscriptions/{id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Get subscription
@@ -2330,10 +3092,21 @@ export def "subscriptions get" [
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/subscriptions/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/subscriptions/{id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update existing subscription
@@ -2364,12 +3137,23 @@ export def "subscriptions update" [
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/subscriptions/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/subscriptions/{id}") $auth.query)
   let req_body = {"custom": $custom, "database_hold_time_h": $database_hold_time_h, "description": $description, "populate_events": $populate_events, "target_retry": $target_retry, "target_url": $target_url, "topic_filter": $topic_filter, "verify_target_certificate": $verify_target_certificate} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get subscription events
@@ -2414,10 +3198,21 @@ export def "subscriptions-events get-for" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "after" $after "scalar") (serialize-qp "after_id" $after_id "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "before_id" $before_id "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "from_id" $from_id "scalar") (serialize-qp "id_only" $id_only "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "populate" $populate "scalar") (serialize-qp "results_only" $results_only "scalar") (serialize-qp "select" $select "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "until" $until "scalar") (serialize-qp "until_id" $until_id "scalar") (serialize-qp "timeout_s" $timeout_s "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "time_created" $time_created "scalar") (serialize-qp "topic.resource_type" $topic_resource_type "scalar") (serialize-qp "topic.action" $topic_action "scalar") (serialize-qp "topic.resource" $topic_resource "scalar") (serialize-qp "time_event" $time_event "scalar") (serialize-qp "time_expire" $time_expire "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/subscriptions/{id}/events") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/subscriptions/{id}/events") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"after": $after, "after_id": $after_id, "before": $before, "before_id": $before_id, "from": $qp_from, "from_id": $from_id, "id_only": $id_only, "limit": $limit, "populate": $populate, "results_only": $results_only, "select": $select, "sort": $qp_sort, "until": $until, "until_id": $until_id, "timeout_s": $timeout_s, "id": $id, "time_created": $time_created, "topic.resource_type": $topic_resource_type, "topic.action": $topic_action, "topic.resource": $topic_resource, "time_event": $time_event, "time_expire": $time_expire} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"after": $after, "after_id": $after_id, "before": $before, "before_id": $before_id, "from": $qp_from, "from_id": $from_id, "id_only": $id_only, "limit": $limit, "populate": $populate, "results_only": $results_only, "select": $select, "sort": $qp_sort, "until": $until, "until_id": $until_id, "timeout_s": $timeout_s, "id": $id, "time_created": $time_created, "topic.resource_type": $topic_resource_type, "topic.action": $topic_action, "topic.resource": $topic_resource, "time_event": $time_event, "time_expire": $time_expire} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get all users
@@ -2461,10 +3256,21 @@ export def "users list" [
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "after" $after "scalar") (serialize-qp "after_id" $after_id "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "before_id" $before_id "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "from_id" $from_id "scalar") (serialize-qp "id_only" $id_only "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "populate" $populate "scalar") (serialize-qp "results_only" $results_only "scalar") (serialize-qp "select" $select "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "until" $until "scalar") (serialize-qp "until_id" $until_id "scalar") (serialize-qp "timeout_s" $timeout_s "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "time_created" $time_created "scalar") (serialize-qp "time_updated" $time_updated "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "first_name" $first_name "scalar") (serialize-qp "last_name" $last_name "scalar") (serialize-qp "is_admin" $is_admin "scalar") (serialize-qp "is_locked" $is_locked "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/users" $qp)
+  let full_url = (build-url $base "/users" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"after": $after, "after_id": $after_id, "before": $before, "before_id": $before_id, "from": $qp_from, "from_id": $from_id, "id_only": $id_only, "limit": $limit, "populate": $populate, "results_only": $results_only, "select": $select, "sort": $qp_sort, "until": $until, "until_id": $until_id, "timeout_s": $timeout_s, "id": $id, "time_created": $time_created, "time_updated": $time_updated, "email": $email, "first_name": $first_name, "last_name": $last_name, "is_admin": $is_admin, "is_locked": $is_locked} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"after": $after, "after_id": $after_id, "before": $before, "before_id": $before_id, "from": $qp_from, "from_id": $from_id, "id_only": $id_only, "limit": $limit, "populate": $populate, "results_only": $results_only, "select": $select, "sort": $qp_sort, "until": $until, "until_id": $until_id, "timeout_s": $timeout_s, "id": $id, "time_created": $time_created, "time_updated": $time_updated, "email": $email, "first_name": $first_name, "last_name": $last_name, "is_admin": $is_admin, "is_locked": $is_locked} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create user
@@ -2491,12 +3297,23 @@ export def "users create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/users")
+  let full_url = (build-url $base "/users" $auth.query)
   let req_body = {"email": $email, "first_name": $first_name, "is_admin": $is_admin, "is_locked": $is_locked, "last_name": $last_name, "password": $password} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Delete user
@@ -2518,10 +3335,21 @@ export def "users delete" [
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/users/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/users/{id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Get user
@@ -2543,10 +3371,21 @@ export def "users get" [
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/users/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/users/{id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update existing user
@@ -2575,10 +3414,21 @@ export def "users update" [
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/users/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/users/{id}") $auth.query)
   let req_body = {"email": $email, "first_name": $first_name, "is_admin": $is_admin, "is_locked": $is_locked, "last_name": $last_name, "password": $password} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }

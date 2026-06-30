@@ -8,7 +8,7 @@ const BASE_URL = "http://azure.local:19080"
 # `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
 # where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o SERVICE_FABRIC_CLIENT_APIS_TOKEN | default "" }
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o SERVICE_FABRIC_CLIENT_APIS_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
@@ -40,14 +40,11 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
-# Trick: `url encode --all` over-encodes, then we decode the four unreserved
-# punctuation chars back. Pre-existing %XX sequences in the input survive
-# because `url encode --all` first turns their % into %25.
 def encode-path-segment [v: any]: nothing -> string {
   $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
-# Serialize an array-typed path parameter (issue 49.A). OpenAPI 3 `style: simple`
+# Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
 # (the default for path params) and Swagger 2 `collectionFormat: csv` both join
 # the elements with a literal comma WITHIN the single path segment, each element
 # RFC-3986-encoded individually (so a comma inside an element stays %2C). Without
@@ -58,51 +55,57 @@ def encode-path-array [v: any]: nothing -> string {
   if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
 }
 
-# Build URL from base, path, and optional query string
-def build-url [base: string, path: string, query?: string]: nothing -> string {
+# Build the request URL from base, path, and any number of pre-encoded query
+# fragments (param serializer output and/or the auth query). Each fragment is an
+# `&`-joinable `key=value` string already percent-encoded by its producer; empty
+# fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
+# delimiters are hand-spliced — and any query already on the base URL is merged in.
+def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
   let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
-  let result = ($parsed | upsert path $full_path)
-  if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
+  let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
+  $parsed | upsert path $full_path | upsert query $query | url join
 }
 
-# Build the dry-run record returned by --dry-run. Shape:
-#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
-#    auth: {scheme, location}}
-# `meta` carries logical-form data (the query record by spec name, the pre-serialization
-# body) that do-request itself cannot reconstruct from its wire-format args.
-def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
-  let m = ($meta | default {})
-  {
-    dry_run: true
-    method: $method
-    url: $url
-    query: ($m | get -o query | default {})
-    headers: $auth.headers
-    body: ($m | get -o body)
-    content_type: $content_type
-    timeout: $timeout
-    auth: {scheme: $auth.scheme, location: $auth.location}
-  }
+# Success policy: did this response succeed? Single source of truth, consulted by
+# handle-response and the HEAD header-unwrap. Empty ok_codes means the spec listed
+# none, so fall back to < 400. Otherwise: any 2xx, plus documented success codes.
+def status-ok [status: int, ok_codes: list<int>]: nothing -> bool {
+  if ($ok_codes | is-empty) { $status < 400 } else { ($status >= 200 and $status < 300) or ($status in $ok_codes) }
 }
 
-# Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
-  let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
-  let timeout = ($max_time | default 30min)
-  let ct = ($content_type | default "application/json")
-  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
-  let resp = match $method {
-    "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
-  }
-  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
-  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
+# Unwrap a `--full` HTTP response into the user-facing value. Response arrives
+# via pipeline; ok_codes gates the error throw (see status-ok).
+def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: record -> any {
+  let resp = $in
+  if $allow_errors { return $resp }
+  if not (status-ok $resp.status $ok_codes) { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } }
+  if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
+  if $resp.status == 204 { return null }
+  $resp.body
+}
+
+# GET — bodyless, honours --raw
+def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+}
+
+# POST — body + content-type
+def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# PUT — body + content-type
+def send-put [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http put --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http put --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# DELETE — body via --data
+def send-delete [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http delete --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url } else { http delete --headers $req.headers --content-type $req.content_type --data $body --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url }
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 def base-url-completer [] { ["http://azure.local:19080" "https://azure.local:19080"] }
@@ -186,12 +189,23 @@ export def "cancel-repair-task cancel" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/$/CancelRepairTask" $qp)
+  let full_url = (build-url $base "/$/CancelRepairTask" $qp $auth.query)
   let req_body = {"RequestAbort": $request_abort, "TaskId": $task_id, "Version": $version} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"api-version": $api_version} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Creates a new repair task.
@@ -235,12 +249,23 @@ export def "create-repair-task create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/$/CreateRepairTask" $qp)
+  let full_url = (build-url $base "/$/CreateRepairTask" $qp $auth.query)
   let req_body = {"Action": $action, "Description": $description, "Executor": $executor, "ExecutorData": $executor_data, "Flags": $flags, "History": $history, "Impact": $impact, "PerformPreparingHealthCheck": $perform_preparing_health_check, "PerformRestoringHealthCheck": $perform_restoring_health_check, "PreparingHealthCheckState": $preparing_health_check_state, "RestoringHealthCheckState": $restoring_health_check_state, "ResultCode": $result_code, "ResultDetails": $result_details, "ResultStatus": $result_status, "State": $state, "Target": $target, "TaskId": $task_id, "Version": $version} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"api-version": $api_version} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes a completed repair task.
@@ -265,12 +290,23 @@ export def "delete-repair-task delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/$/DeleteRepairTask" $qp)
+  let full_url = (build-url $base "/$/DeleteRepairTask" $qp $auth.query)
   let req_body = {"TaskId": $task_id, "Version": $version} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"api-version": $api_version} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Forces the approval of the given repair task.
@@ -295,12 +331,23 @@ export def "force-approve-repair-task approve" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/$/ForceApproveRepairTask" $qp)
+  let full_url = (build-url $base "/$/ForceApproveRepairTask" $qp $auth.query)
   let req_body = {"TaskId": $task_id, "Version": $version} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"api-version": $api_version} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the Azure Active Directory metadata used for secured connection to cluster.
@@ -323,10 +370,21 @@ export def "get-aad-metadata get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/$/GetAadMetadata" $qp)
+  let full_url = (build-url $base "/$/GetAadMetadata" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "timeout": $timeout} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get the Service Fabric standalone cluster configuration.
@@ -350,10 +408,21 @@ export def "get-cluster-configuration get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "ConfigurationApiVersion" $configuration_api_version "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/$/GetClusterConfiguration" $qp)
+  let full_url = (build-url $base "/$/GetClusterConfiguration" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "ConfigurationApiVersion": $configuration_api_version, "timeout": $timeout} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version, "ConfigurationApiVersion": $configuration_api_version, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get the cluster configuration upgrade status of a Service Fabric standalone cluster.
@@ -376,10 +445,21 @@ export def "get-cluster-configuration-upgrade-status get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/$/GetClusterConfigurationUpgradeStatus" $qp)
+  let full_url = (build-url $base "/$/GetClusterConfigurationUpgradeStatus" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "timeout": $timeout} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the health of a Service Fabric cluster.
@@ -407,10 +487,21 @@ export def "get-cluster-health get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "NodesHealthStateFilter" $nodes_health_state_filter "scalar") (serialize-qp "ApplicationsHealthStateFilter" $applications_health_state_filter "scalar") (serialize-qp "EventsHealthStateFilter" $events_health_state_filter "scalar") (serialize-qp "ExcludeHealthStatistics" $exclude_health_statistics "scalar") (serialize-qp "IncludeSystemApplicationHealthStatistics" $include_system_application_health_statistics "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/$/GetClusterHealth" $qp)
+  let full_url = (build-url $base "/$/GetClusterHealth" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "NodesHealthStateFilter": $nodes_health_state_filter, "ApplicationsHealthStateFilter": $applications_health_state_filter, "EventsHealthStateFilter": $events_health_state_filter, "ExcludeHealthStatistics": $exclude_health_statistics, "IncludeSystemApplicationHealthStatistics": $include_system_application_health_statistics, "timeout": $timeout} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version, "NodesHealthStateFilter": $nodes_health_state_filter, "ApplicationsHealthStateFilter": $applications_health_state_filter, "EventsHealthStateFilter": $events_health_state_filter, "ExcludeHealthStatistics": $exclude_health_statistics, "IncludeSystemApplicationHealthStatistics": $include_system_application_health_statistics, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the health of a Service Fabric cluster using the specified policy.
@@ -443,12 +534,23 @@ export def "get-cluster-health get-using-policy" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "NodesHealthStateFilter" $nodes_health_state_filter "scalar") (serialize-qp "ApplicationsHealthStateFilter" $applications_health_state_filter "scalar") (serialize-qp "EventsHealthStateFilter" $events_health_state_filter "scalar") (serialize-qp "ExcludeHealthStatistics" $exclude_health_statistics "scalar") (serialize-qp "IncludeSystemApplicationHealthStatistics" $include_system_application_health_statistics "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/$/GetClusterHealth" $qp)
+  let full_url = (build-url $base "/$/GetClusterHealth" $qp $auth.query)
   let req_body = {"ApplicationHealthPolicyMap": $application_health_policy_map, "ClusterHealthPolicy": $cluster_health_policy} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"api-version": $api_version, "NodesHealthStateFilter": $nodes_health_state_filter, "ApplicationsHealthStateFilter": $applications_health_state_filter, "EventsHealthStateFilter": $events_health_state_filter, "ExcludeHealthStatistics": $exclude_health_statistics, "IncludeSystemApplicationHealthStatistics": $include_system_application_health_statistics, "timeout": $timeout} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"api-version": $api_version, "NodesHealthStateFilter": $nodes_health_state_filter, "ApplicationsHealthStateFilter": $applications_health_state_filter, "EventsHealthStateFilter": $events_health_state_filter, "ExcludeHealthStatistics": $exclude_health_statistics, "IncludeSystemApplicationHealthStatistics": $include_system_application_health_statistics, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the health of a Service Fabric cluster using health chunks.
@@ -471,10 +573,21 @@ export def "get-cluster-health-chunk get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/$/GetClusterHealthChunk" $qp)
+  let full_url = (build-url $base "/$/GetClusterHealthChunk" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "timeout": $timeout} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the health of a Service Fabric cluster using health chunks.
@@ -506,12 +619,23 @@ export def "get-cluster-health-chunk get-using-policy-and-advanced-filters" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/$/GetClusterHealthChunk" $qp)
+  let full_url = (build-url $base "/$/GetClusterHealthChunk" $qp $auth.query)
   let req_body = {"ApplicationFilters": $application_filters, "ApplicationHealthPolicies": $application_health_policies, "ClusterHealthPolicy": $cluster_health_policy, "NodeFilters": $node_filters} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"api-version": $api_version, "timeout": $timeout} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"api-version": $api_version, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get the Service Fabric cluster manifest.
@@ -534,10 +658,21 @@ export def "get-cluster-manifest get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/$/GetClusterManifest" $qp)
+  let full_url = (build-url $base "/$/GetClusterManifest" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "timeout": $timeout} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get the current Service Fabric cluster version.
@@ -560,10 +695,21 @@ export def "get-cluster-version get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/$/GetClusterVersion" $qp)
+  let full_url = (build-url $base "/$/GetClusterVersion" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "timeout": $timeout} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the load of a Service Fabric cluster.
@@ -586,10 +732,21 @@ export def "get-load-information get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/$/GetLoadInformation" $qp)
+  let full_url = (build-url $base "/$/GetLoadInformation" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "timeout": $timeout} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets a list of fabric code versions that are provisioned in a Service Fabric cluster.
@@ -613,10 +770,21 @@ export def "get-provisioned-code-versions get-fabric-list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "CodeVersion" $code_version "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/$/GetProvisionedCodeVersions" $qp)
+  let full_url = (build-url $base "/$/GetProvisionedCodeVersions" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "CodeVersion": $code_version, "timeout": $timeout} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version, "CodeVersion": $code_version, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets a list of fabric config versions that are provisioned in a Service Fabric cluster.
@@ -640,10 +808,21 @@ export def "get-provisioned-config-versions get-fabric-list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "ConfigVersion" $config_version "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/$/GetProvisionedConfigVersions" $qp)
+  let full_url = (build-url $base "/$/GetProvisionedConfigVersions" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "ConfigVersion": $config_version, "timeout": $timeout} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version, "ConfigVersion": $config_version, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets a list of repair tasks matching the given filters.
@@ -668,10 +847,21 @@ export def "get-repair-task-list get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "TaskIdFilter" $task_id_filter "scalar") (serialize-qp "StateFilter" $state_filter "scalar") (serialize-qp "ExecutorFilter" $executor_filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/$/GetRepairTaskList" $qp)
+  let full_url = (build-url $base "/$/GetRepairTaskList" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "TaskIdFilter": $task_id_filter, "StateFilter": $state_filter, "ExecutorFilter": $executor_filter} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version, "TaskIdFilter": $task_id_filter, "StateFilter": $state_filter, "ExecutorFilter": $executor_filter} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get the service state of Service Fabric Upgrade Orchestration Service.
@@ -694,10 +884,21 @@ export def "get-upgrade-orchestration-service-state get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/$/GetUpgradeOrchestrationServiceState" $qp)
+  let full_url = (build-url $base "/$/GetUpgradeOrchestrationServiceState" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "timeout": $timeout} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the progress of the current cluster upgrade.
@@ -720,10 +921,21 @@ export def "get-upgrade-progress get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/$/GetUpgradeProgress" $qp)
+  let full_url = (build-url $base "/$/GetUpgradeProgress" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "timeout": $timeout} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Invokes an administrative command on the given Infrastructure Service instance.
@@ -748,10 +960,21 @@ export def "invoke-infrastructure-command create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "Command" $command "scalar") (serialize-qp "ServiceId" $service_id "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/$/InvokeInfrastructureCommand" $qp)
+  let full_url = (build-url $base "/$/InvokeInfrastructureCommand" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "Command": $command, "ServiceId": $service_id, "timeout": $timeout} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"api-version": $api_version, "Command": $command, "ServiceId": $service_id, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Invokes a read-only query on the given infrastructure service instance.
@@ -776,10 +999,21 @@ export def "invoke-infrastructure-query list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "Command" $command "scalar") (serialize-qp "ServiceId" $service_id "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/$/InvokeInfrastructureQuery" $qp)
+  let full_url = (build-url $base "/$/InvokeInfrastructureQuery" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "Command": $command, "ServiceId": $service_id, "timeout": $timeout} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version, "Command": $command, "ServiceId": $service_id, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Make the cluster upgrade move on to the next upgrade domain.
@@ -804,12 +1038,23 @@ export def "move-to-next-upgrade-domain create-resume" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/$/MoveToNextUpgradeDomain" $qp)
+  let full_url = (build-url $base "/$/MoveToNextUpgradeDomain" $qp $auth.query)
   let req_body = {"UpgradeDomain": $upgrade_domain} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"api-version": $api_version, "timeout": $timeout} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"api-version": $api_version, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Provision the code or configuration packages of a Service Fabric cluster.
@@ -835,12 +1080,23 @@ export def "provision create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/$/Provision" $qp)
+  let full_url = (build-url $base "/$/Provision" $qp $auth.query)
   let req_body = {"ClusterManifestFilePath": $cluster_manifest_file_path, "CodeFilePath": $code_file_path} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"api-version": $api_version, "timeout": $timeout} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"api-version": $api_version, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Indicates to the Service Fabric cluster that it should attempt to recover any services (including system services) which are currently stuck in quorum loss.
@@ -863,10 +1119,21 @@ export def "recover-all-partitions list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/$/RecoverAllPartitions" $qp)
+  let full_url = (build-url $base "/$/RecoverAllPartitions" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "timeout": $timeout} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"api-version": $api_version, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Indicates to the Service Fabric cluster that it should attempt to recover the system services that are currently stuck in quorum loss.
@@ -889,10 +1156,21 @@ export def "recover-system-partitions create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/$/RecoverSystemPartitions" $qp)
+  let full_url = (build-url $base "/$/RecoverSystemPartitions" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "timeout": $timeout} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"api-version": $api_version, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Sends a health report on the Service Fabric cluster.
@@ -924,12 +1202,23 @@ export def "report-cluster-health create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "Immediate" $immediate "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/$/ReportClusterHealth" $qp)
+  let full_url = (build-url $base "/$/ReportClusterHealth" $qp $auth.query)
   let req_body = {"Description": $description, "HealthState": $health_state, "Property": $property, "RemoveWhenExpired": $remove_when_expired, "SequenceNumber": $sequence_number, "SourceId": $source_id, "TimeToLiveInMilliSeconds": $time_to_live_in_milli_seconds} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"api-version": $api_version, "Immediate": $immediate, "timeout": $timeout} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"api-version": $api_version, "Immediate": $immediate, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Roll back the upgrade of a Service Fabric cluster.
@@ -952,10 +1241,21 @@ export def "rollback-upgrade create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/$/RollbackUpgrade" $qp)
+  let full_url = (build-url $base "/$/RollbackUpgrade" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "timeout": $timeout} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"api-version": $api_version, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [202]
 }
 
 # Update the service state of Service Fabric Upgrade Orchestration Service.
@@ -980,12 +1280,23 @@ export def "set-upgrade-orchestration-service-state update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/$/SetUpgradeOrchestrationServiceState" $qp)
+  let full_url = (build-url $base "/$/SetUpgradeOrchestrationServiceState" $qp $auth.query)
   let req_body = {"ServiceState": $service_state} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"api-version": $api_version, "timeout": $timeout} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"api-version": $api_version, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Start upgrading the configuration of a Service Fabric standalone cluster.
@@ -1021,12 +1332,23 @@ export def "start-cluster-configuration-upgrade start" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/$/StartClusterConfigurationUpgrade" $qp)
+  let full_url = (build-url $base "/$/StartClusterConfigurationUpgrade" $qp $auth.query)
   let req_body = {"ApplicationHealthPolicies": $application_health_policies, "ClusterConfig": $cluster_config, "HealthCheckRetryTimeout": $health_check_retry_timeout, "HealthCheckStableDurationInSeconds": $health_check_stable_duration_in_seconds, "HealthCheckWaitDurationInSeconds": $health_check_wait_duration_in_seconds, "MaxPercentDeltaUnhealthyNodes": $max_percent_delta_unhealthy_nodes, "MaxPercentUnhealthyApplications": $max_percent_unhealthy_applications, "MaxPercentUnhealthyNodes": $max_percent_unhealthy_nodes, "MaxPercentUpgradeDomainDeltaUnhealthyNodes": $max_percent_upgrade_domain_delta_unhealthy_nodes, "UpgradeDomainTimeoutInSeconds": $upgrade_domain_timeout_in_seconds, "UpgradeTimeoutInSeconds": $upgrade_timeout_in_seconds} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"api-version": $api_version, "timeout": $timeout} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"api-version": $api_version, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [202]
 }
 
 # Changes the verbosity of service placement health reporting.
@@ -1050,10 +1372,21 @@ export def "toggle-verbose-service-placement-health-reporting create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "Enabled" $enabled "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/$/ToggleVerboseServicePlacementHealthReporting" $qp)
+  let full_url = (build-url $base "/$/ToggleVerboseServicePlacementHealthReporting" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "Enabled": $enabled, "timeout": $timeout} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"api-version": $api_version, "Enabled": $enabled, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Unprovision the code or configuration packages of a Service Fabric cluster.
@@ -1079,12 +1412,23 @@ export def "unprovision create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/$/Unprovision" $qp)
+  let full_url = (build-url $base "/$/Unprovision" $qp $auth.query)
   let req_body = {"CodeVersion": $code_version, "ConfigVersion": $config_version} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"api-version": $api_version, "timeout": $timeout} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"api-version": $api_version, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Updates the execution state of a repair task.
@@ -1128,12 +1472,23 @@ export def "update-repair-execution-state update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/$/UpdateRepairExecutionState" $qp)
+  let full_url = (build-url $base "/$/UpdateRepairExecutionState" $qp $auth.query)
   let req_body = {"Action": $action, "Description": $description, "Executor": $executor, "ExecutorData": $executor_data, "Flags": $flags, "History": $history, "Impact": $impact, "PerformPreparingHealthCheck": $perform_preparing_health_check, "PerformRestoringHealthCheck": $perform_restoring_health_check, "PreparingHealthCheckState": $preparing_health_check_state, "RestoringHealthCheckState": $restoring_health_check_state, "ResultCode": $result_code, "ResultDetails": $result_details, "ResultStatus": $result_status, "State": $state, "Target": $target, "TaskId": $task_id, "Version": $version} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"api-version": $api_version} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Updates the health policy of the given repair task.
@@ -1160,12 +1515,23 @@ export def "update-repair-task-health-policy update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/$/UpdateRepairTaskHealthPolicy" $qp)
+  let full_url = (build-url $base "/$/UpdateRepairTaskHealthPolicy" $qp $auth.query)
   let req_body = {"PerformPreparingHealthCheck": $perform_preparing_health_check, "PerformRestoringHealthCheck": $perform_restoring_health_check, "TaskId": $task_id, "Version": $version} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"api-version": $api_version} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Update the upgrade parameters of a Service Fabric cluster upgrade.
@@ -1199,12 +1565,23 @@ export def "update-upgrade update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/$/UpdateUpgrade" $qp)
+  let full_url = (build-url $base "/$/UpdateUpgrade" $qp $auth.query)
   let req_body = {"ApplicationHealthPolicyMap": $application_health_policy_map, "ClusterHealthPolicy": $cluster_health_policy, "ClusterUpgradeHealthPolicy": $cluster_upgrade_health_policy, "EnableDeltaHealthEvaluation": $enable_delta_health_evaluation, "UpdateDescription": $update_description, "UpgradeKind": $upgrade_kind} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"api-version": $api_version, "timeout": $timeout} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"api-version": $api_version, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Start upgrading the code or configuration version of a Service Fabric cluster.
@@ -1244,12 +1621,23 @@ export def "upgrade start" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/$/Upgrade" $qp)
+  let full_url = (build-url $base "/$/Upgrade" $qp $auth.query)
   let req_body = {"ApplicationHealthPolicyMap": $application_health_policy_map, "ClusterHealthPolicy": $cluster_health_policy, "ClusterUpgradeHealthPolicy": $cluster_upgrade_health_policy, "CodeVersion": $code_version, "ConfigVersion": $config_version, "EnableDeltaHealthEvaluation": $enable_delta_health_evaluation, "ForceRestart": $force_restart, "MonitoringPolicy": $monitoring_policy, "RollingUpgradeMode": $rolling_upgrade_mode, "SortOrder": $sort_order, "UpgradeKind": $upgrade_kind, "UpgradeReplicaSetCheckTimeoutInSeconds": $upgrade_replica_set_check_timeout_in_seconds} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"api-version": $api_version, "timeout": $timeout} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"api-version": $api_version, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [202]
 }
 
 # Gets the list of application types in the Service Fabric cluster.
@@ -1276,10 +1664,21 @@ export def "application-types get-list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "ApplicationTypeDefinitionKindFilter" $application_type_definition_kind_filter "scalar") (serialize-qp "ExcludeApplicationParameters" $exclude_application_parameters "scalar") (serialize-qp "ContinuationToken" $continuation_token "scalar") (serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/ApplicationTypes" $qp)
+  let full_url = (build-url $base "/ApplicationTypes" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "ApplicationTypeDefinitionKindFilter": $application_type_definition_kind_filter, "ExcludeApplicationParameters": $exclude_application_parameters, "ContinuationToken": $continuation_token, "MaxResults": $max_results, "timeout": $timeout} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version, "ApplicationTypeDefinitionKindFilter": $application_type_definition_kind_filter, "ExcludeApplicationParameters": $exclude_application_parameters, "ContinuationToken": $continuation_token, "MaxResults": $max_results, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Provisions or registers a Service Fabric application type with the cluster using the '.sfpkg' package in the external store or using the application package in the image store.
@@ -1306,12 +1705,23 @@ export def "application-types-provision create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/ApplicationTypes/$/Provision" $qp)
+  let full_url = (build-url $base "/ApplicationTypes/$/Provision" $qp $auth.query)
   let req_body = {"Async": $async, "Kind": $kind} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"api-version": $api_version, "timeout": $timeout} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"api-version": $api_version, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200 202]
 }
 
 # Gets the list of application types in the Service Fabric cluster matching exactly the specified name.
@@ -1340,10 +1750,21 @@ export def "application-types get-list-by-name" [
   let base = ($base_url | default $BASE_URL)
   if ($application_type_name | is-empty) { error make --unspanned { msg: "path parameter 'applicationTypeName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "ApplicationTypeVersion" $application_type_version "scalar") (serialize-qp "ExcludeApplicationParameters" $exclude_application_parameters "scalar") (serialize-qp "ContinuationToken" $continuation_token "scalar") (serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({application_type_name: (encode-path-segment $application_type_name)} | format pattern "/ApplicationTypes/{application_type_name}") $qp)
+  let full_url = (build-url $base ({application_type_name: (encode-path-segment $application_type_name)} | format pattern "/ApplicationTypes/{application_type_name}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "ApplicationTypeVersion": $application_type_version, "ExcludeApplicationParameters": $exclude_application_parameters, "ContinuationToken": $continuation_token, "MaxResults": $max_results, "timeout": $timeout} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version, "ApplicationTypeVersion": $application_type_version, "ExcludeApplicationParameters": $exclude_application_parameters, "ContinuationToken": $continuation_token, "MaxResults": $max_results, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the manifest describing an application type.
@@ -1369,10 +1790,21 @@ export def "application-types-get-application-manifest get" [
   let base = ($base_url | default $BASE_URL)
   if ($application_type_name | is-empty) { error make --unspanned { msg: "path parameter 'applicationTypeName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "ApplicationTypeVersion" $application_type_version "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({application_type_name: (encode-path-segment $application_type_name)} | format pattern "/ApplicationTypes/{application_type_name}/$/GetApplicationManifest") $qp)
+  let full_url = (build-url $base ({application_type_name: (encode-path-segment $application_type_name)} | format pattern "/ApplicationTypes/{application_type_name}/$/GetApplicationManifest") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "ApplicationTypeVersion": $application_type_version, "timeout": $timeout} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version, "ApplicationTypeVersion": $application_type_version, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the manifest describing a service type.
@@ -1399,10 +1831,21 @@ export def "application-types-get-service-manifest get" [
   let base = ($base_url | default $BASE_URL)
   if ($application_type_name | is-empty) { error make --unspanned { msg: "path parameter 'applicationTypeName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "ApplicationTypeVersion" $application_type_version "scalar") (serialize-qp "ServiceManifestName" $service_manifest_name "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({application_type_name: (encode-path-segment $application_type_name)} | format pattern "/ApplicationTypes/{application_type_name}/$/GetServiceManifest") $qp)
+  let full_url = (build-url $base ({application_type_name: (encode-path-segment $application_type_name)} | format pattern "/ApplicationTypes/{application_type_name}/$/GetServiceManifest") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "ApplicationTypeVersion": $application_type_version, "ServiceManifestName": $service_manifest_name, "timeout": $timeout} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version, "ApplicationTypeVersion": $application_type_version, "ServiceManifestName": $service_manifest_name, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the list containing the information about service types that are supported by a provisioned application type in a Service Fabric cluster.
@@ -1428,10 +1871,21 @@ export def "application-types-get-service-types get-list" [
   let base = ($base_url | default $BASE_URL)
   if ($application_type_name | is-empty) { error make --unspanned { msg: "path parameter 'applicationTypeName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "ApplicationTypeVersion" $application_type_version "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({application_type_name: (encode-path-segment $application_type_name)} | format pattern "/ApplicationTypes/{application_type_name}/$/GetServiceTypes") $qp)
+  let full_url = (build-url $base ({application_type_name: (encode-path-segment $application_type_name)} | format pattern "/ApplicationTypes/{application_type_name}/$/GetServiceTypes") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "ApplicationTypeVersion": $application_type_version, "timeout": $timeout} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version, "ApplicationTypeVersion": $application_type_version, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the information about a specific service type that is supported by a provisioned application type in a Service Fabric cluster.
@@ -1459,10 +1913,21 @@ export def "application-types-get-service-types get-by-name" [
   if ($application_type_name | is-empty) { error make --unspanned { msg: "path parameter 'applicationTypeName' must be non-empty" } }
   if ($service_type_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceTypeName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "ApplicationTypeVersion" $application_type_version "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({application_type_name: (encode-path-segment $application_type_name), service_type_name: (encode-path-segment $service_type_name)} | format pattern "/ApplicationTypes/{application_type_name}/$/GetServiceTypes/{service_type_name}") $qp)
+  let full_url = (build-url $base ({application_type_name: (encode-path-segment $application_type_name), service_type_name: (encode-path-segment $service_type_name)} | format pattern "/ApplicationTypes/{application_type_name}/$/GetServiceTypes/{service_type_name}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "ApplicationTypeVersion": $application_type_version, "timeout": $timeout} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version, "ApplicationTypeVersion": $application_type_version, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 204]
 }
 
 # Removes or unregisters a Service Fabric application type from the cluster.
@@ -1490,12 +1955,23 @@ export def "application-types-unprovision create" [
   let base = ($base_url | default $BASE_URL)
   if ($application_type_name | is-empty) { error make --unspanned { msg: "path parameter 'applicationTypeName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({application_type_name: (encode-path-segment $application_type_name)} | format pattern "/ApplicationTypes/{application_type_name}/$/Unprovision") $qp)
+  let full_url = (build-url $base ({application_type_name: (encode-path-segment $application_type_name)} | format pattern "/ApplicationTypes/{application_type_name}/$/Unprovision") $qp $auth.query)
   let req_body = {"ApplicationTypeVersion": $application_type_version, "Async": $async} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"api-version": $api_version, "timeout": $timeout} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"api-version": $api_version, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200 202]
 }
 
 # Gets the list of applications created in the Service Fabric cluster that match the specified filters.
@@ -1523,10 +1999,21 @@ export def "applications get-list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "ApplicationDefinitionKindFilter" $application_definition_kind_filter "scalar") (serialize-qp "ApplicationTypeName" $application_type_name "scalar") (serialize-qp "ExcludeApplicationParameters" $exclude_application_parameters "scalar") (serialize-qp "ContinuationToken" $continuation_token "scalar") (serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/Applications" $qp)
+  let full_url = (build-url $base "/Applications" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "ApplicationDefinitionKindFilter": $application_definition_kind_filter, "ApplicationTypeName": $application_type_name, "ExcludeApplicationParameters": $exclude_application_parameters, "ContinuationToken": $continuation_token, "MaxResults": $max_results, "timeout": $timeout} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version, "ApplicationDefinitionKindFilter": $application_definition_kind_filter, "ApplicationTypeName": $application_type_name, "ExcludeApplicationParameters": $exclude_application_parameters, "ContinuationToken": $continuation_token, "MaxResults": $max_results, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Creates a Service Fabric application.
@@ -1559,12 +2046,23 @@ export def "applications-create create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/Applications/$/Create" $qp)
+  let full_url = (build-url $base "/Applications/$/Create" $qp $auth.query)
   let req_body = {"ApplicationCapacity": $application_capacity, "ManagedApplicationIdentity": $managed_application_identity, "Name": $name, "ParameterList": $parameter_list, "TypeName": $type_name, "TypeVersion": $type_version} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"api-version": $api_version, "timeout": $timeout} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"api-version": $api_version, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Gets information about a Service Fabric application.
@@ -1590,10 +2088,21 @@ export def "applications get" [
   let base = ($base_url | default $BASE_URL)
   if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'applicationId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "ExcludeApplicationParameters" $exclude_application_parameters "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({application_id: (encode-path-segment $application_id)} | format pattern "/Applications/{application_id}") $qp)
+  let full_url = (build-url $base ({application_id: (encode-path-segment $application_id)} | format pattern "/Applications/{application_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "ExcludeApplicationParameters": $exclude_application_parameters, "timeout": $timeout} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version, "ExcludeApplicationParameters": $exclude_application_parameters, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 204]
 }
 
 # Deletes an existing Service Fabric application.
@@ -1619,10 +2128,21 @@ export def "applications-delete delete" [
   let base = ($base_url | default $BASE_URL)
   if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'applicationId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "ForceRemove" $force_remove "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({application_id: (encode-path-segment $application_id)} | format pattern "/Applications/{application_id}/$/Delete") $qp)
+  let full_url = (build-url $base ({application_id: (encode-path-segment $application_id)} | format pattern "/Applications/{application_id}/$/Delete") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "ForceRemove": $force_remove, "timeout": $timeout} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"api-version": $api_version, "ForceRemove": $force_remove, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Disables periodic backup of Service Fabric application.
@@ -1649,12 +2169,23 @@ export def "applications-disable-backup disable" [
   let base = ($base_url | default $BASE_URL)
   if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'applicationId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({application_id: (encode-path-segment $application_id)} | format pattern "/Applications/{application_id}/$/DisableBackup") $qp)
+  let full_url = (build-url $base ({application_id: (encode-path-segment $application_id)} | format pattern "/Applications/{application_id}/$/DisableBackup") $qp $auth.query)
   let req_body = {"CleanBackup": $clean_backup} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"api-version": $api_version, "timeout": $timeout} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"api-version": $api_version, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [202]
 }
 
 # Enables periodic backup of stateful partitions under this Service Fabric application.
@@ -1681,12 +2212,23 @@ export def "applications-enable-backup enable" [
   let base = ($base_url | default $BASE_URL)
   if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'applicationId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({application_id: (encode-path-segment $application_id)} | format pattern "/Applications/{application_id}/$/EnableBackup") $qp)
+  let full_url = (build-url $base ({application_id: (encode-path-segment $application_id)} | format pattern "/Applications/{application_id}/$/EnableBackup") $qp $auth.query)
   let req_body = {"BackupPolicyName": $backup_policy_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"api-version": $api_version, "timeout": $timeout} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"api-version": $api_version, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [202]
 }
 
 # Gets the Service Fabric application backup configuration information.
@@ -1713,10 +2255,21 @@ export def "applications-get-backup-configuration-info get" [
   let base = ($base_url | default $BASE_URL)
   if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'applicationId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "ContinuationToken" $continuation_token "scalar") (serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({application_id: (encode-path-segment $application_id)} | format pattern "/Applications/{application_id}/$/GetBackupConfigurationInfo") $qp)
+  let full_url = (build-url $base ({application_id: (encode-path-segment $application_id)} | format pattern "/Applications/{application_id}/$/GetBackupConfigurationInfo") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "ContinuationToken": $continuation_token, "MaxResults": $max_results, "timeout": $timeout} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version, "ContinuationToken": $continuation_token, "MaxResults": $max_results, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the list of backups available for every partition in this application.
@@ -1746,10 +2299,21 @@ export def "applications-get-backups list" [
   let base = ($base_url | default $BASE_URL)
   if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'applicationId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "timeout" $timeout "scalar") (serialize-qp "Latest" $latest "scalar") (serialize-qp "StartDateTimeFilter" $start_date_time_filter "scalar") (serialize-qp "EndDateTimeFilter" $end_date_time_filter "scalar") (serialize-qp "ContinuationToken" $continuation_token "scalar") (serialize-qp "MaxResults" $max_results "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({application_id: (encode-path-segment $application_id)} | format pattern "/Applications/{application_id}/$/GetBackups") $qp)
+  let full_url = (build-url $base ({application_id: (encode-path-segment $application_id)} | format pattern "/Applications/{application_id}/$/GetBackups") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "timeout": $timeout, "Latest": $latest, "StartDateTimeFilter": $start_date_time_filter, "EndDateTimeFilter": $end_date_time_filter, "ContinuationToken": $continuation_token, "MaxResults": $max_results} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version, "timeout": $timeout, "Latest": $latest, "StartDateTimeFilter": $start_date_time_filter, "EndDateTimeFilter": $end_date_time_filter, "ContinuationToken": $continuation_token, "MaxResults": $max_results} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the health of the service fabric application.
@@ -1778,10 +2342,21 @@ export def "applications-get-health get" [
   let base = ($base_url | default $BASE_URL)
   if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'applicationId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "EventsHealthStateFilter" $events_health_state_filter "scalar") (serialize-qp "DeployedApplicationsHealthStateFilter" $deployed_applications_health_state_filter "scalar") (serialize-qp "ServicesHealthStateFilter" $services_health_state_filter "scalar") (serialize-qp "ExcludeHealthStatistics" $exclude_health_statistics "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({application_id: (encode-path-segment $application_id)} | format pattern "/Applications/{application_id}/$/GetHealth") $qp)
+  let full_url = (build-url $base ({application_id: (encode-path-segment $application_id)} | format pattern "/Applications/{application_id}/$/GetHealth") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "EventsHealthStateFilter": $events_health_state_filter, "DeployedApplicationsHealthStateFilter": $deployed_applications_health_state_filter, "ServicesHealthStateFilter": $services_health_state_filter, "ExcludeHealthStatistics": $exclude_health_statistics, "timeout": $timeout} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version, "EventsHealthStateFilter": $events_health_state_filter, "DeployedApplicationsHealthStateFilter": $deployed_applications_health_state_filter, "ServicesHealthStateFilter": $services_health_state_filter, "ExcludeHealthStatistics": $exclude_health_statistics, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the health of a Service Fabric application using the specified policy.
@@ -1817,12 +2392,23 @@ export def "applications-get-health get-using-policy" [
   let base = ($base_url | default $BASE_URL)
   if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'applicationId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "EventsHealthStateFilter" $events_health_state_filter "scalar") (serialize-qp "DeployedApplicationsHealthStateFilter" $deployed_applications_health_state_filter "scalar") (serialize-qp "ServicesHealthStateFilter" $services_health_state_filter "scalar") (serialize-qp "ExcludeHealthStatistics" $exclude_health_statistics "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({application_id: (encode-path-segment $application_id)} | format pattern "/Applications/{application_id}/$/GetHealth") $qp)
+  let full_url = (build-url $base ({application_id: (encode-path-segment $application_id)} | format pattern "/Applications/{application_id}/$/GetHealth") $qp $auth.query)
   let req_body = {"ConsiderWarningAsError": $consider_warning_as_error, "DefaultServiceTypeHealthPolicy": $default_service_type_health_policy, "MaxPercentUnhealthyDeployedApplications": $max_percent_unhealthy_deployed_applications, "ServiceTypeHealthPolicyMap": $service_type_health_policy_map} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"api-version": $api_version, "EventsHealthStateFilter": $events_health_state_filter, "DeployedApplicationsHealthStateFilter": $deployed_applications_health_state_filter, "ServicesHealthStateFilter": $services_health_state_filter, "ExcludeHealthStatistics": $exclude_health_statistics, "timeout": $timeout} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"api-version": $api_version, "EventsHealthStateFilter": $events_health_state_filter, "DeployedApplicationsHealthStateFilter": $deployed_applications_health_state_filter, "ServicesHealthStateFilter": $services_health_state_filter, "ExcludeHealthStatistics": $exclude_health_statistics, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Gets load information about a Service Fabric application.
@@ -1847,10 +2433,21 @@ export def "applications-get-load-information get" [
   let base = ($base_url | default $BASE_URL)
   if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'applicationId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({application_id: (encode-path-segment $application_id)} | format pattern "/Applications/{application_id}/$/GetLoadInformation") $qp)
+  let full_url = (build-url $base ({application_id: (encode-path-segment $application_id)} | format pattern "/Applications/{application_id}/$/GetLoadInformation") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "timeout": $timeout} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 204]
 }
 
 # Gets the information about all services belonging to the application specified by the application ID.
@@ -1877,10 +2474,21 @@ export def "applications-get-services get-list" [
   let base = ($base_url | default $BASE_URL)
   if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'applicationId' must be non-empty" } }
   let qp = [(serialize-qp "ServiceTypeName" $service_type_name "scalar") (serialize-qp "api-version" $api_version "scalar") (serialize-qp "ContinuationToken" $continuation_token "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({application_id: (encode-path-segment $application_id)} | format pattern "/Applications/{application_id}/$/GetServices") $qp)
+  let full_url = (build-url $base ({application_id: (encode-path-segment $application_id)} | format pattern "/Applications/{application_id}/$/GetServices") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"ServiceTypeName": $service_type_name, "api-version": $api_version, "ContinuationToken": $continuation_token, "timeout": $timeout} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"ServiceTypeName": $service_type_name, "api-version": $api_version, "ContinuationToken": $continuation_token, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Creates the specified Service Fabric service.
@@ -1927,12 +2535,23 @@ export def "applications-get-services-create create" [
   let base = ($base_url | default $BASE_URL)
   if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'applicationId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({application_id: (encode-path-segment $application_id)} | format pattern "/Applications/{application_id}/$/GetServices/$/Create") $qp)
+  let full_url = (build-url $base ({application_id: (encode-path-segment $application_id)} | format pattern "/Applications/{application_id}/$/GetServices/$/Create") $qp $auth.query)
   let req_body = {"ApplicationName": $application_name, "CorrelationScheme": $correlation_scheme, "DefaultMoveCost": $default_move_cost, "InitializationData": $initialization_data, "IsDefaultMoveCostSpecified": $is_default_move_cost_specified, "PartitionDescription": $partition_description, "PlacementConstraints": $placement_constraints, "ScalingPolicies": $scaling_policies, "ServiceDnsName": $service_dns_name, "ServiceKind": $service_kind, "ServiceLoadMetrics": $service_load_metrics, "ServiceName": $service_name, "ServicePackageActivationMode": $service_package_activation_mode, "ServicePlacementPolicies": $service_placement_policies, "ServiceTypeName": $service_type_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"api-version": $api_version, "timeout": $timeout} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"api-version": $api_version, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [202]
 }
 
 # Creates a Service Fabric service from the service template.
@@ -1964,12 +2583,23 @@ export def "applications-get-services-create-from-template create" [
   let base = ($base_url | default $BASE_URL)
   if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'applicationId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({application_id: (encode-path-segment $application_id)} | format pattern "/Applications/{application_id}/$/GetServices/$/CreateFromTemplate") $qp)
+  let full_url = (build-url $base ({application_id: (encode-path-segment $application_id)} | format pattern "/Applications/{application_id}/$/GetServices/$/CreateFromTemplate") $qp $auth.query)
   let req_body = {"ApplicationName": $application_name, "InitializationData": $initialization_data, "ServiceDnsName": $service_dns_name, "ServiceName": $service_name, "ServicePackageActivationMode": $service_package_activation_mode, "ServiceTypeName": $service_type_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"api-version": $api_version, "timeout": $timeout} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"api-version": $api_version, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [202]
 }
 
 # Gets the information about the specific service belonging to the Service Fabric application.
@@ -1996,10 +2626,21 @@ export def "applications-get-services get" [
   if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'applicationId' must be non-empty" } }
   if ($service_id | is-empty) { error make --unspanned { msg: "path parameter 'serviceId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({application_id: (encode-path-segment $application_id), service_id: (encode-path-segment $service_id)} | format pattern "/Applications/{application_id}/$/GetServices/{service_id}") $qp)
+  let full_url = (build-url $base ({application_id: (encode-path-segment $application_id), service_id: (encode-path-segment $service_id)} | format pattern "/Applications/{application_id}/$/GetServices/{service_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "timeout": $timeout} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 204]
 }
 
 # Gets details for the latest upgrade performed on this application.
@@ -2024,10 +2665,21 @@ export def "applications-get-upgrade-progress get" [
   let base = ($base_url | default $BASE_URL)
   if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'applicationId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({application_id: (encode-path-segment $application_id)} | format pattern "/Applications/{application_id}/$/GetUpgradeProgress") $qp)
+  let full_url = (build-url $base ({application_id: (encode-path-segment $application_id)} | format pattern "/Applications/{application_id}/$/GetUpgradeProgress") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "timeout": $timeout} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Resumes upgrading an application in the Service Fabric cluster.
@@ -2054,12 +2706,23 @@ export def "applications-move-to-next-upgrade-domain create-resume" [
   let base = ($base_url | default $BASE_URL)
   if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'applicationId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({application_id: (encode-path-segment $application_id)} | format pattern "/Applications/{application_id}/$/MoveToNextUpgradeDomain") $qp)
+  let full_url = (build-url $base ({application_id: (encode-path-segment $application_id)} | format pattern "/Applications/{application_id}/$/MoveToNextUpgradeDomain") $qp $auth.query)
   let req_body = {"UpgradeDomainName": $upgrade_domain_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"api-version": $api_version, "timeout": $timeout} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"api-version": $api_version, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Sends a health report on the Service Fabric application.
@@ -2093,12 +2756,23 @@ export def "applications-report-health create" [
   let base = ($base_url | default $BASE_URL)
   if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'applicationId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "Immediate" $immediate "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({application_id: (encode-path-segment $application_id)} | format pattern "/Applications/{application_id}/$/ReportHealth") $qp)
+  let full_url = (build-url $base ({application_id: (encode-path-segment $application_id)} | format pattern "/Applications/{application_id}/$/ReportHealth") $qp $auth.query)
   let req_body = {"Description": $description, "HealthState": $health_state, "Property": $property, "RemoveWhenExpired": $remove_when_expired, "SequenceNumber": $sequence_number, "SourceId": $source_id, "TimeToLiveInMilliSeconds": $time_to_live_in_milli_seconds} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"api-version": $api_version, "Immediate": $immediate, "timeout": $timeout} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"api-version": $api_version, "Immediate": $immediate, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Resumes periodic backup of a Service Fabric application which was previously suspended.
@@ -2123,10 +2797,21 @@ export def "applications-resume-backup create" [
   let base = ($base_url | default $BASE_URL)
   if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'applicationId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({application_id: (encode-path-segment $application_id)} | format pattern "/Applications/{application_id}/$/ResumeBackup") $qp)
+  let full_url = (build-url $base ({application_id: (encode-path-segment $application_id)} | format pattern "/Applications/{application_id}/$/ResumeBackup") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "timeout": $timeout} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"api-version": $api_version, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [202]
 }
 
 # Starts rolling back the currently on-going upgrade of an application in the Service Fabric cluster.
@@ -2151,10 +2836,21 @@ export def "applications-rollback-upgrade create" [
   let base = ($base_url | default $BASE_URL)
   if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'applicationId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({application_id: (encode-path-segment $application_id)} | format pattern "/Applications/{application_id}/$/RollbackUpgrade") $qp)
+  let full_url = (build-url $base ({application_id: (encode-path-segment $application_id)} | format pattern "/Applications/{application_id}/$/RollbackUpgrade") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "timeout": $timeout} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"api-version": $api_version, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Suspends periodic backup for the specified Service Fabric application.
@@ -2179,10 +2875,21 @@ export def "applications-suspend-backup create" [
   let base = ($base_url | default $BASE_URL)
   if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'applicationId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({application_id: (encode-path-segment $application_id)} | format pattern "/Applications/{application_id}/$/SuspendBackup") $qp)
+  let full_url = (build-url $base ({application_id: (encode-path-segment $application_id)} | format pattern "/Applications/{application_id}/$/SuspendBackup") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "timeout": $timeout} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"api-version": $api_version, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [202]
 }
 
 # Updates an ongoing application upgrade in the Service Fabric cluster.
@@ -2214,12 +2921,23 @@ export def "applications-update-upgrade update" [
   let base = ($base_url | default $BASE_URL)
   if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'applicationId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({application_id: (encode-path-segment $application_id)} | format pattern "/Applications/{application_id}/$/UpdateUpgrade") $qp)
+  let full_url = (build-url $base ({application_id: (encode-path-segment $application_id)} | format pattern "/Applications/{application_id}/$/UpdateUpgrade") $qp $auth.query)
   let req_body = {"ApplicationHealthPolicy": $application_health_policy, "Name": $name, "UpdateDescription": $update_description, "UpgradeKind": $upgrade_kind} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"api-version": $api_version, "timeout": $timeout} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"api-version": $api_version, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Starts upgrading an application in the Service Fabric cluster.
@@ -2258,12 +2976,23 @@ export def "applications-upgrade start" [
   let base = ($base_url | default $BASE_URL)
   if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'applicationId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({application_id: (encode-path-segment $application_id)} | format pattern "/Applications/{application_id}/$/Upgrade") $qp)
+  let full_url = (build-url $base ({application_id: (encode-path-segment $application_id)} | format pattern "/Applications/{application_id}/$/Upgrade") $qp $auth.query)
   let req_body = {"ApplicationHealthPolicy": $application_health_policy, "ForceRestart": $force_restart, "MonitoringPolicy": $monitoring_policy, "Name": $name, "Parameters": $parameters, "RollingUpgradeMode": $rolling_upgrade_mode, "SortOrder": $sort_order, "TargetApplicationTypeVersion": $target_application_type_version, "UpgradeKind": $upgrade_kind, "UpgradeReplicaSetCheckTimeoutInSeconds": $upgrade_replica_set_check_timeout_in_seconds} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"api-version": $api_version, "timeout": $timeout} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"api-version": $api_version, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the list of backups available for the specified backed up entity at the specified backup location.
@@ -2296,12 +3025,23 @@ export def "backup-restore-get-backups get-from-location" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "timeout" $timeout "scalar") (serialize-qp "ContinuationToken" $continuation_token "scalar") (serialize-qp "MaxResults" $max_results "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/BackupRestore/$/GetBackups" $qp)
+  let full_url = (build-url $base "/BackupRestore/$/GetBackups" $qp $auth.query)
   let req_body = {"BackupEntity": $backup_entity, "EndDateTimeFilter": $end_date_time_filter, "Latest": $latest, "StartDateTimeFilter": $start_date_time_filter, "Storage": $storage} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"api-version": $api_version, "timeout": $timeout, "ContinuationToken": $continuation_token, "MaxResults": $max_results} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"api-version": $api_version, "timeout": $timeout, "ContinuationToken": $continuation_token, "MaxResults": $max_results} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Gets all the backup policies configured.
@@ -2326,10 +3066,21 @@ export def "backup-restore-backup-policies get-policy-list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "ContinuationToken" $continuation_token "scalar") (serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/BackupRestore/BackupPolicies" $qp)
+  let full_url = (build-url $base "/BackupRestore/BackupPolicies" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "ContinuationToken": $continuation_token, "MaxResults": $max_results, "timeout": $timeout} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version, "ContinuationToken": $continuation_token, "MaxResults": $max_results, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Creates a backup policy.
@@ -2362,12 +3113,23 @@ export def "backup-restore-backup-policies-create create-policy" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/BackupRestore/BackupPolicies/$/Create" $qp)
+  let full_url = (build-url $base "/BackupRestore/BackupPolicies/$/Create" $qp $auth.query)
   let req_body = {"AutoRestoreOnDataLoss": $auto_restore_on_data_loss, "MaxIncrementalBackups": $max_incremental_backups, "Name": $name, "RetentionPolicy": $retention_policy, "Schedule": $schedule, "Storage": $storage} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"api-version": $api_version, "timeout": $timeout} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"api-version": $api_version, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Gets a particular backup policy by name.
@@ -2392,10 +3154,21 @@ export def "backup-restore-backup-policies get-policy-by-name" [
   let base = ($base_url | default $BASE_URL)
   if ($backup_policy_name | is-empty) { error make --unspanned { msg: "path parameter 'backupPolicyName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({backup_policy_name: (encode-path-segment $backup_policy_name)} | format pattern "/BackupRestore/BackupPolicies/{backup_policy_name}") $qp)
+  let full_url = (build-url $base ({backup_policy_name: (encode-path-segment $backup_policy_name)} | format pattern "/BackupRestore/BackupPolicies/{backup_policy_name}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "timeout": $timeout} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes the backup policy.
@@ -2420,10 +3193,21 @@ export def "backup-restore-backup-policies-delete delete-policy" [
   let base = ($base_url | default $BASE_URL)
   if ($backup_policy_name | is-empty) { error make --unspanned { msg: "path parameter 'backupPolicyName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({backup_policy_name: (encode-path-segment $backup_policy_name)} | format pattern "/BackupRestore/BackupPolicies/{backup_policy_name}/$/Delete") $qp)
+  let full_url = (build-url $base ({backup_policy_name: (encode-path-segment $backup_policy_name)} | format pattern "/BackupRestore/BackupPolicies/{backup_policy_name}/$/Delete") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "timeout": $timeout} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"api-version": $api_version, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the list of backup entities that are associated with this policy.
@@ -2450,10 +3234,21 @@ export def "backup-restore-backup-policies-get-backup-enabled-entities list-back
   let base = ($base_url | default $BASE_URL)
   if ($backup_policy_name | is-empty) { error make --unspanned { msg: "path parameter 'backupPolicyName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "ContinuationToken" $continuation_token "scalar") (serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({backup_policy_name: (encode-path-segment $backup_policy_name)} | format pattern "/BackupRestore/BackupPolicies/{backup_policy_name}/$/GetBackupEnabledEntities") $qp)
+  let full_url = (build-url $base ({backup_policy_name: (encode-path-segment $backup_policy_name)} | format pattern "/BackupRestore/BackupPolicies/{backup_policy_name}/$/GetBackupEnabledEntities") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "ContinuationToken": $continuation_token, "MaxResults": $max_results, "timeout": $timeout} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version, "ContinuationToken": $continuation_token, "MaxResults": $max_results, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates the backup policy.
@@ -2488,12 +3283,23 @@ export def "backup-restore-backup-policies-update update-policy" [
   let base = ($base_url | default $BASE_URL)
   if ($backup_policy_name | is-empty) { error make --unspanned { msg: "path parameter 'backupPolicyName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({backup_policy_name: (encode-path-segment $backup_policy_name)} | format pattern "/BackupRestore/BackupPolicies/{backup_policy_name}/$/Update") $qp)
+  let full_url = (build-url $base ({backup_policy_name: (encode-path-segment $backup_policy_name)} | format pattern "/BackupRestore/BackupPolicies/{backup_policy_name}/$/Update") $qp $auth.query)
   let req_body = {"AutoRestoreOnDataLoss": $auto_restore_on_data_loss, "MaxIncrementalBackups": $max_incremental_backups, "Name": $name, "RetentionPolicy": $retention_policy, "Schedule": $schedule, "Storage": $storage} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"api-version": $api_version, "timeout": $timeout} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"api-version": $api_version, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the list of compose deployments created in the Service Fabric cluster.
@@ -2518,10 +3324,21 @@ export def "compose-deployments get-status-list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "ContinuationToken" $continuation_token "scalar") (serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/ComposeDeployments" $qp)
+  let full_url = (build-url $base "/ComposeDeployments" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "ContinuationToken": $continuation_token, "MaxResults": $max_results, "timeout": $timeout} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version, "ContinuationToken": $continuation_token, "MaxResults": $max_results, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Creates a Service Fabric compose deployment.
@@ -2549,12 +3366,23 @@ export def "compose-deployments-create create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/ComposeDeployments/$/Create" $qp)
+  let full_url = (build-url $base "/ComposeDeployments/$/Create" $qp $auth.query)
   let req_body = {"ComposeFileContent": $compose_file_content, "DeploymentName": $deployment_name, "RegistryCredential": $registry_credential} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"api-version": $api_version, "timeout": $timeout} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"api-version": $api_version, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [202]
 }
 
 # Gets information about a Service Fabric compose deployment.
@@ -2579,10 +3407,21 @@ export def "compose-deployments get-status" [
   let base = ($base_url | default $BASE_URL)
   if ($deployment_name | is-empty) { error make --unspanned { msg: "path parameter 'deploymentName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({deployment_name: (encode-path-segment $deployment_name)} | format pattern "/ComposeDeployments/{deployment_name}") $qp)
+  let full_url = (build-url $base ({deployment_name: (encode-path-segment $deployment_name)} | format pattern "/ComposeDeployments/{deployment_name}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "timeout": $timeout} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes an existing Service Fabric compose deployment from cluster.
@@ -2607,10 +3446,21 @@ export def "compose-deployments-delete delete" [
   let base = ($base_url | default $BASE_URL)
   if ($deployment_name | is-empty) { error make --unspanned { msg: "path parameter 'deploymentName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({deployment_name: (encode-path-segment $deployment_name)} | format pattern "/ComposeDeployments/{deployment_name}/$/Delete") $qp)
+  let full_url = (build-url $base ({deployment_name: (encode-path-segment $deployment_name)} | format pattern "/ComposeDeployments/{deployment_name}/$/Delete") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "timeout": $timeout} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"api-version": $api_version, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [202]
 }
 
 # Gets details for the latest upgrade performed on this Service Fabric compose deployment.
@@ -2635,10 +3485,21 @@ export def "compose-deployments-get-upgrade-progress get" [
   let base = ($base_url | default $BASE_URL)
   if ($deployment_name | is-empty) { error make --unspanned { msg: "path parameter 'deploymentName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({deployment_name: (encode-path-segment $deployment_name)} | format pattern "/ComposeDeployments/{deployment_name}/$/GetUpgradeProgress") $qp)
+  let full_url = (build-url $base ({deployment_name: (encode-path-segment $deployment_name)} | format pattern "/ComposeDeployments/{deployment_name}/$/GetUpgradeProgress") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "timeout": $timeout} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Starts rolling back a compose deployment upgrade in the Service Fabric cluster.
@@ -2663,10 +3524,21 @@ export def "compose-deployments-rollback-upgrade start" [
   let base = ($base_url | default $BASE_URL)
   if ($deployment_name | is-empty) { error make --unspanned { msg: "path parameter 'deploymentName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({deployment_name: (encode-path-segment $deployment_name)} | format pattern "/ComposeDeployments/{deployment_name}/$/RollbackUpgrade") $qp)
+  let full_url = (build-url $base ({deployment_name: (encode-path-segment $deployment_name)} | format pattern "/ComposeDeployments/{deployment_name}/$/RollbackUpgrade") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "timeout": $timeout} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"api-version": $api_version, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Starts upgrading a compose deployment in the Service Fabric cluster.
@@ -2704,12 +3576,23 @@ export def "compose-deployments-upgrade start" [
   let base = ($base_url | default $BASE_URL)
   if ($deployment_name | is-empty) { error make --unspanned { msg: "path parameter 'deploymentName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({deployment_name: (encode-path-segment $deployment_name)} | format pattern "/ComposeDeployments/{deployment_name}/$/Upgrade") $qp)
+  let full_url = (build-url $base ({deployment_name: (encode-path-segment $deployment_name)} | format pattern "/ComposeDeployments/{deployment_name}/$/Upgrade") $qp $auth.query)
   let req_body = {"ApplicationHealthPolicy": $application_health_policy, "ComposeFileContent": $compose_file_content, "DeploymentName": $body_deployment_name, "ForceRestart": $force_restart, "MonitoringPolicy": $monitoring_policy, "RegistryCredential": $registry_credential, "RollingUpgradeMode": $rolling_upgrade_mode, "UpgradeKind": $upgrade_kind, "UpgradeReplicaSetCheckTimeoutInSeconds": $upgrade_replica_set_check_timeout_in_seconds} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"api-version": $api_version, "timeout": $timeout} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"api-version": $api_version, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [202]
 }
 
 # Gets all Applications-related events.
@@ -2737,10 +3620,21 @@ export def "events-store-applications-events list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "timeout" $timeout "scalar") (serialize-qp "StartTimeUtc" $start_time_utc "scalar") (serialize-qp "EndTimeUtc" $end_time_utc "scalar") (serialize-qp "EventsTypesFilter" $events_types_filter "scalar") (serialize-qp "ExcludeAnalysisEvents" $exclude_analysis_events "scalar") (serialize-qp "SkipCorrelationLookup" $skip_correlation_lookup "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/EventsStore/Applications/Events" $qp)
+  let full_url = (build-url $base "/EventsStore/Applications/Events" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "timeout": $timeout, "StartTimeUtc": $start_time_utc, "EndTimeUtc": $end_time_utc, "EventsTypesFilter": $events_types_filter, "ExcludeAnalysisEvents": $exclude_analysis_events, "SkipCorrelationLookup": $skip_correlation_lookup} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version, "timeout": $timeout, "StartTimeUtc": $start_time_utc, "EndTimeUtc": $end_time_utc, "EventsTypesFilter": $events_types_filter, "ExcludeAnalysisEvents": $exclude_analysis_events, "SkipCorrelationLookup": $skip_correlation_lookup} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets an Application-related events.
@@ -2770,10 +3664,21 @@ export def "events-store-applications-events get-list" [
   let base = ($base_url | default $BASE_URL)
   if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'applicationId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "timeout" $timeout "scalar") (serialize-qp "StartTimeUtc" $start_time_utc "scalar") (serialize-qp "EndTimeUtc" $end_time_utc "scalar") (serialize-qp "EventsTypesFilter" $events_types_filter "scalar") (serialize-qp "ExcludeAnalysisEvents" $exclude_analysis_events "scalar") (serialize-qp "SkipCorrelationLookup" $skip_correlation_lookup "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({application_id: (encode-path-segment $application_id)} | format pattern "/EventsStore/Applications/{application_id}/$/Events") $qp)
+  let full_url = (build-url $base ({application_id: (encode-path-segment $application_id)} | format pattern "/EventsStore/Applications/{application_id}/$/Events") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "timeout": $timeout, "StartTimeUtc": $start_time_utc, "EndTimeUtc": $end_time_utc, "EventsTypesFilter": $events_types_filter, "ExcludeAnalysisEvents": $exclude_analysis_events, "SkipCorrelationLookup": $skip_correlation_lookup} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version, "timeout": $timeout, "StartTimeUtc": $start_time_utc, "EndTimeUtc": $end_time_utc, "EventsTypesFilter": $events_types_filter, "ExcludeAnalysisEvents": $exclude_analysis_events, "SkipCorrelationLookup": $skip_correlation_lookup} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets all Cluster-related events.
@@ -2801,10 +3706,21 @@ export def "events-store-cluster-events get-list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "timeout" $timeout "scalar") (serialize-qp "StartTimeUtc" $start_time_utc "scalar") (serialize-qp "EndTimeUtc" $end_time_utc "scalar") (serialize-qp "EventsTypesFilter" $events_types_filter "scalar") (serialize-qp "ExcludeAnalysisEvents" $exclude_analysis_events "scalar") (serialize-qp "SkipCorrelationLookup" $skip_correlation_lookup "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/EventsStore/Cluster/Events" $qp)
+  let full_url = (build-url $base "/EventsStore/Cluster/Events" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "timeout": $timeout, "StartTimeUtc": $start_time_utc, "EndTimeUtc": $end_time_utc, "EventsTypesFilter": $events_types_filter, "ExcludeAnalysisEvents": $exclude_analysis_events, "SkipCorrelationLookup": $skip_correlation_lookup} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version, "timeout": $timeout, "StartTimeUtc": $start_time_utc, "EndTimeUtc": $end_time_utc, "EventsTypesFilter": $events_types_filter, "ExcludeAnalysisEvents": $exclude_analysis_events, "SkipCorrelationLookup": $skip_correlation_lookup} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets all Containers-related events.
@@ -2832,10 +3748,21 @@ export def "events-store-containers-events get-list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "timeout" $timeout "scalar") (serialize-qp "StartTimeUtc" $start_time_utc "scalar") (serialize-qp "EndTimeUtc" $end_time_utc "scalar") (serialize-qp "EventsTypesFilter" $events_types_filter "scalar") (serialize-qp "ExcludeAnalysisEvents" $exclude_analysis_events "scalar") (serialize-qp "SkipCorrelationLookup" $skip_correlation_lookup "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/EventsStore/Containers/Events" $qp)
+  let full_url = (build-url $base "/EventsStore/Containers/Events" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "timeout": $timeout, "StartTimeUtc": $start_time_utc, "EndTimeUtc": $end_time_utc, "EventsTypesFilter": $events_types_filter, "ExcludeAnalysisEvents": $exclude_analysis_events, "SkipCorrelationLookup": $skip_correlation_lookup} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version, "timeout": $timeout, "StartTimeUtc": $start_time_utc, "EndTimeUtc": $end_time_utc, "EventsTypesFilter": $events_types_filter, "ExcludeAnalysisEvents": $exclude_analysis_events, "SkipCorrelationLookup": $skip_correlation_lookup} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets all correlated events for a given event.
@@ -2860,10 +3787,21 @@ export def "events-store-correlated-events-events get-list" [
   let base = ($base_url | default $BASE_URL)
   if ($event_instance_id | is-empty) { error make --unspanned { msg: "path parameter 'eventInstanceId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({event_instance_id: (encode-path-segment $event_instance_id)} | format pattern "/EventsStore/CorrelatedEvents/{event_instance_id}/$/Events") $qp)
+  let full_url = (build-url $base ({event_instance_id: (encode-path-segment $event_instance_id)} | format pattern "/EventsStore/CorrelatedEvents/{event_instance_id}/$/Events") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "timeout": $timeout} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets all Nodes-related Events.
@@ -2891,10 +3829,21 @@ export def "events-store-nodes-events list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "timeout" $timeout "scalar") (serialize-qp "StartTimeUtc" $start_time_utc "scalar") (serialize-qp "EndTimeUtc" $end_time_utc "scalar") (serialize-qp "EventsTypesFilter" $events_types_filter "scalar") (serialize-qp "ExcludeAnalysisEvents" $exclude_analysis_events "scalar") (serialize-qp "SkipCorrelationLookup" $skip_correlation_lookup "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/EventsStore/Nodes/Events" $qp)
+  let full_url = (build-url $base "/EventsStore/Nodes/Events" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "timeout": $timeout, "StartTimeUtc": $start_time_utc, "EndTimeUtc": $end_time_utc, "EventsTypesFilter": $events_types_filter, "ExcludeAnalysisEvents": $exclude_analysis_events, "SkipCorrelationLookup": $skip_correlation_lookup} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version, "timeout": $timeout, "StartTimeUtc": $start_time_utc, "EndTimeUtc": $end_time_utc, "EventsTypesFilter": $events_types_filter, "ExcludeAnalysisEvents": $exclude_analysis_events, "SkipCorrelationLookup": $skip_correlation_lookup} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets a Node-related events.
@@ -2924,10 +3873,21 @@ export def "events-store-nodes-events get-list" [
   let base = ($base_url | default $BASE_URL)
   if ($node_name | is-empty) { error make --unspanned { msg: "path parameter 'nodeName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "timeout" $timeout "scalar") (serialize-qp "StartTimeUtc" $start_time_utc "scalar") (serialize-qp "EndTimeUtc" $end_time_utc "scalar") (serialize-qp "EventsTypesFilter" $events_types_filter "scalar") (serialize-qp "ExcludeAnalysisEvents" $exclude_analysis_events "scalar") (serialize-qp "SkipCorrelationLookup" $skip_correlation_lookup "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({node_name: (encode-path-segment $node_name)} | format pattern "/EventsStore/Nodes/{node_name}/$/Events") $qp)
+  let full_url = (build-url $base ({node_name: (encode-path-segment $node_name)} | format pattern "/EventsStore/Nodes/{node_name}/$/Events") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "timeout": $timeout, "StartTimeUtc": $start_time_utc, "EndTimeUtc": $end_time_utc, "EventsTypesFilter": $events_types_filter, "ExcludeAnalysisEvents": $exclude_analysis_events, "SkipCorrelationLookup": $skip_correlation_lookup} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version, "timeout": $timeout, "StartTimeUtc": $start_time_utc, "EndTimeUtc": $end_time_utc, "EventsTypesFilter": $events_types_filter, "ExcludeAnalysisEvents": $exclude_analysis_events, "SkipCorrelationLookup": $skip_correlation_lookup} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets all Partitions-related events.
@@ -2955,10 +3915,21 @@ export def "events-store-partitions-events list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "timeout" $timeout "scalar") (serialize-qp "StartTimeUtc" $start_time_utc "scalar") (serialize-qp "EndTimeUtc" $end_time_utc "scalar") (serialize-qp "EventsTypesFilter" $events_types_filter "scalar") (serialize-qp "ExcludeAnalysisEvents" $exclude_analysis_events "scalar") (serialize-qp "SkipCorrelationLookup" $skip_correlation_lookup "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/EventsStore/Partitions/Events" $qp)
+  let full_url = (build-url $base "/EventsStore/Partitions/Events" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "timeout": $timeout, "StartTimeUtc": $start_time_utc, "EndTimeUtc": $end_time_utc, "EventsTypesFilter": $events_types_filter, "ExcludeAnalysisEvents": $exclude_analysis_events, "SkipCorrelationLookup": $skip_correlation_lookup} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version, "timeout": $timeout, "StartTimeUtc": $start_time_utc, "EndTimeUtc": $end_time_utc, "EventsTypesFilter": $events_types_filter, "ExcludeAnalysisEvents": $exclude_analysis_events, "SkipCorrelationLookup": $skip_correlation_lookup} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets a Partition-related events.
@@ -2988,10 +3959,21 @@ export def "events-store-partitions-events get-list" [
   let base = ($base_url | default $BASE_URL)
   if ($partition_id | is-empty) { error make --unspanned { msg: "path parameter 'partitionId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "timeout" $timeout "scalar") (serialize-qp "StartTimeUtc" $start_time_utc "scalar") (serialize-qp "EndTimeUtc" $end_time_utc "scalar") (serialize-qp "EventsTypesFilter" $events_types_filter "scalar") (serialize-qp "ExcludeAnalysisEvents" $exclude_analysis_events "scalar") (serialize-qp "SkipCorrelationLookup" $skip_correlation_lookup "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({partition_id: (encode-path-segment $partition_id)} | format pattern "/EventsStore/Partitions/{partition_id}/$/Events") $qp)
+  let full_url = (build-url $base ({partition_id: (encode-path-segment $partition_id)} | format pattern "/EventsStore/Partitions/{partition_id}/$/Events") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "timeout": $timeout, "StartTimeUtc": $start_time_utc, "EndTimeUtc": $end_time_utc, "EventsTypesFilter": $events_types_filter, "ExcludeAnalysisEvents": $exclude_analysis_events, "SkipCorrelationLookup": $skip_correlation_lookup} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version, "timeout": $timeout, "StartTimeUtc": $start_time_utc, "EndTimeUtc": $end_time_utc, "EventsTypesFilter": $events_types_filter, "ExcludeAnalysisEvents": $exclude_analysis_events, "SkipCorrelationLookup": $skip_correlation_lookup} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets all Replicas-related events for a Partition.
@@ -3021,10 +4003,21 @@ export def "events-store-partitions-replicas-events list" [
   let base = ($base_url | default $BASE_URL)
   if ($partition_id | is-empty) { error make --unspanned { msg: "path parameter 'partitionId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "timeout" $timeout "scalar") (serialize-qp "StartTimeUtc" $start_time_utc "scalar") (serialize-qp "EndTimeUtc" $end_time_utc "scalar") (serialize-qp "EventsTypesFilter" $events_types_filter "scalar") (serialize-qp "ExcludeAnalysisEvents" $exclude_analysis_events "scalar") (serialize-qp "SkipCorrelationLookup" $skip_correlation_lookup "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({partition_id: (encode-path-segment $partition_id)} | format pattern "/EventsStore/Partitions/{partition_id}/$/Replicas/Events") $qp)
+  let full_url = (build-url $base ({partition_id: (encode-path-segment $partition_id)} | format pattern "/EventsStore/Partitions/{partition_id}/$/Replicas/Events") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "timeout": $timeout, "StartTimeUtc": $start_time_utc, "EndTimeUtc": $end_time_utc, "EventsTypesFilter": $events_types_filter, "ExcludeAnalysisEvents": $exclude_analysis_events, "SkipCorrelationLookup": $skip_correlation_lookup} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version, "timeout": $timeout, "StartTimeUtc": $start_time_utc, "EndTimeUtc": $end_time_utc, "EventsTypesFilter": $events_types_filter, "ExcludeAnalysisEvents": $exclude_analysis_events, "SkipCorrelationLookup": $skip_correlation_lookup} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets a Partition Replica-related events.
@@ -3056,10 +4049,21 @@ export def "events-store-partitions-replicas-events get-list" [
   if ($partition_id | is-empty) { error make --unspanned { msg: "path parameter 'partitionId' must be non-empty" } }
   if ($replica_id | is-empty) { error make --unspanned { msg: "path parameter 'replicaId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "timeout" $timeout "scalar") (serialize-qp "StartTimeUtc" $start_time_utc "scalar") (serialize-qp "EndTimeUtc" $end_time_utc "scalar") (serialize-qp "EventsTypesFilter" $events_types_filter "scalar") (serialize-qp "ExcludeAnalysisEvents" $exclude_analysis_events "scalar") (serialize-qp "SkipCorrelationLookup" $skip_correlation_lookup "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({partition_id: (encode-path-segment $partition_id), replica_id: (encode-path-segment $replica_id)} | format pattern "/EventsStore/Partitions/{partition_id}/$/Replicas/{replica_id}/$/Events") $qp)
+  let full_url = (build-url $base ({partition_id: (encode-path-segment $partition_id), replica_id: (encode-path-segment $replica_id)} | format pattern "/EventsStore/Partitions/{partition_id}/$/Replicas/{replica_id}/$/Events") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "timeout": $timeout, "StartTimeUtc": $start_time_utc, "EndTimeUtc": $end_time_utc, "EventsTypesFilter": $events_types_filter, "ExcludeAnalysisEvents": $exclude_analysis_events, "SkipCorrelationLookup": $skip_correlation_lookup} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version, "timeout": $timeout, "StartTimeUtc": $start_time_utc, "EndTimeUtc": $end_time_utc, "EventsTypesFilter": $events_types_filter, "ExcludeAnalysisEvents": $exclude_analysis_events, "SkipCorrelationLookup": $skip_correlation_lookup} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets all Services-related events.
@@ -3087,10 +4091,21 @@ export def "events-store-services-events list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "timeout" $timeout "scalar") (serialize-qp "StartTimeUtc" $start_time_utc "scalar") (serialize-qp "EndTimeUtc" $end_time_utc "scalar") (serialize-qp "EventsTypesFilter" $events_types_filter "scalar") (serialize-qp "ExcludeAnalysisEvents" $exclude_analysis_events "scalar") (serialize-qp "SkipCorrelationLookup" $skip_correlation_lookup "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/EventsStore/Services/Events" $qp)
+  let full_url = (build-url $base "/EventsStore/Services/Events" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "timeout": $timeout, "StartTimeUtc": $start_time_utc, "EndTimeUtc": $end_time_utc, "EventsTypesFilter": $events_types_filter, "ExcludeAnalysisEvents": $exclude_analysis_events, "SkipCorrelationLookup": $skip_correlation_lookup} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version, "timeout": $timeout, "StartTimeUtc": $start_time_utc, "EndTimeUtc": $end_time_utc, "EventsTypesFilter": $events_types_filter, "ExcludeAnalysisEvents": $exclude_analysis_events, "SkipCorrelationLookup": $skip_correlation_lookup} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets a Service-related events.
@@ -3120,10 +4135,21 @@ export def "events-store-services-events get-list" [
   let base = ($base_url | default $BASE_URL)
   if ($service_id | is-empty) { error make --unspanned { msg: "path parameter 'serviceId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "timeout" $timeout "scalar") (serialize-qp "StartTimeUtc" $start_time_utc "scalar") (serialize-qp "EndTimeUtc" $end_time_utc "scalar") (serialize-qp "EventsTypesFilter" $events_types_filter "scalar") (serialize-qp "ExcludeAnalysisEvents" $exclude_analysis_events "scalar") (serialize-qp "SkipCorrelationLookup" $skip_correlation_lookup "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_id: (encode-path-segment $service_id)} | format pattern "/EventsStore/Services/{service_id}/$/Events") $qp)
+  let full_url = (build-url $base ({service_id: (encode-path-segment $service_id)} | format pattern "/EventsStore/Services/{service_id}/$/Events") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "timeout": $timeout, "StartTimeUtc": $start_time_utc, "EndTimeUtc": $end_time_utc, "EventsTypesFilter": $events_types_filter, "ExcludeAnalysisEvents": $exclude_analysis_events, "SkipCorrelationLookup": $skip_correlation_lookup} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version, "timeout": $timeout, "StartTimeUtc": $start_time_utc, "EndTimeUtc": $end_time_utc, "EventsTypesFilter": $events_types_filter, "ExcludeAnalysisEvents": $exclude_analysis_events, "SkipCorrelationLookup": $skip_correlation_lookup} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets a list of user-induced fault operations filtered by provided input.
@@ -3148,10 +4174,21 @@ export def "faults get-operation-list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "TypeFilter" $type_filter "scalar") (serialize-qp "StateFilter" $state_filter "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/Faults/" $qp)
+  let full_url = (build-url $base "/Faults/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "TypeFilter": $type_filter, "StateFilter": $state_filter, "timeout": $timeout} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version, "TypeFilter": $type_filter, "StateFilter": $state_filter, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Cancels a user-induced fault operation.
@@ -3176,10 +4213,21 @@ export def "faults-cancel cancel-operation" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "OperationId" $operation_id "scalar") (serialize-qp "Force" $force "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/Faults/$/Cancel" $qp)
+  let full_url = (build-url $base "/Faults/$/Cancel" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "OperationId": $operation_id, "Force": $force, "timeout": $timeout} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"api-version": $api_version, "OperationId": $operation_id, "Force": $force, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the progress of an operation started using StartNodeTransition.
@@ -3205,10 +4253,21 @@ export def "faults-nodes-get-transition-progress get" [
   let base = ($base_url | default $BASE_URL)
   if ($node_name | is-empty) { error make --unspanned { msg: "path parameter 'nodeName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "OperationId" $operation_id "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({node_name: (encode-path-segment $node_name)} | format pattern "/Faults/Nodes/{node_name}/$/GetTransitionProgress") $qp)
+  let full_url = (build-url $base ({node_name: (encode-path-segment $node_name)} | format pattern "/Faults/Nodes/{node_name}/$/GetTransitionProgress") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "OperationId": $operation_id, "timeout": $timeout} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version, "OperationId": $operation_id, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Starts or stops a cluster node.
@@ -3237,10 +4296,21 @@ export def "faults-nodes-start-transition start" [
   let base = ($base_url | default $BASE_URL)
   if ($node_name | is-empty) { error make --unspanned { msg: "path parameter 'nodeName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "OperationId" $operation_id "scalar") (serialize-qp "NodeTransitionType" $node_transition_type "scalar") (serialize-qp "NodeInstanceId" $node_instance_id "scalar") (serialize-qp "StopDurationInSeconds" $stop_duration_in_seconds "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({node_name: (encode-path-segment $node_name)} | format pattern "/Faults/Nodes/{node_name}/$/StartTransition/") $qp)
+  let full_url = (build-url $base ({node_name: (encode-path-segment $node_name)} | format pattern "/Faults/Nodes/{node_name}/$/StartTransition/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "OperationId": $operation_id, "NodeTransitionType": $node_transition_type, "NodeInstanceId": $node_instance_id, "StopDurationInSeconds": $stop_duration_in_seconds, "timeout": $timeout} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"api-version": $api_version, "OperationId": $operation_id, "NodeTransitionType": $node_transition_type, "NodeInstanceId": $node_instance_id, "StopDurationInSeconds": $stop_duration_in_seconds, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [202]
 }
 
 # Gets the progress of a partition data loss operation started using the StartDataLoss API.
@@ -3268,10 +4338,21 @@ export def "faults-services-get-partitions-get-data-loss-progress get" [
   if ($service_id | is-empty) { error make --unspanned { msg: "path parameter 'serviceId' must be non-empty" } }
   if ($partition_id | is-empty) { error make --unspanned { msg: "path parameter 'partitionId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "OperationId" $operation_id "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_id: (encode-path-segment $service_id), partition_id: (encode-path-segment $partition_id)} | format pattern "/Faults/Services/{service_id}/$/GetPartitions/{partition_id}/$/GetDataLossProgress") $qp)
+  let full_url = (build-url $base ({service_id: (encode-path-segment $service_id), partition_id: (encode-path-segment $partition_id)} | format pattern "/Faults/Services/{service_id}/$/GetPartitions/{partition_id}/$/GetDataLossProgress") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "OperationId": $operation_id, "timeout": $timeout} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version, "OperationId": $operation_id, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the progress of a quorum loss operation on a partition started using the StartQuorumLoss API.
@@ -3299,10 +4380,21 @@ export def "faults-services-get-partitions-get-quorum-loss-progress get" [
   if ($service_id | is-empty) { error make --unspanned { msg: "path parameter 'serviceId' must be non-empty" } }
   if ($partition_id | is-empty) { error make --unspanned { msg: "path parameter 'partitionId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "OperationId" $operation_id "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_id: (encode-path-segment $service_id), partition_id: (encode-path-segment $partition_id)} | format pattern "/Faults/Services/{service_id}/$/GetPartitions/{partition_id}/$/GetQuorumLossProgress") $qp)
+  let full_url = (build-url $base ({service_id: (encode-path-segment $service_id), partition_id: (encode-path-segment $partition_id)} | format pattern "/Faults/Services/{service_id}/$/GetPartitions/{partition_id}/$/GetQuorumLossProgress") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "OperationId": $operation_id, "timeout": $timeout} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version, "OperationId": $operation_id, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the progress of a PartitionRestart operation started using StartPartitionRestart.
@@ -3330,10 +4422,21 @@ export def "faults-services-get-partitions-get-restart-progress get" [
   if ($service_id | is-empty) { error make --unspanned { msg: "path parameter 'serviceId' must be non-empty" } }
   if ($partition_id | is-empty) { error make --unspanned { msg: "path parameter 'partitionId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "OperationId" $operation_id "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_id: (encode-path-segment $service_id), partition_id: (encode-path-segment $partition_id)} | format pattern "/Faults/Services/{service_id}/$/GetPartitions/{partition_id}/$/GetRestartProgress") $qp)
+  let full_url = (build-url $base ({service_id: (encode-path-segment $service_id), partition_id: (encode-path-segment $partition_id)} | format pattern "/Faults/Services/{service_id}/$/GetPartitions/{partition_id}/$/GetRestartProgress") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "OperationId": $operation_id, "timeout": $timeout} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version, "OperationId": $operation_id, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # This API will induce data loss for the specified partition. It will trigger a call to the OnDataLossAsync API of the partition.
@@ -3362,10 +4465,21 @@ export def "faults-services-get-partitions-start-data-loss start" [
   if ($service_id | is-empty) { error make --unspanned { msg: "path parameter 'serviceId' must be non-empty" } }
   if ($partition_id | is-empty) { error make --unspanned { msg: "path parameter 'partitionId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "OperationId" $operation_id "scalar") (serialize-qp "DataLossMode" $data_loss_mode "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_id: (encode-path-segment $service_id), partition_id: (encode-path-segment $partition_id)} | format pattern "/Faults/Services/{service_id}/$/GetPartitions/{partition_id}/$/StartDataLoss") $qp)
+  let full_url = (build-url $base ({service_id: (encode-path-segment $service_id), partition_id: (encode-path-segment $partition_id)} | format pattern "/Faults/Services/{service_id}/$/GetPartitions/{partition_id}/$/StartDataLoss") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "OperationId": $operation_id, "DataLossMode": $data_loss_mode, "timeout": $timeout} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"api-version": $api_version, "OperationId": $operation_id, "DataLossMode": $data_loss_mode, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [202]
 }
 
 # Induces quorum loss for a given stateful service partition.
@@ -3395,10 +4509,21 @@ export def "faults-services-get-partitions-start-quorum-loss start" [
   if ($service_id | is-empty) { error make --unspanned { msg: "path parameter 'serviceId' must be non-empty" } }
   if ($partition_id | is-empty) { error make --unspanned { msg: "path parameter 'partitionId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "OperationId" $operation_id "scalar") (serialize-qp "QuorumLossMode" $quorum_loss_mode "scalar") (serialize-qp "QuorumLossDuration" $quorum_loss_duration "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_id: (encode-path-segment $service_id), partition_id: (encode-path-segment $partition_id)} | format pattern "/Faults/Services/{service_id}/$/GetPartitions/{partition_id}/$/StartQuorumLoss") $qp)
+  let full_url = (build-url $base ({service_id: (encode-path-segment $service_id), partition_id: (encode-path-segment $partition_id)} | format pattern "/Faults/Services/{service_id}/$/GetPartitions/{partition_id}/$/StartQuorumLoss") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "OperationId": $operation_id, "QuorumLossMode": $quorum_loss_mode, "QuorumLossDuration": $quorum_loss_duration, "timeout": $timeout} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"api-version": $api_version, "OperationId": $operation_id, "QuorumLossMode": $quorum_loss_mode, "QuorumLossDuration": $quorum_loss_duration, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [202]
 }
 
 # This API will restart some or all replicas or instances of the specified partition.
@@ -3427,10 +4552,21 @@ export def "faults-services-get-partitions-start-restart start" [
   if ($service_id | is-empty) { error make --unspanned { msg: "path parameter 'serviceId' must be non-empty" } }
   if ($partition_id | is-empty) { error make --unspanned { msg: "path parameter 'partitionId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "OperationId" $operation_id "scalar") (serialize-qp "RestartPartitionMode" $restart_partition_mode "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_id: (encode-path-segment $service_id), partition_id: (encode-path-segment $partition_id)} | format pattern "/Faults/Services/{service_id}/$/GetPartitions/{partition_id}/$/StartRestart") $qp)
+  let full_url = (build-url $base ({service_id: (encode-path-segment $service_id), partition_id: (encode-path-segment $partition_id)} | format pattern "/Faults/Services/{service_id}/$/GetPartitions/{partition_id}/$/StartRestart") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "OperationId": $operation_id, "RestartPartitionMode": $restart_partition_mode, "timeout": $timeout} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"api-version": $api_version, "OperationId": $operation_id, "RestartPartitionMode": $restart_partition_mode, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [202]
 }
 
 # Gets the content information at the root of the image store.
@@ -3453,10 +4589,21 @@ export def "image-store get-root-content" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/ImageStore" $qp)
+  let full_url = (build-url $base "/ImageStore" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "timeout": $timeout} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Commit an image store upload session.
@@ -3480,10 +4627,21 @@ export def "image-store-commit-upload-session commit" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "session-id" $session_id "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/ImageStore/$/CommitUploadSession" $qp)
+  let full_url = (build-url $base "/ImageStore/$/CommitUploadSession" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "session-id": $session_id, "timeout": $timeout} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"api-version": $api_version, "session-id": $session_id, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Copies image store content internally
@@ -3511,12 +4669,23 @@ export def "image-store-copy copy-content" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/ImageStore/$/Copy" $qp)
+  let full_url = (build-url $base "/ImageStore/$/Copy" $qp $auth.query)
   let req_body = {"CheckMarkFile": $check_mark_file, "RemoteDestination": $remote_destination, "RemoteSource": $remote_source, "SkipFiles": $skip_files} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"api-version": $api_version, "timeout": $timeout} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"api-version": $api_version, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Cancels an image store upload session.
@@ -3540,10 +4709,21 @@ export def "image-store-delete-upload-session delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "session-id" $session_id "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/ImageStore/$/DeleteUploadSession" $qp)
+  let full_url = (build-url $base "/ImageStore/$/DeleteUploadSession" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "session-id": $session_id, "timeout": $timeout} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"api-version": $api_version, "session-id": $session_id, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Get the folder size at the root of the image store.
@@ -3566,10 +4746,21 @@ export def "image-store-folder-size get-root" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/ImageStore/$/FolderSize" $qp)
+  let full_url = (build-url $base "/ImageStore/$/FolderSize" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "timeout": $timeout} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get the image store upload session by ID.
@@ -3593,10 +4784,21 @@ export def "image-store-get-upload-session get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "session-id" $session_id "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/ImageStore/$/GetUploadSession" $qp)
+  let full_url = (build-url $base "/ImageStore/$/GetUploadSession" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "session-id": $session_id, "timeout": $timeout} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version, "session-id": $session_id, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes existing image store content.
@@ -3621,10 +4823,21 @@ export def "image-store delete-content" [
   let base = ($base_url | default $BASE_URL)
   if ($content_path | is-empty) { error make --unspanned { msg: "path parameter 'contentPath' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({content_path: (encode-path-segment $content_path)} | format pattern "/ImageStore/{content_path}") $qp)
+  let full_url = (build-url $base ({content_path: (encode-path-segment $content_path)} | format pattern "/ImageStore/{content_path}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "timeout": $timeout} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"api-version": $api_version, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the image store content information.
@@ -3649,10 +4862,21 @@ export def "image-store get-content" [
   let base = ($base_url | default $BASE_URL)
   if ($content_path | is-empty) { error make --unspanned { msg: "path parameter 'contentPath' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({content_path: (encode-path-segment $content_path)} | format pattern "/ImageStore/{content_path}") $qp)
+  let full_url = (build-url $base ({content_path: (encode-path-segment $content_path)} | format pattern "/ImageStore/{content_path}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "timeout": $timeout} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Uploads contents of the file to the image store.
@@ -3677,10 +4901,21 @@ export def "image-store upload-file" [
   let base = ($base_url | default $BASE_URL)
   if ($content_path | is-empty) { error make --unspanned { msg: "path parameter 'contentPath' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({content_path: (encode-path-segment $content_path)} | format pattern "/ImageStore/{content_path}") $qp)
+  let full_url = (build-url $base ({content_path: (encode-path-segment $content_path)} | format pattern "/ImageStore/{content_path}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "timeout": $timeout} | compact), body: null}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"api-version": $api_version, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Get the size of a folder in image store
@@ -3705,10 +4940,21 @@ export def "image-store-folder-size get" [
   let base = ($base_url | default $BASE_URL)
   if ($content_path | is-empty) { error make --unspanned { msg: "path parameter 'contentPath' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({content_path: (encode-path-segment $content_path)} | format pattern "/ImageStore/{content_path}/$/FolderSize") $qp)
+  let full_url = (build-url $base ({content_path: (encode-path-segment $content_path)} | format pattern "/ImageStore/{content_path}/$/FolderSize") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "timeout": $timeout} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get the image store upload session by relative path.
@@ -3733,10 +4979,21 @@ export def "image-store-get-upload-session get-by-path" [
   let base = ($base_url | default $BASE_URL)
   if ($content_path | is-empty) { error make --unspanned { msg: "path parameter 'contentPath' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({content_path: (encode-path-segment $content_path)} | format pattern "/ImageStore/{content_path}/$/GetUploadSession") $qp)
+  let full_url = (build-url $base ({content_path: (encode-path-segment $content_path)} | format pattern "/ImageStore/{content_path}/$/GetUploadSession") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "timeout": $timeout} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Uploads a file chunk to the image store relative path.
@@ -3763,12 +5020,23 @@ export def "image-store-upload-chunk upload-file" [
   let base = ($base_url | default $BASE_URL)
   if ($content_path | is-empty) { error make --unspanned { msg: "path parameter 'contentPath' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "session-id" $session_id "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({content_path: (encode-path-segment $content_path)} | format pattern "/ImageStore/{content_path}/$/UploadChunk") $qp)
+  let full_url = (build-url $base ({content_path: (encode-path-segment $content_path)} | format pattern "/ImageStore/{content_path}/$/UploadChunk") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Content-Range": $content_range} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "session-id": $session_id, "timeout": $timeout} | compact), body: null}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"api-version": $api_version, "session-id": $session_id, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Creates a Service Fabric name.
@@ -3793,12 +5061,23 @@ export def "names-create create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/Names/$/Create" $qp)
+  let full_url = (build-url $base "/Names/$/Create" $qp $auth.query)
   let req_body = {"Name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"api-version": $api_version, "timeout": $timeout} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"api-version": $api_version, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Deletes a Service Fabric name.
@@ -3823,10 +5102,21 @@ export def "names delete" [
   let base = ($base_url | default $BASE_URL)
   if ($name_id | is-empty) { error make --unspanned { msg: "path parameter 'nameId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name_id: (encode-path-segment $name_id)} | format pattern "/Names/{name_id}") $qp)
+  let full_url = (build-url $base ({name_id: (encode-path-segment $name_id)} | format pattern "/Names/{name_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "timeout": $timeout} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"api-version": $api_version, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Returns whether the Service Fabric name exists.
@@ -3851,10 +5141,21 @@ export def "names get-exists" [
   let base = ($base_url | default $BASE_URL)
   if ($name_id | is-empty) { error make --unspanned { msg: "path parameter 'nameId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name_id: (encode-path-segment $name_id)} | format pattern "/Names/{name_id}") $qp)
+  let full_url = (build-url $base ({name_id: (encode-path-segment $name_id)} | format pattern "/Names/{name_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "timeout": $timeout} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets information on all Service Fabric properties under a given name.
@@ -3881,10 +5182,21 @@ export def "names-get-properties get-property-list" [
   let base = ($base_url | default $BASE_URL)
   if ($name_id | is-empty) { error make --unspanned { msg: "path parameter 'nameId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "IncludeValues" $include_values "scalar") (serialize-qp "ContinuationToken" $continuation_token "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name_id: (encode-path-segment $name_id)} | format pattern "/Names/{name_id}/$/GetProperties") $qp)
+  let full_url = (build-url $base ({name_id: (encode-path-segment $name_id)} | format pattern "/Names/{name_id}/$/GetProperties") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "IncludeValues": $include_values, "ContinuationToken": $continuation_token, "timeout": $timeout} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version, "IncludeValues": $include_values, "ContinuationToken": $continuation_token, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Submits a property batch.
@@ -3912,12 +5224,23 @@ export def "names-get-properties-submit-batch submit-property" [
   let base = ($base_url | default $BASE_URL)
   if ($name_id | is-empty) { error make --unspanned { msg: "path parameter 'nameId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name_id: (encode-path-segment $name_id)} | format pattern "/Names/{name_id}/$/GetProperties/$/SubmitBatch") $qp)
+  let full_url = (build-url $base ({name_id: (encode-path-segment $name_id)} | format pattern "/Names/{name_id}/$/GetProperties/$/SubmitBatch") $qp $auth.query)
   let req_body = {"Operations": $operations} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"api-version": $api_version, "timeout": $timeout} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"api-version": $api_version, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes the specified Service Fabric property.
@@ -3943,10 +5266,21 @@ export def "names-get-property delete" [
   let base = ($base_url | default $BASE_URL)
   if ($name_id | is-empty) { error make --unspanned { msg: "path parameter 'nameId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "PropertyName" $property_name "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name_id: (encode-path-segment $name_id)} | format pattern "/Names/{name_id}/$/GetProperty") $qp)
+  let full_url = (build-url $base ({name_id: (encode-path-segment $name_id)} | format pattern "/Names/{name_id}/$/GetProperty") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "PropertyName": $property_name, "timeout": $timeout} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"api-version": $api_version, "PropertyName": $property_name, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the specified Service Fabric property.
@@ -3972,10 +5306,21 @@ export def "names-get-property get" [
   let base = ($base_url | default $BASE_URL)
   if ($name_id | is-empty) { error make --unspanned { msg: "path parameter 'nameId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "PropertyName" $property_name "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name_id: (encode-path-segment $name_id)} | format pattern "/Names/{name_id}/$/GetProperty") $qp)
+  let full_url = (build-url $base ({name_id: (encode-path-segment $name_id)} | format pattern "/Names/{name_id}/$/GetProperty") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "PropertyName": $property_name, "timeout": $timeout} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version, "PropertyName": $property_name, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Creates or updates a Service Fabric property.
@@ -4005,12 +5350,23 @@ export def "names-get-property update" [
   let base = ($base_url | default $BASE_URL)
   if ($name_id | is-empty) { error make --unspanned { msg: "path parameter 'nameId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name_id: (encode-path-segment $name_id)} | format pattern "/Names/{name_id}/$/GetProperty") $qp)
+  let full_url = (build-url $base ({name_id: (encode-path-segment $name_id)} | format pattern "/Names/{name_id}/$/GetProperty") $qp $auth.query)
   let req_body = {"CustomTypeId": $custom_type_id, "PropertyName": $property_name, "Value": $value} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"api-version": $api_version, "timeout": $timeout} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"api-version": $api_version, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Enumerates all the Service Fabric names under a given name.
@@ -4037,10 +5393,21 @@ export def "names-get-sub-names get-list" [
   let base = ($base_url | default $BASE_URL)
   if ($name_id | is-empty) { error make --unspanned { msg: "path parameter 'nameId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "Recursive" $recursive "scalar") (serialize-qp "ContinuationToken" $continuation_token "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name_id: (encode-path-segment $name_id)} | format pattern "/Names/{name_id}/$/GetSubNames") $qp)
+  let full_url = (build-url $base ({name_id: (encode-path-segment $name_id)} | format pattern "/Names/{name_id}/$/GetSubNames") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "Recursive": $recursive, "ContinuationToken": $continuation_token, "timeout": $timeout} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version, "Recursive": $recursive, "ContinuationToken": $continuation_token, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the list of nodes in the Service Fabric cluster.
@@ -4066,10 +5433,21 @@ export def "nodes get-list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "ContinuationToken" $continuation_token "scalar") (serialize-qp "NodeStatusFilter" $node_status_filter "scalar") (serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/Nodes" $qp)
+  let full_url = (build-url $base "/Nodes" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "ContinuationToken": $continuation_token, "NodeStatusFilter": $node_status_filter, "MaxResults": $max_results, "timeout": $timeout} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version, "ContinuationToken": $continuation_token, "NodeStatusFilter": $node_status_filter, "MaxResults": $max_results, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the information about a specific node in the Service Fabric cluster.
@@ -4094,10 +5472,21 @@ export def "nodes get" [
   let base = ($base_url | default $BASE_URL)
   if ($node_name | is-empty) { error make --unspanned { msg: "path parameter 'nodeName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({node_name: (encode-path-segment $node_name)} | format pattern "/Nodes/{node_name}") $qp)
+  let full_url = (build-url $base ({node_name: (encode-path-segment $node_name)} | format pattern "/Nodes/{node_name}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "timeout": $timeout} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 204]
 }
 
 # Activate a Service Fabric cluster node that is currently deactivated.
@@ -4122,10 +5511,21 @@ export def "nodes-activate enable" [
   let base = ($base_url | default $BASE_URL)
   if ($node_name | is-empty) { error make --unspanned { msg: "path parameter 'nodeName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({node_name: (encode-path-segment $node_name)} | format pattern "/Nodes/{node_name}/$/Activate") $qp)
+  let full_url = (build-url $base ({node_name: (encode-path-segment $node_name)} | format pattern "/Nodes/{node_name}/$/Activate") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "timeout": $timeout} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"api-version": $api_version, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Deactivate a Service Fabric cluster node with the specified deactivation intent.
@@ -4152,12 +5552,23 @@ export def "nodes-deactivate disable" [
   let base = ($base_url | default $BASE_URL)
   if ($node_name | is-empty) { error make --unspanned { msg: "path parameter 'nodeName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({node_name: (encode-path-segment $node_name)} | format pattern "/Nodes/{node_name}/$/Deactivate") $qp)
+  let full_url = (build-url $base ({node_name: (encode-path-segment $node_name)} | format pattern "/Nodes/{node_name}/$/Deactivate") $qp $auth.query)
   let req_body = {"DeactivationIntent": $deactivation_intent} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"api-version": $api_version, "timeout": $timeout} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"api-version": $api_version, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Downloads all of the code packages associated with specified service manifest on the specified node.
@@ -4189,12 +5600,23 @@ export def "nodes-deploy-service-package create" [
   let base = ($base_url | default $BASE_URL)
   if ($node_name | is-empty) { error make --unspanned { msg: "path parameter 'nodeName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({node_name: (encode-path-segment $node_name)} | format pattern "/Nodes/{node_name}/$/DeployServicePackage") $qp)
+  let full_url = (build-url $base ({node_name: (encode-path-segment $node_name)} | format pattern "/Nodes/{node_name}/$/DeployServicePackage") $qp $auth.query)
   let req_body = {"ApplicationTypeName": $application_type_name, "ApplicationTypeVersion": $application_type_version, "NodeName": $body_node_name, "PackageSharingPolicy": $package_sharing_policy, "ServiceManifestName": $service_manifest_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"api-version": $api_version, "timeout": $timeout} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"api-version": $api_version, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the list of applications deployed on a Service Fabric node.
@@ -4222,10 +5644,21 @@ export def "nodes-get-applications get-deployed-list" [
   let base = ($base_url | default $BASE_URL)
   if ($node_name | is-empty) { error make --unspanned { msg: "path parameter 'nodeName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "timeout" $timeout "scalar") (serialize-qp "IncludeHealthState" $include_health_state "scalar") (serialize-qp "ContinuationToken" $continuation_token "scalar") (serialize-qp "MaxResults" $max_results "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({node_name: (encode-path-segment $node_name)} | format pattern "/Nodes/{node_name}/$/GetApplications") $qp)
+  let full_url = (build-url $base ({node_name: (encode-path-segment $node_name)} | format pattern "/Nodes/{node_name}/$/GetApplications") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "timeout": $timeout, "IncludeHealthState": $include_health_state, "ContinuationToken": $continuation_token, "MaxResults": $max_results} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version, "timeout": $timeout, "IncludeHealthState": $include_health_state, "ContinuationToken": $continuation_token, "MaxResults": $max_results} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the information about an application deployed on a Service Fabric node.
@@ -4253,10 +5686,21 @@ export def "nodes-get-applications get-deployed" [
   if ($node_name | is-empty) { error make --unspanned { msg: "path parameter 'nodeName' must be non-empty" } }
   if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'applicationId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "timeout" $timeout "scalar") (serialize-qp "IncludeHealthState" $include_health_state "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({node_name: (encode-path-segment $node_name), application_id: (encode-path-segment $application_id)} | format pattern "/Nodes/{node_name}/$/GetApplications/{application_id}") $qp)
+  let full_url = (build-url $base ({node_name: (encode-path-segment $node_name), application_id: (encode-path-segment $application_id)} | format pattern "/Nodes/{node_name}/$/GetApplications/{application_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "timeout": $timeout, "IncludeHealthState": $include_health_state} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version, "timeout": $timeout, "IncludeHealthState": $include_health_state} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 204]
 }
 
 # Gets the list of code packages deployed on a Service Fabric node.
@@ -4285,10 +5729,21 @@ export def "nodes-get-applications-get-code-packages get-deployed-list" [
   if ($node_name | is-empty) { error make --unspanned { msg: "path parameter 'nodeName' must be non-empty" } }
   if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'applicationId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "ServiceManifestName" $service_manifest_name "scalar") (serialize-qp "CodePackageName" $code_package_name "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({node_name: (encode-path-segment $node_name), application_id: (encode-path-segment $application_id)} | format pattern "/Nodes/{node_name}/$/GetApplications/{application_id}/$/GetCodePackages") $qp)
+  let full_url = (build-url $base ({node_name: (encode-path-segment $node_name), application_id: (encode-path-segment $application_id)} | format pattern "/Nodes/{node_name}/$/GetApplications/{application_id}/$/GetCodePackages") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "ServiceManifestName": $service_manifest_name, "CodePackageName": $code_package_name, "timeout": $timeout} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version, "ServiceManifestName": $service_manifest_name, "CodePackageName": $code_package_name, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Invoke container API on a container deployed on a Service Fabric node.
@@ -4323,12 +5778,23 @@ export def "nodes-get-applications-get-code-packages-container-api create-invoke
   if ($node_name | is-empty) { error make --unspanned { msg: "path parameter 'nodeName' must be non-empty" } }
   if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'applicationId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "ServiceManifestName" $service_manifest_name "scalar") (serialize-qp "CodePackageName" $code_package_name "scalar") (serialize-qp "CodePackageInstanceId" $code_package_instance_id "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({node_name: (encode-path-segment $node_name), application_id: (encode-path-segment $application_id)} | format pattern "/Nodes/{node_name}/$/GetApplications/{application_id}/$/GetCodePackages/$/ContainerApi") $qp)
+  let full_url = (build-url $base ({node_name: (encode-path-segment $node_name), application_id: (encode-path-segment $application_id)} | format pattern "/Nodes/{node_name}/$/GetApplications/{application_id}/$/GetCodePackages/$/ContainerApi") $qp $auth.query)
   let req_body = {"Body": $body, "Content-Type": $content_type, "HttpVerb": $http_verb, "UriPath": $uri_path} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"api-version": $api_version, "ServiceManifestName": $service_manifest_name, "CodePackageName": $code_package_name, "CodePackageInstanceId": $code_package_instance_id, "timeout": $timeout} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"api-version": $api_version, "ServiceManifestName": $service_manifest_name, "CodePackageName": $code_package_name, "CodePackageInstanceId": $code_package_instance_id, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the container logs for container deployed on a Service Fabric node.
@@ -4359,10 +5825,21 @@ export def "nodes-get-applications-get-code-packages-container-logs get-deployed
   if ($node_name | is-empty) { error make --unspanned { msg: "path parameter 'nodeName' must be non-empty" } }
   if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'applicationId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "ServiceManifestName" $service_manifest_name "scalar") (serialize-qp "CodePackageName" $code_package_name "scalar") (serialize-qp "Tail" $tail "scalar") (serialize-qp "Previous" $previous "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({node_name: (encode-path-segment $node_name), application_id: (encode-path-segment $application_id)} | format pattern "/Nodes/{node_name}/$/GetApplications/{application_id}/$/GetCodePackages/$/ContainerLogs") $qp)
+  let full_url = (build-url $base ({node_name: (encode-path-segment $node_name), application_id: (encode-path-segment $application_id)} | format pattern "/Nodes/{node_name}/$/GetApplications/{application_id}/$/GetCodePackages/$/ContainerLogs") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "ServiceManifestName": $service_manifest_name, "CodePackageName": $code_package_name, "Tail": $tail, "Previous": $previous, "timeout": $timeout} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version, "ServiceManifestName": $service_manifest_name, "CodePackageName": $code_package_name, "Tail": $tail, "Previous": $previous, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Restarts a code package deployed on a Service Fabric node in a cluster.
@@ -4394,12 +5871,23 @@ export def "nodes-get-applications-get-code-packages-restart restart-deployed" [
   if ($node_name | is-empty) { error make --unspanned { msg: "path parameter 'nodeName' must be non-empty" } }
   if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'applicationId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({node_name: (encode-path-segment $node_name), application_id: (encode-path-segment $application_id)} | format pattern "/Nodes/{node_name}/$/GetApplications/{application_id}/$/GetCodePackages/$/Restart") $qp)
+  let full_url = (build-url $base ({node_name: (encode-path-segment $node_name), application_id: (encode-path-segment $application_id)} | format pattern "/Nodes/{node_name}/$/GetApplications/{application_id}/$/GetCodePackages/$/Restart") $qp $auth.query)
   let req_body = {"CodePackageInstanceId": $code_package_instance_id, "CodePackageName": $code_package_name, "ServiceManifestName": $service_manifest_name, "ServicePackageActivationId": $service_package_activation_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"api-version": $api_version, "timeout": $timeout} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"api-version": $api_version, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the information about health of an application deployed on a Service Fabric node.
@@ -4429,10 +5917,21 @@ export def "nodes-get-applications-get-health get-deployed" [
   if ($node_name | is-empty) { error make --unspanned { msg: "path parameter 'nodeName' must be non-empty" } }
   if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'applicationId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "EventsHealthStateFilter" $events_health_state_filter "scalar") (serialize-qp "DeployedServicePackagesHealthStateFilter" $deployed_service_packages_health_state_filter "scalar") (serialize-qp "ExcludeHealthStatistics" $exclude_health_statistics "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({node_name: (encode-path-segment $node_name), application_id: (encode-path-segment $application_id)} | format pattern "/Nodes/{node_name}/$/GetApplications/{application_id}/$/GetHealth") $qp)
+  let full_url = (build-url $base ({node_name: (encode-path-segment $node_name), application_id: (encode-path-segment $application_id)} | format pattern "/Nodes/{node_name}/$/GetApplications/{application_id}/$/GetHealth") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "EventsHealthStateFilter": $events_health_state_filter, "DeployedServicePackagesHealthStateFilter": $deployed_service_packages_health_state_filter, "ExcludeHealthStatistics": $exclude_health_statistics, "timeout": $timeout} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version, "EventsHealthStateFilter": $events_health_state_filter, "DeployedServicePackagesHealthStateFilter": $deployed_service_packages_health_state_filter, "ExcludeHealthStatistics": $exclude_health_statistics, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the information about health of an application deployed on a Service Fabric node. using the specified policy.
@@ -4469,12 +5968,23 @@ export def "nodes-get-applications-get-health get-deployed-using-policy" [
   if ($node_name | is-empty) { error make --unspanned { msg: "path parameter 'nodeName' must be non-empty" } }
   if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'applicationId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "EventsHealthStateFilter" $events_health_state_filter "scalar") (serialize-qp "DeployedServicePackagesHealthStateFilter" $deployed_service_packages_health_state_filter "scalar") (serialize-qp "ExcludeHealthStatistics" $exclude_health_statistics "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({node_name: (encode-path-segment $node_name), application_id: (encode-path-segment $application_id)} | format pattern "/Nodes/{node_name}/$/GetApplications/{application_id}/$/GetHealth") $qp)
+  let full_url = (build-url $base ({node_name: (encode-path-segment $node_name), application_id: (encode-path-segment $application_id)} | format pattern "/Nodes/{node_name}/$/GetApplications/{application_id}/$/GetHealth") $qp $auth.query)
   let req_body = {"ConsiderWarningAsError": $consider_warning_as_error, "DefaultServiceTypeHealthPolicy": $default_service_type_health_policy, "MaxPercentUnhealthyDeployedApplications": $max_percent_unhealthy_deployed_applications, "ServiceTypeHealthPolicyMap": $service_type_health_policy_map} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"api-version": $api_version, "EventsHealthStateFilter": $events_health_state_filter, "DeployedServicePackagesHealthStateFilter": $deployed_service_packages_health_state_filter, "ExcludeHealthStatistics": $exclude_health_statistics, "timeout": $timeout} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"api-version": $api_version, "EventsHealthStateFilter": $events_health_state_filter, "DeployedServicePackagesHealthStateFilter": $deployed_service_packages_health_state_filter, "ExcludeHealthStatistics": $exclude_health_statistics, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the list of replicas deployed on a Service Fabric node.
@@ -4503,10 +6013,21 @@ export def "nodes-get-applications-get-replicas get-deployed-service-list" [
   if ($node_name | is-empty) { error make --unspanned { msg: "path parameter 'nodeName' must be non-empty" } }
   if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'applicationId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "PartitionId" $partition_id "scalar") (serialize-qp "ServiceManifestName" $service_manifest_name "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({node_name: (encode-path-segment $node_name), application_id: (encode-path-segment $application_id)} | format pattern "/Nodes/{node_name}/$/GetApplications/{application_id}/$/GetReplicas") $qp)
+  let full_url = (build-url $base ({node_name: (encode-path-segment $node_name), application_id: (encode-path-segment $application_id)} | format pattern "/Nodes/{node_name}/$/GetApplications/{application_id}/$/GetReplicas") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "PartitionId": $partition_id, "ServiceManifestName": $service_manifest_name, "timeout": $timeout} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version, "PartitionId": $partition_id, "ServiceManifestName": $service_manifest_name, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 204]
 }
 
 # Gets the list of service packages deployed on a Service Fabric node.
@@ -4533,10 +6054,21 @@ export def "nodes-get-applications-get-service-packages get-deployed-list" [
   if ($node_name | is-empty) { error make --unspanned { msg: "path parameter 'nodeName' must be non-empty" } }
   if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'applicationId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({node_name: (encode-path-segment $node_name), application_id: (encode-path-segment $application_id)} | format pattern "/Nodes/{node_name}/$/GetApplications/{application_id}/$/GetServicePackages") $qp)
+  let full_url = (build-url $base ({node_name: (encode-path-segment $node_name), application_id: (encode-path-segment $application_id)} | format pattern "/Nodes/{node_name}/$/GetApplications/{application_id}/$/GetServicePackages") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "timeout": $timeout} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the list of service packages deployed on a Service Fabric node matching exactly the specified name.
@@ -4565,10 +6097,21 @@ export def "nodes-get-applications-get-service-packages get-deployed-list-by-nam
   if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'applicationId' must be non-empty" } }
   if ($service_package_name | is-empty) { error make --unspanned { msg: "path parameter 'servicePackageName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({node_name: (encode-path-segment $node_name), application_id: (encode-path-segment $application_id), service_package_name: (encode-path-segment $service_package_name)} | format pattern "/Nodes/{node_name}/$/GetApplications/{application_id}/$/GetServicePackages/{service_package_name}") $qp)
+  let full_url = (build-url $base ({node_name: (encode-path-segment $node_name), application_id: (encode-path-segment $application_id), service_package_name: (encode-path-segment $service_package_name)} | format pattern "/Nodes/{node_name}/$/GetApplications/{application_id}/$/GetServicePackages/{service_package_name}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "timeout": $timeout} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 204]
 }
 
 # Gets the information about health of a service package for a specific application deployed for a Service Fabric node and application.
@@ -4598,10 +6141,21 @@ export def "nodes-get-applications-get-service-packages-get-health get-deployed"
   if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'applicationId' must be non-empty" } }
   if ($service_package_name | is-empty) { error make --unspanned { msg: "path parameter 'servicePackageName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "EventsHealthStateFilter" $events_health_state_filter "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({node_name: (encode-path-segment $node_name), application_id: (encode-path-segment $application_id), service_package_name: (encode-path-segment $service_package_name)} | format pattern "/Nodes/{node_name}/$/GetApplications/{application_id}/$/GetServicePackages/{service_package_name}/$/GetHealth") $qp)
+  let full_url = (build-url $base ({node_name: (encode-path-segment $node_name), application_id: (encode-path-segment $application_id), service_package_name: (encode-path-segment $service_package_name)} | format pattern "/Nodes/{node_name}/$/GetApplications/{application_id}/$/GetServicePackages/{service_package_name}/$/GetHealth") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "EventsHealthStateFilter": $events_health_state_filter, "timeout": $timeout} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version, "EventsHealthStateFilter": $events_health_state_filter, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the information about health of service package for a specific application deployed on a Service Fabric node using the specified policy.
@@ -4638,12 +6192,23 @@ export def "nodes-get-applications-get-service-packages-get-health get-deployed-
   if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'applicationId' must be non-empty" } }
   if ($service_package_name | is-empty) { error make --unspanned { msg: "path parameter 'servicePackageName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "EventsHealthStateFilter" $events_health_state_filter "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({node_name: (encode-path-segment $node_name), application_id: (encode-path-segment $application_id), service_package_name: (encode-path-segment $service_package_name)} | format pattern "/Nodes/{node_name}/$/GetApplications/{application_id}/$/GetServicePackages/{service_package_name}/$/GetHealth") $qp)
+  let full_url = (build-url $base ({node_name: (encode-path-segment $node_name), application_id: (encode-path-segment $application_id), service_package_name: (encode-path-segment $service_package_name)} | format pattern "/Nodes/{node_name}/$/GetApplications/{application_id}/$/GetServicePackages/{service_package_name}/$/GetHealth") $qp $auth.query)
   let req_body = {"ConsiderWarningAsError": $consider_warning_as_error, "DefaultServiceTypeHealthPolicy": $default_service_type_health_policy, "MaxPercentUnhealthyDeployedApplications": $max_percent_unhealthy_deployed_applications, "ServiceTypeHealthPolicyMap": $service_type_health_policy_map} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"api-version": $api_version, "EventsHealthStateFilter": $events_health_state_filter, "timeout": $timeout} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"api-version": $api_version, "EventsHealthStateFilter": $events_health_state_filter, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Sends a health report on the Service Fabric deployed service package.
@@ -4681,12 +6246,23 @@ export def "nodes-get-applications-get-service-packages-report-health create-dep
   if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'applicationId' must be non-empty" } }
   if ($service_package_name | is-empty) { error make --unspanned { msg: "path parameter 'servicePackageName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "Immediate" $immediate "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({node_name: (encode-path-segment $node_name), application_id: (encode-path-segment $application_id), service_package_name: (encode-path-segment $service_package_name)} | format pattern "/Nodes/{node_name}/$/GetApplications/{application_id}/$/GetServicePackages/{service_package_name}/$/ReportHealth") $qp)
+  let full_url = (build-url $base ({node_name: (encode-path-segment $node_name), application_id: (encode-path-segment $application_id), service_package_name: (encode-path-segment $service_package_name)} | format pattern "/Nodes/{node_name}/$/GetApplications/{application_id}/$/GetServicePackages/{service_package_name}/$/ReportHealth") $qp $auth.query)
   let req_body = {"Description": $description, "HealthState": $health_state, "Property": $property, "RemoveWhenExpired": $remove_when_expired, "SequenceNumber": $sequence_number, "SourceId": $source_id, "TimeToLiveInMilliSeconds": $time_to_live_in_milli_seconds} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"api-version": $api_version, "Immediate": $immediate, "timeout": $timeout} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"api-version": $api_version, "Immediate": $immediate, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the list containing the information about service types from the applications deployed on a node in a Service Fabric cluster.
@@ -4714,10 +6290,21 @@ export def "nodes-get-applications-get-service-types get-deployed-list" [
   if ($node_name | is-empty) { error make --unspanned { msg: "path parameter 'nodeName' must be non-empty" } }
   if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'applicationId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "ServiceManifestName" $service_manifest_name "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({node_name: (encode-path-segment $node_name), application_id: (encode-path-segment $application_id)} | format pattern "/Nodes/{node_name}/$/GetApplications/{application_id}/$/GetServiceTypes") $qp)
+  let full_url = (build-url $base ({node_name: (encode-path-segment $node_name), application_id: (encode-path-segment $application_id)} | format pattern "/Nodes/{node_name}/$/GetApplications/{application_id}/$/GetServiceTypes") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "ServiceManifestName": $service_manifest_name, "timeout": $timeout} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version, "ServiceManifestName": $service_manifest_name, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the information about a specified service type of the application deployed on a node in a Service Fabric cluster.
@@ -4747,10 +6334,21 @@ export def "nodes-get-applications-get-service-types get-deployed-by-name" [
   if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'applicationId' must be non-empty" } }
   if ($service_type_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceTypeName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "ServiceManifestName" $service_manifest_name "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({node_name: (encode-path-segment $node_name), application_id: (encode-path-segment $application_id), service_type_name: (encode-path-segment $service_type_name)} | format pattern "/Nodes/{node_name}/$/GetApplications/{application_id}/$/GetServiceTypes/{service_type_name}") $qp)
+  let full_url = (build-url $base ({node_name: (encode-path-segment $node_name), application_id: (encode-path-segment $application_id), service_type_name: (encode-path-segment $service_type_name)} | format pattern "/Nodes/{node_name}/$/GetApplications/{application_id}/$/GetServiceTypes/{service_type_name}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "ServiceManifestName": $service_manifest_name, "timeout": $timeout} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version, "ServiceManifestName": $service_manifest_name, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 204]
 }
 
 # Sends a health report on the Service Fabric application deployed on a Service Fabric node.
@@ -4786,12 +6384,23 @@ export def "nodes-get-applications-report-health create-deployed" [
   if ($node_name | is-empty) { error make --unspanned { msg: "path parameter 'nodeName' must be non-empty" } }
   if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'applicationId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "Immediate" $immediate "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({node_name: (encode-path-segment $node_name), application_id: (encode-path-segment $application_id)} | format pattern "/Nodes/{node_name}/$/GetApplications/{application_id}/$/ReportHealth") $qp)
+  let full_url = (build-url $base ({node_name: (encode-path-segment $node_name), application_id: (encode-path-segment $application_id)} | format pattern "/Nodes/{node_name}/$/GetApplications/{application_id}/$/ReportHealth") $qp $auth.query)
   let req_body = {"Description": $description, "HealthState": $health_state, "Property": $property, "RemoveWhenExpired": $remove_when_expired, "SequenceNumber": $sequence_number, "SourceId": $source_id, "TimeToLiveInMilliSeconds": $time_to_live_in_milli_seconds} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"api-version": $api_version, "Immediate": $immediate, "timeout": $timeout} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"api-version": $api_version, "Immediate": $immediate, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the health of a Service Fabric node.
@@ -4817,10 +6426,21 @@ export def "nodes-get-health get" [
   let base = ($base_url | default $BASE_URL)
   if ($node_name | is-empty) { error make --unspanned { msg: "path parameter 'nodeName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "EventsHealthStateFilter" $events_health_state_filter "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({node_name: (encode-path-segment $node_name)} | format pattern "/Nodes/{node_name}/$/GetHealth") $qp)
+  let full_url = (build-url $base ({node_name: (encode-path-segment $node_name)} | format pattern "/Nodes/{node_name}/$/GetHealth") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "EventsHealthStateFilter": $events_health_state_filter, "timeout": $timeout} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version, "EventsHealthStateFilter": $events_health_state_filter, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the health of a Service Fabric node, by using the specified health policy.
@@ -4852,12 +6472,23 @@ export def "nodes-get-health get-using-policy" [
   let base = ($base_url | default $BASE_URL)
   if ($node_name | is-empty) { error make --unspanned { msg: "path parameter 'nodeName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "EventsHealthStateFilter" $events_health_state_filter "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({node_name: (encode-path-segment $node_name)} | format pattern "/Nodes/{node_name}/$/GetHealth") $qp)
+  let full_url = (build-url $base ({node_name: (encode-path-segment $node_name)} | format pattern "/Nodes/{node_name}/$/GetHealth") $qp $auth.query)
   let req_body = {"ApplicationTypeHealthPolicyMap": $application_type_health_policy_map, "ConsiderWarningAsError": $consider_warning_as_error, "MaxPercentUnhealthyApplications": $max_percent_unhealthy_applications, "MaxPercentUnhealthyNodes": $max_percent_unhealthy_nodes} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"api-version": $api_version, "EventsHealthStateFilter": $events_health_state_filter, "timeout": $timeout} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"api-version": $api_version, "EventsHealthStateFilter": $events_health_state_filter, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the load information of a Service Fabric node.
@@ -4882,10 +6513,21 @@ export def "nodes-get-load-information get" [
   let base = ($base_url | default $BASE_URL)
   if ($node_name | is-empty) { error make --unspanned { msg: "path parameter 'nodeName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({node_name: (encode-path-segment $node_name)} | format pattern "/Nodes/{node_name}/$/GetLoadInformation") $qp)
+  let full_url = (build-url $base ({node_name: (encode-path-segment $node_name)} | format pattern "/Nodes/{node_name}/$/GetLoadInformation") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "timeout": $timeout} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the details of replica deployed on a Service Fabric node.
@@ -4912,10 +6554,21 @@ export def "nodes-get-partitions-get-replicas get-deployed-service-detail" [
   if ($node_name | is-empty) { error make --unspanned { msg: "path parameter 'nodeName' must be non-empty" } }
   if ($partition_id | is-empty) { error make --unspanned { msg: "path parameter 'partitionId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({node_name: (encode-path-segment $node_name), partition_id: (encode-path-segment $partition_id)} | format pattern "/Nodes/{node_name}/$/GetPartitions/{partition_id}/$/GetReplicas") $qp)
+  let full_url = (build-url $base ({node_name: (encode-path-segment $node_name), partition_id: (encode-path-segment $partition_id)} | format pattern "/Nodes/{node_name}/$/GetPartitions/{partition_id}/$/GetReplicas") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "timeout": $timeout} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Removes a service replica running on a node.
@@ -4945,10 +6598,21 @@ export def "nodes-get-partitions-get-replicas-delete delete" [
   if ($partition_id | is-empty) { error make --unspanned { msg: "path parameter 'partitionId' must be non-empty" } }
   if ($replica_id | is-empty) { error make --unspanned { msg: "path parameter 'replicaId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "ForceRemove" $force_remove "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({node_name: (encode-path-segment $node_name), partition_id: (encode-path-segment $partition_id), replica_id: (encode-path-segment $replica_id)} | format pattern "/Nodes/{node_name}/$/GetPartitions/{partition_id}/$/GetReplicas/{replica_id}/$/Delete") $qp)
+  let full_url = (build-url $base ({node_name: (encode-path-segment $node_name), partition_id: (encode-path-segment $partition_id), replica_id: (encode-path-segment $replica_id)} | format pattern "/Nodes/{node_name}/$/GetPartitions/{partition_id}/$/GetReplicas/{replica_id}/$/Delete") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "ForceRemove": $force_remove, "timeout": $timeout} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"api-version": $api_version, "ForceRemove": $force_remove, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the details of replica deployed on a Service Fabric node.
@@ -4977,10 +6641,21 @@ export def "nodes-get-partitions-get-replicas-get-detail get-deployed-service" [
   if ($partition_id | is-empty) { error make --unspanned { msg: "path parameter 'partitionId' must be non-empty" } }
   if ($replica_id | is-empty) { error make --unspanned { msg: "path parameter 'replicaId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({node_name: (encode-path-segment $node_name), partition_id: (encode-path-segment $partition_id), replica_id: (encode-path-segment $replica_id)} | format pattern "/Nodes/{node_name}/$/GetPartitions/{partition_id}/$/GetReplicas/{replica_id}/$/GetDetail") $qp)
+  let full_url = (build-url $base ({node_name: (encode-path-segment $node_name), partition_id: (encode-path-segment $partition_id), replica_id: (encode-path-segment $replica_id)} | format pattern "/Nodes/{node_name}/$/GetPartitions/{partition_id}/$/GetReplicas/{replica_id}/$/GetDetail") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "timeout": $timeout} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Restarts a service replica of a persisted service running on a node.
@@ -5009,10 +6684,21 @@ export def "nodes-get-partitions-get-replicas-restart restart" [
   if ($partition_id | is-empty) { error make --unspanned { msg: "path parameter 'partitionId' must be non-empty" } }
   if ($replica_id | is-empty) { error make --unspanned { msg: "path parameter 'replicaId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({node_name: (encode-path-segment $node_name), partition_id: (encode-path-segment $partition_id), replica_id: (encode-path-segment $replica_id)} | format pattern "/Nodes/{node_name}/$/GetPartitions/{partition_id}/$/GetReplicas/{replica_id}/$/Restart") $qp)
+  let full_url = (build-url $base ({node_name: (encode-path-segment $node_name), partition_id: (encode-path-segment $partition_id), replica_id: (encode-path-segment $replica_id)} | format pattern "/Nodes/{node_name}/$/GetPartitions/{partition_id}/$/GetReplicas/{replica_id}/$/Restart") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "timeout": $timeout} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"api-version": $api_version, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Notifies Service Fabric that the persisted state on a node has been permanently removed or lost.
@@ -5037,10 +6723,21 @@ export def "nodes-remove-node-state delete" [
   let base = ($base_url | default $BASE_URL)
   if ($node_name | is-empty) { error make --unspanned { msg: "path parameter 'nodeName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({node_name: (encode-path-segment $node_name)} | format pattern "/Nodes/{node_name}/$/RemoveNodeState") $qp)
+  let full_url = (build-url $base ({node_name: (encode-path-segment $node_name)} | format pattern "/Nodes/{node_name}/$/RemoveNodeState") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "timeout": $timeout} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"api-version": $api_version, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Sends a health report on the Service Fabric node.
@@ -5074,12 +6771,23 @@ export def "nodes-report-health create" [
   let base = ($base_url | default $BASE_URL)
   if ($node_name | is-empty) { error make --unspanned { msg: "path parameter 'nodeName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "Immediate" $immediate "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({node_name: (encode-path-segment $node_name)} | format pattern "/Nodes/{node_name}/$/ReportHealth") $qp)
+  let full_url = (build-url $base ({node_name: (encode-path-segment $node_name)} | format pattern "/Nodes/{node_name}/$/ReportHealth") $qp $auth.query)
   let req_body = {"Description": $description, "HealthState": $health_state, "Property": $property, "RemoveWhenExpired": $remove_when_expired, "SequenceNumber": $sequence_number, "SourceId": $source_id, "TimeToLiveInMilliSeconds": $time_to_live_in_milli_seconds} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"api-version": $api_version, "Immediate": $immediate, "timeout": $timeout} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"api-version": $api_version, "Immediate": $immediate, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Restarts a Service Fabric cluster node.
@@ -5107,12 +6815,23 @@ export def "nodes-restart restart" [
   let base = ($base_url | default $BASE_URL)
   if ($node_name | is-empty) { error make --unspanned { msg: "path parameter 'nodeName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({node_name: (encode-path-segment $node_name)} | format pattern "/Nodes/{node_name}/$/Restart") $qp)
+  let full_url = (build-url $base ({node_name: (encode-path-segment $node_name)} | format pattern "/Nodes/{node_name}/$/Restart") $qp $auth.query)
   let req_body = {"CreateFabricDump": $create_fabric_dump, "NodeInstanceId": $node_instance_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"api-version": $api_version, "timeout": $timeout} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"api-version": $api_version, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the information about a Service Fabric partition.
@@ -5137,10 +6856,21 @@ export def "partitions get" [
   let base = ($base_url | default $BASE_URL)
   if ($partition_id | is-empty) { error make --unspanned { msg: "path parameter 'partitionId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({partition_id: (encode-path-segment $partition_id)} | format pattern "/Partitions/{partition_id}") $qp)
+  let full_url = (build-url $base ({partition_id: (encode-path-segment $partition_id)} | format pattern "/Partitions/{partition_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "timeout": $timeout} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 204]
 }
 
 # Triggers backup of the partition's state.
@@ -5169,12 +6899,23 @@ export def "partitions-backup create" [
   let base = ($base_url | default $BASE_URL)
   if ($partition_id | is-empty) { error make --unspanned { msg: "path parameter 'partitionId' must be non-empty" } }
   let qp = [(serialize-qp "BackupTimeout" $backup_timeout "scalar") (serialize-qp "api-version" $api_version "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({partition_id: (encode-path-segment $partition_id)} | format pattern "/Partitions/{partition_id}/$/Backup") $qp)
+  let full_url = (build-url $base ({partition_id: (encode-path-segment $partition_id)} | format pattern "/Partitions/{partition_id}/$/Backup") $qp $auth.query)
   let req_body = {"BackupStorage": $backup_storage} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"BackupTimeout": $backup_timeout, "api-version": $api_version, "timeout": $timeout} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"BackupTimeout": $backup_timeout, "api-version": $api_version, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [202]
 }
 
 # Disables periodic backup of Service Fabric partition which was previously enabled.
@@ -5201,12 +6942,23 @@ export def "partitions-disable-backup disable" [
   let base = ($base_url | default $BASE_URL)
   if ($partition_id | is-empty) { error make --unspanned { msg: "path parameter 'partitionId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({partition_id: (encode-path-segment $partition_id)} | format pattern "/Partitions/{partition_id}/$/DisableBackup") $qp)
+  let full_url = (build-url $base ({partition_id: (encode-path-segment $partition_id)} | format pattern "/Partitions/{partition_id}/$/DisableBackup") $qp $auth.query)
   let req_body = {"CleanBackup": $clean_backup} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"api-version": $api_version, "timeout": $timeout} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"api-version": $api_version, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [202]
 }
 
 # Enables periodic backup of the stateful persisted partition.
@@ -5233,12 +6985,23 @@ export def "partitions-enable-backup enable" [
   let base = ($base_url | default $BASE_URL)
   if ($partition_id | is-empty) { error make --unspanned { msg: "path parameter 'partitionId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({partition_id: (encode-path-segment $partition_id)} | format pattern "/Partitions/{partition_id}/$/EnableBackup") $qp)
+  let full_url = (build-url $base ({partition_id: (encode-path-segment $partition_id)} | format pattern "/Partitions/{partition_id}/$/EnableBackup") $qp $auth.query)
   let req_body = {"BackupPolicyName": $backup_policy_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"api-version": $api_version, "timeout": $timeout} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"api-version": $api_version, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [202]
 }
 
 # Gets the partition backup configuration information
@@ -5263,10 +7026,21 @@ export def "partitions-get-backup-configuration-info get" [
   let base = ($base_url | default $BASE_URL)
   if ($partition_id | is-empty) { error make --unspanned { msg: "path parameter 'partitionId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({partition_id: (encode-path-segment $partition_id)} | format pattern "/Partitions/{partition_id}/$/GetBackupConfigurationInfo") $qp)
+  let full_url = (build-url $base ({partition_id: (encode-path-segment $partition_id)} | format pattern "/Partitions/{partition_id}/$/GetBackupConfigurationInfo") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "timeout": $timeout} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets details for the latest backup triggered for this partition.
@@ -5291,10 +7065,21 @@ export def "partitions-get-backup-progress get" [
   let base = ($base_url | default $BASE_URL)
   if ($partition_id | is-empty) { error make --unspanned { msg: "path parameter 'partitionId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({partition_id: (encode-path-segment $partition_id)} | format pattern "/Partitions/{partition_id}/$/GetBackupProgress") $qp)
+  let full_url = (build-url $base ({partition_id: (encode-path-segment $partition_id)} | format pattern "/Partitions/{partition_id}/$/GetBackupProgress") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "timeout": $timeout} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the list of backups available for the specified partition.
@@ -5322,10 +7107,21 @@ export def "partitions-get-backups list" [
   let base = ($base_url | default $BASE_URL)
   if ($partition_id | is-empty) { error make --unspanned { msg: "path parameter 'partitionId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "timeout" $timeout "scalar") (serialize-qp "Latest" $latest "scalar") (serialize-qp "StartDateTimeFilter" $start_date_time_filter "scalar") (serialize-qp "EndDateTimeFilter" $end_date_time_filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({partition_id: (encode-path-segment $partition_id)} | format pattern "/Partitions/{partition_id}/$/GetBackups") $qp)
+  let full_url = (build-url $base ({partition_id: (encode-path-segment $partition_id)} | format pattern "/Partitions/{partition_id}/$/GetBackups") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "timeout": $timeout, "Latest": $latest, "StartDateTimeFilter": $start_date_time_filter, "EndDateTimeFilter": $end_date_time_filter} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version, "timeout": $timeout, "Latest": $latest, "StartDateTimeFilter": $start_date_time_filter, "EndDateTimeFilter": $end_date_time_filter} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the health of the specified Service Fabric partition.
@@ -5353,10 +7149,21 @@ export def "partitions-get-health get" [
   let base = ($base_url | default $BASE_URL)
   if ($partition_id | is-empty) { error make --unspanned { msg: "path parameter 'partitionId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "EventsHealthStateFilter" $events_health_state_filter "scalar") (serialize-qp "ReplicasHealthStateFilter" $replicas_health_state_filter "scalar") (serialize-qp "ExcludeHealthStatistics" $exclude_health_statistics "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({partition_id: (encode-path-segment $partition_id)} | format pattern "/Partitions/{partition_id}/$/GetHealth") $qp)
+  let full_url = (build-url $base ({partition_id: (encode-path-segment $partition_id)} | format pattern "/Partitions/{partition_id}/$/GetHealth") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "EventsHealthStateFilter": $events_health_state_filter, "ReplicasHealthStateFilter": $replicas_health_state_filter, "ExcludeHealthStatistics": $exclude_health_statistics, "timeout": $timeout} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version, "EventsHealthStateFilter": $events_health_state_filter, "ReplicasHealthStateFilter": $replicas_health_state_filter, "ExcludeHealthStatistics": $exclude_health_statistics, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the health of the specified Service Fabric partition, by using the specified health policy.
@@ -5391,12 +7198,23 @@ export def "partitions-get-health get-using-policy" [
   let base = ($base_url | default $BASE_URL)
   if ($partition_id | is-empty) { error make --unspanned { msg: "path parameter 'partitionId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "EventsHealthStateFilter" $events_health_state_filter "scalar") (serialize-qp "ReplicasHealthStateFilter" $replicas_health_state_filter "scalar") (serialize-qp "ExcludeHealthStatistics" $exclude_health_statistics "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({partition_id: (encode-path-segment $partition_id)} | format pattern "/Partitions/{partition_id}/$/GetHealth") $qp)
+  let full_url = (build-url $base ({partition_id: (encode-path-segment $partition_id)} | format pattern "/Partitions/{partition_id}/$/GetHealth") $qp $auth.query)
   let req_body = {"ConsiderWarningAsError": $consider_warning_as_error, "DefaultServiceTypeHealthPolicy": $default_service_type_health_policy, "MaxPercentUnhealthyDeployedApplications": $max_percent_unhealthy_deployed_applications, "ServiceTypeHealthPolicyMap": $service_type_health_policy_map} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"api-version": $api_version, "EventsHealthStateFilter": $events_health_state_filter, "ReplicasHealthStateFilter": $replicas_health_state_filter, "ExcludeHealthStatistics": $exclude_health_statistics, "timeout": $timeout} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"api-version": $api_version, "EventsHealthStateFilter": $events_health_state_filter, "ReplicasHealthStateFilter": $replicas_health_state_filter, "ExcludeHealthStatistics": $exclude_health_statistics, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the load information of the specified Service Fabric partition.
@@ -5421,10 +7239,21 @@ export def "partitions-get-load-information get" [
   let base = ($base_url | default $BASE_URL)
   if ($partition_id | is-empty) { error make --unspanned { msg: "path parameter 'partitionId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({partition_id: (encode-path-segment $partition_id)} | format pattern "/Partitions/{partition_id}/$/GetLoadInformation") $qp)
+  let full_url = (build-url $base ({partition_id: (encode-path-segment $partition_id)} | format pattern "/Partitions/{partition_id}/$/GetLoadInformation") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "timeout": $timeout} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the information about replicas of a Service Fabric service partition.
@@ -5450,10 +7279,21 @@ export def "partitions-get-replicas get-list" [
   let base = ($base_url | default $BASE_URL)
   if ($partition_id | is-empty) { error make --unspanned { msg: "path parameter 'partitionId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "ContinuationToken" $continuation_token "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({partition_id: (encode-path-segment $partition_id)} | format pattern "/Partitions/{partition_id}/$/GetReplicas") $qp)
+  let full_url = (build-url $base ({partition_id: (encode-path-segment $partition_id)} | format pattern "/Partitions/{partition_id}/$/GetReplicas") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "ContinuationToken": $continuation_token, "timeout": $timeout} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version, "ContinuationToken": $continuation_token, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the information about a replica of a Service Fabric partition.
@@ -5480,10 +7320,21 @@ export def "partitions-get-replicas get" [
   if ($partition_id | is-empty) { error make --unspanned { msg: "path parameter 'partitionId' must be non-empty" } }
   if ($replica_id | is-empty) { error make --unspanned { msg: "path parameter 'replicaId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({partition_id: (encode-path-segment $partition_id), replica_id: (encode-path-segment $replica_id)} | format pattern "/Partitions/{partition_id}/$/GetReplicas/{replica_id}") $qp)
+  let full_url = (build-url $base ({partition_id: (encode-path-segment $partition_id), replica_id: (encode-path-segment $replica_id)} | format pattern "/Partitions/{partition_id}/$/GetReplicas/{replica_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "timeout": $timeout} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 204]
 }
 
 # Gets the health of a Service Fabric stateful service replica or stateless service instance.
@@ -5511,10 +7362,21 @@ export def "partitions-get-replicas-get-health get" [
   if ($partition_id | is-empty) { error make --unspanned { msg: "path parameter 'partitionId' must be non-empty" } }
   if ($replica_id | is-empty) { error make --unspanned { msg: "path parameter 'replicaId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "EventsHealthStateFilter" $events_health_state_filter "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({partition_id: (encode-path-segment $partition_id), replica_id: (encode-path-segment $replica_id)} | format pattern "/Partitions/{partition_id}/$/GetReplicas/{replica_id}/$/GetHealth") $qp)
+  let full_url = (build-url $base ({partition_id: (encode-path-segment $partition_id), replica_id: (encode-path-segment $replica_id)} | format pattern "/Partitions/{partition_id}/$/GetReplicas/{replica_id}/$/GetHealth") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "EventsHealthStateFilter": $events_health_state_filter, "timeout": $timeout} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version, "EventsHealthStateFilter": $events_health_state_filter, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the health of a Service Fabric stateful service replica or stateless service instance using the specified policy.
@@ -5549,12 +7411,23 @@ export def "partitions-get-replicas-get-health get-using-policy" [
   if ($partition_id | is-empty) { error make --unspanned { msg: "path parameter 'partitionId' must be non-empty" } }
   if ($replica_id | is-empty) { error make --unspanned { msg: "path parameter 'replicaId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "EventsHealthStateFilter" $events_health_state_filter "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({partition_id: (encode-path-segment $partition_id), replica_id: (encode-path-segment $replica_id)} | format pattern "/Partitions/{partition_id}/$/GetReplicas/{replica_id}/$/GetHealth") $qp)
+  let full_url = (build-url $base ({partition_id: (encode-path-segment $partition_id), replica_id: (encode-path-segment $replica_id)} | format pattern "/Partitions/{partition_id}/$/GetReplicas/{replica_id}/$/GetHealth") $qp $auth.query)
   let req_body = {"ConsiderWarningAsError": $consider_warning_as_error, "DefaultServiceTypeHealthPolicy": $default_service_type_health_policy, "MaxPercentUnhealthyDeployedApplications": $max_percent_unhealthy_deployed_applications, "ServiceTypeHealthPolicyMap": $service_type_health_policy_map} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"api-version": $api_version, "EventsHealthStateFilter": $events_health_state_filter, "timeout": $timeout} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"api-version": $api_version, "EventsHealthStateFilter": $events_health_state_filter, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Sends a health report on the Service Fabric replica.
@@ -5591,12 +7464,23 @@ export def "partitions-get-replicas-report-health create" [
   if ($partition_id | is-empty) { error make --unspanned { msg: "path parameter 'partitionId' must be non-empty" } }
   if ($replica_id | is-empty) { error make --unspanned { msg: "path parameter 'replicaId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "ServiceKind" $service_kind "scalar") (serialize-qp "Immediate" $immediate "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({partition_id: (encode-path-segment $partition_id), replica_id: (encode-path-segment $replica_id)} | format pattern "/Partitions/{partition_id}/$/GetReplicas/{replica_id}/$/ReportHealth") $qp)
+  let full_url = (build-url $base ({partition_id: (encode-path-segment $partition_id), replica_id: (encode-path-segment $replica_id)} | format pattern "/Partitions/{partition_id}/$/GetReplicas/{replica_id}/$/ReportHealth") $qp $auth.query)
   let req_body = {"Description": $description, "HealthState": $health_state, "Property": $property, "RemoveWhenExpired": $remove_when_expired, "SequenceNumber": $sequence_number, "SourceId": $source_id, "TimeToLiveInMilliSeconds": $time_to_live_in_milli_seconds} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"api-version": $api_version, "ServiceKind": $service_kind, "Immediate": $immediate, "timeout": $timeout} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"api-version": $api_version, "ServiceKind": $service_kind, "Immediate": $immediate, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Gets details for the latest restore operation triggered for this partition.
@@ -5621,10 +7505,21 @@ export def "partitions-get-restore-progress get" [
   let base = ($base_url | default $BASE_URL)
   if ($partition_id | is-empty) { error make --unspanned { msg: "path parameter 'partitionId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({partition_id: (encode-path-segment $partition_id)} | format pattern "/Partitions/{partition_id}/$/GetRestoreProgress") $qp)
+  let full_url = (build-url $base ({partition_id: (encode-path-segment $partition_id)} | format pattern "/Partitions/{partition_id}/$/GetRestoreProgress") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "timeout": $timeout} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the name of the Service Fabric service for a partition.
@@ -5649,10 +7544,21 @@ export def "partitions-get-service-name get" [
   let base = ($base_url | default $BASE_URL)
   if ($partition_id | is-empty) { error make --unspanned { msg: "path parameter 'partitionId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({partition_id: (encode-path-segment $partition_id)} | format pattern "/Partitions/{partition_id}/$/GetServiceName") $qp)
+  let full_url = (build-url $base ({partition_id: (encode-path-segment $partition_id)} | format pattern "/Partitions/{partition_id}/$/GetServiceName") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "timeout": $timeout} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Moves the primary replica of a partition of a stateful service.
@@ -5679,10 +7585,21 @@ export def "partitions-move-primary-replica move" [
   let base = ($base_url | default $BASE_URL)
   if ($partition_id | is-empty) { error make --unspanned { msg: "path parameter 'partitionId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "NodeName" $node_name "scalar") (serialize-qp "IgnoreConstraints" $ignore_constraints "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({partition_id: (encode-path-segment $partition_id)} | format pattern "/Partitions/{partition_id}/$/MovePrimaryReplica") $qp)
+  let full_url = (build-url $base ({partition_id: (encode-path-segment $partition_id)} | format pattern "/Partitions/{partition_id}/$/MovePrimaryReplica") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "NodeName": $node_name, "IgnoreConstraints": $ignore_constraints, "timeout": $timeout} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"api-version": $api_version, "NodeName": $node_name, "IgnoreConstraints": $ignore_constraints, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Moves the secondary replica of a partition of a stateful service.
@@ -5710,10 +7627,21 @@ export def "partitions-move-secondary-replica move" [
   let base = ($base_url | default $BASE_URL)
   if ($partition_id | is-empty) { error make --unspanned { msg: "path parameter 'partitionId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "CurrentNodeName" $current_node_name "scalar") (serialize-qp "NewNodeName" $new_node_name "scalar") (serialize-qp "IgnoreConstraints" $ignore_constraints "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({partition_id: (encode-path-segment $partition_id)} | format pattern "/Partitions/{partition_id}/$/MoveSecondaryReplica") $qp)
+  let full_url = (build-url $base ({partition_id: (encode-path-segment $partition_id)} | format pattern "/Partitions/{partition_id}/$/MoveSecondaryReplica") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "CurrentNodeName": $current_node_name, "NewNodeName": $new_node_name, "IgnoreConstraints": $ignore_constraints, "timeout": $timeout} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"api-version": $api_version, "CurrentNodeName": $current_node_name, "NewNodeName": $new_node_name, "IgnoreConstraints": $ignore_constraints, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Indicates to the Service Fabric cluster that it should attempt to recover a specific partition that is currently stuck in quorum loss.
@@ -5738,10 +7666,21 @@ export def "partitions-recover create" [
   let base = ($base_url | default $BASE_URL)
   if ($partition_id | is-empty) { error make --unspanned { msg: "path parameter 'partitionId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({partition_id: (encode-path-segment $partition_id)} | format pattern "/Partitions/{partition_id}/$/Recover") $qp)
+  let full_url = (build-url $base ({partition_id: (encode-path-segment $partition_id)} | format pattern "/Partitions/{partition_id}/$/Recover") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "timeout": $timeout} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"api-version": $api_version, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Sends a health report on the Service Fabric partition.
@@ -5775,12 +7714,23 @@ export def "partitions-report-health create" [
   let base = ($base_url | default $BASE_URL)
   if ($partition_id | is-empty) { error make --unspanned { msg: "path parameter 'partitionId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "Immediate" $immediate "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({partition_id: (encode-path-segment $partition_id)} | format pattern "/Partitions/{partition_id}/$/ReportHealth") $qp)
+  let full_url = (build-url $base ({partition_id: (encode-path-segment $partition_id)} | format pattern "/Partitions/{partition_id}/$/ReportHealth") $qp $auth.query)
   let req_body = {"Description": $description, "HealthState": $health_state, "Property": $property, "RemoveWhenExpired": $remove_when_expired, "SequenceNumber": $sequence_number, "SourceId": $source_id, "TimeToLiveInMilliSeconds": $time_to_live_in_milli_seconds} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"api-version": $api_version, "Immediate": $immediate, "timeout": $timeout} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"api-version": $api_version, "Immediate": $immediate, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Resets the current load of a Service Fabric partition.
@@ -5805,10 +7755,21 @@ export def "partitions-reset-load reset" [
   let base = ($base_url | default $BASE_URL)
   if ($partition_id | is-empty) { error make --unspanned { msg: "path parameter 'partitionId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({partition_id: (encode-path-segment $partition_id)} | format pattern "/Partitions/{partition_id}/$/ResetLoad") $qp)
+  let full_url = (build-url $base ({partition_id: (encode-path-segment $partition_id)} | format pattern "/Partitions/{partition_id}/$/ResetLoad") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "timeout": $timeout} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"api-version": $api_version, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Triggers restore of the state of the partition using the specified restore partition description.
@@ -5839,12 +7800,23 @@ export def "partitions-restore create" [
   let base = ($base_url | default $BASE_URL)
   if ($partition_id | is-empty) { error make --unspanned { msg: "path parameter 'partitionId' must be non-empty" } }
   let qp = [(serialize-qp "RestoreTimeout" $restore_timeout "scalar") (serialize-qp "api-version" $api_version "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({partition_id: (encode-path-segment $partition_id)} | format pattern "/Partitions/{partition_id}/$/Restore") $qp)
+  let full_url = (build-url $base ({partition_id: (encode-path-segment $partition_id)} | format pattern "/Partitions/{partition_id}/$/Restore") $qp $auth.query)
   let req_body = {"BackupId": $backup_id, "BackupLocation": $backup_location, "BackupStorage": $backup_storage} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"RestoreTimeout": $restore_timeout, "api-version": $api_version, "timeout": $timeout} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"RestoreTimeout": $restore_timeout, "api-version": $api_version, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [202]
 }
 
 # Resumes periodic backup of partition which was previously suspended.
@@ -5869,10 +7841,21 @@ export def "partitions-resume-backup create" [
   let base = ($base_url | default $BASE_URL)
   if ($partition_id | is-empty) { error make --unspanned { msg: "path parameter 'partitionId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({partition_id: (encode-path-segment $partition_id)} | format pattern "/Partitions/{partition_id}/$/ResumeBackup") $qp)
+  let full_url = (build-url $base ({partition_id: (encode-path-segment $partition_id)} | format pattern "/Partitions/{partition_id}/$/ResumeBackup") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "timeout": $timeout} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"api-version": $api_version, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [202]
 }
 
 # Suspends periodic backup for the specified partition.
@@ -5897,10 +7880,21 @@ export def "partitions-suspend-backup create" [
   let base = ($base_url | default $BASE_URL)
   if ($partition_id | is-empty) { error make --unspanned { msg: "path parameter 'partitionId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({partition_id: (encode-path-segment $partition_id)} | format pattern "/Partitions/{partition_id}/$/SuspendBackup") $qp)
+  let full_url = (build-url $base ({partition_id: (encode-path-segment $partition_id)} | format pattern "/Partitions/{partition_id}/$/SuspendBackup") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "timeout": $timeout} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"api-version": $api_version, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [202]
 }
 
 # Lists all the application resources.
@@ -5922,10 +7916,21 @@ export def "resources-applications list-mesh" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/Resources/Applications" $qp)
+  let full_url = (build-url $base "/Resources/Applications" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes the Application resource.
@@ -5949,10 +7954,21 @@ export def "resources-applications delete-mesh" [
   let base = ($base_url | default $BASE_URL)
   if ($application_resource_name | is-empty) { error make --unspanned { msg: "path parameter 'applicationResourceName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({application_resource_name: (encode-path-segment $application_resource_name)} | format pattern "/Resources/Applications/{application_resource_name}") $qp)
+  let full_url = (build-url $base ({application_resource_name: (encode-path-segment $application_resource_name)} | format pattern "/Resources/Applications/{application_resource_name}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200 202 204]
 }
 
 # Gets the Application resource with the given name.
@@ -5976,10 +7992,21 @@ export def "resources-applications get-mesh" [
   let base = ($base_url | default $BASE_URL)
   if ($application_resource_name | is-empty) { error make --unspanned { msg: "path parameter 'applicationResourceName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({application_resource_name: (encode-path-segment $application_resource_name)} | format pattern "/Resources/Applications/{application_resource_name}") $qp)
+  let full_url = (build-url $base ({application_resource_name: (encode-path-segment $application_resource_name)} | format pattern "/Resources/Applications/{application_resource_name}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Creates or updates a Application resource.
@@ -6009,12 +8036,23 @@ export def "resources-applications create-mesh-or-update" [
   let base = ($base_url | default $BASE_URL)
   if ($application_resource_name | is-empty) { error make --unspanned { msg: "path parameter 'applicationResourceName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({application_resource_name: (encode-path-segment $application_resource_name)} | format pattern "/Resources/Applications/{application_resource_name}") $qp)
+  let full_url = (build-url $base ({application_resource_name: (encode-path-segment $application_resource_name)} | format pattern "/Resources/Applications/{application_resource_name}") $qp $auth.query)
   let req_body = {"identity": $identity, "name": $name, "properties": $properties} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"api-version": $api_version} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200 201 202]
 }
 
 # Lists all the service resources.
@@ -6038,10 +8076,21 @@ export def "resources-applications-services list-mesh" [
   let base = ($base_url | default $BASE_URL)
   if ($application_resource_name | is-empty) { error make --unspanned { msg: "path parameter 'applicationResourceName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({application_resource_name: (encode-path-segment $application_resource_name)} | format pattern "/Resources/Applications/{application_resource_name}/Services") $qp)
+  let full_url = (build-url $base ({application_resource_name: (encode-path-segment $application_resource_name)} | format pattern "/Resources/Applications/{application_resource_name}/Services") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the Service resource with the given name.
@@ -6067,10 +8116,21 @@ export def "resources-applications-services get-mesh" [
   if ($application_resource_name | is-empty) { error make --unspanned { msg: "path parameter 'applicationResourceName' must be non-empty" } }
   if ($service_resource_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceResourceName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({application_resource_name: (encode-path-segment $application_resource_name), service_resource_name: (encode-path-segment $service_resource_name)} | format pattern "/Resources/Applications/{application_resource_name}/Services/{service_resource_name}") $qp)
+  let full_url = (build-url $base ({application_resource_name: (encode-path-segment $application_resource_name), service_resource_name: (encode-path-segment $service_resource_name)} | format pattern "/Resources/Applications/{application_resource_name}/Services/{service_resource_name}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Lists all the replicas of a service.
@@ -6096,10 +8156,21 @@ export def "resources-applications-services-replicas list-mesh" [
   if ($application_resource_name | is-empty) { error make --unspanned { msg: "path parameter 'applicationResourceName' must be non-empty" } }
   if ($service_resource_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceResourceName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({application_resource_name: (encode-path-segment $application_resource_name), service_resource_name: (encode-path-segment $service_resource_name)} | format pattern "/Resources/Applications/{application_resource_name}/Services/{service_resource_name}/Replicas") $qp)
+  let full_url = (build-url $base ({application_resource_name: (encode-path-segment $application_resource_name), service_resource_name: (encode-path-segment $service_resource_name)} | format pattern "/Resources/Applications/{application_resource_name}/Services/{service_resource_name}/Replicas") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the given replica of the service of an application.
@@ -6127,10 +8198,21 @@ export def "resources-applications-services-replicas get-mesh" [
   if ($service_resource_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceResourceName' must be non-empty" } }
   if ($replica_name | is-empty) { error make --unspanned { msg: "path parameter 'replicaName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({application_resource_name: (encode-path-segment $application_resource_name), service_resource_name: (encode-path-segment $service_resource_name), replica_name: (encode-path-segment $replica_name)} | format pattern "/Resources/Applications/{application_resource_name}/Services/{service_resource_name}/Replicas/{replica_name}") $qp)
+  let full_url = (build-url $base ({application_resource_name: (encode-path-segment $application_resource_name), service_resource_name: (encode-path-segment $service_resource_name), replica_name: (encode-path-segment $replica_name)} | format pattern "/Resources/Applications/{application_resource_name}/Services/{service_resource_name}/Replicas/{replica_name}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the logs from the container.
@@ -6161,10 +8243,21 @@ export def "resources-applications-services-replicas-code-packages-logs get-mesh
   if ($replica_name | is-empty) { error make --unspanned { msg: "path parameter 'replicaName' must be non-empty" } }
   if ($code_package_name | is-empty) { error make --unspanned { msg: "path parameter 'codePackageName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "Tail" $tail "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({application_resource_name: (encode-path-segment $application_resource_name), service_resource_name: (encode-path-segment $service_resource_name), replica_name: (encode-path-segment $replica_name), code_package_name: (encode-path-segment $code_package_name)} | format pattern "/Resources/Applications/{application_resource_name}/Services/{service_resource_name}/Replicas/{replica_name}/CodePackages/{code_package_name}/Logs") $qp)
+  let full_url = (build-url $base ({application_resource_name: (encode-path-segment $application_resource_name), service_resource_name: (encode-path-segment $service_resource_name), replica_name: (encode-path-segment $replica_name), code_package_name: (encode-path-segment $code_package_name)} | format pattern "/Resources/Applications/{application_resource_name}/Services/{service_resource_name}/Replicas/{replica_name}/CodePackages/{code_package_name}/Logs") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "Tail": $tail} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version, "Tail": $tail} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Lists all the gateway resources.
@@ -6186,10 +8279,21 @@ export def "resources-gateways list-mesh" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/Resources/Gateways" $qp)
+  let full_url = (build-url $base "/Resources/Gateways" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes the Gateway resource.
@@ -6213,10 +8317,21 @@ export def "resources-gateways delete-mesh" [
   let base = ($base_url | default $BASE_URL)
   if ($gateway_resource_name | is-empty) { error make --unspanned { msg: "path parameter 'gatewayResourceName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({gateway_resource_name: (encode-path-segment $gateway_resource_name)} | format pattern "/Resources/Gateways/{gateway_resource_name}") $qp)
+  let full_url = (build-url $base ({gateway_resource_name: (encode-path-segment $gateway_resource_name)} | format pattern "/Resources/Gateways/{gateway_resource_name}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200 202 204]
 }
 
 # Gets the Gateway resource with the given name.
@@ -6240,10 +8355,21 @@ export def "resources-gateways get-mesh" [
   let base = ($base_url | default $BASE_URL)
   if ($gateway_resource_name | is-empty) { error make --unspanned { msg: "path parameter 'gatewayResourceName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({gateway_resource_name: (encode-path-segment $gateway_resource_name)} | format pattern "/Resources/Gateways/{gateway_resource_name}") $qp)
+  let full_url = (build-url $base ({gateway_resource_name: (encode-path-segment $gateway_resource_name)} | format pattern "/Resources/Gateways/{gateway_resource_name}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Creates or updates a Gateway resource.
@@ -6271,12 +8397,23 @@ export def "resources-gateways create-mesh-or-update" [
   let base = ($base_url | default $BASE_URL)
   if ($gateway_resource_name | is-empty) { error make --unspanned { msg: "path parameter 'gatewayResourceName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({gateway_resource_name: (encode-path-segment $gateway_resource_name)} | format pattern "/Resources/Gateways/{gateway_resource_name}") $qp)
+  let full_url = (build-url $base ({gateway_resource_name: (encode-path-segment $gateway_resource_name)} | format pattern "/Resources/Gateways/{gateway_resource_name}") $qp $auth.query)
   let req_body = {"name": $name, "properties": $properties} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"api-version": $api_version} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200 201 202]
 }
 
 # Lists all the network resources.
@@ -6298,10 +8435,21 @@ export def "resources-networks list-mesh" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/Resources/Networks" $qp)
+  let full_url = (build-url $base "/Resources/Networks" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes the Network resource.
@@ -6325,10 +8473,21 @@ export def "resources-networks delete-mesh" [
   let base = ($base_url | default $BASE_URL)
   if ($network_resource_name | is-empty) { error make --unspanned { msg: "path parameter 'networkResourceName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({network_resource_name: (encode-path-segment $network_resource_name)} | format pattern "/Resources/Networks/{network_resource_name}") $qp)
+  let full_url = (build-url $base ({network_resource_name: (encode-path-segment $network_resource_name)} | format pattern "/Resources/Networks/{network_resource_name}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200 202 204]
 }
 
 # Gets the Network resource with the given name.
@@ -6352,10 +8511,21 @@ export def "resources-networks get-mesh" [
   let base = ($base_url | default $BASE_URL)
   if ($network_resource_name | is-empty) { error make --unspanned { msg: "path parameter 'networkResourceName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({network_resource_name: (encode-path-segment $network_resource_name)} | format pattern "/Resources/Networks/{network_resource_name}") $qp)
+  let full_url = (build-url $base ({network_resource_name: (encode-path-segment $network_resource_name)} | format pattern "/Resources/Networks/{network_resource_name}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Creates or updates a Network resource.
@@ -6383,12 +8553,23 @@ export def "resources-networks create-mesh-or-update" [
   let base = ($base_url | default $BASE_URL)
   if ($network_resource_name | is-empty) { error make --unspanned { msg: "path parameter 'networkResourceName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({network_resource_name: (encode-path-segment $network_resource_name)} | format pattern "/Resources/Networks/{network_resource_name}") $qp)
+  let full_url = (build-url $base ({network_resource_name: (encode-path-segment $network_resource_name)} | format pattern "/Resources/Networks/{network_resource_name}") $qp $auth.query)
   let req_body = {"name": $name, "properties": $properties} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"api-version": $api_version} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200 201 202]
 }
 
 # Lists all the secret resources.
@@ -6410,10 +8591,21 @@ export def "resources-secrets list-mesh" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/Resources/Secrets" $qp)
+  let full_url = (build-url $base "/Resources/Secrets" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes the Secret resource.
@@ -6437,10 +8629,21 @@ export def "resources-secrets delete-mesh" [
   let base = ($base_url | default $BASE_URL)
   if ($secret_resource_name | is-empty) { error make --unspanned { msg: "path parameter 'secretResourceName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({secret_resource_name: (encode-path-segment $secret_resource_name)} | format pattern "/Resources/Secrets/{secret_resource_name}") $qp)
+  let full_url = (build-url $base ({secret_resource_name: (encode-path-segment $secret_resource_name)} | format pattern "/Resources/Secrets/{secret_resource_name}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200 202 204]
 }
 
 # Gets the Secret resource with the given name.
@@ -6464,10 +8667,21 @@ export def "resources-secrets get-mesh" [
   let base = ($base_url | default $BASE_URL)
   if ($secret_resource_name | is-empty) { error make --unspanned { msg: "path parameter 'secretResourceName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({secret_resource_name: (encode-path-segment $secret_resource_name)} | format pattern "/Resources/Secrets/{secret_resource_name}") $qp)
+  let full_url = (build-url $base ({secret_resource_name: (encode-path-segment $secret_resource_name)} | format pattern "/Resources/Secrets/{secret_resource_name}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Creates or updates a Secret resource.
@@ -6495,12 +8709,23 @@ export def "resources-secrets create-mesh-or-update" [
   let base = ($base_url | default $BASE_URL)
   if ($secret_resource_name | is-empty) { error make --unspanned { msg: "path parameter 'secretResourceName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({secret_resource_name: (encode-path-segment $secret_resource_name)} | format pattern "/Resources/Secrets/{secret_resource_name}") $qp)
+  let full_url = (build-url $base ({secret_resource_name: (encode-path-segment $secret_resource_name)} | format pattern "/Resources/Secrets/{secret_resource_name}") $qp $auth.query)
   let req_body = {"name": $name, "properties": $properties} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"api-version": $api_version} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200 201 202]
 }
 
 # List names of all values of the specified secret resource.
@@ -6524,10 +8749,21 @@ export def "resources-secrets-values list-mesh" [
   let base = ($base_url | default $BASE_URL)
   if ($secret_resource_name | is-empty) { error make --unspanned { msg: "path parameter 'secretResourceName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({secret_resource_name: (encode-path-segment $secret_resource_name)} | format pattern "/Resources/Secrets/{secret_resource_name}/values") $qp)
+  let full_url = (build-url $base ({secret_resource_name: (encode-path-segment $secret_resource_name)} | format pattern "/Resources/Secrets/{secret_resource_name}/values") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes the specified value of the named secret resource.
@@ -6553,10 +8789,21 @@ export def "resources-secrets-values delete-mesh" [
   if ($secret_resource_name | is-empty) { error make --unspanned { msg: "path parameter 'secretResourceName' must be non-empty" } }
   if ($secret_value_resource_name | is-empty) { error make --unspanned { msg: "path parameter 'secretValueResourceName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({secret_resource_name: (encode-path-segment $secret_resource_name), secret_value_resource_name: (encode-path-segment $secret_value_resource_name)} | format pattern "/Resources/Secrets/{secret_resource_name}/values/{secret_value_resource_name}") $qp)
+  let full_url = (build-url $base ({secret_resource_name: (encode-path-segment $secret_resource_name), secret_value_resource_name: (encode-path-segment $secret_value_resource_name)} | format pattern "/Resources/Secrets/{secret_resource_name}/values/{secret_value_resource_name}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200 202 204]
 }
 
 # Gets the specified secret value resource.
@@ -6582,10 +8829,21 @@ export def "resources-secrets-values get-mesh" [
   if ($secret_resource_name | is-empty) { error make --unspanned { msg: "path parameter 'secretResourceName' must be non-empty" } }
   if ($secret_value_resource_name | is-empty) { error make --unspanned { msg: "path parameter 'secretValueResourceName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({secret_resource_name: (encode-path-segment $secret_resource_name), secret_value_resource_name: (encode-path-segment $secret_value_resource_name)} | format pattern "/Resources/Secrets/{secret_resource_name}/values/{secret_value_resource_name}") $qp)
+  let full_url = (build-url $base ({secret_resource_name: (encode-path-segment $secret_resource_name), secret_value_resource_name: (encode-path-segment $secret_value_resource_name)} | format pattern "/Resources/Secrets/{secret_resource_name}/values/{secret_value_resource_name}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Adds the specified value as a new version of the specified secret resource.
@@ -6614,12 +8872,23 @@ export def "resources-secrets-values create-mesh" [
   if ($secret_resource_name | is-empty) { error make --unspanned { msg: "path parameter 'secretResourceName' must be non-empty" } }
   if ($secret_value_resource_name | is-empty) { error make --unspanned { msg: "path parameter 'secretValueResourceName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({secret_resource_name: (encode-path-segment $secret_resource_name), secret_value_resource_name: (encode-path-segment $secret_value_resource_name)} | format pattern "/Resources/Secrets/{secret_resource_name}/values/{secret_value_resource_name}") $qp)
+  let full_url = (build-url $base ({secret_resource_name: (encode-path-segment $secret_resource_name), secret_value_resource_name: (encode-path-segment $secret_value_resource_name)} | format pattern "/Resources/Secrets/{secret_resource_name}/values/{secret_value_resource_name}") $qp $auth.query)
   let req_body = {"name": $name, "properties": $properties} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"api-version": $api_version} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200 201 202]
 }
 
 # Lists the specified value of the secret resource.
@@ -6645,10 +8914,21 @@ export def "resources-secrets-values-list-value create-mesh-show" [
   if ($secret_resource_name | is-empty) { error make --unspanned { msg: "path parameter 'secretResourceName' must be non-empty" } }
   if ($secret_value_resource_name | is-empty) { error make --unspanned { msg: "path parameter 'secretValueResourceName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({secret_resource_name: (encode-path-segment $secret_resource_name), secret_value_resource_name: (encode-path-segment $secret_value_resource_name)} | format pattern "/Resources/Secrets/{secret_resource_name}/values/{secret_value_resource_name}/list_value") $qp)
+  let full_url = (build-url $base ({secret_resource_name: (encode-path-segment $secret_resource_name), secret_value_resource_name: (encode-path-segment $secret_value_resource_name)} | format pattern "/Resources/Secrets/{secret_resource_name}/values/{secret_value_resource_name}/list_value") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Lists all the volume resources.
@@ -6670,10 +8950,21 @@ export def "resources-volumes list-mesh" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/Resources/Volumes" $qp)
+  let full_url = (build-url $base "/Resources/Volumes" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes the Volume resource.
@@ -6697,10 +8988,21 @@ export def "resources-volumes delete-mesh" [
   let base = ($base_url | default $BASE_URL)
   if ($volume_resource_name | is-empty) { error make --unspanned { msg: "path parameter 'volumeResourceName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({volume_resource_name: (encode-path-segment $volume_resource_name)} | format pattern "/Resources/Volumes/{volume_resource_name}") $qp)
+  let full_url = (build-url $base ({volume_resource_name: (encode-path-segment $volume_resource_name)} | format pattern "/Resources/Volumes/{volume_resource_name}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200 202 204]
 }
 
 # Gets the Volume resource with the given name.
@@ -6724,10 +9026,21 @@ export def "resources-volumes get-mesh" [
   let base = ($base_url | default $BASE_URL)
   if ($volume_resource_name | is-empty) { error make --unspanned { msg: "path parameter 'volumeResourceName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({volume_resource_name: (encode-path-segment $volume_resource_name)} | format pattern "/Resources/Volumes/{volume_resource_name}") $qp)
+  let full_url = (build-url $base ({volume_resource_name: (encode-path-segment $volume_resource_name)} | format pattern "/Resources/Volumes/{volume_resource_name}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Creates or updates a Volume resource.
@@ -6755,12 +9068,23 @@ export def "resources-volumes create-mesh-or-update" [
   let base = ($base_url | default $BASE_URL)
   if ($volume_resource_name | is-empty) { error make --unspanned { msg: "path parameter 'volumeResourceName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({volume_resource_name: (encode-path-segment $volume_resource_name)} | format pattern "/Resources/Volumes/{volume_resource_name}") $qp)
+  let full_url = (build-url $base ({volume_resource_name: (encode-path-segment $volume_resource_name)} | format pattern "/Resources/Volumes/{volume_resource_name}") $qp $auth.query)
   let req_body = {"name": $name, "properties": $properties} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"api-version": $api_version} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200 201 202]
 }
 
 # Indicates to the Service Fabric cluster that it should attempt to recover the specified service that is currently stuck in quorum loss.
@@ -6785,10 +9109,21 @@ export def "services-get-partitions-recover create" [
   let base = ($base_url | default $BASE_URL)
   if ($service_id | is-empty) { error make --unspanned { msg: "path parameter 'serviceId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_id: (encode-path-segment $service_id)} | format pattern "/Services/$/{service_id}/$/GetPartitions/$/Recover") $qp)
+  let full_url = (build-url $base ({service_id: (encode-path-segment $service_id)} | format pattern "/Services/$/{service_id}/$/GetPartitions/$/Recover") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "timeout": $timeout} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"api-version": $api_version, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes an existing Service Fabric service.
@@ -6814,10 +9149,21 @@ export def "services-delete delete" [
   let base = ($base_url | default $BASE_URL)
   if ($service_id | is-empty) { error make --unspanned { msg: "path parameter 'serviceId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "ForceRemove" $force_remove "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_id: (encode-path-segment $service_id)} | format pattern "/Services/{service_id}/$/Delete") $qp)
+  let full_url = (build-url $base ({service_id: (encode-path-segment $service_id)} | format pattern "/Services/{service_id}/$/Delete") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "ForceRemove": $force_remove, "timeout": $timeout} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"api-version": $api_version, "ForceRemove": $force_remove, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Disables periodic backup of Service Fabric service which was previously enabled.
@@ -6844,12 +9190,23 @@ export def "services-disable-backup disable" [
   let base = ($base_url | default $BASE_URL)
   if ($service_id | is-empty) { error make --unspanned { msg: "path parameter 'serviceId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_id: (encode-path-segment $service_id)} | format pattern "/Services/{service_id}/$/DisableBackup") $qp)
+  let full_url = (build-url $base ({service_id: (encode-path-segment $service_id)} | format pattern "/Services/{service_id}/$/DisableBackup") $qp $auth.query)
   let req_body = {"CleanBackup": $clean_backup} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"api-version": $api_version, "timeout": $timeout} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"api-version": $api_version, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [202]
 }
 
 # Enables periodic backup of stateful partitions under this Service Fabric service.
@@ -6876,12 +9233,23 @@ export def "services-enable-backup enable" [
   let base = ($base_url | default $BASE_URL)
   if ($service_id | is-empty) { error make --unspanned { msg: "path parameter 'serviceId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_id: (encode-path-segment $service_id)} | format pattern "/Services/{service_id}/$/EnableBackup") $qp)
+  let full_url = (build-url $base ({service_id: (encode-path-segment $service_id)} | format pattern "/Services/{service_id}/$/EnableBackup") $qp $auth.query)
   let req_body = {"BackupPolicyName": $backup_policy_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"api-version": $api_version, "timeout": $timeout} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"api-version": $api_version, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [202]
 }
 
 # Gets the name of the Service Fabric application for a service.
@@ -6906,10 +9274,21 @@ export def "services-get-application-name get" [
   let base = ($base_url | default $BASE_URL)
   if ($service_id | is-empty) { error make --unspanned { msg: "path parameter 'serviceId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_id: (encode-path-segment $service_id)} | format pattern "/Services/{service_id}/$/GetApplicationName") $qp)
+  let full_url = (build-url $base ({service_id: (encode-path-segment $service_id)} | format pattern "/Services/{service_id}/$/GetApplicationName") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "timeout": $timeout} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the Service Fabric service backup configuration information.
@@ -6936,10 +9315,21 @@ export def "services-get-backup-configuration-info get" [
   let base = ($base_url | default $BASE_URL)
   if ($service_id | is-empty) { error make --unspanned { msg: "path parameter 'serviceId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "ContinuationToken" $continuation_token "scalar") (serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_id: (encode-path-segment $service_id)} | format pattern "/Services/{service_id}/$/GetBackupConfigurationInfo") $qp)
+  let full_url = (build-url $base ({service_id: (encode-path-segment $service_id)} | format pattern "/Services/{service_id}/$/GetBackupConfigurationInfo") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "ContinuationToken": $continuation_token, "MaxResults": $max_results, "timeout": $timeout} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version, "ContinuationToken": $continuation_token, "MaxResults": $max_results, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the list of backups available for every partition in this service.
@@ -6969,10 +9359,21 @@ export def "services-get-backups list" [
   let base = ($base_url | default $BASE_URL)
   if ($service_id | is-empty) { error make --unspanned { msg: "path parameter 'serviceId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "timeout" $timeout "scalar") (serialize-qp "Latest" $latest "scalar") (serialize-qp "StartDateTimeFilter" $start_date_time_filter "scalar") (serialize-qp "EndDateTimeFilter" $end_date_time_filter "scalar") (serialize-qp "ContinuationToken" $continuation_token "scalar") (serialize-qp "MaxResults" $max_results "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_id: (encode-path-segment $service_id)} | format pattern "/Services/{service_id}/$/GetBackups") $qp)
+  let full_url = (build-url $base ({service_id: (encode-path-segment $service_id)} | format pattern "/Services/{service_id}/$/GetBackups") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "timeout": $timeout, "Latest": $latest, "StartDateTimeFilter": $start_date_time_filter, "EndDateTimeFilter": $end_date_time_filter, "ContinuationToken": $continuation_token, "MaxResults": $max_results} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version, "timeout": $timeout, "Latest": $latest, "StartDateTimeFilter": $start_date_time_filter, "EndDateTimeFilter": $end_date_time_filter, "ContinuationToken": $continuation_token, "MaxResults": $max_results} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the description of an existing Service Fabric service.
@@ -6997,10 +9398,21 @@ export def "services-get-description get" [
   let base = ($base_url | default $BASE_URL)
   if ($service_id | is-empty) { error make --unspanned { msg: "path parameter 'serviceId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_id: (encode-path-segment $service_id)} | format pattern "/Services/{service_id}/$/GetDescription") $qp)
+  let full_url = (build-url $base ({service_id: (encode-path-segment $service_id)} | format pattern "/Services/{service_id}/$/GetDescription") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "timeout": $timeout} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the health of the specified Service Fabric service.
@@ -7028,10 +9440,21 @@ export def "services-get-health get" [
   let base = ($base_url | default $BASE_URL)
   if ($service_id | is-empty) { error make --unspanned { msg: "path parameter 'serviceId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "EventsHealthStateFilter" $events_health_state_filter "scalar") (serialize-qp "PartitionsHealthStateFilter" $partitions_health_state_filter "scalar") (serialize-qp "ExcludeHealthStatistics" $exclude_health_statistics "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_id: (encode-path-segment $service_id)} | format pattern "/Services/{service_id}/$/GetHealth") $qp)
+  let full_url = (build-url $base ({service_id: (encode-path-segment $service_id)} | format pattern "/Services/{service_id}/$/GetHealth") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "EventsHealthStateFilter": $events_health_state_filter, "PartitionsHealthStateFilter": $partitions_health_state_filter, "ExcludeHealthStatistics": $exclude_health_statistics, "timeout": $timeout} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version, "EventsHealthStateFilter": $events_health_state_filter, "PartitionsHealthStateFilter": $partitions_health_state_filter, "ExcludeHealthStatistics": $exclude_health_statistics, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the health of the specified Service Fabric service, by using the specified health policy.
@@ -7066,12 +9489,23 @@ export def "services-get-health get-using-policy" [
   let base = ($base_url | default $BASE_URL)
   if ($service_id | is-empty) { error make --unspanned { msg: "path parameter 'serviceId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "EventsHealthStateFilter" $events_health_state_filter "scalar") (serialize-qp "PartitionsHealthStateFilter" $partitions_health_state_filter "scalar") (serialize-qp "ExcludeHealthStatistics" $exclude_health_statistics "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_id: (encode-path-segment $service_id)} | format pattern "/Services/{service_id}/$/GetHealth") $qp)
+  let full_url = (build-url $base ({service_id: (encode-path-segment $service_id)} | format pattern "/Services/{service_id}/$/GetHealth") $qp $auth.query)
   let req_body = {"ConsiderWarningAsError": $consider_warning_as_error, "DefaultServiceTypeHealthPolicy": $default_service_type_health_policy, "MaxPercentUnhealthyDeployedApplications": $max_percent_unhealthy_deployed_applications, "ServiceTypeHealthPolicyMap": $service_type_health_policy_map} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"api-version": $api_version, "EventsHealthStateFilter": $events_health_state_filter, "PartitionsHealthStateFilter": $partitions_health_state_filter, "ExcludeHealthStatistics": $exclude_health_statistics, "timeout": $timeout} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"api-version": $api_version, "EventsHealthStateFilter": $events_health_state_filter, "PartitionsHealthStateFilter": $partitions_health_state_filter, "ExcludeHealthStatistics": $exclude_health_statistics, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the list of partitions of a Service Fabric service.
@@ -7097,10 +9531,21 @@ export def "services-get-partitions get-list" [
   let base = ($base_url | default $BASE_URL)
   if ($service_id | is-empty) { error make --unspanned { msg: "path parameter 'serviceId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "ContinuationToken" $continuation_token "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_id: (encode-path-segment $service_id)} | format pattern "/Services/{service_id}/$/GetPartitions") $qp)
+  let full_url = (build-url $base ({service_id: (encode-path-segment $service_id)} | format pattern "/Services/{service_id}/$/GetPartitions") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "ContinuationToken": $continuation_token, "timeout": $timeout} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version, "ContinuationToken": $continuation_token, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the information about unplaced replica of the service.
@@ -7127,10 +9572,21 @@ export def "services-get-unplaced-replica-information get" [
   let base = ($base_url | default $BASE_URL)
   if ($service_id | is-empty) { error make --unspanned { msg: "path parameter 'serviceId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "PartitionId" $partition_id "scalar") (serialize-qp "OnlyQueryPrimaries" $only_query_primaries "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_id: (encode-path-segment $service_id)} | format pattern "/Services/{service_id}/$/GetUnplacedReplicaInformation") $qp)
+  let full_url = (build-url $base ({service_id: (encode-path-segment $service_id)} | format pattern "/Services/{service_id}/$/GetUnplacedReplicaInformation") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "PartitionId": $partition_id, "OnlyQueryPrimaries": $only_query_primaries, "timeout": $timeout} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version, "PartitionId": $partition_id, "OnlyQueryPrimaries": $only_query_primaries, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Sends a health report on the Service Fabric service.
@@ -7164,12 +9620,23 @@ export def "services-report-health create" [
   let base = ($base_url | default $BASE_URL)
   if ($service_id | is-empty) { error make --unspanned { msg: "path parameter 'serviceId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "Immediate" $immediate "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_id: (encode-path-segment $service_id)} | format pattern "/Services/{service_id}/$/ReportHealth") $qp)
+  let full_url = (build-url $base ({service_id: (encode-path-segment $service_id)} | format pattern "/Services/{service_id}/$/ReportHealth") $qp $auth.query)
   let req_body = {"Description": $description, "HealthState": $health_state, "Property": $property, "RemoveWhenExpired": $remove_when_expired, "SequenceNumber": $sequence_number, "SourceId": $source_id, "TimeToLiveInMilliSeconds": $time_to_live_in_milli_seconds} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"api-version": $api_version, "Immediate": $immediate, "timeout": $timeout} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"api-version": $api_version, "Immediate": $immediate, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Resolve a Service Fabric partition.
@@ -7197,10 +9664,21 @@ export def "services-resolve-partition get" [
   let base = ($base_url | default $BASE_URL)
   if ($service_id | is-empty) { error make --unspanned { msg: "path parameter 'serviceId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "PartitionKeyType" $partition_key_type "scalar") (serialize-qp "PartitionKeyValue" $partition_key_value "scalar") (serialize-qp "PreviousRspVersion" $previous_rsp_version "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_id: (encode-path-segment $service_id)} | format pattern "/Services/{service_id}/$/ResolvePartition") $qp)
+  let full_url = (build-url $base ({service_id: (encode-path-segment $service_id)} | format pattern "/Services/{service_id}/$/ResolvePartition") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "PartitionKeyType": $partition_key_type, "PartitionKeyValue": $partition_key_value, "PreviousRspVersion": $previous_rsp_version, "timeout": $timeout} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version, "PartitionKeyType": $partition_key_type, "PartitionKeyValue": $partition_key_value, "PreviousRspVersion": $previous_rsp_version, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Resumes periodic backup of a Service Fabric service which was previously suspended.
@@ -7225,10 +9703,21 @@ export def "services-resume-backup create" [
   let base = ($base_url | default $BASE_URL)
   if ($service_id | is-empty) { error make --unspanned { msg: "path parameter 'serviceId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_id: (encode-path-segment $service_id)} | format pattern "/Services/{service_id}/$/ResumeBackup") $qp)
+  let full_url = (build-url $base ({service_id: (encode-path-segment $service_id)} | format pattern "/Services/{service_id}/$/ResumeBackup") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "timeout": $timeout} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"api-version": $api_version, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [202]
 }
 
 # Suspends periodic backup for the specified Service Fabric service.
@@ -7253,10 +9742,21 @@ export def "services-suspend-backup create" [
   let base = ($base_url | default $BASE_URL)
   if ($service_id | is-empty) { error make --unspanned { msg: "path parameter 'serviceId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_id: (encode-path-segment $service_id)} | format pattern "/Services/{service_id}/$/SuspendBackup") $qp)
+  let full_url = (build-url $base ({service_id: (encode-path-segment $service_id)} | format pattern "/Services/{service_id}/$/SuspendBackup") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "timeout": $timeout} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"api-version": $api_version, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [202]
 }
 
 # Updates a Service Fabric service using the specified update description.
@@ -7295,12 +9795,23 @@ export def "services-update update" [
   let base = ($base_url | default $BASE_URL)
   if ($service_id | is-empty) { error make --unspanned { msg: "path parameter 'serviceId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_id: (encode-path-segment $service_id)} | format pattern "/Services/{service_id}/$/Update") $qp)
+  let full_url = (build-url $base ({service_id: (encode-path-segment $service_id)} | format pattern "/Services/{service_id}/$/Update") $qp $auth.query)
   let req_body = {"CorrelationScheme": $correlation_scheme, "DefaultMoveCost": $default_move_cost, "Flags": $flags, "LoadMetrics": $load_metrics, "PlacementConstraints": $placement_constraints, "ScalingPolicies": $scaling_policies, "ServiceKind": $service_kind, "ServicePlacementPolicies": $service_placement_policies} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"api-version": $api_version, "timeout": $timeout} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"api-version": $api_version, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get the status of Chaos.
@@ -7323,10 +9834,21 @@ export def "tools-chaos get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/Tools/Chaos" $qp)
+  let full_url = (build-url $base "/Tools/Chaos" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "timeout": $timeout} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Starts Chaos in the cluster.
@@ -7362,12 +9884,23 @@ export def "tools-chaos-start start" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/Tools/Chaos/$/Start" $qp)
+  let full_url = (build-url $base "/Tools/Chaos/$/Start" $qp $auth.query)
   let req_body = {"ChaosTargetFilter": $chaos_target_filter, "ClusterHealthPolicy": $cluster_health_policy, "Context": $context, "EnableMoveReplicaFaults": $enable_move_replica_faults, "MaxClusterStabilizationTimeoutInSeconds": $max_cluster_stabilization_timeout_in_seconds, "MaxConcurrentFaults": $max_concurrent_faults, "TimeToRunInSeconds": $time_to_run_in_seconds, "WaitTimeBetweenFaultsInSeconds": $wait_time_between_faults_in_seconds, "WaitTimeBetweenIterationsInSeconds": $wait_time_between_iterations_in_seconds} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"api-version": $api_version, "timeout": $timeout} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"api-version": $api_version, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Stops Chaos if it is running in the cluster and put the Chaos Schedule in a stopped state.
@@ -7390,10 +9923,21 @@ export def "tools-chaos-stop stop" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/Tools/Chaos/$/Stop" $qp)
+  let full_url = (build-url $base "/Tools/Chaos/$/Stop" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "timeout": $timeout} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"api-version": $api_version, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the next segment of the Chaos events based on the continuation token or the time range.
@@ -7420,10 +9964,21 @@ export def "tools-chaos-events get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "ContinuationToken" $continuation_token "scalar") (serialize-qp "StartTimeUtc" $start_time_utc "scalar") (serialize-qp "EndTimeUtc" $end_time_utc "scalar") (serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/Tools/Chaos/Events" $qp)
+  let full_url = (build-url $base "/Tools/Chaos/Events" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "ContinuationToken": $continuation_token, "StartTimeUtc": $start_time_utc, "EndTimeUtc": $end_time_utc, "MaxResults": $max_results, "timeout": $timeout} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version, "ContinuationToken": $continuation_token, "StartTimeUtc": $start_time_utc, "EndTimeUtc": $end_time_utc, "MaxResults": $max_results, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get the Chaos Schedule defining when and how to run Chaos.
@@ -7446,10 +10001,21 @@ export def "tools-chaos-schedule get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/Tools/Chaos/Schedule" $qp)
+  let full_url = (build-url $base "/Tools/Chaos/Schedule" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "timeout": $timeout} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"api-version": $api_version, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Set the schedule used by Chaos.
@@ -7476,10 +10042,21 @@ export def "tools-chaos-schedule create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/Tools/Chaos/Schedule" $qp)
+  let full_url = (build-url $base "/Tools/Chaos/Schedule" $qp $auth.query)
   let req_body = {"Schedule": $schedule, "Version": $version} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"api-version": $api_version, "timeout": $timeout} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"api-version": $api_version, "timeout": $timeout} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }

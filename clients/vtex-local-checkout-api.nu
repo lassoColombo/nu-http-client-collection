@@ -8,7 +8,7 @@ const BASE_URL = "https://vtex.local"
 # `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
 # where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o CHECKOUT_API_TOKEN | default "" }
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o CHECKOUT_API_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
@@ -52,14 +52,11 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
-# Trick: `url encode --all` over-encodes, then we decode the four unreserved
-# punctuation chars back. Pre-existing %XX sequences in the input survive
-# because `url encode --all` first turns their % into %25.
 def encode-path-segment [v: any]: nothing -> string {
   $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
-# Serialize an array-typed path parameter (issue 49.A). OpenAPI 3 `style: simple`
+# Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
 # (the default for path params) and Swagger 2 `collectionFormat: csv` both join
 # the elements with a literal comma WITHIN the single path segment, each element
 # RFC-3986-encoded individually (so a comma inside an element stays %2C). Without
@@ -70,51 +67,63 @@ def encode-path-array [v: any]: nothing -> string {
   if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
 }
 
-# Build URL from base, path, and optional query string
-def build-url [base: string, path: string, query?: string]: nothing -> string {
+# Build the request URL from base, path, and any number of pre-encoded query
+# fragments (param serializer output and/or the auth query). Each fragment is an
+# `&`-joinable `key=value` string already percent-encoded by its producer; empty
+# fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
+# delimiters are hand-spliced — and any query already on the base URL is merged in.
+def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
   let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
-  let result = ($parsed | upsert path $full_path)
-  if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
+  let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
+  $parsed | upsert path $full_path | upsert query $query | url join
 }
 
-# Build the dry-run record returned by --dry-run. Shape:
-#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
-#    auth: {scheme, location}}
-# `meta` carries logical-form data (the query record by spec name, the pre-serialization
-# body) that do-request itself cannot reconstruct from its wire-format args.
-def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
-  let m = ($meta | default {})
-  {
-    dry_run: true
-    method: $method
-    url: $url
-    query: ($m | get -o query | default {})
-    headers: $auth.headers
-    body: ($m | get -o body)
-    content_type: $content_type
-    timeout: $timeout
-    auth: {scheme: $auth.scheme, location: $auth.location}
-  }
+# Success policy: did this response succeed? Single source of truth, consulted by
+# handle-response and the HEAD header-unwrap. Empty ok_codes means the spec listed
+# none, so fall back to < 400. Otherwise: any 2xx, plus documented success codes.
+def status-ok [status: int, ok_codes: list<int>]: nothing -> bool {
+  if ($ok_codes | is-empty) { $status < 400 } else { ($status >= 200 and $status < 300) or ($status in $ok_codes) }
 }
 
-# Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
-  let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
-  let timeout = ($max_time | default 30min)
-  let ct = ($content_type | default "application/json")
-  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
-  let resp = match $method {
-    "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
-  }
-  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
-  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
+# Unwrap a `--full` HTTP response into the user-facing value. Response arrives
+# via pipeline; ok_codes gates the error throw (see status-ok).
+def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: record -> any {
+  let resp = $in
+  if $allow_errors { return $resp }
+  if not (status-ok $resp.status $ok_codes) { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } }
+  if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
+  if $resp.status == 204 { return null }
+  $resp.body
+}
+
+# GET — bodyless, honours --raw
+def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+}
+
+# POST — body + content-type
+def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# PUT — body + content-type
+def send-put [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http put --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http put --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# PATCH — body + content-type
+def send-patch [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http patch --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http patch --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# DELETE — body via --data
+def send-delete [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http delete --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url } else { http delete --headers $req.headers --content-type $req.content_type --data $body --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url }
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 def base-url-completer [] { ["https://vtex.local" "https://{accountName}.{environment}.com.br"] }
@@ -166,12 +175,23 @@ export def "checkout-pub-gateway-callback create-process-order" [
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($order_group | is-empty) { error make --unspanned { msg: "path parameter 'orderGroup' must be non-empty" } }
-  let full_url = (build-url $base ({order_group: (encode-path-segment $order_group)} | format pattern "/api/checkout/pub/gatewayCallback/{order_group}"))
+  let full_url = (build-url $base ({order_group: (encode-path-segment $order_group)} | format pattern "/api/checkout/pub/gatewayCallback/{order_group}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept, "Cookie": $cookie} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Get current or create a new cart
@@ -195,12 +215,23 @@ export def "checkout-pub-order-form create-new-cart" [
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "forceNewCart" $force_new_cart "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/checkout/pub/orderForm" $qp)
+  let full_url = (build-url $base "/api/checkout/pub/orderForm" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"forceNewCart": $force_new_cart} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"forceNewCart": $force_new_cart} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get cart information by ID
@@ -226,12 +257,23 @@ export def "checkout-pub-order-form get-cart-information" [
   let base = ($base_url | default $BASE_URL)
   if ($order_form_id | is-empty) { error make --unspanned { msg: "path parameter 'orderFormId' must be non-empty" } }
   let qp = [(serialize-qp "refreshOutdatedData" $refresh_outdated_data "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({order_form_id: (encode-path-segment $order_form_id)} | format pattern "/api/checkout/pub/orderForm/{order_form_id}") $qp)
+  let full_url = (build-url $base ({order_form_id: (encode-path-segment $order_form_id)} | format pattern "/api/checkout/pub/orderForm/{order_form_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"refreshOutdatedData": $refresh_outdated_data} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"refreshOutdatedData": $refresh_outdated_data} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Add client preferences
@@ -258,7 +300,7 @@ export def "checkout-pub-order-form-attachments-client-preferences-data create" 
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($order_form_id | is-empty) { error make --unspanned { msg: "path parameter 'orderFormId' must be non-empty" } }
-  let full_url = (build-url $base ({order_form_id: (encode-path-segment $order_form_id)} | format pattern "/api/checkout/pub/orderForm/{order_form_id}/attachments/clientPreferencesData"))
+  let full_url = (build-url $base ({order_form_id: (encode-path-segment $order_form_id)} | format pattern "/api/checkout/pub/orderForm/{order_form_id}/attachments/clientPreferencesData") $auth.query)
   let req_body = {"locale": $locale, "optinNewsLetter": $optin_news_letter} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
@@ -267,7 +309,18 @@ export def "checkout-pub-order-form-attachments-client-preferences-data create" 
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let effective_ct = ($content_type | default "application/json")
   let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $effective_ct $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: $effective_ct
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Add client profile
@@ -304,7 +357,7 @@ export def "checkout-pub-order-form-attachments-client-profile-data create" [
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($order_form_id | is-empty) { error make --unspanned { msg: "path parameter 'orderFormId' must be non-empty" } }
-  let full_url = (build-url $base ({order_form_id: (encode-path-segment $order_form_id)} | format pattern "/api/checkout/pub/orderForm/{order_form_id}/attachments/clientProfileData"))
+  let full_url = (build-url $base ({order_form_id: (encode-path-segment $order_form_id)} | format pattern "/api/checkout/pub/orderForm/{order_form_id}/attachments/clientProfileData") $auth.query)
   let req_body = {"corporateDocument": $corporate_document, "corporateName": $corporate_name, "corporatePhone": $corporate_phone, "document": $document, "documentType": $document_type, "email": $email, "firstName": $first_name, "isCorporate": $is_corporate, "lastName": $last_name, "phone": $phone, "stateInscription": $state_inscription, "tradeName": $trade_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
@@ -313,7 +366,18 @@ export def "checkout-pub-order-form-attachments-client-profile-data create" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let effective_ct = ($content_type | default "application/json")
   let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $effective_ct $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: $effective_ct
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Add marketing data
@@ -346,7 +410,7 @@ export def "checkout-pub-order-form-attachments-marketing-data create" [
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($order_form_id | is-empty) { error make --unspanned { msg: "path parameter 'orderFormId' must be non-empty" } }
-  let full_url = (build-url $base ({order_form_id: (encode-path-segment $order_form_id)} | format pattern "/api/checkout/pub/orderForm/{order_form_id}/attachments/marketingData"))
+  let full_url = (build-url $base ({order_form_id: (encode-path-segment $order_form_id)} | format pattern "/api/checkout/pub/orderForm/{order_form_id}/attachments/marketingData") $auth.query)
   let req_body = {"coupon": $coupon, "marketingTags": $marketing_tags, "utmCampaign": $utm_campaign, "utmMedium": $utm_medium, "utmSource": $utm_source, "utmiCampaign": $utmi_campaign, "utmiPage": $utmi_page, "utmiPart": $utmi_part} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
@@ -355,7 +419,18 @@ export def "checkout-pub-order-form-attachments-marketing-data create" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let effective_ct = ($content_type | default "application/json")
   let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $effective_ct $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: $effective_ct
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Add merchant context data
@@ -382,7 +457,7 @@ export def "checkout-pub-order-form-attachments-merchant-context-data create" [
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($order_form_id | is-empty) { error make --unspanned { msg: "path parameter 'orderFormId' must be non-empty" } }
-  let full_url = (build-url $base ({order_form_id: (encode-path-segment $order_form_id)} | format pattern "/api/checkout/pub/orderForm/{order_form_id}/attachments/merchantContextData"))
+  let full_url = (build-url $base ({order_form_id: (encode-path-segment $order_form_id)} | format pattern "/api/checkout/pub/orderForm/{order_form_id}/attachments/merchantContextData") $auth.query)
   let req_body = {"salesAssociateData": $sales_associate_data} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
@@ -391,7 +466,18 @@ export def "checkout-pub-order-form-attachments-merchant-context-data create" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let effective_ct = ($content_type | default "application/json")
   let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $effective_ct $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: $effective_ct
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Add payment data
@@ -418,7 +504,7 @@ export def "checkout-pub-order-form-attachments-payment-data create" [
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($order_form_id | is-empty) { error make --unspanned { msg: "path parameter 'orderFormId' must be non-empty" } }
-  let full_url = (build-url $base ({order_form_id: (encode-path-segment $order_form_id)} | format pattern "/api/checkout/pub/orderForm/{order_form_id}/attachments/paymentData"))
+  let full_url = (build-url $base ({order_form_id: (encode-path-segment $order_form_id)} | format pattern "/api/checkout/pub/orderForm/{order_form_id}/attachments/paymentData") $auth.query)
   let req_body = {"payments": $payments} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
@@ -427,7 +513,18 @@ export def "checkout-pub-order-form-attachments-payment-data create" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let effective_ct = ($content_type | default "application/json")
   let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $effective_ct $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: $effective_ct
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Add shipping address and select delivery option
@@ -457,7 +554,7 @@ export def "checkout-pub-order-form-attachments-shipping-data create-address" [
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($order_form_id | is-empty) { error make --unspanned { msg: "path parameter 'orderFormId' must be non-empty" } }
-  let full_url = (build-url $base ({order_form_id: (encode-path-segment $order_form_id)} | format pattern "/api/checkout/pub/orderForm/{order_form_id}/attachments/shippingData"))
+  let full_url = (build-url $base ({order_form_id: (encode-path-segment $order_form_id)} | format pattern "/api/checkout/pub/orderForm/{order_form_id}/attachments/shippingData") $auth.query)
   let req_body = {"clearAddressIfPostalCodeNotFound": $clear_address_if_postal_code_not_found, "logisticsInfo": $logistics_info, "selectedAddresses": $selected_addresses} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
@@ -466,7 +563,18 @@ export def "checkout-pub-order-form-attachments-shipping-data create-address" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let effective_ct = ($content_type | default "application/json")
   let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $effective_ct $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: $effective_ct
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Add coupons to the cart
@@ -492,7 +600,7 @@ export def "checkout-pub-order-form-coupons create" [
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($order_form_id | is-empty) { error make --unspanned { msg: "path parameter 'orderFormId' must be non-empty" } }
-  let full_url = (build-url $base ({order_form_id: (encode-path-segment $order_form_id)} | format pattern "/api/checkout/pub/orderForm/{order_form_id}/coupons"))
+  let full_url = (build-url $base ({order_form_id: (encode-path-segment $order_form_id)} | format pattern "/api/checkout/pub/orderForm/{order_form_id}/coupons") $auth.query)
   let req_body = {"text": $text} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
@@ -501,7 +609,18 @@ export def "checkout-pub-order-form-coupons create" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let effective_ct = ($content_type | default "application/json")
   let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $effective_ct $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: $effective_ct
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Set multiple custom field values
@@ -529,7 +648,7 @@ export def "checkout-pub-order-form-custom-data update-multiple-field-values" [
   let base = ($base_url | default $BASE_URL)
   if ($order_form_id | is-empty) { error make --unspanned { msg: "path parameter 'orderFormId' must be non-empty" } }
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
-  let full_url = (build-url $base ({order_form_id: (encode-path-segment $order_form_id), app_id: (encode-path-segment $app_id)} | format pattern "/api/checkout/pub/orderForm/{order_form_id}/customData/{app_id}"))
+  let full_url = (build-url $base ({order_form_id: (encode-path-segment $order_form_id), app_id: (encode-path-segment $app_id)} | format pattern "/api/checkout/pub/orderForm/{order_form_id}/customData/{app_id}") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
@@ -538,7 +657,18 @@ export def "checkout-pub-order-form-custom-data update-multiple-field-values" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let effective_ct = ($content_type | default "application/json")
   let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $effective_ct $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: $effective_ct
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Remove single custom field value
@@ -566,12 +696,23 @@ export def "checkout-pub-order-form-custom-data delete-singlecustomfieldvalue" [
   if ($order_form_id | is-empty) { error make --unspanned { msg: "path parameter 'orderFormId' must be non-empty" } }
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($app_field_name | is-empty) { error make --unspanned { msg: "path parameter 'appFieldName' must be non-empty" } }
-  let full_url = (build-url $base ({order_form_id: (encode-path-segment $order_form_id), app_id: (encode-path-segment $app_id), app_field_name: (encode-path-segment $app_field_name)} | format pattern "/api/checkout/pub/orderForm/{order_form_id}/customData/{app_id}/{app_field_name}"))
+  let full_url = (build-url $base ({order_form_id: (encode-path-segment $order_form_id), app_id: (encode-path-segment $app_id), app_field_name: (encode-path-segment $app_field_name)} | format pattern "/api/checkout/pub/orderForm/{order_form_id}/customData/{app_id}/{app_field_name}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Set single custom field value
@@ -601,7 +742,7 @@ export def "checkout-pub-order-form-custom-data update-single-field-value" [
   if ($order_form_id | is-empty) { error make --unspanned { msg: "path parameter 'orderFormId' must be non-empty" } }
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($app_field_name | is-empty) { error make --unspanned { msg: "path parameter 'appFieldName' must be non-empty" } }
-  let full_url = (build-url $base ({order_form_id: (encode-path-segment $order_form_id), app_id: (encode-path-segment $app_id), app_field_name: (encode-path-segment $app_field_name)} | format pattern "/api/checkout/pub/orderForm/{order_form_id}/customData/{app_id}/{app_field_name}"))
+  let full_url = (build-url $base ({order_form_id: (encode-path-segment $order_form_id), app_id: (encode-path-segment $app_id), app_field_name: (encode-path-segment $app_field_name)} | format pattern "/api/checkout/pub/orderForm/{order_form_id}/customData/{app_id}/{app_field_name}") $auth.query)
   let req_body = {"value": $value} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
@@ -610,7 +751,18 @@ export def "checkout-pub-order-form-custom-data update-single-field-value" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let effective_ct = ($content_type | default "application/json")
   let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $effective_ct $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: $effective_ct
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Cart installments
@@ -636,12 +788,23 @@ export def "checkout-pub-order-form-installments get-cart" [
   let base = ($base_url | default $BASE_URL)
   if ($order_form_id | is-empty) { error make --unspanned { msg: "path parameter 'orderFormId' must be non-empty" } }
   let qp = [(serialize-qp "paymentSystem" $payment_system "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({order_form_id: (encode-path-segment $order_form_id)} | format pattern "/api/checkout/pub/orderForm/{order_form_id}/installments") $qp)
+  let full_url = (build-url $base ({order_form_id: (encode-path-segment $order_form_id)} | format pattern "/api/checkout/pub/orderForm/{order_form_id}/installments") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"paymentSystem": $payment_system} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"paymentSystem": $payment_system} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Add cart items
@@ -670,7 +833,7 @@ export def "checkout-pub-order-form-items create" [
   let base = ($base_url | default $BASE_URL)
   if ($order_form_id | is-empty) { error make --unspanned { msg: "path parameter 'orderFormId' must be non-empty" } }
   let qp = [(serialize-qp "allowedOutdatedData" $allowed_outdated_data "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({order_form_id: (encode-path-segment $order_form_id)} | format pattern "/api/checkout/pub/orderForm/{order_form_id}/items") $qp)
+  let full_url = (build-url $base ({order_form_id: (encode-path-segment $order_form_id)} | format pattern "/api/checkout/pub/orderForm/{order_form_id}/items") $qp $auth.query)
   let req_body = {"orderItems": $order_items} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
@@ -679,7 +842,18 @@ export def "checkout-pub-order-form-items create" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let effective_ct = ($content_type | default "application/json")
   let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $effective_ct $req_body_wire {query: ({"allowedOutdatedData": $allowed_outdated_data} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"allowedOutdatedData": $allowed_outdated_data} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: $effective_ct
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Remove all items
@@ -705,7 +879,7 @@ export def "checkout-pub-order-form-items-remove-all delete" [
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($order_form_id | is-empty) { error make --unspanned { msg: "path parameter 'orderFormId' must be non-empty" } }
-  let full_url = (build-url $base ({order_form_id: (encode-path-segment $order_form_id)} | format pattern "/api/checkout/pub/orderForm/{order_form_id}/items/removeAll"))
+  let full_url = (build-url $base ({order_form_id: (encode-path-segment $order_form_id)} | format pattern "/api/checkout/pub/orderForm/{order_form_id}/items/removeAll") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
@@ -714,7 +888,18 @@ export def "checkout-pub-order-form-items-remove-all delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let effective_ct = ($content_type | default "application/json")
   let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $effective_ct $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: $effective_ct
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Update cart items
@@ -743,7 +928,7 @@ export def "checkout-pub-order-form-items-update update" [
   let base = ($base_url | default $BASE_URL)
   if ($order_form_id | is-empty) { error make --unspanned { msg: "path parameter 'orderFormId' must be non-empty" } }
   let qp = [(serialize-qp "allowedOutdatedData" $allowed_outdated_data "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({order_form_id: (encode-path-segment $order_form_id)} | format pattern "/api/checkout/pub/orderForm/{order_form_id}/items/update") $qp)
+  let full_url = (build-url $base ({order_form_id: (encode-path-segment $order_form_id)} | format pattern "/api/checkout/pub/orderForm/{order_form_id}/items/update") $qp $auth.query)
   let req_body = {"orderItems": $order_items} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
@@ -752,7 +937,18 @@ export def "checkout-pub-order-form-items-update update" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let effective_ct = ($content_type | default "application/json")
   let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $effective_ct $req_body_wire {query: ({"allowedOutdatedData": $allowed_outdated_data} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"allowedOutdatedData": $allowed_outdated_data} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: $effective_ct
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Change price
@@ -780,7 +976,7 @@ export def "checkout-pub-order-form-items-price update-change" [
   let base = ($base_url | default $BASE_URL)
   if ($order_form_id | is-empty) { error make --unspanned { msg: "path parameter 'orderFormId' must be non-empty" } }
   if ($item_index | is-empty) { error make --unspanned { msg: "path parameter 'itemIndex' must be non-empty" } }
-  let full_url = (build-url $base ({order_form_id: (encode-path-segment $order_form_id), item_index: (encode-path-segment $item_index)} | format pattern "/api/checkout/pub/orderForm/{order_form_id}/items/{item_index}/price"))
+  let full_url = (build-url $base ({order_form_id: (encode-path-segment $order_form_id), item_index: (encode-path-segment $item_index)} | format pattern "/api/checkout/pub/orderForm/{order_form_id}/items/{item_index}/price") $auth.query)
   let req_body = {"price": $price} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
@@ -789,7 +985,18 @@ export def "checkout-pub-order-form-items-price update-change" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let effective_ct = ($content_type | default "application/json")
   let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $effective_ct $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: $effective_ct
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Clear orderForm messages
@@ -815,7 +1022,7 @@ export def "checkout-pub-order-form-messages-clear create-clearorder" [
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($order_form_id | is-empty) { error make --unspanned { msg: "path parameter 'orderFormId' must be non-empty" } }
-  let full_url = (build-url $base ({order_form_id: (encode-path-segment $order_form_id)} | format pattern "/api/checkout/pub/orderForm/{order_form_id}/messages/clear"))
+  let full_url = (build-url $base ({order_form_id: (encode-path-segment $order_form_id)} | format pattern "/api/checkout/pub/orderForm/{order_form_id}/messages/clear") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
@@ -824,7 +1031,18 @@ export def "checkout-pub-order-form-messages-clear create-clearorder" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let effective_ct = ($content_type | default "application/json")
   let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $effective_ct $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: $effective_ct
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Ignore profile data
@@ -850,7 +1068,7 @@ export def "checkout-pub-order-form-profile update-ignore-data" [
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($order_form_id | is-empty) { error make --unspanned { msg: "path parameter 'orderFormId' must be non-empty" } }
-  let full_url = (build-url $base ({order_form_id: (encode-path-segment $order_form_id)} | format pattern "/api/checkout/pub/orderForm/{order_form_id}/profile"))
+  let full_url = (build-url $base ({order_form_id: (encode-path-segment $order_form_id)} | format pattern "/api/checkout/pub/orderForm/{order_form_id}/profile") $auth.query)
   let req_body = {"ignoreProfileData": $ignore_profile_data} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
@@ -859,7 +1077,18 @@ export def "checkout-pub-order-form-profile update-ignore-data" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let effective_ct = ($content_type | default "application/json")
   let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $effective_ct $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: $effective_ct
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Place order from an existing cart
@@ -890,7 +1119,7 @@ export def "checkout-pub-order-form-transaction create-place-from-existing" [
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($order_form_id | is-empty) { error make --unspanned { msg: "path parameter 'orderFormId' must be non-empty" } }
-  let full_url = (build-url $base ({order_form_id: (encode-path-segment $order_form_id)} | format pattern "/api/checkout/pub/orderForm/{order_form_id}/transaction"))
+  let full_url = (build-url $base ({order_form_id: (encode-path-segment $order_form_id)} | format pattern "/api/checkout/pub/orderForm/{order_form_id}/transaction") $auth.query)
   let req_body = {"interestValue": $interest_value, "optinNewsLetter": $optin_news_letter, "referenceId": $reference_id, "referenceValue": $reference_value, "savePersonalData": $save_personal_data, "value": $value} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
@@ -899,7 +1128,18 @@ export def "checkout-pub-order-form-transaction create-place-from-existing" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let effective_ct = ($content_type | default "application/json")
   let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $effective_ct $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: $effective_ct
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Cart simulation
@@ -930,7 +1170,7 @@ export def "checkout-pub-order-forms-simulation create-cart" [
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "RnbBehavior" $rnb_behavior "scalar") (serialize-qp "sc" $sc "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/checkout/pub/orderForms/simulation" $qp)
+  let full_url = (build-url $base "/api/checkout/pub/orderForms/simulation" $qp $auth.query)
   let req_body = {"country": $country, "geoCoordinates": $geo_coordinates, "items": $items, "postalCode": $postal_code} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
@@ -939,7 +1179,18 @@ export def "checkout-pub-order-forms-simulation create-cart" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let effective_ct = ($content_type | default "application/json")
   let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $effective_ct $req_body_wire {query: ({"RnbBehavior": $rnb_behavior, "sc": $sc} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"RnbBehavior": $rnb_behavior, "sc": $sc} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: $effective_ct
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Place order
@@ -977,7 +1228,7 @@ export def "checkout-pub-orders update-place" [
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CHECKOUT_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CHECKOUT_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "sc" $sc "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/checkout/pub/orders" $qp)
+  let full_url = (build-url $base "/api/checkout/pub/orders" $qp $auth.query)
   let req_body = {"clientProfileData": $client_profile_data, "items": $items, "marketingData": $marketing_data, "openTextField": $open_text_field, "paymentData": $payment_data, "salesAssociateData": $sales_associate_data, "shippingData": $shipping_data} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
@@ -986,7 +1237,18 @@ export def "checkout-pub-orders update-place" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let effective_ct = ($content_type | default "application/json")
   let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $effective_ct $req_body_wire {query: ({"sc": $sc} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"sc": $sc} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: $effective_ct
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # List pickup points by location
@@ -1012,12 +1274,23 @@ export def "checkout-pub-pickup-points list-ppoints-by-location" [
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "geoCoordinates" $geo_coordinates "multi") (serialize-qp "postalCode" $postal_code "scalar") (serialize-qp "countryCode" $country_code "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/checkout/pub/pickup-points" $qp)
+  let full_url = (build-url $base "/api/checkout/pub/pickup-points" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"geoCoordinates": $geo_coordinates, "postalCode": $postal_code, "countryCode": $country_code} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"geoCoordinates": $geo_coordinates, "postalCode": $postal_code, "countryCode": $country_code} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get address by postal code
@@ -1043,12 +1316,23 @@ export def "checkout-pub-postal-code get-address" [
   let base = ($base_url | default $BASE_URL)
   if ($country_code | is-empty) { error make --unspanned { msg: "path parameter 'countryCode' must be non-empty" } }
   if ($postal_code | is-empty) { error make --unspanned { msg: "path parameter 'postalCode' must be non-empty" } }
-  let full_url = (build-url $base ({country_code: (encode-path-segment $country_code), postal_code: (encode-path-segment $postal_code)} | format pattern "/api/checkout/pub/postal-code/{country_code}/{postal_code}"))
+  let full_url = (build-url $base ({country_code: (encode-path-segment $country_code), postal_code: (encode-path-segment $postal_code)} | format pattern "/api/checkout/pub/postal-code/{country_code}/{postal_code}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get client profile by email
@@ -1072,12 +1356,23 @@ export def "checkout-pub-profiles get-client-by-email" [
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "email" $email "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/checkout/pub/profiles" $qp)
+  let full_url = (build-url $base "/api/checkout/pub/profiles" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"email": $email} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"email": $email} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get sellers by region or address
@@ -1105,12 +1400,23 @@ export def "checkout-pub-regions get-sellers" [
   let base = ($base_url | default $BASE_URL)
   if ($region_id | is-empty) { error make --unspanned { msg: "path parameter 'regionId' must be non-empty" } }
   let qp = [(serialize-qp "country" $country "scalar") (serialize-qp "postalCode" $postal_code "scalar") (serialize-qp "geoCoordinates" $geo_coordinates "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({region_id: (encode-path-segment $region_id)} | format pattern "/api/checkout/pub/regions/{region_id}") $qp)
+  let full_url = (build-url $base ({region_id: (encode-path-segment $region_id)} | format pattern "/api/checkout/pub/regions/{region_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"country": $country, "postalCode": $postal_code, "geoCoordinates": $geo_coordinates} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"country": $country, "postalCode": $postal_code, "geoCoordinates": $geo_coordinates} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get orderForm configuration
@@ -1132,12 +1438,23 @@ export def "checkout-pvt-configuration-order-form get-formconfiguration" [
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CHECKOUT_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CHECKOUT_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/checkout/pvt/configuration/orderForm")
+  let full_url = (build-url $base "/api/checkout/pvt/configuration/orderForm" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update orderForm configuration
@@ -1175,7 +1492,7 @@ export def "checkout-pvt-configuration-order-form update-formconfiguration" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CHECKOUT_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CHECKOUT_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/checkout/pvt/configuration/orderForm")
+  let full_url = (build-url $base "/api/checkout/pvt/configuration/orderForm" $auth.query)
   let req_body = {"allowManualPrice": $allow_manual_price, "allowMultipleDeliveries": $allow_multiple_deliveries, "apps": $apps, "decimalDigitsPrecision": $decimal_digits_precision, "maskFirstPurchaseData": $mask_first_purchase_data, "maxNumberOfWhiteLabelSellers": $max_number_of_white_label_sellers, "minimumQuantityAccumulatedForItems": $minimum_quantity_accumulated_for_items, "minimumValueAccumulated": $minimum_value_accumulated, "paymentConfiguration": $payment_configuration, "paymentSystemToCheckFirstInstallment": $payment_system_to_check_first_installment, "recaptchaValidation": $recaptcha_validation, "taxConfiguration": $tax_configuration} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
@@ -1184,7 +1501,18 @@ export def "checkout-pvt-configuration-order-form update-formconfiguration" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let effective_ct = ($content_type | default "application/json")
   let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $effective_ct $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: $effective_ct
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [204]
 }
 
 # Get window to change seller
@@ -1206,12 +1534,23 @@ export def "checkout-pvt-configuration-window-to-change-seller get" [
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CHECKOUT_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CHECKOUT_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/checkout/pvt/configuration/window-to-change-seller")
+  let full_url = (build-url $base "/api/checkout/pvt/configuration/window-to-change-seller" $auth.query)
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update window to change seller
@@ -1235,7 +1574,7 @@ export def "checkout-pvt-configuration-window-to-change-seller update" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CHECKOUT_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CHECKOUT_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/checkout/pvt/configuration/window-to-change-seller")
+  let full_url = (build-url $base "/api/checkout/pvt/configuration/window-to-change-seller" $auth.query)
   let req_body = {"waitingTime": $waiting_time} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
@@ -1244,7 +1583,18 @@ export def "checkout-pvt-configuration-window-to-change-seller update" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let effective_ct = ($content_type | default "application/json")
   let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $effective_ct $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: $effective_ct
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [201]
 }
 
 # Remove all personal data
@@ -1268,10 +1618,21 @@ export def "checkout-change-to-anonymous-user delete-allpersonaldata" [
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($order_form_id | is-empty) { error make --unspanned { msg: "path parameter 'orderFormId' must be non-empty" } }
-  let full_url = (build-url $base ({order_form_id: (encode-path-segment $order_form_id)} | format pattern "/checkout/changeToAnonymousUser/{order_form_id}"))
+  let full_url = (build-url $base ({order_form_id: (encode-path-segment $order_form_id)} | format pattern "/checkout/changeToAnonymousUser/{order_form_id}") $auth.query)
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }

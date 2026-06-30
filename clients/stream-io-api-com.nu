@@ -8,7 +8,7 @@ const BASE_URL = "https://chat.stream-io-api.com"
 # `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
 # where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o STREAM_CHAT_API_TOKEN | default "" }
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o STREAM_CHAT_API_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
@@ -53,14 +53,11 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
-# Trick: `url encode --all` over-encodes, then we decode the four unreserved
-# punctuation chars back. Pre-existing %XX sequences in the input survive
-# because `url encode --all` first turns their % into %25.
 def encode-path-segment [v: any]: nothing -> string {
   $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
-# Serialize an array-typed path parameter (issue 49.A). OpenAPI 3 `style: simple`
+# Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
 # (the default for path params) and Swagger 2 `collectionFormat: csv` both join
 # the elements with a literal comma WITHIN the single path segment, each element
 # RFC-3986-encoded individually (so a comma inside an element stays %2C). Without
@@ -71,60 +68,72 @@ def encode-path-array [v: any]: nothing -> string {
   if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
 }
 
-# Build URL from base, path, and optional query string
-def build-url [base: string, path: string, query?: string]: nothing -> string {
+# Build the request URL from base, path, and any number of pre-encoded query
+# fragments (param serializer output and/or the auth query). Each fragment is an
+# `&`-joinable `key=value` string already percent-encoded by its producer; empty
+# fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
+# delimiters are hand-spliced — and any query already on the base URL is merged in.
+def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
   let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
-  let result = ($parsed | upsert path $full_path)
-  if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
+  let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
+  $parsed | upsert path $full_path | upsert query $query | url join
 }
 
-# Build the dry-run record returned by --dry-run. Shape:
-#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
-#    auth: {scheme, location}}
-# `meta` carries logical-form data (the query record by spec name, the pre-serialization
-# body) that do-request itself cannot reconstruct from its wire-format args.
-def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
-  let m = ($meta | default {})
-  {
-    dry_run: true
-    method: $method
-    url: $url
-    query: ($m | get -o query | default {})
-    headers: $auth.headers
-    body: ($m | get -o body)
-    content_type: $content_type
-    timeout: $timeout
-    auth: {scheme: $auth.scheme, location: $auth.location}
-  }
+# Success policy: did this response succeed? Single source of truth, consulted by
+# handle-response and the HEAD header-unwrap. Empty ok_codes means the spec listed
+# none, so fall back to < 400. Otherwise: any 2xx, plus documented success codes.
+def status-ok [status: int, ok_codes: list<int>]: nothing -> bool {
+  if ($ok_codes | is-empty) { $status < 400 } else { ($status >= 200 and $status < 300) or ($status in $ok_codes) }
 }
 
-# Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
-  let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
-  let timeout = ($max_time | default 30min)
-  let ct = ($content_type | default "application/json")
-  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
-  let resp = match $method {
-    "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
-  }
-  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
-  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
+# Unwrap a `--full` HTTP response into the user-facing value. Response arrives
+# via pipeline; ok_codes gates the error throw (see status-ok).
+def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: record -> any {
+  let resp = $in
+  if $allow_errors { return $resp }
+  if not (status-ok $resp.status $ok_codes) { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } }
+  if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
+  if $resp.status == 204 { return null }
+  $resp.body
+}
+
+# GET — bodyless, honours --raw
+def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+}
+
+# POST — body + content-type
+def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# PUT — body + content-type
+def send-put [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http put --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http put --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# PATCH — body + content-type
+def send-patch [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http patch --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http patch --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# DELETE — body via --data
+def send-delete [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http delete --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url } else { http delete --headers $req.headers --content-type $req.content_type --data $body --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url }
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # Build a `multipart/form-data` envelope per RFC 7578. `file_fields` lists
 # the field names whose value should be read from disk as bytes; every
 # other field is sent as a text part (records/lists JSON-stringified).
-# Returns {content_type, body} ready to pass to `do-request`.
+# Returns {content_type, body}.
 # When `$dry_run` is true, file fields are NOT read from disk — they emit
 # an empty-bytes placeholder so callers can inspect the request shape
-# without the file existing on disk (issue 11.B).
+# without the file existing on disk.
 def build-multipart-body [parts: record, file_fields: list<string>, dry_run: bool = false]: nothing -> record {
   let boundary = $"----nu-(random chars --length 24)"
   let crlf = "\r\n"
@@ -206,10 +215,21 @@ export def "app get" [
 ]: nothing -> record<app: record<agora_options: record<app_certificate: string, app_id: string, default_role: string, role_map: record>, async_url_enrich_enabled: bool, auto_translation_enabled: bool, before_message_send_hook_url: string, campaign_enabled: bool, cdn_expiration_seconds: float, channel_configs: record, custom_action_handler_url: string, disable_auth_checks: bool, disable_permissions_checks: bool, enforce_unique_usernames: string, file_upload_config: record<allowed_file_extensions: list, allowed_mime_types: list, blocked_file_extensions: list, blocked_mime_types: list>, grants: record, hms_options: record<app_certificate: string, app_id: string, default_role: string, role_map: record>, image_moderation_enabled: bool, image_moderation_labels: list<string>, image_upload_config: record<allowed_file_extensions: list, allowed_mime_types: list, blocked_file_extensions: list, blocked_mime_types: list>, multi_tenant_enabled: bool, name: string, organization: string, permission_version: string, policies: record, push_notifications: record<apn: record, firebase: record, huawei: record, offline_only: bool, providers: list, version: string, xiaomi: record>, reminders_interval: float, revoke_tokens_issued_before: string, search_backend: string, sqs_key: string, sqs_secret: string, sqs_url: string, suspended: bool, suspended_explanation: string, user_search_disallowed_roles: list<string>, video_provider: string, webhook_events: list<string>, webhook_url: string>, duration: string> {
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/app")
+  let full_url = (build-url $base "/app" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update App Settings
@@ -276,12 +296,23 @@ export def "app update" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/app")
+  let full_url = (build-url $base "/app" $auth.query)
   let req_body = {"agora_options": $agora_options, "apn_config": $apn_config, "async_moderation_config": $async_moderation_config, "async_url_enrich_enabled": $async_url_enrich_enabled, "auto_translation_enabled": $auto_translation_enabled, "before_message_send_hook_url": $before_message_send_hook_url, "cdn_expiration_seconds": $cdn_expiration_seconds, "channel_hide_members_only": $channel_hide_members_only, "custom_action_handler_url": $custom_action_handler_url, "disable_auth_checks": $disable_auth_checks, "disable_permissions_checks": $disable_permissions_checks, "enforce_unique_usernames": $enforce_unique_usernames, "file_upload_config": $file_upload_config, "firebase_config": $firebase_config, "grants": $grants, "hms_options": $hms_options, "huawei_config": $huawei_config, "image_moderation_block_labels": $image_moderation_block_labels, "image_moderation_enabled": $image_moderation_enabled, "image_moderation_labels": $image_moderation_labels, "image_upload_config": $image_upload_config, "migrate_permissions_to_v2": $migrate_permissions_to_v2, "multi_tenant_enabled": $multi_tenant_enabled, "permission_version": $permission_version, "push_config": $push_config, "reminders_interval": $reminders_interval, "revoke_tokens_issued_before": $revoke_tokens_issued_before, "sqs_key": $sqs_key, "sqs_secret": $sqs_secret, "sqs_url": $sqs_url, "user_search_disallowed_roles": $user_search_disallowed_roles, "video_provider": $video_provider, "webhook_events": $webhook_events, "webhook_url": $webhook_url, "xiaomi_config": $xiaomi_config} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # List block lists
@@ -302,10 +333,21 @@ export def "blocklists list-block-lists" [
 ]: nothing -> record<blocklists: table<created_at: string, name: string, updated_at: string, words: list>, duration: string> {
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/blocklists")
+  let full_url = (build-url $base "/blocklists" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create block list
@@ -329,12 +371,23 @@ export def "blocklists create-block-list" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/blocklists")
+  let full_url = (build-url $base "/blocklists" $auth.query)
   let req_body = {"name": $name, "words": $words} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Delete block list
@@ -357,10 +410,21 @@ export def "blocklists delete-block-list" [
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
-  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/blocklists/{name}"))
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/blocklists/{name}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Get block list
@@ -383,10 +447,21 @@ export def "blocklists get-block-list" [
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
-  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/blocklists/{name}"))
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/blocklists/{name}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update block list
@@ -412,12 +487,23 @@ export def "blocklists update-block-list" [
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
-  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/blocklists/{name}"))
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/blocklists/{name}") $auth.query)
   let req_body = {"Name": $body_name, "words": $words} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Get Call Token ()
@@ -442,12 +528,23 @@ export def "calls get-token" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/calls/")
+  let full_url = (build-url $base "/calls/" $auth.query)
   let req_body = {"user": $user, "user_id": $user_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Get Call Token (call_id)
@@ -474,12 +571,23 @@ export def "calls get-token-by-call-id" [
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   if ($call_id | is-empty) { error make --unspanned { msg: "path parameter 'call_id' must be non-empty" } }
-  let full_url = (build-url $base ({call_id: (encode-path-segment $call_id)} | format pattern "/calls/{call_id}"))
+  let full_url = (build-url $base ({call_id: (encode-path-segment $call_id)} | format pattern "/calls/{call_id}") $auth.query)
   let req_body = {"user": $user, "user_id": $user_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Query campaigns
@@ -502,10 +610,21 @@ export def "campaigns list" [
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "payload" $payload "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/campaigns" $qp)
+  let full_url = (build-url $base "/campaigns" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"payload": $payload} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"payload": $payload} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create campaign
@@ -529,12 +648,23 @@ export def "campaigns create" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/campaigns")
+  let full_url = (build-url $base "/campaigns" $auth.query)
   let req_body = {"campaign": $campaign} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Delete campaign
@@ -559,10 +689,21 @@ export def "campaigns delete" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "recipients" $recipients "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/campaigns/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/campaigns/{id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"recipients": $recipients} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"recipients": $recipients} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Update campaign
@@ -588,12 +729,23 @@ export def "campaigns update" [
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/campaigns/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/campaigns/{id}") $auth.query)
   let req_body = {"campaign": $campaign} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Resume campaign
@@ -616,10 +768,21 @@ export def "campaigns-resume update" [
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/campaigns/{id}/resume"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/campaigns/{id}/resume") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Schedule campaign
@@ -644,12 +807,23 @@ export def "campaigns-schedule update" [
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/campaigns/{id}/schedule"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/campaigns/{id}/schedule") $auth.query)
   let req_body = {"scheduled_for": $scheduled_for} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Stop campaign
@@ -672,10 +846,21 @@ export def "campaigns-stop stop" [
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/campaigns/{id}/stop"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/campaigns/{id}/stop") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Test campaign
@@ -700,12 +885,23 @@ export def "campaigns-test test" [
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/campaigns/{id}/test"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/campaigns/{id}/test") $auth.query)
   let req_body = {"users": $users} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Query channels
@@ -745,12 +941,23 @@ export def "channels list" [
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "client_id" $client_id "scalar") (serialize-qp "connection_id" $connection_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/channels" $qp)
+  let full_url = (build-url $base "/channels" $qp $auth.query)
   let req_body = {"client_id": $client_id_body, "connection_id": $connection_id_body, "filter_conditions": $filter_conditions, "limit": $limit, "member_limit": $member_limit, "message_limit": $message_limit, "offset": $offset, "presence": $presence, "sort": $body_sort, "state": $state, "user": $user, "user_id": $user_id, "watch": $watch} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"client_id": $client_id, "connection_id": $connection_id} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"client_id": $client_id, "connection_id": $connection_id} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Deletes channels asynchronously
@@ -774,12 +981,23 @@ export def "channels-delete delete" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/channels/delete")
+  let full_url = (build-url $base "/channels/delete" $auth.query)
   let req_body = {"cids": $cids, "hard_delete": $hard_delete} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Mark channels as read
@@ -804,12 +1022,23 @@ export def "channels-read get-mark" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/channels/read")
+  let full_url = (build-url $base "/channels/read" $auth.query)
   let req_body = {"user": $user, "user_id": $user_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Get or create channel (type)
@@ -849,12 +1078,23 @@ export def "channels-query get-or-create-by-type" [
   let base = ($base_url | default $BASE_URL)
   if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
   let qp = [(serialize-qp "client_id" $client_id "scalar") (serialize-qp "connection_id" $connection_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({type: (encode-path-segment $type)} | format pattern "/channels/{type}/query") $qp)
+  let full_url = (build-url $base ({type: (encode-path-segment $type)} | format pattern "/channels/{type}/query") $qp $auth.query)
   let req_body = {"client_id": $client_id_body, "connection_id": $connection_id_body, "data": $data, "members": $members, "messages": $messages, "presence": $presence, "state": $state, "watch": $watch, "watchers": $watchers} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"client_id": $client_id, "connection_id": $connection_id} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"client_id": $client_id, "connection_id": $connection_id} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Delete channel
@@ -881,10 +1121,21 @@ export def "channels delete" [
   if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "hard_delete" $hard_delete "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({type: (encode-path-segment $type), id: (encode-path-segment $id)} | format pattern "/channels/{type}/{id}") $qp)
+  let full_url = (build-url $base ({type: (encode-path-segment $type), id: (encode-path-segment $id)} | format pattern "/channels/{type}/{id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"hard_delete": $hard_delete} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"hard_delete": $hard_delete} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Partially update channel
@@ -915,12 +1166,23 @@ export def "channels update-partial" [
   let base = ($base_url | default $BASE_URL)
   if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({type: (encode-path-segment $type), id: (encode-path-segment $id)} | format pattern "/channels/{type}/{id}"))
+  let full_url = (build-url $base ({type: (encode-path-segment $type), id: (encode-path-segment $id)} | format pattern "/channels/{type}/{id}") $auth.query)
   let req_body = {"set": $set, "unset": $unset, "user": $user, "user_id": $user_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Update channel
@@ -967,12 +1229,23 @@ export def "channels update" [
   let base = ($base_url | default $BASE_URL)
   if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({type: (encode-path-segment $type), id: (encode-path-segment $id)} | format pattern "/channels/{type}/{id}"))
+  let full_url = (build-url $base ({type: (encode-path-segment $type), id: (encode-path-segment $id)} | format pattern "/channels/{type}/{id}") $auth.query)
   let req_body = {"accept_invite": $accept_invite, "add_members": $add_members, "add_moderators": $add_moderators, "assign_roles": $assign_roles, "cooldown": $cooldown, "data": $data, "demote_moderators": $demote_moderators, "hide_history": $hide_history, "invites": $invites, "message": $message, "reject_invite": $reject_invite, "remove_members": $remove_members, "skip_push": $skip_push, "user": $user, "user_id": $user_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Create a call
@@ -1004,12 +1277,23 @@ export def "channels-call create" [
   let base = ($base_url | default $BASE_URL)
   if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({type: (encode-path-segment $type), id: (encode-path-segment $id)} | format pattern "/channels/{type}/{id}/call"))
+  let full_url = (build-url $base ({type: (encode-path-segment $type), id: (encode-path-segment $id)} | format pattern "/channels/{type}/{id}/call") $auth.query)
   let req_body = {"id": $body_id, "options": $options, "type": $body_type, "user": $user, "user_id": $user_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Send event
@@ -1037,12 +1321,23 @@ export def "channels-event send" [
   let base = ($base_url | default $BASE_URL)
   if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({type: (encode-path-segment $type), id: (encode-path-segment $id)} | format pattern "/channels/{type}/{id}/event"))
+  let full_url = (build-url $base ({type: (encode-path-segment $type), id: (encode-path-segment $id)} | format pattern "/channels/{type}/{id}/event") $auth.query)
   let req_body = {"event": $event} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Delete file
@@ -1069,10 +1364,21 @@ export def "channels-file delete" [
   if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "url" $url "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({type: (encode-path-segment $type), id: (encode-path-segment $id)} | format pattern "/channels/{type}/{id}/file") $qp)
+  let full_url = (build-url $base ({type: (encode-path-segment $type), id: (encode-path-segment $id)} | format pattern "/channels/{type}/{id}/file") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"url": $url} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"url": $url} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Upload file
@@ -1101,14 +1407,25 @@ export def "channels-file upload" [
   let base = ($base_url | default $BASE_URL)
   if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({type: (encode-path-segment $type), id: (encode-path-segment $id)} | format pattern "/channels/{type}/{id}/file"))
+  let full_url = (build-url $base ({type: (encode-path-segment $type), id: (encode-path-segment $id)} | format pattern "/channels/{type}/{id}/file") $auth.query)
   let req_body = {"file": $file, "user": $user} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body [] $dry_run)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: $mp.content_type
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $mp.body $insecure $raw $allow_errors $full [201]
 }
 
 # Hide channel
@@ -1138,12 +1455,23 @@ export def "channels-hide create" [
   let base = ($base_url | default $BASE_URL)
   if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({type: (encode-path-segment $type), id: (encode-path-segment $id)} | format pattern "/channels/{type}/{id}/hide"))
+  let full_url = (build-url $base ({type: (encode-path-segment $type), id: (encode-path-segment $id)} | format pattern "/channels/{type}/{id}/hide") $auth.query)
   let req_body = {"clear_history": $clear_history, "user": $user, "user_id": $user_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Delete image
@@ -1170,10 +1498,21 @@ export def "channels-image delete" [
   if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "url" $url "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({type: (encode-path-segment $type), id: (encode-path-segment $id)} | format pattern "/channels/{type}/{id}/image") $qp)
+  let full_url = (build-url $base ({type: (encode-path-segment $type), id: (encode-path-segment $id)} | format pattern "/channels/{type}/{id}/image") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"url": $url} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"url": $url} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Upload image
@@ -1204,14 +1543,25 @@ export def "channels-image upload" [
   let base = ($base_url | default $BASE_URL)
   if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({type: (encode-path-segment $type), id: (encode-path-segment $id)} | format pattern "/channels/{type}/{id}/image"))
+  let full_url = (build-url $base ({type: (encode-path-segment $type), id: (encode-path-segment $id)} | format pattern "/channels/{type}/{id}/image") $auth.query)
   let req_body = {"file": $file, "upload_sizes": $upload_sizes, "user": $user} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body [] $dry_run)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: $mp.content_type
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $mp.body $insecure $raw $allow_errors $full [201]
 }
 
 # Send new message
@@ -1244,12 +1594,23 @@ export def "channels-message send" [
   let base = ($base_url | default $BASE_URL)
   if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({type: (encode-path-segment $type), id: (encode-path-segment $id)} | format pattern "/channels/{type}/{id}/message"))
+  let full_url = (build-url $base ({type: (encode-path-segment $type), id: (encode-path-segment $id)} | format pattern "/channels/{type}/{id}/message") $auth.query)
   let req_body = {"force_moderation": $force_moderation, "is_pending_message": $is_pending_message, "message": $message, "pending_message_metadata": $pending_message_metadata, "skip_enrich_url": $skip_enrich_url, "skip_push": $skip_push} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Get many messages
@@ -1276,10 +1637,21 @@ export def "channels-messages get-many" [
   if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "ids" $ids "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({type: (encode-path-segment $type), id: (encode-path-segment $id)} | format pattern "/channels/{type}/{id}/messages") $qp)
+  let full_url = (build-url $base ({type: (encode-path-segment $type), id: (encode-path-segment $id)} | format pattern "/channels/{type}/{id}/messages") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"ids": $ids} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"ids": $ids} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get or create channel (type, id)
@@ -1321,12 +1693,23 @@ export def "channels-query get-or-create-by-type-id" [
   if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "client_id" $client_id "scalar") (serialize-qp "connection_id" $connection_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({type: (encode-path-segment $type), id: (encode-path-segment $id)} | format pattern "/channels/{type}/{id}/query") $qp)
+  let full_url = (build-url $base ({type: (encode-path-segment $type), id: (encode-path-segment $id)} | format pattern "/channels/{type}/{id}/query") $qp $auth.query)
   let req_body = {"client_id": $client_id_body, "connection_id": $connection_id_body, "data": $data, "members": $members, "messages": $messages, "presence": $presence, "state": $state, "watch": $watch, "watchers": $watchers} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"client_id": $client_id, "connection_id": $connection_id} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"client_id": $client_id, "connection_id": $connection_id} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Mark read
@@ -1356,12 +1739,23 @@ export def "channels-read get-mark-by-type-id" [
   let base = ($base_url | default $BASE_URL)
   if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({type: (encode-path-segment $type), id: (encode-path-segment $id)} | format pattern "/channels/{type}/{id}/read"))
+  let full_url = (build-url $base ({type: (encode-path-segment $type), id: (encode-path-segment $id)} | format pattern "/channels/{type}/{id}/read") $auth.query)
   let req_body = {"message_id": $message_id, "user": $user, "user_id": $user_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Show channel
@@ -1390,12 +1784,23 @@ export def "channels-show create" [
   let base = ($base_url | default $BASE_URL)
   if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({type: (encode-path-segment $type), id: (encode-path-segment $id)} | format pattern "/channels/{type}/{id}/show"))
+  let full_url = (build-url $base ({type: (encode-path-segment $type), id: (encode-path-segment $id)} | format pattern "/channels/{type}/{id}/show") $auth.query)
   let req_body = {"user": $user, "user_id": $user_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Stop watching channel
@@ -1426,12 +1831,23 @@ export def "channels-stop-watching stop" [
   if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "client_id" $client_id "scalar") (serialize-qp "connection_id" $connection_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({type: (encode-path-segment $type), id: (encode-path-segment $id)} | format pattern "/channels/{type}/{id}/stop-watching") $qp)
+  let full_url = (build-url $base ({type: (encode-path-segment $type), id: (encode-path-segment $id)} | format pattern "/channels/{type}/{id}/stop-watching") $qp $auth.query)
   let req_body = {"client_id": $client_id_body, "connection_id": $connection_id_body} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"client_id": $client_id, "connection_id": $connection_id} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"client_id": $client_id, "connection_id": $connection_id} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Truncate channel
@@ -1465,12 +1881,23 @@ export def "channels-truncate create" [
   let base = ($base_url | default $BASE_URL)
   if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({type: (encode-path-segment $type), id: (encode-path-segment $id)} | format pattern "/channels/{type}/{id}/truncate"))
+  let full_url = (build-url $base ({type: (encode-path-segment $type), id: (encode-path-segment $id)} | format pattern "/channels/{type}/{id}/truncate") $auth.query)
   let req_body = {"hard_delete": $hard_delete, "message": $message, "skip_push": $skip_push, "truncated_at": $truncated_at, "user": $user, "user_id": $user_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Mark unread
@@ -1500,12 +1927,23 @@ export def "channels-unread create-mark" [
   let base = ($base_url | default $BASE_URL)
   if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({type: (encode-path-segment $type), id: (encode-path-segment $id)} | format pattern "/channels/{type}/{id}/unread"))
+  let full_url = (build-url $base ({type: (encode-path-segment $type), id: (encode-path-segment $id)} | format pattern "/channels/{type}/{id}/unread") $auth.query)
   let req_body = {"message_id": $message_id, "user": $user, "user_id": $user_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # List channel types
@@ -1526,10 +1964,21 @@ export def "channeltypes list-channel-types" [
 ]: nothing -> record<channel_types: record, duration: string> {
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/channeltypes")
+  let full_url = (build-url $base "/channeltypes" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create channel type
@@ -1573,12 +2022,23 @@ export def "channeltypes create-channel-type" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/channeltypes")
+  let full_url = (build-url $base "/channeltypes" $auth.query)
   let req_body = {"automod": $automod, "automod_behavior": $automod_behavior, "blocklist": $blocklist, "blocklist_behavior": $blocklist_behavior, "commands": $commands, "connect_events": $connect_events, "custom_events": $custom_events, "grants": $grants, "max_message_length": $max_message_length, "message_retention": $message_retention, "mutes": $mutes, "name": $name, "permissions": $permissions, "push_notifications": $push_notifications, "reactions": $reactions, "read_events": $read_events, "replies": $replies, "search": $search, "typing_events": $typing_events, "uploads": $uploads, "url_enrichment": $url_enrichment} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Delete channel type
@@ -1601,10 +2061,21 @@ export def "channeltypes delete-channel-type" [
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
-  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/channeltypes/{name}"))
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/channeltypes/{name}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Get channel type
@@ -1627,10 +2098,21 @@ export def "channeltypes get-channel-type" [
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
-  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/channeltypes/{name}"))
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/channeltypes/{name}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update channel type
@@ -1680,12 +2162,23 @@ export def "channeltypes update-channel-type" [
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
-  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/channeltypes/{name}"))
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/channeltypes/{name}") $auth.query)
   let req_body = {"NameFromPath": $name_from_path, "automod": $automod, "automod_behavior": $automod_behavior, "automod_thresholds": $automod_thresholds, "blocklist": $blocklist, "blocklist_behavior": $blocklist_behavior, "commands": $commands, "connect_events": $connect_events, "custom_events": $custom_events, "grants": $grants, "max_message_length": $max_message_length, "message_retention": $message_retention, "mutes": $mutes, "permissions": $permissions, "push_notifications": $push_notifications, "quotes": $quotes, "reactions": $reactions, "read_events": $read_events, "reminders": $reminders, "replies": $replies, "search": $search, "typing_events": $typing_events, "uploads": $uploads, "url_enrichment": $url_enrichment} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Check push
@@ -1717,12 +2210,23 @@ export def "check-push check" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/check_push")
+  let full_url = (build-url $base "/check_push" $auth.query)
   let req_body = {"apn_template": $apn_template, "firebase_data_template": $firebase_data_template, "firebase_template": $firebase_template, "message_id": $message_id, "push_provider_name": $push_provider_name, "push_provider_type": $push_provider_type, "skip_devices": $skip_devices, "user": $user, "user_id": $user_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Check SQS
@@ -1747,12 +2251,23 @@ export def "check-sqs check" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/check_sqs")
+  let full_url = (build-url $base "/check_sqs" $auth.query)
   let req_body = {"sqs_key": $sqs_key, "sqs_secret": $sqs_secret, "sqs_url": $sqs_url} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # List commands
@@ -1773,10 +2288,21 @@ export def "commands list" [
 ]: nothing -> record<commands: table<args: string, created_at: string, description: string, name: string, set: string, updated_at: string>, duration: string> {
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/commands")
+  let full_url = (build-url $base "/commands" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create command
@@ -1802,12 +2328,23 @@ export def "commands create" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/commands")
+  let full_url = (build-url $base "/commands" $auth.query)
   let req_body = {"args": $args, "description": $description, "name": $name, "set": $set} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Delete command
@@ -1830,10 +2367,21 @@ export def "commands delete" [
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
-  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/commands/{name}"))
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/commands/{name}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Get command
@@ -1856,10 +2404,21 @@ export def "commands get" [
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
-  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/commands/{name}"))
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/commands/{name}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update command
@@ -1887,12 +2446,23 @@ export def "commands update" [
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
-  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/commands/{name}"))
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/commands/{name}") $auth.query)
   let req_body = {"Name": $body_name, "args": $args, "description": $description, "set": $set} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Connect (WebSocket)
@@ -1915,10 +2485,21 @@ export def "connect get" [
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "json" $json "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/connect" $qp)
+  let full_url = (build-url $base "/connect" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"json": $json} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"json": $json} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Delete device
@@ -1942,10 +2523,21 @@ export def "devices delete" [
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "user_id" $user_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/devices" $qp)
+  let full_url = (build-url $base "/devices" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"id": $id, "user_id": $user_id} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"id": $id, "user_id": $user_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # List devices
@@ -1968,10 +2560,21 @@ export def "devices list" [
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "user_id" $user_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/devices" $qp)
+  let full_url = (build-url $base "/devices" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"user_id": $user_id} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"user_id": $user_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create device
@@ -1999,12 +2602,23 @@ export def "devices create" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/devices")
+  let full_url = (build-url $base "/devices" $auth.query)
   let req_body = {"id": $id, "push_provider": $push_provider, "push_provider_name": $push_provider_name, "user": $user, "user_id": $user_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Export users
@@ -2027,12 +2641,23 @@ export def "export-users export" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/export/users")
+  let full_url = (build-url $base "/export/users" $auth.query)
   let req_body = {"user_ids": $user_ids} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Export channels
@@ -2060,12 +2685,23 @@ export def "export-channels export" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/export_channels")
+  let full_url = (build-url $base "/export_channels" $auth.query)
   let req_body = {"channels": $channels, "clear_deleted_message_text": $clear_deleted_message_text, "export_users": $export_users, "include_truncated_messages": $include_truncated_messages, "version": $version} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Export channels status
@@ -2088,10 +2724,21 @@ export def "export-channels get-status" [
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/export_channels/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/export_channels/{id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create guest
@@ -2115,12 +2762,23 @@ export def "guest create" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/guest")
+  let full_url = (build-url $base "/guest" $auth.query)
   let req_body = {"user": $user} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Create import URL
@@ -2143,12 +2801,23 @@ export def "import-urls create" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/import_urls")
+  let full_url = (build-url $base "/import_urls" $auth.query)
   let req_body = {"filename": $filename} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Get import
@@ -2169,10 +2838,21 @@ export def "imports list" [
 ]: nothing -> record<duration: string, import_tasks: table<created_at: string, history: list, id: string, mode: string, path: string, result: any, size: float, state: string, updated_at: string>> {
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/imports")
+  let full_url = (build-url $base "/imports" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create import
@@ -2196,12 +2876,23 @@ export def "imports create" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/imports")
+  let full_url = (build-url $base "/imports" $auth.query)
   let req_body = {"mode": $mode, "path": $path} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Get import
@@ -2224,10 +2915,21 @@ export def "imports get" [
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/imports/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/imports/{id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Long Poll (Transport)
@@ -2251,10 +2953,21 @@ export def "longpoll get-long-poll" [
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "json" $json "scalar") (serialize-qp "connection_id" $connection_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/longpoll" $qp)
+  let full_url = (build-url $base "/longpoll" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"json": $json, "connection_id": $connection_id} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"json": $json, "connection_id": $connection_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Query members
@@ -2277,10 +2990,21 @@ export def "members list" [
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "payload" $payload "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/members" $qp)
+  let full_url = (build-url $base "/members" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"payload": $payload} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"payload": $payload} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Delete message
@@ -2305,10 +3029,21 @@ export def "messages delete" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "hard" $hard "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/messages/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/messages/{id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"hard": $hard} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"hard": $hard} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Get message
@@ -2331,10 +3066,21 @@ export def "messages get" [
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/messages/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/messages/{id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update message
@@ -2362,12 +3108,23 @@ export def "messages update" [
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/messages/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/messages/{id}") $auth.query)
   let req_body = {"message": $message, "pending_message_metadata": $pending_message_metadata, "skip_enrich_url": $skip_enrich_url} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Partially message update
@@ -2397,12 +3154,23 @@ export def "messages update-partial" [
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/messages/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/messages/{id}") $auth.query)
   let req_body = {"set": $set, "skip_enrich_url": $skip_enrich_url, "unset": $unset, "user": $user, "user_id": $user_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Run message command action
@@ -2431,12 +3199,23 @@ export def "messages-action create-run" [
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/messages/{id}/action"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/messages/{id}/action") $auth.query)
   let req_body = {"ID": $body_id, "form_data": $form_data, "user": $user, "user_id": $user_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Commit message
@@ -2459,10 +3238,21 @@ export def "messages-commit commit" [
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/messages/{id}/commit"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/messages/{id}/commit") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [201]
 }
 
 # Send reaction
@@ -2491,12 +3281,23 @@ export def "messages-reaction send" [
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/messages/{id}/reaction"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/messages/{id}/reaction") $auth.query)
   let req_body = {"ID": $body_id, "enforce_unique": $enforce_unique, "reaction": $reaction, "skip_push": $skip_push} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Delete reaction
@@ -2523,10 +3324,21 @@ export def "messages-reaction delete" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
   let qp = [(serialize-qp "user_id" $user_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id), type: (encode-path-segment $type)} | format pattern "/messages/{id}/reaction/{type}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id), type: (encode-path-segment $type)} | format pattern "/messages/{id}/reaction/{type}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"user_id": $user_id} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"user_id": $user_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Get reactions
@@ -2552,10 +3364,21 @@ export def "messages-reactions get" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/messages/{id}/reactions") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/messages/{id}/reactions") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"limit": $limit, "offset": $offset} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"limit": $limit, "offset": $offset} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Translate message
@@ -2580,12 +3403,23 @@ export def "messages-translate create" [
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/messages/{id}/translate"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/messages/{id}/translate") $auth.query)
   let req_body = {"language": $language} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Get replies
@@ -2619,10 +3453,21 @@ export def "messages-replies get" [
   let base = ($base_url | default $BASE_URL)
   if ($parent_id | is-empty) { error make --unspanned { msg: "path parameter 'parent_id' must be non-empty" } }
   let qp = [(serialize-qp "id_gte" $id_gte "scalar") (serialize-qp "id_gt" $id_gt "scalar") (serialize-qp "id_lte" $id_lte "scalar") (serialize-qp "id_lt" $id_lt "scalar") (serialize-qp "created_at_after_or_equal" $created_at_after_or_equal "scalar") (serialize-qp "created_at_after" $created_at_after "scalar") (serialize-qp "created_at_before_or_equal" $created_at_before_or_equal "scalar") (serialize-qp "created_at_before" $created_at_before "scalar") (serialize-qp "id_around" $id_around "scalar") (serialize-qp "created_at_around" $created_at_around "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent_id: (encode-path-segment $parent_id)} | format pattern "/messages/{parent_id}/replies") $qp)
+  let full_url = (build-url $base ({parent_id: (encode-path-segment $parent_id)} | format pattern "/messages/{parent_id}/replies") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"id_gte": $id_gte, "id_gt": $id_gt, "id_lte": $id_lte, "id_lt": $id_lt, "created_at_after_or_equal": $created_at_after_or_equal, "created_at_after": $created_at_after, "created_at_before_or_equal": $created_at_before_or_equal, "created_at_before": $created_at_before, "id_around": $id_around, "created_at_around": $created_at_around} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"id_gte": $id_gte, "id_gt": $id_gt, "id_lte": $id_lte, "id_lt": $id_lt, "created_at_after_or_equal": $created_at_after_or_equal, "created_at_after": $created_at_after, "created_at_before_or_equal": $created_at_before_or_equal, "created_at_before": $created_at_before, "id_around": $id_around, "created_at_around": $created_at_around} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Unban user
@@ -2647,10 +3492,21 @@ export def "moderation-ban delete-unban" [
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "target_user_id" $target_user_id "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "id" $id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/moderation/ban" $qp)
+  let full_url = (build-url $base "/moderation/ban" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"target_user_id": $target_user_id, "type": $type, "id": $id} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"target_user_id": $target_user_id, "type": $type, "id": $id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Ban user
@@ -2685,12 +3541,23 @@ export def "moderation-ban create" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/moderation/ban")
+  let full_url = (build-url $base "/moderation/ban" $auth.query)
   let req_body = {"banned_by": $banned_by, "banned_by_id": $banned_by_id, "id": $id, "ip_ban": $ip_ban, "reason": $reason, "shadow": $shadow, "target_user_id": $target_user_id, "timeout": $timeout, "type": $type, "user": $user, "user_id": $user_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Flag
@@ -2717,12 +3584,23 @@ export def "moderation-flag create" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/moderation/flag")
+  let full_url = (build-url $base "/moderation/flag" $auth.query)
   let req_body = {"target_message_id": $target_message_id, "target_user_id": $target_user_id, "user": $user, "user_id": $user_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Query Message Flags
@@ -2745,10 +3623,21 @@ export def "moderation-flags-message list" [
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "payload" $payload "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/moderation/flags/message" $qp)
+  let full_url = (build-url $base "/moderation/flags/message" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"payload": $payload} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"payload": $payload} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Mute user
@@ -2775,12 +3664,23 @@ export def "moderation-mute create-user" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/moderation/mute")
+  let full_url = (build-url $base "/moderation/mute" $auth.query)
   let req_body = {"target_ids": $target_ids, "timeout": $timeout, "user": $user, "user_id": $user_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Mute channel
@@ -2807,12 +3707,23 @@ export def "moderation-mute-channel create" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/moderation/mute/channel")
+  let full_url = (build-url $base "/moderation/mute/channel" $auth.query)
   let req_body = {"channel_cids": $channel_cids, "expiration": $expiration, "user": $user, "user_id": $user_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Unflag
@@ -2839,12 +3750,23 @@ export def "moderation-unflag create" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/moderation/unflag")
+  let full_url = (build-url $base "/moderation/unflag" $auth.query)
   let req_body = {"target_message_id": $target_message_id, "target_user_id": $target_user_id, "user": $user, "user_id": $user_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Unmute user
@@ -2872,12 +3794,23 @@ export def "moderation-unmute create-user" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/moderation/unmute")
+  let full_url = (build-url $base "/moderation/unmute" $auth.query)
   let req_body = {"target_id": $target_id, "target_ids": $target_ids, "timeout": $timeout, "user": $user, "user_id": $user_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Unmute channel
@@ -2905,12 +3838,23 @@ export def "moderation-unmute-channel create" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/moderation/unmute/channel")
+  let full_url = (build-url $base "/moderation/unmute/channel" $auth.query)
   let req_body = {"channel_cid": $channel_cid, "channel_cids": $channel_cids, "expiration": $expiration, "user": $user, "user_id": $user_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Get OG
@@ -2933,10 +3877,21 @@ export def "og get" [
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "url" $url "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/og" $qp)
+  let full_url = (build-url $base "/og" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"url": $url} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"url": $url} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List permissions
@@ -2957,10 +3912,21 @@ export def "permissions list" [
 ]: nothing -> record<duration: string, permissions: table<action: string, condition: record, custom: bool, description: string, id: string, level: string, name: string, owner: bool, same_team: bool, tags: list>> {
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/permissions")
+  let full_url = (build-url $base "/permissions" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get permission
@@ -2983,10 +3949,21 @@ export def "permissions get" [
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/permissions/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/permissions/{id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List push providers
@@ -3007,10 +3984,21 @@ export def "push-providers list" [
 ]: nothing -> record<duration: string, push_providers: table<apn_auth_key: string, apn_auth_type: string, apn_development: bool, apn_host: string, apn_key_id: string, apn_notification_template: string, apn_p12_cert: string, apn_team_id: string, apn_topic: string, created_at: string, description: string, disabled_at: string, disabled_reason: string, firebase_apn_template: string, firebase_credentials: string, firebase_data_template: string, firebase_notification_template: string, firebase_server_key: string, huawei_app_id: string, huawei_app_secret: string, name: string, type: float, updated_at: string, xiaomi_app_secret: string, xiaomi_package_name: string>> {
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/push_providers")
+  let full_url = (build-url $base "/push_providers" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Upsert a push provider
@@ -3034,12 +4022,23 @@ export def "push-providers update" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/push_providers")
+  let full_url = (build-url $base "/push_providers" $auth.query)
   let req_body = {"push_provider": $push_provider} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Delete a push provider
@@ -3064,10 +4063,21 @@ export def "push-providers delete" [
   let base = ($base_url | default $BASE_URL)
   if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
-  let full_url = (build-url $base ({type: (encode-path-segment $type), name: (encode-path-segment $name)} | format pattern "/push_providers/{type}/{name}"))
+  let full_url = (build-url $base ({type: (encode-path-segment $type), name: (encode-path-segment $name)} | format pattern "/push_providers/{type}/{name}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Query Banned Users
@@ -3090,10 +4100,21 @@ export def "query-banned-users list" [
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "payload" $payload "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/query_banned_users" $qp)
+  let full_url = (build-url $base "/query_banned_users" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"payload": $payload} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"payload": $payload} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get rate limits
@@ -3120,10 +4141,21 @@ export def "rate-limits get" [
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "server_side" $server_side "scalar") (serialize-qp "android" $android "scalar") (serialize-qp "ios" $ios "scalar") (serialize-qp "web" $web "scalar") (serialize-qp "endpoints" $endpoints "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/rate_limits" $qp)
+  let full_url = (build-url $base "/rate_limits" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"server_side": $server_side, "android": $android, "ios": $ios, "web": $web, "endpoints": $endpoints} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"server_side": $server_side, "android": $android, "ios": $ios, "web": $web, "endpoints": $endpoints} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Query recipients
@@ -3146,10 +4178,21 @@ export def "recipients list" [
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "payload" $payload "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/recipients" $qp)
+  let full_url = (build-url $base "/recipients" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"payload": $payload} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"payload": $payload} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List roles
@@ -3170,10 +4213,21 @@ export def "roles list" [
 ]: nothing -> record<duration: string, roles: table<created_at: string, custom: bool, name: string, scopes: list, updated_at: string>> {
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/roles")
+  let full_url = (build-url $base "/roles" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create role
@@ -3196,12 +4250,23 @@ export def "roles create" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/roles")
+  let full_url = (build-url $base "/roles" $auth.query)
   let req_body = {"name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Delete role
@@ -3224,10 +4289,21 @@ export def "roles delete" [
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
-  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/roles/{name}"))
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/roles/{name}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Search messages
@@ -3250,10 +4326,21 @@ export def "search list" [
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "payload" $payload "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/search" $qp)
+  let full_url = (build-url $base "/search" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"payload": $payload} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"payload": $payload} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Query segments
@@ -3276,10 +4363,21 @@ export def "segments list" [
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "payload" $payload "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/segments" $qp)
+  let full_url = (build-url $base "/segments" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"payload": $payload} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"payload": $payload} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create segment
@@ -3303,12 +4401,23 @@ export def "segments create" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/segments")
+  let full_url = (build-url $base "/segments" $auth.query)
   let req_body = {"segment": $segment} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Delete segment
@@ -3331,10 +4440,21 @@ export def "segments delete" [
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/segments/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/segments/{id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Update segment
@@ -3360,12 +4480,23 @@ export def "segments update" [
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/segments/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/segments/{id}") $auth.query)
   let req_body = {"segment": $segment} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Sync
@@ -3401,12 +4532,23 @@ export def "sync create" [
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "with_inaccessible_cids" $with_inaccessible_cids "scalar") (serialize-qp "watch" $watch "scalar") (serialize-qp "client_id" $client_id "scalar") (serialize-qp "connection_id" $connection_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/sync" $qp)
+  let full_url = (build-url $base "/sync" $qp $auth.query)
   let req_body = {"channel_cids": $channel_cids, "client_id": $client_id_body, "connection_id": $connection_id_body, "last_sync_at": $last_sync_at, "user": $user, "user_id": $user_id, "watch": $watch_body, "with_inaccessible_cids": $with_inaccessible_cids_body} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"with_inaccessible_cids": $with_inaccessible_cids, "watch": $watch, "client_id": $client_id, "connection_id": $connection_id} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"with_inaccessible_cids": $with_inaccessible_cids, "watch": $watch, "client_id": $client_id, "connection_id": $connection_id} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Get status of a task
@@ -3429,10 +4571,21 @@ export def "tasks get" [
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/tasks/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/tasks/{id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Query users
@@ -3455,10 +4608,21 @@ export def "users list" [
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "payload" $payload "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/users" $qp)
+  let full_url = (build-url $base "/users" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"payload": $payload} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"payload": $payload} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Partially update user
@@ -3483,12 +4647,23 @@ export def "users update-partial" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/users")
+  let full_url = (build-url $base "/users" $auth.query)
   let req_body = {"id": $id, "set": $set, "unset": $unset} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Upsert users
@@ -3511,12 +4686,23 @@ export def "users update" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/users")
+  let full_url = (build-url $base "/users" $auth.query)
   let req_body = {"users": $users} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Deactivate users
@@ -3541,12 +4727,23 @@ export def "users-deactivate create" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/users/deactivate")
+  let full_url = (build-url $base "/users/deactivate" $auth.query)
   let req_body = {"created_by_id": $created_by_id, "mark_messages_deleted": $mark_messages_deleted, "user_ids": $user_ids} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Delete Users
@@ -3573,12 +4770,23 @@ export def "users-delete delete" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/users/delete")
+  let full_url = (build-url $base "/users/delete" $auth.query)
   let req_body = {"conversations": $conversations, "messages": $messages, "new_channel_owner_id": $new_channel_owner_id, "user": $user, "user_ids": $user_ids} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Reactivate users
@@ -3603,12 +4811,23 @@ export def "users-reactivate create" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/users/reactivate")
+  let full_url = (build-url $base "/users/reactivate" $auth.query)
   let req_body = {"created_by_id": $created_by_id, "restore_messages": $restore_messages, "user_ids": $user_ids} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Restore users
@@ -3631,12 +4850,23 @@ export def "users-restore create" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/users/restore")
+  let full_url = (build-url $base "/users/restore" $auth.query)
   let req_body = {"user_ids": $user_ids} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Delete user
@@ -3663,10 +4893,21 @@ export def "users delete" [
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
   let qp = [(serialize-qp "mark_messages_deleted" $mark_messages_deleted "scalar") (serialize-qp "hard_delete" $hard_delete "scalar") (serialize-qp "delete_conversation_channels" $delete_conversation_channels "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}") $qp)
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"mark_messages_deleted": $mark_messages_deleted, "hard_delete": $hard_delete, "delete_conversation_channels": $delete_conversation_channels} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"mark_messages_deleted": $mark_messages_deleted, "hard_delete": $hard_delete, "delete_conversation_channels": $delete_conversation_channels} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Deactivate user
@@ -3693,12 +4934,23 @@ export def "users-deactivate create-by-user-id" [
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}/deactivate"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}/deactivate") $auth.query)
   let req_body = {"created_by_id": $created_by_id, "mark_messages_deleted": $mark_messages_deleted, "user_id": $body_user_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Send user event
@@ -3724,12 +4976,23 @@ export def "users-event send-custom" [
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}/event"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}/event") $auth.query)
   let req_body = {"event": $event} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Export user
@@ -3751,10 +5014,21 @@ export def "users-export get" [
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}/export"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}/export") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Reactivate user
@@ -3782,10 +5056,21 @@ export def "users-reactivate create-by-user-id" [
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}/reactivate"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}/reactivate") $auth.query)
   let req_body = {"created_by_id": $created_by_id, "name": $name, "restore_messages": $restore_messages, "user_id": $body_user_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }

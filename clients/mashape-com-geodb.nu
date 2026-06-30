@@ -8,7 +8,7 @@ const BASE_URL = "https://wft-geo-db.p.rapidapi.com/v1"
 # `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
 # where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o GEODB_CITIES_API_TOKEN | default "" }
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o GEODB_CITIES_API_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
@@ -41,14 +41,11 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
-# Trick: `url encode --all` over-encodes, then we decode the four unreserved
-# punctuation chars back. Pre-existing %XX sequences in the input survive
-# because `url encode --all` first turns their % into %25.
 def encode-path-segment [v: any]: nothing -> string {
   $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
-# Serialize an array-typed path parameter (issue 49.A). OpenAPI 3 `style: simple`
+# Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
 # (the default for path params) and Swagger 2 `collectionFormat: csv` both join
 # the elements with a literal comma WITHIN the single path segment, each element
 # RFC-3986-encoded individually (so a comma inside an element stays %2C). Without
@@ -59,51 +56,39 @@ def encode-path-array [v: any]: nothing -> string {
   if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
 }
 
-# Build URL from base, path, and optional query string
-def build-url [base: string, path: string, query?: string]: nothing -> string {
+# Build the request URL from base, path, and any number of pre-encoded query
+# fragments (param serializer output and/or the auth query). Each fragment is an
+# `&`-joinable `key=value` string already percent-encoded by its producer; empty
+# fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
+# delimiters are hand-spliced — and any query already on the base URL is merged in.
+def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
   let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
-  let result = ($parsed | upsert path $full_path)
-  if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
+  let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
+  $parsed | upsert path $full_path | upsert query $query | url join
 }
 
-# Build the dry-run record returned by --dry-run. Shape:
-#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
-#    auth: {scheme, location}}
-# `meta` carries logical-form data (the query record by spec name, the pre-serialization
-# body) that do-request itself cannot reconstruct from its wire-format args.
-def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
-  let m = ($meta | default {})
-  {
-    dry_run: true
-    method: $method
-    url: $url
-    query: ($m | get -o query | default {})
-    headers: $auth.headers
-    body: ($m | get -o body)
-    content_type: $content_type
-    timeout: $timeout
-    auth: {scheme: $auth.scheme, location: $auth.location}
-  }
+# Success policy: did this response succeed? Single source of truth, consulted by
+# handle-response and the HEAD header-unwrap. Empty ok_codes means the spec listed
+# none, so fall back to < 400. Otherwise: any 2xx, plus documented success codes.
+def status-ok [status: int, ok_codes: list<int>]: nothing -> bool {
+  if ($ok_codes | is-empty) { $status < 400 } else { ($status >= 200 and $status < 300) or ($status in $ok_codes) }
 }
 
-# Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
-  let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
-  let timeout = ($max_time | default 30min)
-  let ct = ($content_type | default "application/json")
-  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
-  let resp = match $method {
-    "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
-  }
-  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
-  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
+# Unwrap a `--full` HTTP response into the user-facing value. Response arrives
+# via pipeline; ok_codes gates the error throw (see status-ok).
+def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: record -> any {
+  let resp = $in
+  if $allow_errors { return $resp }
+  if not (status-ok $resp.status $ok_codes) { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } }
+  if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
+  if $resp.status == 204 { return null }
+  $resp.body
+}
+
+# GET — bodyless, honours --raw
+def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
 }
 
 def base-url-completer [] { ["https://wft-geo-db.p.rapidapi.com/v1"] }
@@ -168,10 +153,21 @@ export def "geo-admin-divisions find-using-get" [
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "location" $location "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "distanceUnit" $distance_unit "scalar") (serialize-qp "countryIds" $country_ids "scalar") (serialize-qp "excludedCountryIds" $excluded_country_ids "scalar") (serialize-qp "minPopulation" $min_population "scalar") (serialize-qp "maxPopulation" $max_population "scalar") (serialize-qp "namePrefix" $name_prefix "scalar") (serialize-qp "namePrefixDefaultLangResults" $name_prefix_default_lang_results "scalar") (serialize-qp "timeZoneIds" $time_zone_ids "scalar") (serialize-qp "asciiMode" $ascii_mode "scalar") (serialize-qp "hateoasMode" $hateoas_mode "scalar") (serialize-qp "languageCode" $language_code "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "includeDeleted" $include_deleted "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/geo/adminDivisions" $qp)
+  let full_url = (build-url $base "/geo/adminDivisions" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"location": $location, "radius": $radius, "distanceUnit": $distance_unit, "countryIds": $country_ids, "excludedCountryIds": $excluded_country_ids, "minPopulation": $min_population, "maxPopulation": $max_population, "namePrefix": $name_prefix, "namePrefixDefaultLangResults": $name_prefix_default_lang_results, "timeZoneIds": $time_zone_ids, "asciiMode": $ascii_mode, "hateoasMode": $hateoas_mode, "languageCode": $language_code, "limit": $limit, "offset": $offset, "sort": $qp_sort, "includeDeleted": $include_deleted} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"location": $location, "radius": $radius, "distanceUnit": $distance_unit, "countryIds": $country_ids, "excludedCountryIds": $excluded_country_ids, "minPopulation": $min_population, "maxPopulation": $max_population, "namePrefix": $name_prefix, "namePrefixDefaultLangResults": $name_prefix_default_lang_results, "timeZoneIds": $time_zone_ids, "asciiMode": $ascii_mode, "hateoasMode": $hateoas_mode, "languageCode": $language_code, "limit": $limit, "offset": $offset, "sort": $qp_sort, "includeDeleted": $include_deleted} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get administrative division details
@@ -196,10 +192,21 @@ export def "geo-admin-divisions get-using" [
   let base = ($base_url | default $BASE_URL)
   if ($division_id | is-empty) { error make --unspanned { msg: "path parameter 'divisionId' must be non-empty" } }
   let qp = [(serialize-qp "asciiMode" $ascii_mode "scalar") (serialize-qp "languageCode" $language_code "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({division_id: (encode-path-segment $division_id)} | format pattern "/geo/adminDivisions/{division_id}") $qp)
+  let full_url = (build-url $base ({division_id: (encode-path-segment $division_id)} | format pattern "/geo/adminDivisions/{division_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"asciiMode": $ascii_mode, "languageCode": $language_code} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"asciiMode": $ascii_mode, "languageCode": $language_code} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Find cities near division
@@ -239,10 +246,21 @@ export def "geo-admin-divisions-nearby-cities find-near-using-get" [
   let base = ($base_url | default $BASE_URL)
   if ($division_id | is-empty) { error make --unspanned { msg: "path parameter 'divisionId' must be non-empty" } }
   let qp = [(serialize-qp "radius" $radius "scalar") (serialize-qp "distanceUnit" $distance_unit "scalar") (serialize-qp "countryIds" $country_ids "scalar") (serialize-qp "excludedCountryIds" $excluded_country_ids "scalar") (serialize-qp "minPopulation" $min_population "scalar") (serialize-qp "maxPopulation" $max_population "scalar") (serialize-qp "namePrefix" $name_prefix "scalar") (serialize-qp "namePrefixDefaultLangResults" $name_prefix_default_lang_results "scalar") (serialize-qp "timeZoneIds" $time_zone_ids "scalar") (serialize-qp "types" $types "scalar") (serialize-qp "asciiMode" $ascii_mode "scalar") (serialize-qp "hateoasMode" $hateoas_mode "scalar") (serialize-qp "languageCode" $language_code "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "includeDeleted" $include_deleted "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({division_id: (encode-path-segment $division_id)} | format pattern "/geo/adminDivisions/{division_id}/nearbyCities") $qp)
+  let full_url = (build-url $base ({division_id: (encode-path-segment $division_id)} | format pattern "/geo/adminDivisions/{division_id}/nearbyCities") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"radius": $radius, "distanceUnit": $distance_unit, "countryIds": $country_ids, "excludedCountryIds": $excluded_country_ids, "minPopulation": $min_population, "maxPopulation": $max_population, "namePrefix": $name_prefix, "namePrefixDefaultLangResults": $name_prefix_default_lang_results, "timeZoneIds": $time_zone_ids, "types": $types, "asciiMode": $ascii_mode, "hateoasMode": $hateoas_mode, "languageCode": $language_code, "limit": $limit, "offset": $offset, "sort": $qp_sort, "includeDeleted": $include_deleted} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"radius": $radius, "distanceUnit": $distance_unit, "countryIds": $country_ids, "excludedCountryIds": $excluded_country_ids, "minPopulation": $min_population, "maxPopulation": $max_population, "namePrefix": $name_prefix, "namePrefixDefaultLangResults": $name_prefix_default_lang_results, "timeZoneIds": $time_zone_ids, "types": $types, "asciiMode": $ascii_mode, "hateoasMode": $hateoas_mode, "languageCode": $language_code, "limit": $limit, "offset": $offset, "sort": $qp_sort, "includeDeleted": $include_deleted} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Find divisions near division
@@ -281,10 +299,21 @@ export def "geo-admin-divisions-nearby-divisions find-near-using-get" [
   let base = ($base_url | default $BASE_URL)
   if ($division_id | is-empty) { error make --unspanned { msg: "path parameter 'divisionId' must be non-empty" } }
   let qp = [(serialize-qp "radius" $radius "scalar") (serialize-qp "distanceUnit" $distance_unit "scalar") (serialize-qp "countryIds" $country_ids "scalar") (serialize-qp "excludedCountryIds" $excluded_country_ids "scalar") (serialize-qp "minPopulation" $min_population "scalar") (serialize-qp "maxPopulation" $max_population "scalar") (serialize-qp "namePrefix" $name_prefix "scalar") (serialize-qp "namePrefixDefaultLangResults" $name_prefix_default_lang_results "scalar") (serialize-qp "timeZoneIds" $time_zone_ids "scalar") (serialize-qp "asciiMode" $ascii_mode "scalar") (serialize-qp "hateoasMode" $hateoas_mode "scalar") (serialize-qp "languageCode" $language_code "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "includeDeleted" $include_deleted "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({division_id: (encode-path-segment $division_id)} | format pattern "/geo/adminDivisions/{division_id}/nearbyDivisions") $qp)
+  let full_url = (build-url $base ({division_id: (encode-path-segment $division_id)} | format pattern "/geo/adminDivisions/{division_id}/nearbyDivisions") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"radius": $radius, "distanceUnit": $distance_unit, "countryIds": $country_ids, "excludedCountryIds": $excluded_country_ids, "minPopulation": $min_population, "maxPopulation": $max_population, "namePrefix": $name_prefix, "namePrefixDefaultLangResults": $name_prefix_default_lang_results, "timeZoneIds": $time_zone_ids, "asciiMode": $ascii_mode, "hateoasMode": $hateoas_mode, "languageCode": $language_code, "limit": $limit, "offset": $offset, "sort": $qp_sort, "includeDeleted": $include_deleted} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"radius": $radius, "distanceUnit": $distance_unit, "countryIds": $country_ids, "excludedCountryIds": $excluded_country_ids, "minPopulation": $min_population, "maxPopulation": $max_population, "namePrefix": $name_prefix, "namePrefixDefaultLangResults": $name_prefix_default_lang_results, "timeZoneIds": $time_zone_ids, "asciiMode": $ascii_mode, "hateoasMode": $hateoas_mode, "languageCode": $language_code, "limit": $limit, "offset": $offset, "sort": $qp_sort, "includeDeleted": $include_deleted} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Find cities
@@ -323,10 +352,21 @@ export def "geo-cities find-using-get" [
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "location" $location "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "distanceUnit" $distance_unit "scalar") (serialize-qp "countryIds" $country_ids "scalar") (serialize-qp "excludedCountryIds" $excluded_country_ids "scalar") (serialize-qp "minPopulation" $min_population "scalar") (serialize-qp "maxPopulation" $max_population "scalar") (serialize-qp "namePrefix" $name_prefix "scalar") (serialize-qp "namePrefixDefaultLangResults" $name_prefix_default_lang_results "scalar") (serialize-qp "timeZoneIds" $time_zone_ids "scalar") (serialize-qp "types" $types "scalar") (serialize-qp "asciiMode" $ascii_mode "scalar") (serialize-qp "hateoasMode" $hateoas_mode "scalar") (serialize-qp "languageCode" $language_code "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "includeDeleted" $include_deleted "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/geo/cities" $qp)
+  let full_url = (build-url $base "/geo/cities" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"location": $location, "radius": $radius, "distanceUnit": $distance_unit, "countryIds": $country_ids, "excludedCountryIds": $excluded_country_ids, "minPopulation": $min_population, "maxPopulation": $max_population, "namePrefix": $name_prefix, "namePrefixDefaultLangResults": $name_prefix_default_lang_results, "timeZoneIds": $time_zone_ids, "types": $types, "asciiMode": $ascii_mode, "hateoasMode": $hateoas_mode, "languageCode": $language_code, "limit": $limit, "offset": $offset, "sort": $qp_sort, "includeDeleted": $include_deleted} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"location": $location, "radius": $radius, "distanceUnit": $distance_unit, "countryIds": $country_ids, "excludedCountryIds": $excluded_country_ids, "minPopulation": $min_population, "maxPopulation": $max_population, "namePrefix": $name_prefix, "namePrefixDefaultLangResults": $name_prefix_default_lang_results, "timeZoneIds": $time_zone_ids, "types": $types, "asciiMode": $ascii_mode, "hateoasMode": $hateoas_mode, "languageCode": $language_code, "limit": $limit, "offset": $offset, "sort": $qp_sort, "includeDeleted": $include_deleted} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get city details
@@ -351,10 +391,21 @@ export def "geo-cities get-city-using" [
   let base = ($base_url | default $BASE_URL)
   if ($city_id | is-empty) { error make --unspanned { msg: "path parameter 'cityId' must be non-empty" } }
   let qp = [(serialize-qp "asciiMode" $ascii_mode "scalar") (serialize-qp "languageCode" $language_code "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({city_id: (encode-path-segment $city_id)} | format pattern "/geo/cities/{city_id}") $qp)
+  let full_url = (build-url $base ({city_id: (encode-path-segment $city_id)} | format pattern "/geo/cities/{city_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"asciiMode": $ascii_mode, "languageCode": $language_code} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"asciiMode": $ascii_mode, "languageCode": $language_code} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get city date-time
@@ -376,10 +427,21 @@ export def "geo-cities-date-time get-city-using" [
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-key"))
   let base = ($base_url | default $BASE_URL)
   if ($city_id | is-empty) { error make --unspanned { msg: "path parameter 'cityId' must be non-empty" } }
-  let full_url = (build-url $base ({city_id: (encode-path-segment $city_id)} | format pattern "/geo/cities/{city_id}/dateTime"))
+  let full_url = (build-url $base ({city_id: (encode-path-segment $city_id)} | format pattern "/geo/cities/{city_id}/dateTime") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get city distance
@@ -404,10 +466,21 @@ export def "geo-cities-distance get-city-using" [
   let base = ($base_url | default $BASE_URL)
   if ($city_id | is-empty) { error make --unspanned { msg: "path parameter 'cityId' must be non-empty" } }
   let qp = [(serialize-qp "toCityId" $to_city_id "scalar") (serialize-qp "distanceUnit" $distance_unit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({city_id: (encode-path-segment $city_id)} | format pattern "/geo/cities/{city_id}/distance") $qp)
+  let full_url = (build-url $base ({city_id: (encode-path-segment $city_id)} | format pattern "/geo/cities/{city_id}/distance") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"toCityId": $to_city_id, "distanceUnit": $distance_unit} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"toCityId": $to_city_id, "distanceUnit": $distance_unit} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get city admin region
@@ -432,10 +505,21 @@ export def "geo-cities-located-in get-city-using" [
   let base = ($base_url | default $BASE_URL)
   if ($city_id | is-empty) { error make --unspanned { msg: "path parameter 'cityId' must be non-empty" } }
   let qp = [(serialize-qp "asciiMode" $ascii_mode "scalar") (serialize-qp "languageCode" $language_code "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({city_id: (encode-path-segment $city_id)} | format pattern "/geo/cities/{city_id}/locatedIn") $qp)
+  let full_url = (build-url $base ({city_id: (encode-path-segment $city_id)} | format pattern "/geo/cities/{city_id}/locatedIn") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"asciiMode": $ascii_mode, "languageCode": $language_code} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"asciiMode": $ascii_mode, "languageCode": $language_code} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Find cities near city
@@ -475,10 +559,21 @@ export def "geo-cities-nearby-cities find-near-city-using-get" [
   let base = ($base_url | default $BASE_URL)
   if ($city_id | is-empty) { error make --unspanned { msg: "path parameter 'cityId' must be non-empty" } }
   let qp = [(serialize-qp "radius" $radius "scalar") (serialize-qp "distanceUnit" $distance_unit "scalar") (serialize-qp "countryIds" $country_ids "scalar") (serialize-qp "excludedCountryIds" $excluded_country_ids "scalar") (serialize-qp "minPopulation" $min_population "scalar") (serialize-qp "maxPopulation" $max_population "scalar") (serialize-qp "namePrefix" $name_prefix "scalar") (serialize-qp "namePrefixDefaultLangResults" $name_prefix_default_lang_results "scalar") (serialize-qp "timeZoneIds" $time_zone_ids "scalar") (serialize-qp "types" $types "scalar") (serialize-qp "asciiMode" $ascii_mode "scalar") (serialize-qp "hateoasMode" $hateoas_mode "scalar") (serialize-qp "languageCode" $language_code "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "includeDeleted" $include_deleted "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({city_id: (encode-path-segment $city_id)} | format pattern "/geo/cities/{city_id}/nearbyCities") $qp)
+  let full_url = (build-url $base ({city_id: (encode-path-segment $city_id)} | format pattern "/geo/cities/{city_id}/nearbyCities") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"radius": $radius, "distanceUnit": $distance_unit, "countryIds": $country_ids, "excludedCountryIds": $excluded_country_ids, "minPopulation": $min_population, "maxPopulation": $max_population, "namePrefix": $name_prefix, "namePrefixDefaultLangResults": $name_prefix_default_lang_results, "timeZoneIds": $time_zone_ids, "types": $types, "asciiMode": $ascii_mode, "hateoasMode": $hateoas_mode, "languageCode": $language_code, "limit": $limit, "offset": $offset, "sort": $qp_sort, "includeDeleted": $include_deleted} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"radius": $radius, "distanceUnit": $distance_unit, "countryIds": $country_ids, "excludedCountryIds": $excluded_country_ids, "minPopulation": $min_population, "maxPopulation": $max_population, "namePrefix": $name_prefix, "namePrefixDefaultLangResults": $name_prefix_default_lang_results, "timeZoneIds": $time_zone_ids, "types": $types, "asciiMode": $ascii_mode, "hateoasMode": $hateoas_mode, "languageCode": $language_code, "limit": $limit, "offset": $offset, "sort": $qp_sort, "includeDeleted": $include_deleted} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get city time
@@ -500,10 +595,21 @@ export def "geo-cities-time get-city-using" [
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-key"))
   let base = ($base_url | default $BASE_URL)
   if ($city_id | is-empty) { error make --unspanned { msg: "path parameter 'cityId' must be non-empty" } }
-  let full_url = (build-url $base ({city_id: (encode-path-segment $city_id)} | format pattern "/geo/cities/{city_id}/time"))
+  let full_url = (build-url $base ({city_id: (encode-path-segment $city_id)} | format pattern "/geo/cities/{city_id}/time") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Find countries
@@ -533,10 +639,21 @@ export def "geo-countries get-using" [
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "currencyCode" $currency_code "scalar") (serialize-qp "namePrefix" $name_prefix "scalar") (serialize-qp "namePrefixDefaultLangResults" $name_prefix_default_lang_results "scalar") (serialize-qp "asciiMode" $ascii_mode "scalar") (serialize-qp "hateoasMode" $hateoas_mode "scalar") (serialize-qp "languageCode" $language_code "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/geo/countries" $qp)
+  let full_url = (build-url $base "/geo/countries" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"currencyCode": $currency_code, "namePrefix": $name_prefix, "namePrefixDefaultLangResults": $name_prefix_default_lang_results, "asciiMode": $ascii_mode, "hateoasMode": $hateoas_mode, "languageCode": $language_code, "limit": $limit, "offset": $offset, "sort": $qp_sort} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"currencyCode": $currency_code, "namePrefix": $name_prefix, "namePrefixDefaultLangResults": $name_prefix_default_lang_results, "asciiMode": $ascii_mode, "hateoasMode": $hateoas_mode, "languageCode": $language_code, "limit": $limit, "offset": $offset, "sort": $qp_sort} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get country details
@@ -561,10 +678,21 @@ export def "geo-countries get-country-using" [
   let base = ($base_url | default $BASE_URL)
   if ($country_id | is-empty) { error make --unspanned { msg: "path parameter 'countryId' must be non-empty" } }
   let qp = [(serialize-qp "asciiMode" $ascii_mode "scalar") (serialize-qp "languageCode" $language_code "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({country_id: (encode-path-segment $country_id)} | format pattern "/geo/countries/{country_id}") $qp)
+  let full_url = (build-url $base ({country_id: (encode-path-segment $country_id)} | format pattern "/geo/countries/{country_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"asciiMode": $ascii_mode, "languageCode": $language_code} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"asciiMode": $ascii_mode, "languageCode": $language_code} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Find country regions
@@ -595,10 +723,21 @@ export def "geo-countries-regions list" [
   let base = ($base_url | default $BASE_URL)
   if ($country_id | is-empty) { error make --unspanned { msg: "path parameter 'countryId' must be non-empty" } }
   let qp = [(serialize-qp "namePrefix" $name_prefix "scalar") (serialize-qp "namePrefixDefaultLangResults" $name_prefix_default_lang_results "scalar") (serialize-qp "asciiMode" $ascii_mode "scalar") (serialize-qp "hateoasMode" $hateoas_mode "scalar") (serialize-qp "languageCode" $language_code "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({country_id: (encode-path-segment $country_id)} | format pattern "/geo/countries/{country_id}/regions") $qp)
+  let full_url = (build-url $base ({country_id: (encode-path-segment $country_id)} | format pattern "/geo/countries/{country_id}/regions") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"namePrefix": $name_prefix, "namePrefixDefaultLangResults": $name_prefix_default_lang_results, "asciiMode": $ascii_mode, "hateoasMode": $hateoas_mode, "languageCode": $language_code, "limit": $limit, "offset": $offset, "sort": $qp_sort} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"namePrefix": $name_prefix, "namePrefixDefaultLangResults": $name_prefix_default_lang_results, "asciiMode": $ascii_mode, "hateoasMode": $hateoas_mode, "languageCode": $language_code, "limit": $limit, "offset": $offset, "sort": $qp_sort} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get region details
@@ -625,10 +764,21 @@ export def "geo-countries-regions get-using" [
   if ($country_id | is-empty) { error make --unspanned { msg: "path parameter 'countryId' must be non-empty" } }
   if ($region_code | is-empty) { error make --unspanned { msg: "path parameter 'regionCode' must be non-empty" } }
   let qp = [(serialize-qp "asciiMode" $ascii_mode "scalar") (serialize-qp "languageCode" $language_code "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({country_id: (encode-path-segment $country_id), region_code: (encode-path-segment $region_code)} | format pattern "/geo/countries/{country_id}/regions/{region_code}") $qp)
+  let full_url = (build-url $base ({country_id: (encode-path-segment $country_id), region_code: (encode-path-segment $region_code)} | format pattern "/geo/countries/{country_id}/regions/{region_code}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"asciiMode": $ascii_mode, "languageCode": $language_code} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"asciiMode": $ascii_mode, "languageCode": $language_code} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Find country region administrative divisions
@@ -665,10 +815,21 @@ export def "geo-countries-regions-admin-divisions find-using-get" [
   if ($country_id | is-empty) { error make --unspanned { msg: "path parameter 'countryId' must be non-empty" } }
   if ($region_code | is-empty) { error make --unspanned { msg: "path parameter 'regionCode' must be non-empty" } }
   let qp = [(serialize-qp "minPopulation" $min_population "scalar") (serialize-qp "maxPopulation" $max_population "scalar") (serialize-qp "namePrefix" $name_prefix "scalar") (serialize-qp "namePrefixDefaultLangResults" $name_prefix_default_lang_results "scalar") (serialize-qp "timeZoneIds" $time_zone_ids "scalar") (serialize-qp "asciiMode" $ascii_mode "scalar") (serialize-qp "hateoasMode" $hateoas_mode "scalar") (serialize-qp "languageCode" $language_code "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "includeDeleted" $include_deleted "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({country_id: (encode-path-segment $country_id), region_code: (encode-path-segment $region_code)} | format pattern "/geo/countries/{country_id}/regions/{region_code}/adminDivisions") $qp)
+  let full_url = (build-url $base ({country_id: (encode-path-segment $country_id), region_code: (encode-path-segment $region_code)} | format pattern "/geo/countries/{country_id}/regions/{region_code}/adminDivisions") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"minPopulation": $min_population, "maxPopulation": $max_population, "namePrefix": $name_prefix, "namePrefixDefaultLangResults": $name_prefix_default_lang_results, "timeZoneIds": $time_zone_ids, "asciiMode": $ascii_mode, "hateoasMode": $hateoas_mode, "languageCode": $language_code, "limit": $limit, "offset": $offset, "sort": $qp_sort, "includeDeleted": $include_deleted} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"minPopulation": $min_population, "maxPopulation": $max_population, "namePrefix": $name_prefix, "namePrefixDefaultLangResults": $name_prefix_default_lang_results, "timeZoneIds": $time_zone_ids, "asciiMode": $ascii_mode, "hateoasMode": $hateoas_mode, "languageCode": $language_code, "limit": $limit, "offset": $offset, "sort": $qp_sort, "includeDeleted": $include_deleted} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Find country region cities
@@ -706,10 +867,21 @@ export def "geo-countries-regions-cities find-using-get" [
   if ($country_id | is-empty) { error make --unspanned { msg: "path parameter 'countryId' must be non-empty" } }
   if ($region_code | is-empty) { error make --unspanned { msg: "path parameter 'regionCode' must be non-empty" } }
   let qp = [(serialize-qp "minPopulation" $min_population "scalar") (serialize-qp "maxPopulation" $max_population "scalar") (serialize-qp "namePrefix" $name_prefix "scalar") (serialize-qp "namePrefixDefaultLangResults" $name_prefix_default_lang_results "scalar") (serialize-qp "timeZoneIds" $time_zone_ids "scalar") (serialize-qp "types" $types "scalar") (serialize-qp "asciiMode" $ascii_mode "scalar") (serialize-qp "hateoasMode" $hateoas_mode "scalar") (serialize-qp "languageCode" $language_code "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "includeDeleted" $include_deleted "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({country_id: (encode-path-segment $country_id), region_code: (encode-path-segment $region_code)} | format pattern "/geo/countries/{country_id}/regions/{region_code}/cities") $qp)
+  let full_url = (build-url $base ({country_id: (encode-path-segment $country_id), region_code: (encode-path-segment $region_code)} | format pattern "/geo/countries/{country_id}/regions/{region_code}/cities") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"minPopulation": $min_population, "maxPopulation": $max_population, "namePrefix": $name_prefix, "namePrefixDefaultLangResults": $name_prefix_default_lang_results, "timeZoneIds": $time_zone_ids, "types": $types, "asciiMode": $ascii_mode, "hateoasMode": $hateoas_mode, "languageCode": $language_code, "limit": $limit, "offset": $offset, "sort": $qp_sort, "includeDeleted": $include_deleted} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"minPopulation": $min_population, "maxPopulation": $max_population, "namePrefix": $name_prefix, "namePrefixDefaultLangResults": $name_prefix_default_lang_results, "timeZoneIds": $time_zone_ids, "types": $types, "asciiMode": $ascii_mode, "hateoasMode": $hateoas_mode, "languageCode": $language_code, "limit": $limit, "offset": $offset, "sort": $qp_sort, "includeDeleted": $include_deleted} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Find cities near location
@@ -749,10 +921,21 @@ export def "geo-locations-nearby-cities find-near-using-get" [
   let base = ($base_url | default $BASE_URL)
   if ($location_id | is-empty) { error make --unspanned { msg: "path parameter 'locationId' must be non-empty" } }
   let qp = [(serialize-qp "radius" $radius "scalar") (serialize-qp "distanceUnit" $distance_unit "scalar") (serialize-qp "countryIds" $country_ids "scalar") (serialize-qp "excludedCountryIds" $excluded_country_ids "scalar") (serialize-qp "minPopulation" $min_population "scalar") (serialize-qp "maxPopulation" $max_population "scalar") (serialize-qp "namePrefix" $name_prefix "scalar") (serialize-qp "namePrefixDefaultLangResults" $name_prefix_default_lang_results "scalar") (serialize-qp "timeZoneIds" $time_zone_ids "scalar") (serialize-qp "types" $types "scalar") (serialize-qp "asciiMode" $ascii_mode "scalar") (serialize-qp "hateoasMode" $hateoas_mode "scalar") (serialize-qp "languageCode" $language_code "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "includeDeleted" $include_deleted "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({location_id: (encode-path-segment $location_id)} | format pattern "/geo/locations/{location_id}/nearbyCities") $qp)
+  let full_url = (build-url $base ({location_id: (encode-path-segment $location_id)} | format pattern "/geo/locations/{location_id}/nearbyCities") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"radius": $radius, "distanceUnit": $distance_unit, "countryIds": $country_ids, "excludedCountryIds": $excluded_country_ids, "minPopulation": $min_population, "maxPopulation": $max_population, "namePrefix": $name_prefix, "namePrefixDefaultLangResults": $name_prefix_default_lang_results, "timeZoneIds": $time_zone_ids, "types": $types, "asciiMode": $ascii_mode, "hateoasMode": $hateoas_mode, "languageCode": $language_code, "limit": $limit, "offset": $offset, "sort": $qp_sort, "includeDeleted": $include_deleted} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"radius": $radius, "distanceUnit": $distance_unit, "countryIds": $country_ids, "excludedCountryIds": $excluded_country_ids, "minPopulation": $min_population, "maxPopulation": $max_population, "namePrefix": $name_prefix, "namePrefixDefaultLangResults": $name_prefix_default_lang_results, "timeZoneIds": $time_zone_ids, "types": $types, "asciiMode": $ascii_mode, "hateoasMode": $hateoas_mode, "languageCode": $language_code, "limit": $limit, "offset": $offset, "sort": $qp_sort, "includeDeleted": $include_deleted} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Find divisions near location
@@ -791,10 +974,21 @@ export def "geo-locations-nearby-divisions find-near-using-get" [
   let base = ($base_url | default $BASE_URL)
   if ($location_id | is-empty) { error make --unspanned { msg: "path parameter 'locationId' must be non-empty" } }
   let qp = [(serialize-qp "radius" $radius "scalar") (serialize-qp "distanceUnit" $distance_unit "scalar") (serialize-qp "countryIds" $country_ids "scalar") (serialize-qp "excludedCountryIds" $excluded_country_ids "scalar") (serialize-qp "minPopulation" $min_population "scalar") (serialize-qp "maxPopulation" $max_population "scalar") (serialize-qp "namePrefix" $name_prefix "scalar") (serialize-qp "namePrefixDefaultLangResults" $name_prefix_default_lang_results "scalar") (serialize-qp "timeZoneIds" $time_zone_ids "scalar") (serialize-qp "asciiMode" $ascii_mode "scalar") (serialize-qp "hateoasMode" $hateoas_mode "scalar") (serialize-qp "languageCode" $language_code "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "includeDeleted" $include_deleted "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({location_id: (encode-path-segment $location_id)} | format pattern "/geo/locations/{location_id}/nearbyDivisions") $qp)
+  let full_url = (build-url $base ({location_id: (encode-path-segment $location_id)} | format pattern "/geo/locations/{location_id}/nearbyDivisions") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"radius": $radius, "distanceUnit": $distance_unit, "countryIds": $country_ids, "excludedCountryIds": $excluded_country_ids, "minPopulation": $min_population, "maxPopulation": $max_population, "namePrefix": $name_prefix, "namePrefixDefaultLangResults": $name_prefix_default_lang_results, "timeZoneIds": $time_zone_ids, "asciiMode": $ascii_mode, "hateoasMode": $hateoas_mode, "languageCode": $language_code, "limit": $limit, "offset": $offset, "sort": $qp_sort, "includeDeleted": $include_deleted} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"radius": $radius, "distanceUnit": $distance_unit, "countryIds": $country_ids, "excludedCountryIds": $excluded_country_ids, "minPopulation": $min_population, "maxPopulation": $max_population, "namePrefix": $name_prefix, "namePrefixDefaultLangResults": $name_prefix_default_lang_results, "timeZoneIds": $time_zone_ids, "asciiMode": $ascii_mode, "hateoasMode": $hateoas_mode, "languageCode": $language_code, "limit": $limit, "offset": $offset, "sort": $qp_sort, "includeDeleted": $include_deleted} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Find currencies
@@ -819,10 +1013,21 @@ export def "locale-currencies get-using" [
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "countryId" $country_id "scalar") (serialize-qp "hateoasMode" $hateoas_mode "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/locale/currencies" $qp)
+  let full_url = (build-url $base "/locale/currencies" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"countryId": $country_id, "hateoasMode": $hateoas_mode, "limit": $limit, "offset": $offset} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"countryId": $country_id, "hateoasMode": $hateoas_mode, "limit": $limit, "offset": $offset} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get languages
@@ -846,10 +1051,21 @@ export def "locale-languages get-using" [
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "hateoasMode" $hateoas_mode "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/locale/languages" $qp)
+  let full_url = (build-url $base "/locale/languages" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"hateoasMode": $hateoas_mode, "limit": $limit, "offset": $offset} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"hateoasMode": $hateoas_mode, "limit": $limit, "offset": $offset} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get locales
@@ -873,10 +1089,21 @@ export def "locale-locales get-using" [
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "hateoasMode" $hateoas_mode "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/locale/locales" $qp)
+  let full_url = (build-url $base "/locale/locales" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"hateoasMode": $hateoas_mode, "limit": $limit, "offset": $offset} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"hateoasMode": $hateoas_mode, "limit": $limit, "offset": $offset} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get time-zones
@@ -900,10 +1127,21 @@ export def "locale-timezones get-using" [
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "hateoasMode" $hateoas_mode "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/locale/timezones" $qp)
+  let full_url = (build-url $base "/locale/timezones" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"hateoasMode": $hateoas_mode, "limit": $limit, "offset": $offset} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"hateoasMode": $hateoas_mode, "limit": $limit, "offset": $offset} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get time-zone
@@ -925,10 +1163,21 @@ export def "locale-timezones get-time-zone-using" [
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-key"))
   let base = ($base_url | default $BASE_URL)
   if ($zone_id | is-empty) { error make --unspanned { msg: "path parameter 'zoneId' must be non-empty" } }
-  let full_url = (build-url $base ({zone_id: (encode-path-segment $zone_id)} | format pattern "/locale/timezones/{zone_id}"))
+  let full_url = (build-url $base ({zone_id: (encode-path-segment $zone_id)} | format pattern "/locale/timezones/{zone_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get time-zone date-time
@@ -950,10 +1199,21 @@ export def "locale-timezones-date-time get-zone-using" [
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-key"))
   let base = ($base_url | default $BASE_URL)
   if ($zone_id | is-empty) { error make --unspanned { msg: "path parameter 'zoneId' must be non-empty" } }
-  let full_url = (build-url $base ({zone_id: (encode-path-segment $zone_id)} | format pattern "/locale/timezones/{zone_id}/dateTime"))
+  let full_url = (build-url $base ({zone_id: (encode-path-segment $zone_id)} | format pattern "/locale/timezones/{zone_id}/dateTime") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get time-zone time
@@ -975,8 +1235,19 @@ export def "locale-timezones-time get-zone-using" [
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-key"))
   let base = ($base_url | default $BASE_URL)
   if ($zone_id | is-empty) { error make --unspanned { msg: "path parameter 'zoneId' must be non-empty" } }
-  let full_url = (build-url $base ({zone_id: (encode-path-segment $zone_id)} | format pattern "/locale/timezones/{zone_id}/time"))
+  let full_url = (build-url $base ({zone_id: (encode-path-segment $zone_id)} | format pattern "/locale/timezones/{zone_id}/time") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }

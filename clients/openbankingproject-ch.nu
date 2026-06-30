@@ -8,7 +8,7 @@ const BASE_URL = "https://api.dev.openbankingproject.ch"
 # `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
 # where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o SWISS_NEXTGEN_BANKING_API_FRAMEWORK_TOKEN | default "" }
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o SWISS_NEXTGEN_BANKING_API_FRAMEWORK_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
@@ -41,14 +41,11 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
-# Trick: `url encode --all` over-encodes, then we decode the four unreserved
-# punctuation chars back. Pre-existing %XX sequences in the input survive
-# because `url encode --all` first turns their % into %25.
 def encode-path-segment [v: any]: nothing -> string {
   $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
-# Serialize an array-typed path parameter (issue 49.A). OpenAPI 3 `style: simple`
+# Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
 # (the default for path params) and Swagger 2 `collectionFormat: csv` both join
 # the elements with a literal comma WITHIN the single path segment, each element
 # RFC-3986-encoded individually (so a comma inside an element stays %2C). Without
@@ -59,51 +56,57 @@ def encode-path-array [v: any]: nothing -> string {
   if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
 }
 
-# Build URL from base, path, and optional query string
-def build-url [base: string, path: string, query?: string]: nothing -> string {
+# Build the request URL from base, path, and any number of pre-encoded query
+# fragments (param serializer output and/or the auth query). Each fragment is an
+# `&`-joinable `key=value` string already percent-encoded by its producer; empty
+# fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
+# delimiters are hand-spliced — and any query already on the base URL is merged in.
+def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
   let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
-  let result = ($parsed | upsert path $full_path)
-  if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
+  let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
+  $parsed | upsert path $full_path | upsert query $query | url join
 }
 
-# Build the dry-run record returned by --dry-run. Shape:
-#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
-#    auth: {scheme, location}}
-# `meta` carries logical-form data (the query record by spec name, the pre-serialization
-# body) that do-request itself cannot reconstruct from its wire-format args.
-def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
-  let m = ($meta | default {})
-  {
-    dry_run: true
-    method: $method
-    url: $url
-    query: ($m | get -o query | default {})
-    headers: $auth.headers
-    body: ($m | get -o body)
-    content_type: $content_type
-    timeout: $timeout
-    auth: {scheme: $auth.scheme, location: $auth.location}
-  }
+# Success policy: did this response succeed? Single source of truth, consulted by
+# handle-response and the HEAD header-unwrap. Empty ok_codes means the spec listed
+# none, so fall back to < 400. Otherwise: any 2xx, plus documented success codes.
+def status-ok [status: int, ok_codes: list<int>]: nothing -> bool {
+  if ($ok_codes | is-empty) { $status < 400 } else { ($status >= 200 and $status < 300) or ($status in $ok_codes) }
 }
 
-# Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
-  let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
-  let timeout = ($max_time | default 30min)
-  let ct = ($content_type | default "application/json")
-  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
-  let resp = match $method {
-    "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
-  }
-  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
-  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
+# Unwrap a `--full` HTTP response into the user-facing value. Response arrives
+# via pipeline; ok_codes gates the error throw (see status-ok).
+def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: record -> any {
+  let resp = $in
+  if $allow_errors { return $resp }
+  if not (status-ok $resp.status $ok_codes) { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } }
+  if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
+  if $resp.status == 204 { return null }
+  $resp.body
+}
+
+# GET — bodyless, honours --raw
+def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+}
+
+# POST — body + content-type
+def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# PUT — body + content-type
+def send-put [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http put --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http put --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# DELETE — body via --data
+def send-delete [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http delete --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url } else { http delete --headers $req.headers --content-type $req.content_type --data $body --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url }
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 def base-url-completer [] { ["https://api.dev.openbankingproject.ch"] }
@@ -176,12 +179,23 @@ export def "accounts get-list" [
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "withBalance" $with_balance "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v1/accounts" $qp)
+  let full_url = (build-url $base "/v1/accounts" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Request-ID": $x_request_id, "Digest": $digest, "Signature": $signature, "TPP-Signature-Certificate": $tpp_signature_certificate, "Consent-ID": $consent_id, "PSU-IP-Address": $psu_ip_address, "PSU-IP-Port": $psu_ip_port, "PSU-Accept": $psu_accept, "PSU-Accept-Charset": $psu_accept_charset, "PSU-Accept-Encoding": $psu_accept_encoding, "PSU-Accept-Language": $psu_accept_language, "PSU-User-Agent": $psu_user_agent, "PSU-Http-Method": $psu_http_method, "PSU-Device-ID": $psu_device_id, "PSU-Geo-Location": $psu_geo_location} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"withBalance": $with_balance} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"withBalance": $with_balance} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Read account details
@@ -220,12 +234,23 @@ export def "accounts get-details" [
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'account-id' must be non-empty" } }
   let qp = [(serialize-qp "withBalance" $with_balance "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v1/accounts/{account_id}") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v1/accounts/{account_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Request-ID": $x_request_id, "Digest": $digest, "Signature": $signature, "TPP-Signature-Certificate": $tpp_signature_certificate, "Consent-ID": $consent_id, "PSU-IP-Address": $psu_ip_address, "PSU-IP-Port": $psu_ip_port, "PSU-Accept": $psu_accept, "PSU-Accept-Charset": $psu_accept_charset, "PSU-Accept-Encoding": $psu_accept_encoding, "PSU-Accept-Language": $psu_accept_language, "PSU-User-Agent": $psu_user_agent, "PSU-Http-Method": $psu_http_method, "PSU-Device-ID": $psu_device_id, "PSU-Geo-Location": $psu_geo_location} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"withBalance": $with_balance} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"withBalance": $with_balance} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Read balance
@@ -262,12 +287,23 @@ export def "accounts-balances get" [
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'account-id' must be non-empty" } }
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v1/accounts/{account_id}/balances"))
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v1/accounts/{account_id}/balances") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Request-ID": $x_request_id, "Digest": $digest, "Signature": $signature, "TPP-Signature-Certificate": $tpp_signature_certificate, "Consent-ID": $consent_id, "PSU-IP-Address": $psu_ip_address, "PSU-IP-Port": $psu_ip_port, "PSU-Accept": $psu_accept, "PSU-Accept-Charset": $psu_accept_charset, "PSU-Accept-Encoding": $psu_accept_encoding, "PSU-Accept-Language": $psu_accept_language, "PSU-User-Agent": $psu_user_agent, "PSU-Http-Method": $psu_http_method, "PSU-Device-ID": $psu_device_id, "PSU-Geo-Location": $psu_geo_location} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Read transaction list of an account
@@ -311,12 +347,23 @@ export def "accounts-transactions get-list" [
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'account-id' must be non-empty" } }
   let qp = [(serialize-qp "dateFrom" $date_from "scalar") (serialize-qp "dateTo" $date_to "scalar") (serialize-qp "entryReferenceFrom" $entry_reference_from "scalar") (serialize-qp "bookingStatus" $booking_status "scalar") (serialize-qp "deltaList" $delta_list "scalar") (serialize-qp "withBalance" $with_balance "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v1/accounts/{account_id}/transactions") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v1/accounts/{account_id}/transactions") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Request-ID": $x_request_id, "Digest": $digest, "Signature": $signature, "TPP-Signature-Certificate": $tpp_signature_certificate, "Consent-ID": $consent_id, "PSU-IP-Address": $psu_ip_address, "PSU-IP-Port": $psu_ip_port, "PSU-Accept": $psu_accept, "PSU-Accept-Charset": $psu_accept_charset, "PSU-Accept-Encoding": $psu_accept_encoding, "PSU-Accept-Language": $psu_accept_language, "PSU-User-Agent": $psu_user_agent, "PSU-Http-Method": $psu_http_method, "PSU-Device-ID": $psu_device_id, "PSU-Geo-Location": $psu_geo_location} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"dateFrom": $date_from, "dateTo": $date_to, "entryReferenceFrom": $entry_reference_from, "bookingStatus": $booking_status, "deltaList": $delta_list, "withBalance": $with_balance} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"dateFrom": $date_from, "dateTo": $date_to, "entryReferenceFrom": $entry_reference_from, "bookingStatus": $booking_status, "deltaList": $delta_list, "withBalance": $with_balance} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Read transaction details
@@ -355,12 +402,23 @@ export def "accounts-transactions get-details" [
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'account-id' must be non-empty" } }
   if ($transaction_id | is-empty) { error make --unspanned { msg: "path parameter 'transactionId' must be non-empty" } }
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), transaction_id: (encode-path-segment $transaction_id)} | format pattern "/v1/accounts/{account_id}/transactions/{transaction_id}"))
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), transaction_id: (encode-path-segment $transaction_id)} | format pattern "/v1/accounts/{account_id}/transactions/{transaction_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Request-ID": $x_request_id, "Digest": $digest, "Signature": $signature, "TPP-Signature-Certificate": $tpp_signature_certificate, "Consent-ID": $consent_id, "PSU-IP-Address": $psu_ip_address, "PSU-IP-Port": $psu_ip_port, "PSU-Accept": $psu_accept, "PSU-Accept-Charset": $psu_accept_charset, "PSU-Accept-Encoding": $psu_accept_encoding, "PSU-Accept-Language": $psu_accept_language, "PSU-User-Agent": $psu_user_agent, "PSU-Http-Method": $psu_http_method, "PSU-Device-ID": $psu_device_id, "PSU-Geo-Location": $psu_geo_location} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create consent
@@ -412,14 +470,25 @@ export def "consents create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v1/consents")
+  let full_url = (build-url $base "/v1/consents" $auth.query)
   let req_body = {"access": $access, "combinedServiceIndicator": $combined_service_indicator, "frequencyPerDay": $frequency_per_day, "recurringIndicator": $recurring_indicator, "validUntil": $valid_until} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Request-ID": $x_request_id, "Digest": $digest, "Signature": $signature, "TPP-Signature-Certificate": $tpp_signature_certificate, "PSU-ID": $psu_id, "PSU-ID-Type": $psu_id_type, "PSU-Corporate-ID": $psu_corporate_id, "PSU-Corporate-ID-Type": $psu_corporate_id_type, "TPP-Redirect-Preferred": $tpp_redirect_preferred, "TPP-Redirect-URI": $tpp_redirect_uri, "TPP-Nok-Redirect-URI": $tpp_nok_redirect_uri, "TPP-Explicit-Authorisation-Preferred": $tpp_explicit_authorisation_preferred, "TPP-Brand-Logging-Information": $tpp_brand_logging_information, "TPP-Notification-URI": $tpp_notification_uri, "TPP-Notification-Content-Preferred": $tpp_notification_content_preferred, "PSU-IP-Port": $psu_ip_port, "PSU-IP-Address": $psu_ip_address, "PSU-Accept": $psu_accept, "PSU-Accept-Charset": $psu_accept_charset, "PSU-Accept-Encoding": $psu_accept_encoding, "PSU-Accept-Language": $psu_accept_language, "PSU-User-Agent": $psu_user_agent, "PSU-Http-Method": $psu_http_method, "PSU-Device-ID": $psu_device_id, "PSU-Geo-Location": $psu_geo_location} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Delete Consent
@@ -455,12 +524,23 @@ export def "consents delete" [
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($consent_id | is-empty) { error make --unspanned { msg: "path parameter 'consentId' must be non-empty" } }
-  let full_url = (build-url $base ({consent_id: (encode-path-segment $consent_id)} | format pattern "/v1/consents/{consent_id}"))
+  let full_url = (build-url $base ({consent_id: (encode-path-segment $consent_id)} | format pattern "/v1/consents/{consent_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Request-ID": $x_request_id, "Digest": $digest, "Signature": $signature, "TPP-Signature-Certificate": $tpp_signature_certificate, "PSU-IP-Address": $psu_ip_address, "PSU-IP-Port": $psu_ip_port, "PSU-Accept": $psu_accept, "PSU-Accept-Charset": $psu_accept_charset, "PSU-Accept-Encoding": $psu_accept_encoding, "PSU-Accept-Language": $psu_accept_language, "PSU-User-Agent": $psu_user_agent, "PSU-Http-Method": $psu_http_method, "PSU-Device-ID": $psu_device_id, "PSU-Geo-Location": $psu_geo_location} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Get consent request
@@ -496,12 +576,23 @@ export def "consents get-information" [
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($consent_id | is-empty) { error make --unspanned { msg: "path parameter 'consentId' must be non-empty" } }
-  let full_url = (build-url $base ({consent_id: (encode-path-segment $consent_id)} | format pattern "/v1/consents/{consent_id}"))
+  let full_url = (build-url $base ({consent_id: (encode-path-segment $consent_id)} | format pattern "/v1/consents/{consent_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Request-ID": $x_request_id, "Digest": $digest, "Signature": $signature, "TPP-Signature-Certificate": $tpp_signature_certificate, "PSU-IP-Address": $psu_ip_address, "PSU-IP-Port": $psu_ip_port, "PSU-Accept": $psu_accept, "PSU-Accept-Charset": $psu_accept_charset, "PSU-Accept-Encoding": $psu_accept_encoding, "PSU-Accept-Language": $psu_accept_language, "PSU-User-Agent": $psu_user_agent, "PSU-Http-Method": $psu_http_method, "PSU-Device-ID": $psu_device_id, "PSU-Geo-Location": $psu_geo_location} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get consent authorisation sub-resources request
@@ -537,12 +628,23 @@ export def "consents-authorisations get" [
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($consent_id | is-empty) { error make --unspanned { msg: "path parameter 'consentId' must be non-empty" } }
-  let full_url = (build-url $base ({consent_id: (encode-path-segment $consent_id)} | format pattern "/v1/consents/{consent_id}/authorisations"))
+  let full_url = (build-url $base ({consent_id: (encode-path-segment $consent_id)} | format pattern "/v1/consents/{consent_id}/authorisations") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Request-ID": $x_request_id, "Digest": $digest, "Signature": $signature, "TPP-Signature-Certificate": $tpp_signature_certificate, "PSU-IP-Address": $psu_ip_address, "PSU-IP-Port": $psu_ip_port, "PSU-Accept": $psu_accept, "PSU-Accept-Charset": $psu_accept_charset, "PSU-Accept-Encoding": $psu_accept_encoding, "PSU-Accept-Language": $psu_accept_language, "PSU-User-Agent": $psu_user_agent, "PSU-Http-Method": $psu_http_method, "PSU-Device-ID": $psu_device_id, "PSU-Geo-Location": $psu_geo_location} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Start the authorisation process for a consent
@@ -592,14 +694,25 @@ export def "consents-authorisations start" [
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($consent_id | is-empty) { error make --unspanned { msg: "path parameter 'consentId' must be non-empty" } }
-  let full_url = (build-url $base ({consent_id: (encode-path-segment $consent_id)} | format pattern "/v1/consents/{consent_id}/authorisations"))
+  let full_url = (build-url $base ({consent_id: (encode-path-segment $consent_id)} | format pattern "/v1/consents/{consent_id}/authorisations") $auth.query)
   let req_body = {"psuData": $psu_data, "authenticationMethodId": $authentication_method_id, "scaAuthenticationData": $sca_authentication_data} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Request-ID": $x_request_id, "Digest": $digest, "Signature": $signature, "TPP-Signature-Certificate": $tpp_signature_certificate, "PSU-ID": $psu_id, "PSU-ID-Type": $psu_id_type, "PSU-Corporate-ID": $psu_corporate_id, "PSU-Corporate-ID-Type": $psu_corporate_id_type, "TPP-Redirect-Preferred": $tpp_redirect_preferred, "TPP-Redirect-URI": $tpp_redirect_uri, "TPP-Nok-Redirect-URI": $tpp_nok_redirect_uri, "TPP-Notification-URI": $tpp_notification_uri, "TPP-Notification-Content-Preferred": $tpp_notification_content_preferred, "PSU-IP-Address": $psu_ip_address, "PSU-IP-Port": $psu_ip_port, "PSU-Accept": $psu_accept, "PSU-Accept-Charset": $psu_accept_charset, "PSU-Accept-Encoding": $psu_accept_encoding, "PSU-Accept-Language": $psu_accept_language, "PSU-User-Agent": $psu_user_agent, "PSU-Http-Method": $psu_http_method, "PSU-Device-ID": $psu_device_id, "PSU-Geo-Location": $psu_geo_location} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Read the SCA status of the consent authorisation
@@ -637,12 +750,23 @@ export def "consents-authorisations get-sca-status" [
   let base = ($base_url | default $BASE_URL)
   if ($consent_id | is-empty) { error make --unspanned { msg: "path parameter 'consentId' must be non-empty" } }
   if ($authorisation_id | is-empty) { error make --unspanned { msg: "path parameter 'authorisationId' must be non-empty" } }
-  let full_url = (build-url $base ({consent_id: (encode-path-segment $consent_id), authorisation_id: (encode-path-segment $authorisation_id)} | format pattern "/v1/consents/{consent_id}/authorisations/{authorisation_id}"))
+  let full_url = (build-url $base ({consent_id: (encode-path-segment $consent_id), authorisation_id: (encode-path-segment $authorisation_id)} | format pattern "/v1/consents/{consent_id}/authorisations/{authorisation_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Request-ID": $x_request_id, "Digest": $digest, "Signature": $signature, "TPP-Signature-Certificate": $tpp_signature_certificate, "PSU-IP-Address": $psu_ip_address, "PSU-IP-Port": $psu_ip_port, "PSU-Accept": $psu_accept, "PSU-Accept-Charset": $psu_accept_charset, "PSU-Accept-Encoding": $psu_accept_encoding, "PSU-Accept-Language": $psu_accept_language, "PSU-User-Agent": $psu_user_agent, "PSU-Http-Method": $psu_http_method, "PSU-Device-ID": $psu_device_id, "PSU-Geo-Location": $psu_geo_location} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update PSU Data for consents
@@ -690,14 +814,25 @@ export def "consents-authorisations update-psu-data" [
   let base = ($base_url | default $BASE_URL)
   if ($consent_id | is-empty) { error make --unspanned { msg: "path parameter 'consentId' must be non-empty" } }
   if ($authorisation_id | is-empty) { error make --unspanned { msg: "path parameter 'authorisationId' must be non-empty" } }
-  let full_url = (build-url $base ({consent_id: (encode-path-segment $consent_id), authorisation_id: (encode-path-segment $authorisation_id)} | format pattern "/v1/consents/{consent_id}/authorisations/{authorisation_id}"))
+  let full_url = (build-url $base ({consent_id: (encode-path-segment $consent_id), authorisation_id: (encode-path-segment $authorisation_id)} | format pattern "/v1/consents/{consent_id}/authorisations/{authorisation_id}") $auth.query)
   let req_body = {"psuData": $psu_data, "authenticationMethodId": $authentication_method_id, "scaAuthenticationData": $sca_authentication_data, "confirmationCode": $confirmation_code} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Request-ID": $x_request_id, "Digest": $digest, "Signature": $signature, "TPP-Signature-Certificate": $tpp_signature_certificate, "PSU-ID": $psu_id, "PSU-ID-Type": $psu_id_type, "PSU-Corporate-ID": $psu_corporate_id, "PSU-Corporate-ID-Type": $psu_corporate_id_type, "PSU-IP-Address": $psu_ip_address, "PSU-IP-Port": $psu_ip_port, "PSU-Accept": $psu_accept, "PSU-Accept-Charset": $psu_accept_charset, "PSU-Accept-Encoding": $psu_accept_encoding, "PSU-Accept-Language": $psu_accept_language, "PSU-User-Agent": $psu_user_agent, "PSU-Http-Method": $psu_http_method, "PSU-Device-ID": $psu_device_id, "PSU-Geo-Location": $psu_geo_location} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Consent status request
@@ -733,12 +868,23 @@ export def "consents-status get" [
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($consent_id | is-empty) { error make --unspanned { msg: "path parameter 'consentId' must be non-empty" } }
-  let full_url = (build-url $base ({consent_id: (encode-path-segment $consent_id)} | format pattern "/v1/consents/{consent_id}/status"))
+  let full_url = (build-url $base ({consent_id: (encode-path-segment $consent_id)} | format pattern "/v1/consents/{consent_id}/status") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Request-ID": $x_request_id, "Digest": $digest, "Signature": $signature, "TPP-Signature-Certificate": $tpp_signature_certificate, "PSU-IP-Address": $psu_ip_address, "PSU-IP-Port": $psu_ip_port, "PSU-Accept": $psu_accept, "PSU-Accept-Charset": $psu_accept_charset, "PSU-Accept-Encoding": $psu_accept_encoding, "PSU-Accept-Language": $psu_accept_language, "PSU-User-Agent": $psu_user_agent, "PSU-Http-Method": $psu_http_method, "PSU-Device-ID": $psu_device_id, "PSU-Geo-Location": $psu_geo_location} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Confirmation of funds request
@@ -770,14 +916,25 @@ export def "funds-confirmations check-availability" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v1/funds-confirmations")
+  let full_url = (build-url $base "/v1/funds-confirmations" $auth.query)
   let req_body = {"account": $account, "cardNumber": $card_number, "instructedAmount": $instructed_amount, "payee": $payee} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Request-ID": $x_request_id, "Authorization": $authorization, "Digest": $digest, "Signature": $signature, "TPP-Signature-Certificate": $tpp_signature_certificate} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Create a signing basket resource
@@ -825,14 +982,25 @@ export def "signing-baskets create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v1/signing-baskets")
+  let full_url = (build-url $base "/v1/signing-baskets" $auth.query)
   let req_body = {"consentIds": $consent_ids, "paymentIds": $payment_ids} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Request-ID": $x_request_id, "Digest": $digest, "Signature": $signature, "TPP-Signature-Certificate": $tpp_signature_certificate, "PSU-ID": $psu_id, "PSU-ID-Type": $psu_id_type, "PSU-Corporate-ID": $psu_corporate_id, "PSU-Corporate-ID-Type": $psu_corporate_id_type, "Consent-ID": $consent_id, "PSU-IP-Address": $psu_ip_address, "TPP-Redirect-Preferred": $tpp_redirect_preferred, "TPP-Redirect-URI": $tpp_redirect_uri, "TPP-Nok-Redirect-URI": $tpp_nok_redirect_uri, "TPP-Explicit-Authorisation-Preferred": $tpp_explicit_authorisation_preferred, "TPP-Notification-URI": $tpp_notification_uri, "TPP-Notification-Content-Preferred": $tpp_notification_content_preferred, "PSU-IP-Port": $psu_ip_port, "PSU-Accept": $psu_accept, "PSU-Accept-Charset": $psu_accept_charset, "PSU-Accept-Encoding": $psu_accept_encoding, "PSU-Accept-Language": $psu_accept_language, "PSU-User-Agent": $psu_user_agent, "PSU-Http-Method": $psu_http_method, "PSU-Device-ID": $psu_device_id, "PSU-Geo-Location": $psu_geo_location} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Delete the signing basket
@@ -868,12 +1036,23 @@ export def "signing-baskets delete" [
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($basket_id | is-empty) { error make --unspanned { msg: "path parameter 'basketId' must be non-empty" } }
-  let full_url = (build-url $base ({basket_id: (encode-path-segment $basket_id)} | format pattern "/v1/signing-baskets/{basket_id}"))
+  let full_url = (build-url $base ({basket_id: (encode-path-segment $basket_id)} | format pattern "/v1/signing-baskets/{basket_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Request-ID": $x_request_id, "Digest": $digest, "Signature": $signature, "TPP-Signature-Certificate": $tpp_signature_certificate, "PSU-IP-Address": $psu_ip_address, "PSU-IP-Port": $psu_ip_port, "PSU-Accept": $psu_accept, "PSU-Accept-Charset": $psu_accept_charset, "PSU-Accept-Encoding": $psu_accept_encoding, "PSU-Accept-Language": $psu_accept_language, "PSU-User-Agent": $psu_user_agent, "PSU-Http-Method": $psu_http_method, "PSU-Device-ID": $psu_device_id, "PSU-Geo-Location": $psu_geo_location} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Returns the content of an signing basket object
@@ -909,12 +1088,23 @@ export def "signing-baskets get" [
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($basket_id | is-empty) { error make --unspanned { msg: "path parameter 'basketId' must be non-empty" } }
-  let full_url = (build-url $base ({basket_id: (encode-path-segment $basket_id)} | format pattern "/v1/signing-baskets/{basket_id}"))
+  let full_url = (build-url $base ({basket_id: (encode-path-segment $basket_id)} | format pattern "/v1/signing-baskets/{basket_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Request-ID": $x_request_id, "Digest": $digest, "Signature": $signature, "TPP-Signature-Certificate": $tpp_signature_certificate, "PSU-IP-Address": $psu_ip_address, "PSU-IP-Port": $psu_ip_port, "PSU-Accept": $psu_accept, "PSU-Accept-Charset": $psu_accept_charset, "PSU-Accept-Encoding": $psu_accept_encoding, "PSU-Accept-Language": $psu_accept_language, "PSU-User-Agent": $psu_user_agent, "PSU-Http-Method": $psu_http_method, "PSU-Device-ID": $psu_device_id, "PSU-Geo-Location": $psu_geo_location} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get signing basket authorisation sub-resources request
@@ -950,12 +1140,23 @@ export def "signing-baskets-authorisations get" [
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($basket_id | is-empty) { error make --unspanned { msg: "path parameter 'basketId' must be non-empty" } }
-  let full_url = (build-url $base ({basket_id: (encode-path-segment $basket_id)} | format pattern "/v1/signing-baskets/{basket_id}/authorisations"))
+  let full_url = (build-url $base ({basket_id: (encode-path-segment $basket_id)} | format pattern "/v1/signing-baskets/{basket_id}/authorisations") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Request-ID": $x_request_id, "Digest": $digest, "Signature": $signature, "TPP-Signature-Certificate": $tpp_signature_certificate, "PSU-IP-Address": $psu_ip_address, "PSU-IP-Port": $psu_ip_port, "PSU-Accept": $psu_accept, "PSU-Accept-Charset": $psu_accept_charset, "PSU-Accept-Encoding": $psu_accept_encoding, "PSU-Accept-Language": $psu_accept_language, "PSU-User-Agent": $psu_user_agent, "PSU-Http-Method": $psu_http_method, "PSU-Device-ID": $psu_device_id, "PSU-Geo-Location": $psu_geo_location} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Start the authorisation process for a signing basket
@@ -1005,14 +1206,25 @@ export def "signing-baskets-authorisations start" [
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($basket_id | is-empty) { error make --unspanned { msg: "path parameter 'basketId' must be non-empty" } }
-  let full_url = (build-url $base ({basket_id: (encode-path-segment $basket_id)} | format pattern "/v1/signing-baskets/{basket_id}/authorisations"))
+  let full_url = (build-url $base ({basket_id: (encode-path-segment $basket_id)} | format pattern "/v1/signing-baskets/{basket_id}/authorisations") $auth.query)
   let req_body = {"psuData": $psu_data, "authenticationMethodId": $authentication_method_id, "scaAuthenticationData": $sca_authentication_data} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Request-ID": $x_request_id, "Digest": $digest, "Signature": $signature, "TPP-Signature-Certificate": $tpp_signature_certificate, "PSU-ID": $psu_id, "PSU-ID-Type": $psu_id_type, "PSU-Corporate-ID": $psu_corporate_id, "PSU-Corporate-ID-Type": $psu_corporate_id_type, "TPP-Redirect-Preferred": $tpp_redirect_preferred, "TPP-Redirect-URI": $tpp_redirect_uri, "TPP-Nok-Redirect-URI": $tpp_nok_redirect_uri, "TPP-Notification-URI": $tpp_notification_uri, "TPP-Notification-Content-Preferred": $tpp_notification_content_preferred, "PSU-IP-Address": $psu_ip_address, "PSU-IP-Port": $psu_ip_port, "PSU-Accept": $psu_accept, "PSU-Accept-Charset": $psu_accept_charset, "PSU-Accept-Encoding": $psu_accept_encoding, "PSU-Accept-Language": $psu_accept_language, "PSU-User-Agent": $psu_user_agent, "PSU-Http-Method": $psu_http_method, "PSU-Device-ID": $psu_device_id, "PSU-Geo-Location": $psu_geo_location} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Read the SCA status of the signing basket authorisation
@@ -1050,12 +1262,23 @@ export def "signing-baskets-authorisations get-sca-status" [
   let base = ($base_url | default $BASE_URL)
   if ($basket_id | is-empty) { error make --unspanned { msg: "path parameter 'basketId' must be non-empty" } }
   if ($authorisation_id | is-empty) { error make --unspanned { msg: "path parameter 'authorisationId' must be non-empty" } }
-  let full_url = (build-url $base ({basket_id: (encode-path-segment $basket_id), authorisation_id: (encode-path-segment $authorisation_id)} | format pattern "/v1/signing-baskets/{basket_id}/authorisations/{authorisation_id}"))
+  let full_url = (build-url $base ({basket_id: (encode-path-segment $basket_id), authorisation_id: (encode-path-segment $authorisation_id)} | format pattern "/v1/signing-baskets/{basket_id}/authorisations/{authorisation_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Request-ID": $x_request_id, "Digest": $digest, "Signature": $signature, "TPP-Signature-Certificate": $tpp_signature_certificate, "PSU-IP-Address": $psu_ip_address, "PSU-IP-Port": $psu_ip_port, "PSU-Accept": $psu_accept, "PSU-Accept-Charset": $psu_accept_charset, "PSU-Accept-Encoding": $psu_accept_encoding, "PSU-Accept-Language": $psu_accept_language, "PSU-User-Agent": $psu_user_agent, "PSU-Http-Method": $psu_http_method, "PSU-Device-ID": $psu_device_id, "PSU-Geo-Location": $psu_geo_location} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update PSU data for signing basket
@@ -1103,14 +1326,25 @@ export def "signing-baskets-authorisations update-psu-data" [
   let base = ($base_url | default $BASE_URL)
   if ($basket_id | is-empty) { error make --unspanned { msg: "path parameter 'basketId' must be non-empty" } }
   if ($authorisation_id | is-empty) { error make --unspanned { msg: "path parameter 'authorisationId' must be non-empty" } }
-  let full_url = (build-url $base ({basket_id: (encode-path-segment $basket_id), authorisation_id: (encode-path-segment $authorisation_id)} | format pattern "/v1/signing-baskets/{basket_id}/authorisations/{authorisation_id}"))
+  let full_url = (build-url $base ({basket_id: (encode-path-segment $basket_id), authorisation_id: (encode-path-segment $authorisation_id)} | format pattern "/v1/signing-baskets/{basket_id}/authorisations/{authorisation_id}") $auth.query)
   let req_body = {"psuData": $psu_data, "authenticationMethodId": $authentication_method_id, "scaAuthenticationData": $sca_authentication_data, "confirmationCode": $confirmation_code} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Request-ID": $x_request_id, "Digest": $digest, "Signature": $signature, "TPP-Signature-Certificate": $tpp_signature_certificate, "PSU-ID": $psu_id, "PSU-ID-Type": $psu_id_type, "PSU-Corporate-ID": $psu_corporate_id, "PSU-Corporate-ID-Type": $psu_corporate_id_type, "PSU-IP-Address": $psu_ip_address, "PSU-IP-Port": $psu_ip_port, "PSU-Accept": $psu_accept, "PSU-Accept-Charset": $psu_accept_charset, "PSU-Accept-Encoding": $psu_accept_encoding, "PSU-Accept-Language": $psu_accept_language, "PSU-User-Agent": $psu_user_agent, "PSU-Http-Method": $psu_http_method, "PSU-Device-ID": $psu_device_id, "PSU-Geo-Location": $psu_geo_location} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Read the status of the signing basket
@@ -1150,12 +1384,23 @@ export def "signing-baskets-status get" [
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($basket_id | is-empty) { error make --unspanned { msg: "path parameter 'basketId' must be non-empty" } }
-  let full_url = (build-url $base ({basket_id: (encode-path-segment $basket_id)} | format pattern "/v1/signing-baskets/{basket_id}/status"))
+  let full_url = (build-url $base ({basket_id: (encode-path-segment $basket_id)} | format pattern "/v1/signing-baskets/{basket_id}/status") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Request-ID": $x_request_id, "Digest": $digest, "Signature": $signature, "TPP-Signature-Certificate": $tpp_signature_certificate, "PSU-ID": $psu_id, "PSU-ID-Type": $psu_id_type, "PSU-Corporate-ID": $psu_corporate_id, "PSU-Corporate-ID-Type": $psu_corporate_id_type, "PSU-IP-Address": $psu_ip_address, "PSU-IP-Port": $psu_ip_port, "PSU-Accept": $psu_accept, "PSU-Accept-Charset": $psu_accept_charset, "PSU-Accept-Encoding": $psu_accept_encoding, "PSU-Accept-Language": $psu_accept_language, "PSU-User-Agent": $psu_user_agent, "PSU-Http-Method": $psu_http_method, "PSU-Device-ID": $psu_device_id, "PSU-Geo-Location": $psu_geo_location} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Payment initiation request
@@ -1250,14 +1495,25 @@ export def "payment-initiation-service-pis create-initiate" [
   let base = ($base_url | default $BASE_URL)
   if ($payment_service | is-empty) { error make --unspanned { msg: "path parameter 'payment-service' must be non-empty" } }
   if ($payment_product | is-empty) { error make --unspanned { msg: "path parameter 'payment-product' must be non-empty" } }
-  let full_url = (build-url $base ({payment_service: (encode-path-segment $payment_service), payment_product: (encode-path-segment $payment_product)} | format pattern "/v1/{payment_service}/{payment_product}"))
+  let full_url = (build-url $base ({payment_service: (encode-path-segment $payment_service), payment_product: (encode-path-segment $payment_product)} | format pattern "/v1/{payment_service}/{payment_product}") $auth.query)
   let req_body = {"chargeBearer": $charge_bearer, "creditorAccount": $creditor_account, "creditorAddress": $creditor_address, "creditorAgent": $creditor_agent, "creditorAgentName": $creditor_agent_name, "creditorId": $creditor_id, "creditorName": $creditor_name, "creditorNameAndAddress": $creditor_name_and_address, "debtorAccount": $debtor_account, "debtorAgent": $debtor_agent, "debtorId": $debtor_id, "debtorName": $debtor_name, "endToEndIdentification": $end_to_end_identification, "equivalentAmount": $equivalent_amount, "exchangeRateInformation": $exchange_rate_information, "instructedAmount": $instructed_amount, "intermediaryAgent": $intermediary_agent, "purposeCode": $purpose_code, "remittanceInformationStructured": $remittance_information_structured, "remittanceInformationUnstructured": $remittance_information_unstructured, "requestedExecutionDate": $requested_execution_date, "serviceLevel": $service_level, "transactionCurrency": $transaction_currency, "ultimateCreditor": $ultimate_creditor, "ultimateDebtor": $ultimate_debtor, "dayOfExecution": $day_of_execution, "endDate": $end_date, "executionRule": $execution_rule, "frequency": $frequency, "startDate": $start_date, "batchBookingPreferred": $batch_booking_preferred, "payments": $payments, "requestedExecutionTime": $requested_execution_time} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Request-ID": $x_request_id, "Digest": $digest, "Signature": $signature, "TPP-Signature-Certificate": $tpp_signature_certificate, "PSU-ID": $psu_id, "PSU-ID-Type": $psu_id_type, "PSU-Corporate-ID": $psu_corporate_id, "PSU-Corporate-ID-Type": $psu_corporate_id_type, "Consent-ID": $consent_id, "PSU-IP-Address": $psu_ip_address, "TPP-Redirect-Preferred": $tpp_redirect_preferred, "TPP-Redirect-URI": $tpp_redirect_uri, "TPP-Nok-Redirect-URI": $tpp_nok_redirect_uri, "TPP-Explicit-Authorisation-Preferred": $tpp_explicit_authorisation_preferred, "TPP-Rejection-NoFunds-Preferred": $tpp_rejection_no_funds_preferred, "TPP-Brand-Logging-Information": $tpp_brand_logging_information, "TPP-Notification-URI": $tpp_notification_uri, "TPP-Notification-Content-Preferred": $tpp_notification_content_preferred, "PSU-IP-Port": $psu_ip_port, "PSU-Accept": $psu_accept, "PSU-Accept-Charset": $psu_accept_charset, "PSU-Accept-Encoding": $psu_accept_encoding, "PSU-Accept-Language": $psu_accept_language, "PSU-User-Agent": $psu_user_agent, "PSU-Http-Method": $psu_http_method, "PSU-Device-ID": $psu_device_id, "PSU-Geo-Location": $psu_geo_location} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Payment cancellation request
@@ -1301,12 +1557,23 @@ export def "payment-initiation-service-pis cancel" [
   if ($payment_service | is-empty) { error make --unspanned { msg: "path parameter 'payment-service' must be non-empty" } }
   if ($payment_product | is-empty) { error make --unspanned { msg: "path parameter 'payment-product' must be non-empty" } }
   if ($payment_id | is-empty) { error make --unspanned { msg: "path parameter 'paymentId' must be non-empty" } }
-  let full_url = (build-url $base ({payment_service: (encode-path-segment $payment_service), payment_product: (encode-path-segment $payment_product), payment_id: (encode-path-segment $payment_id)} | format pattern "/v1/{payment_service}/{payment_product}/{payment_id}"))
+  let full_url = (build-url $base ({payment_service: (encode-path-segment $payment_service), payment_product: (encode-path-segment $payment_product), payment_id: (encode-path-segment $payment_id)} | format pattern "/v1/{payment_service}/{payment_product}/{payment_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Request-ID": $x_request_id, "Digest": $digest, "Signature": $signature, "TPP-Signature-Certificate": $tpp_signature_certificate, "TPP-Redirect-Preferred": $tpp_redirect_preferred, "TPP-Nok-Redirect-URI": $tpp_nok_redirect_uri, "TPP-Redirect-URI": $tpp_redirect_uri, "TPP-Explicit-Authorisation-Preferred": $tpp_explicit_authorisation_preferred, "PSU-IP-Address": $psu_ip_address, "PSU-IP-Port": $psu_ip_port, "PSU-Accept": $psu_accept, "PSU-Accept-Charset": $psu_accept_charset, "PSU-Accept-Encoding": $psu_accept_encoding, "PSU-Accept-Language": $psu_accept_language, "PSU-User-Agent": $psu_user_agent, "PSU-Http-Method": $psu_http_method, "PSU-Device-ID": $psu_device_id, "PSU-Geo-Location": $psu_geo_location} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [202 204]
 }
 
 # Get payment information
@@ -1346,12 +1613,23 @@ export def "payment-initiation-service-pis get-information" [
   if ($payment_service | is-empty) { error make --unspanned { msg: "path parameter 'payment-service' must be non-empty" } }
   if ($payment_product | is-empty) { error make --unspanned { msg: "path parameter 'payment-product' must be non-empty" } }
   if ($payment_id | is-empty) { error make --unspanned { msg: "path parameter 'paymentId' must be non-empty" } }
-  let full_url = (build-url $base ({payment_service: (encode-path-segment $payment_service), payment_product: (encode-path-segment $payment_product), payment_id: (encode-path-segment $payment_id)} | format pattern "/v1/{payment_service}/{payment_product}/{payment_id}"))
+  let full_url = (build-url $base ({payment_service: (encode-path-segment $payment_service), payment_product: (encode-path-segment $payment_product), payment_id: (encode-path-segment $payment_id)} | format pattern "/v1/{payment_service}/{payment_product}/{payment_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Request-ID": $x_request_id, "Digest": $digest, "Signature": $signature, "TPP-Signature-Certificate": $tpp_signature_certificate, "PSU-IP-Address": $psu_ip_address, "PSU-IP-Port": $psu_ip_port, "PSU-Accept": $psu_accept, "PSU-Accept-Charset": $psu_accept_charset, "PSU-Accept-Encoding": $psu_accept_encoding, "PSU-Accept-Language": $psu_accept_language, "PSU-User-Agent": $psu_user_agent, "PSU-Http-Method": $psu_http_method, "PSU-Device-ID": $psu_device_id, "PSU-Geo-Location": $psu_geo_location} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get payment initiation authorisation sub-resources request
@@ -1391,12 +1669,23 @@ export def "authorisations get-initiation" [
   if ($payment_service | is-empty) { error make --unspanned { msg: "path parameter 'payment-service' must be non-empty" } }
   if ($payment_product | is-empty) { error make --unspanned { msg: "path parameter 'payment-product' must be non-empty" } }
   if ($payment_id | is-empty) { error make --unspanned { msg: "path parameter 'paymentId' must be non-empty" } }
-  let full_url = (build-url $base ({payment_service: (encode-path-segment $payment_service), payment_product: (encode-path-segment $payment_product), payment_id: (encode-path-segment $payment_id)} | format pattern "/v1/{payment_service}/{payment_product}/{payment_id}/authorisations"))
+  let full_url = (build-url $base ({payment_service: (encode-path-segment $payment_service), payment_product: (encode-path-segment $payment_product), payment_id: (encode-path-segment $payment_id)} | format pattern "/v1/{payment_service}/{payment_product}/{payment_id}/authorisations") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Request-ID": $x_request_id, "Digest": $digest, "Signature": $signature, "TPP-Signature-Certificate": $tpp_signature_certificate, "PSU-IP-Address": $psu_ip_address, "PSU-IP-Port": $psu_ip_port, "PSU-Accept": $psu_accept, "PSU-Accept-Charset": $psu_accept_charset, "PSU-Accept-Encoding": $psu_accept_encoding, "PSU-Accept-Language": $psu_accept_language, "PSU-User-Agent": $psu_user_agent, "PSU-Http-Method": $psu_http_method, "PSU-Device-ID": $psu_device_id, "PSU-Geo-Location": $psu_geo_location} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Start the authorisation process for a payment initiation
@@ -1450,14 +1739,25 @@ export def "authorisations start" [
   if ($payment_service | is-empty) { error make --unspanned { msg: "path parameter 'payment-service' must be non-empty" } }
   if ($payment_product | is-empty) { error make --unspanned { msg: "path parameter 'payment-product' must be non-empty" } }
   if ($payment_id | is-empty) { error make --unspanned { msg: "path parameter 'paymentId' must be non-empty" } }
-  let full_url = (build-url $base ({payment_service: (encode-path-segment $payment_service), payment_product: (encode-path-segment $payment_product), payment_id: (encode-path-segment $payment_id)} | format pattern "/v1/{payment_service}/{payment_product}/{payment_id}/authorisations"))
+  let full_url = (build-url $base ({payment_service: (encode-path-segment $payment_service), payment_product: (encode-path-segment $payment_product), payment_id: (encode-path-segment $payment_id)} | format pattern "/v1/{payment_service}/{payment_product}/{payment_id}/authorisations") $auth.query)
   let req_body = {"psuData": $psu_data, "authenticationMethodId": $authentication_method_id, "scaAuthenticationData": $sca_authentication_data} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Request-ID": $x_request_id, "PSU-ID": $psu_id, "PSU-ID-Type": $psu_id_type, "PSU-Corporate-ID": $psu_corporate_id, "PSU-Corporate-ID-Type": $psu_corporate_id_type, "TPP-Redirect-Preferred": $tpp_redirect_preferred, "TPP-Redirect-URI": $tpp_redirect_uri, "TPP-Nok-Redirect-URI": $tpp_nok_redirect_uri, "TPP-Notification-URI": $tpp_notification_uri, "TPP-Notification-Content-Preferred": $tpp_notification_content_preferred, "Digest": $digest, "Signature": $signature, "TPP-Signature-Certificate": $tpp_signature_certificate, "PSU-IP-Address": $psu_ip_address, "PSU-IP-Port": $psu_ip_port, "PSU-Accept": $psu_accept, "PSU-Accept-Charset": $psu_accept_charset, "PSU-Accept-Encoding": $psu_accept_encoding, "PSU-Accept-Language": $psu_accept_language, "PSU-User-Agent": $psu_user_agent, "PSU-Http-Method": $psu_http_method, "PSU-Device-ID": $psu_device_id, "PSU-Geo-Location": $psu_geo_location} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Read the SCA status of the payment authorisation
@@ -1499,12 +1799,23 @@ export def "authorisations get-initiation-sca-status" [
   if ($payment_product | is-empty) { error make --unspanned { msg: "path parameter 'payment-product' must be non-empty" } }
   if ($payment_id | is-empty) { error make --unspanned { msg: "path parameter 'paymentId' must be non-empty" } }
   if ($authorisation_id | is-empty) { error make --unspanned { msg: "path parameter 'authorisationId' must be non-empty" } }
-  let full_url = (build-url $base ({payment_service: (encode-path-segment $payment_service), payment_product: (encode-path-segment $payment_product), payment_id: (encode-path-segment $payment_id), authorisation_id: (encode-path-segment $authorisation_id)} | format pattern "/v1/{payment_service}/{payment_product}/{payment_id}/authorisations/{authorisation_id}"))
+  let full_url = (build-url $base ({payment_service: (encode-path-segment $payment_service), payment_product: (encode-path-segment $payment_product), payment_id: (encode-path-segment $payment_id), authorisation_id: (encode-path-segment $authorisation_id)} | format pattern "/v1/{payment_service}/{payment_product}/{payment_id}/authorisations/{authorisation_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Request-ID": $x_request_id, "Digest": $digest, "Signature": $signature, "TPP-Signature-Certificate": $tpp_signature_certificate, "PSU-IP-Address": $psu_ip_address, "PSU-IP-Port": $psu_ip_port, "PSU-Accept": $psu_accept, "PSU-Accept-Charset": $psu_accept_charset, "PSU-Accept-Encoding": $psu_accept_encoding, "PSU-Accept-Language": $psu_accept_language, "PSU-User-Agent": $psu_user_agent, "PSU-Http-Method": $psu_http_method, "PSU-Device-ID": $psu_device_id, "PSU-Geo-Location": $psu_geo_location} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update PSU data for payment initiation
@@ -1556,14 +1867,25 @@ export def "authorisations update-psu-data" [
   if ($payment_product | is-empty) { error make --unspanned { msg: "path parameter 'payment-product' must be non-empty" } }
   if ($payment_id | is-empty) { error make --unspanned { msg: "path parameter 'paymentId' must be non-empty" } }
   if ($authorisation_id | is-empty) { error make --unspanned { msg: "path parameter 'authorisationId' must be non-empty" } }
-  let full_url = (build-url $base ({payment_service: (encode-path-segment $payment_service), payment_product: (encode-path-segment $payment_product), payment_id: (encode-path-segment $payment_id), authorisation_id: (encode-path-segment $authorisation_id)} | format pattern "/v1/{payment_service}/{payment_product}/{payment_id}/authorisations/{authorisation_id}"))
+  let full_url = (build-url $base ({payment_service: (encode-path-segment $payment_service), payment_product: (encode-path-segment $payment_product), payment_id: (encode-path-segment $payment_id), authorisation_id: (encode-path-segment $authorisation_id)} | format pattern "/v1/{payment_service}/{payment_product}/{payment_id}/authorisations/{authorisation_id}") $auth.query)
   let req_body = {"psuData": $psu_data, "authenticationMethodId": $authentication_method_id, "scaAuthenticationData": $sca_authentication_data, "confirmationCode": $confirmation_code} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Request-ID": $x_request_id, "Digest": $digest, "Signature": $signature, "TPP-Signature-Certificate": $tpp_signature_certificate, "PSU-ID": $psu_id, "PSU-ID-Type": $psu_id_type, "PSU-Corporate-ID": $psu_corporate_id, "PSU-Corporate-ID-Type": $psu_corporate_id_type, "PSU-IP-Address": $psu_ip_address, "PSU-IP-Port": $psu_ip_port, "PSU-Accept": $psu_accept, "PSU-Accept-Charset": $psu_accept_charset, "PSU-Accept-Encoding": $psu_accept_encoding, "PSU-Accept-Language": $psu_accept_language, "PSU-User-Agent": $psu_user_agent, "PSU-Http-Method": $psu_http_method, "PSU-Device-ID": $psu_device_id, "PSU-Geo-Location": $psu_geo_location} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Will deliver an array of resource identifications to all generated cancellation authorisation sub-resources
@@ -1603,12 +1925,23 @@ export def "cancellation-authorisations get-initiation-information" [
   if ($payment_service | is-empty) { error make --unspanned { msg: "path parameter 'payment-service' must be non-empty" } }
   if ($payment_product | is-empty) { error make --unspanned { msg: "path parameter 'payment-product' must be non-empty" } }
   if ($payment_id | is-empty) { error make --unspanned { msg: "path parameter 'paymentId' must be non-empty" } }
-  let full_url = (build-url $base ({payment_service: (encode-path-segment $payment_service), payment_product: (encode-path-segment $payment_product), payment_id: (encode-path-segment $payment_id)} | format pattern "/v1/{payment_service}/{payment_product}/{payment_id}/cancellation-authorisations"))
+  let full_url = (build-url $base ({payment_service: (encode-path-segment $payment_service), payment_product: (encode-path-segment $payment_product), payment_id: (encode-path-segment $payment_id)} | format pattern "/v1/{payment_service}/{payment_product}/{payment_id}/cancellation-authorisations") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Request-ID": $x_request_id, "Digest": $digest, "Signature": $signature, "TPP-Signature-Certificate": $tpp_signature_certificate, "PSU-IP-Address": $psu_ip_address, "PSU-IP-Port": $psu_ip_port, "PSU-Accept": $psu_accept, "PSU-Accept-Charset": $psu_accept_charset, "PSU-Accept-Encoding": $psu_accept_encoding, "PSU-Accept-Language": $psu_accept_language, "PSU-User-Agent": $psu_user_agent, "PSU-Http-Method": $psu_http_method, "PSU-Device-ID": $psu_device_id, "PSU-Geo-Location": $psu_geo_location} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Start the authorisation process for the cancellation of the addressed payment
@@ -1662,14 +1995,25 @@ export def "cancellation-authorisations start-initiation" [
   if ($payment_service | is-empty) { error make --unspanned { msg: "path parameter 'payment-service' must be non-empty" } }
   if ($payment_product | is-empty) { error make --unspanned { msg: "path parameter 'payment-product' must be non-empty" } }
   if ($payment_id | is-empty) { error make --unspanned { msg: "path parameter 'paymentId' must be non-empty" } }
-  let full_url = (build-url $base ({payment_service: (encode-path-segment $payment_service), payment_product: (encode-path-segment $payment_product), payment_id: (encode-path-segment $payment_id)} | format pattern "/v1/{payment_service}/{payment_product}/{payment_id}/cancellation-authorisations"))
+  let full_url = (build-url $base ({payment_service: (encode-path-segment $payment_service), payment_product: (encode-path-segment $payment_product), payment_id: (encode-path-segment $payment_id)} | format pattern "/v1/{payment_service}/{payment_product}/{payment_id}/cancellation-authorisations") $auth.query)
   let req_body = {"psuData": $psu_data, "authenticationMethodId": $authentication_method_id, "scaAuthenticationData": $sca_authentication_data} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Request-ID": $x_request_id, "Digest": $digest, "Signature": $signature, "TPP-Signature-Certificate": $tpp_signature_certificate, "PSU-ID": $psu_id, "PSU-ID-Type": $psu_id_type, "PSU-Corporate-ID": $psu_corporate_id, "PSU-Corporate-ID-Type": $psu_corporate_id_type, "TPP-Redirect-Preferred": $tpp_redirect_preferred, "TPP-Redirect-URI": $tpp_redirect_uri, "TPP-Nok-Redirect-URI": $tpp_nok_redirect_uri, "TPP-Notification-URI": $tpp_notification_uri, "TPP-Notification-Content-Preferred": $tpp_notification_content_preferred, "PSU-IP-Address": $psu_ip_address, "PSU-IP-Port": $psu_ip_port, "PSU-Accept": $psu_accept, "PSU-Accept-Charset": $psu_accept_charset, "PSU-Accept-Encoding": $psu_accept_encoding, "PSU-Accept-Language": $psu_accept_language, "PSU-User-Agent": $psu_user_agent, "PSU-Http-Method": $psu_http_method, "PSU-Device-ID": $psu_device_id, "PSU-Geo-Location": $psu_geo_location} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Read the SCA status of the payment cancellation's authorisation
@@ -1711,12 +2055,23 @@ export def "cancellation-authorisations get-sca-status" [
   if ($payment_product | is-empty) { error make --unspanned { msg: "path parameter 'payment-product' must be non-empty" } }
   if ($payment_id | is-empty) { error make --unspanned { msg: "path parameter 'paymentId' must be non-empty" } }
   if ($authorisation_id | is-empty) { error make --unspanned { msg: "path parameter 'authorisationId' must be non-empty" } }
-  let full_url = (build-url $base ({payment_service: (encode-path-segment $payment_service), payment_product: (encode-path-segment $payment_product), payment_id: (encode-path-segment $payment_id), authorisation_id: (encode-path-segment $authorisation_id)} | format pattern "/v1/{payment_service}/{payment_product}/{payment_id}/cancellation-authorisations/{authorisation_id}"))
+  let full_url = (build-url $base ({payment_service: (encode-path-segment $payment_service), payment_product: (encode-path-segment $payment_product), payment_id: (encode-path-segment $payment_id), authorisation_id: (encode-path-segment $authorisation_id)} | format pattern "/v1/{payment_service}/{payment_product}/{payment_id}/cancellation-authorisations/{authorisation_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Request-ID": $x_request_id, "Digest": $digest, "Signature": $signature, "TPP-Signature-Certificate": $tpp_signature_certificate, "PSU-IP-Address": $psu_ip_address, "PSU-IP-Port": $psu_ip_port, "PSU-Accept": $psu_accept, "PSU-Accept-Charset": $psu_accept_charset, "PSU-Accept-Encoding": $psu_accept_encoding, "PSU-Accept-Language": $psu_accept_language, "PSU-User-Agent": $psu_user_agent, "PSU-Http-Method": $psu_http_method, "PSU-Device-ID": $psu_device_id, "PSU-Geo-Location": $psu_geo_location} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update PSU data for payment initiation cancellation
@@ -1768,14 +2123,25 @@ export def "cancellation-authorisations update-psu-data" [
   if ($payment_product | is-empty) { error make --unspanned { msg: "path parameter 'payment-product' must be non-empty" } }
   if ($payment_id | is-empty) { error make --unspanned { msg: "path parameter 'paymentId' must be non-empty" } }
   if ($authorisation_id | is-empty) { error make --unspanned { msg: "path parameter 'authorisationId' must be non-empty" } }
-  let full_url = (build-url $base ({payment_service: (encode-path-segment $payment_service), payment_product: (encode-path-segment $payment_product), payment_id: (encode-path-segment $payment_id), authorisation_id: (encode-path-segment $authorisation_id)} | format pattern "/v1/{payment_service}/{payment_product}/{payment_id}/cancellation-authorisations/{authorisation_id}"))
+  let full_url = (build-url $base ({payment_service: (encode-path-segment $payment_service), payment_product: (encode-path-segment $payment_product), payment_id: (encode-path-segment $payment_id), authorisation_id: (encode-path-segment $authorisation_id)} | format pattern "/v1/{payment_service}/{payment_product}/{payment_id}/cancellation-authorisations/{authorisation_id}") $auth.query)
   let req_body = {"psuData": $psu_data, "authenticationMethodId": $authentication_method_id, "scaAuthenticationData": $sca_authentication_data, "confirmationCode": $confirmation_code} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Request-ID": $x_request_id, "Digest": $digest, "Signature": $signature, "TPP-Signature-Certificate": $tpp_signature_certificate, "PSU-ID": $psu_id, "PSU-ID-Type": $psu_id_type, "PSU-Corporate-ID": $psu_corporate_id, "PSU-Corporate-ID-Type": $psu_corporate_id_type, "PSU-IP-Address": $psu_ip_address, "PSU-IP-Port": $psu_ip_port, "PSU-Accept": $psu_accept, "PSU-Accept-Charset": $psu_accept_charset, "PSU-Accept-Encoding": $psu_accept_encoding, "PSU-Accept-Language": $psu_accept_language, "PSU-User-Agent": $psu_user_agent, "PSU-Http-Method": $psu_http_method, "PSU-Device-ID": $psu_device_id, "PSU-Geo-Location": $psu_geo_location} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Payment initiation status request
@@ -1815,10 +2181,21 @@ export def "status get-initiation" [
   if ($payment_service | is-empty) { error make --unspanned { msg: "path parameter 'payment-service' must be non-empty" } }
   if ($payment_product | is-empty) { error make --unspanned { msg: "path parameter 'payment-product' must be non-empty" } }
   if ($payment_id | is-empty) { error make --unspanned { msg: "path parameter 'paymentId' must be non-empty" } }
-  let full_url = (build-url $base ({payment_service: (encode-path-segment $payment_service), payment_product: (encode-path-segment $payment_product), payment_id: (encode-path-segment $payment_id)} | format pattern "/v1/{payment_service}/{payment_product}/{payment_id}/status"))
+  let full_url = (build-url $base ({payment_service: (encode-path-segment $payment_service), payment_product: (encode-path-segment $payment_product), payment_id: (encode-path-segment $payment_id)} | format pattern "/v1/{payment_service}/{payment_product}/{payment_id}/status") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Request-ID": $x_request_id, "Digest": $digest, "Signature": $signature, "TPP-Signature-Certificate": $tpp_signature_certificate, "PSU-IP-Address": $psu_ip_address, "PSU-IP-Port": $psu_ip_port, "PSU-Accept": $psu_accept, "PSU-Accept-Charset": $psu_accept_charset, "PSU-Accept-Encoding": $psu_accept_encoding, "PSU-Accept-Language": $psu_accept_language, "PSU-User-Agent": $psu_user_agent, "PSU-Http-Method": $psu_http_method, "PSU-Device-ID": $psu_device_id, "PSU-Geo-Location": $psu_geo_location} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }

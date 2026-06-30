@@ -8,7 +8,7 @@ const BASE_URL = "https://echodata.epa.gov/echo"
 # `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
 # where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o U_S_EPA_ENFORCEMENT_AND_COMPLIANCE_HISTORY_ONLINE_ECHO_DETAILED_FACILITY_REPORT_DFR_TOKEN | default "" }
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o U_S_EPA_ENFORCEMENT_AND_COMPLIANCE_HISTORY_ONLINE_ECHO_DETAILED_FACILITY_REPORT_DFR_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
@@ -40,14 +40,11 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
-# Trick: `url encode --all` over-encodes, then we decode the four unreserved
-# punctuation chars back. Pre-existing %XX sequences in the input survive
-# because `url encode --all` first turns their % into %25.
 def encode-path-segment [v: any]: nothing -> string {
   $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
-# Serialize an array-typed path parameter (issue 49.A). OpenAPI 3 `style: simple`
+# Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
 # (the default for path params) and Swagger 2 `collectionFormat: csv` both join
 # the elements with a literal comma WITHIN the single path segment, each element
 # RFC-3986-encoded individually (so a comma inside an element stays %2C). Without
@@ -58,51 +55,45 @@ def encode-path-array [v: any]: nothing -> string {
   if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
 }
 
-# Build URL from base, path, and optional query string
-def build-url [base: string, path: string, query?: string]: nothing -> string {
+# Build the request URL from base, path, and any number of pre-encoded query
+# fragments (param serializer output and/or the auth query). Each fragment is an
+# `&`-joinable `key=value` string already percent-encoded by its producer; empty
+# fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
+# delimiters are hand-spliced — and any query already on the base URL is merged in.
+def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
   let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
-  let result = ($parsed | upsert path $full_path)
-  if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
+  let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
+  $parsed | upsert path $full_path | upsert query $query | url join
 }
 
-# Build the dry-run record returned by --dry-run. Shape:
-#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
-#    auth: {scheme, location}}
-# `meta` carries logical-form data (the query record by spec name, the pre-serialization
-# body) that do-request itself cannot reconstruct from its wire-format args.
-def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
-  let m = ($meta | default {})
-  {
-    dry_run: true
-    method: $method
-    url: $url
-    query: ($m | get -o query | default {})
-    headers: $auth.headers
-    body: ($m | get -o body)
-    content_type: $content_type
-    timeout: $timeout
-    auth: {scheme: $auth.scheme, location: $auth.location}
-  }
+# Success policy: did this response succeed? Single source of truth, consulted by
+# handle-response and the HEAD header-unwrap. Empty ok_codes means the spec listed
+# none, so fall back to < 400. Otherwise: any 2xx, plus documented success codes.
+def status-ok [status: int, ok_codes: list<int>]: nothing -> bool {
+  if ($ok_codes | is-empty) { $status < 400 } else { ($status >= 200 and $status < 300) or ($status in $ok_codes) }
 }
 
-# Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
-  let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
-  let timeout = ($max_time | default 30min)
-  let ct = ($content_type | default "application/json")
-  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
-  let resp = match $method {
-    "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
-  }
-  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
-  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
+# Unwrap a `--full` HTTP response into the user-facing value. Response arrives
+# via pipeline; ok_codes gates the error throw (see status-ok).
+def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: record -> any {
+  let resp = $in
+  if $allow_errors { return $resp }
+  if not (status-ok $resp.status $ok_codes) { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } }
+  if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
+  if $resp.status == 204 { return null }
+  $resp.body
+}
+
+# GET — bodyless, honours --raw
+def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+}
+
+# POST — body + content-type
+def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 def base-url-completer [] { ["https://echodata.epa.gov/echo"] }
@@ -154,10 +145,21 @@ export def "dfr-rest-services-air-3-yr-download get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/dfr_rest_services.air_3_yr_download")
+  let full_url = (build-url $base "/dfr_rest_services.air_3_yr_download" $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Downloads the complete Air Compliance History Section of the DFR
@@ -177,10 +179,21 @@ export def "dfr-rest-services-air-3-yr-download create" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/dfr_rest_services.air_3_yr_download")
+  let full_url = (build-url $base "/dfr_rest_services.air_3_yr_download" $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Downloads NPDES Effluent Violation Information by month and quarter.
@@ -200,10 +213,21 @@ export def "dfr-rest-services-cwa-3-yr-effluent-download get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/dfr_rest_services.cwa_3_yr_effluent_download")
+  let full_url = (build-url $base "/dfr_rest_services.cwa_3_yr_effluent_download" $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Downloads NPDES Effluent Violation Information by month and quarter.
@@ -223,10 +247,21 @@ export def "dfr-rest-services-cwa-3-yr-effluent-download create" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/dfr_rest_services.cwa_3_yr_effluent_download")
+  let full_url = (build-url $base "/dfr_rest_services.cwa_3_yr_effluent_download" $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Downloads NPDES Compliance Schedule, Permit Schedule and Single Event Violation Information by month and quarter.
@@ -246,10 +281,21 @@ export def "dfr-rest-services-cwa-3-yr-sepscs-download get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/dfr_rest_services.cwa_3_yr_sepscs_download")
+  let full_url = (build-url $base "/dfr_rest_services.cwa_3_yr_sepscs_download" $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Downloads NPDES Compliance Schedule, Permit Schedule and Single Event Violation Information by month and quarter.
@@ -269,10 +315,21 @@ export def "dfr-rest-services-cwa-3-yr-sepscs-download create" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/dfr_rest_services.cwa_3_yr_sepscs_download")
+  let full_url = (build-url $base "/dfr_rest_services.cwa_3_yr_sepscs_download" $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Detailed Facility Report Air Compliance Report Service
@@ -296,10 +353,21 @@ export def "dfr-rest-services-get-air-compliance get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_id" $p_id "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/dfr_rest_services.get_air_compliance" $qp)
+  let full_url = (build-url $base "/dfr_rest_services.get_air_compliance" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"output": $output, "p_id": $p_id, "callback": $callback} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"output": $output, "p_id": $p_id, "callback": $callback} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Detailed Facility Report Air Compliance Report Service
@@ -323,13 +391,24 @@ export def "dfr-rest-services-get-air-compliance create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/dfr_rest_services.get_air_compliance")
+  let full_url = (build-url $base "/dfr_rest_services.get_air_compliance" $auth.query)
   let req_body = {"output": $output, "p_id": $p_id, "callback": $callback} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/x-www-form-urlencoded"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Detailed Facility Report Air Quality Report Service
@@ -353,10 +432,21 @@ export def "dfr-rest-services-get-air-quality get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_id" $p_id "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/dfr_rest_services.get_air_quality" $qp)
+  let full_url = (build-url $base "/dfr_rest_services.get_air_quality" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"output": $output, "p_id": $p_id, "callback": $callback} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"output": $output, "p_id": $p_id, "callback": $callback} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Detailed Facility Report Air Quality Report Service
@@ -380,13 +470,24 @@ export def "dfr-rest-services-get-air-quality create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/dfr_rest_services.get_air_quality")
+  let full_url = (build-url $base "/dfr_rest_services.get_air_quality" $auth.query)
   let req_body = {"output": $output, "p_id": $p_id, "callback": $callback} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/x-www-form-urlencoded"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Placeholder
@@ -410,10 +511,21 @@ export def "dfr-rest-services-get-aws-docs get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_id" $p_id "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/dfr_rest_services.get_aws_docs" $qp)
+  let full_url = (build-url $base "/dfr_rest_services.get_aws_docs" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"output": $output, "p_id": $p_id, "callback": $callback} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"output": $output, "p_id": $p_id, "callback": $callback} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Placeholder
@@ -437,13 +549,24 @@ export def "dfr-rest-services-get-aws-docs create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/dfr_rest_services.get_aws_docs")
+  let full_url = (build-url $base "/dfr_rest_services.get_aws_docs" $auth.query)
   let req_body = {"output": $output, "p_id": $p_id, "callback": $callback} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/x-www-form-urlencoded"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Displays Cases related to the Facility
@@ -467,10 +590,21 @@ export def "dfr-rest-services-get-case-formal-actions get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_id" $p_id "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/dfr_rest_services.get_case_formal_actions" $qp)
+  let full_url = (build-url $base "/dfr_rest_services.get_case_formal_actions" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"output": $output, "p_id": $p_id, "callback": $callback} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"output": $output, "p_id": $p_id, "callback": $callback} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Displays Cases related to the Facility
@@ -494,13 +628,24 @@ export def "dfr-rest-services-get-case-formal-actions create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/dfr_rest_services.get_case_formal_actions")
+  let full_url = (build-url $base "/dfr_rest_services.get_case_formal_actions" $auth.query)
   let req_body = {"output": $output, "p_id": $p_id, "callback": $callback} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/x-www-form-urlencoded"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Detailed Facility Report 5 Year Compliance Monitoring History Service
@@ -524,10 +669,21 @@ export def "dfr-rest-services-get-compliance-history get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_id" $p_id "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/dfr_rest_services.get_compliance_history" $qp)
+  let full_url = (build-url $base "/dfr_rest_services.get_compliance_history" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"output": $output, "p_id": $p_id, "callback": $callback} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"output": $output, "p_id": $p_id, "callback": $callback} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Detailed Facility Report 5 Year Compliance Monitoring History Service
@@ -551,13 +707,24 @@ export def "dfr-rest-services-get-compliance-history create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/dfr_rest_services.get_compliance_history")
+  let full_url = (build-url $base "/dfr_rest_services.get_compliance_history" $auth.query)
   let req_body = {"output": $output, "p_id": $p_id, "callback": $callback} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/x-www-form-urlencoded"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Detailed Facility Report Compliance Summary Service
@@ -581,10 +748,21 @@ export def "dfr-rest-services-get-compliance-summary get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_id" $p_id "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/dfr_rest_services.get_compliance_summary" $qp)
+  let full_url = (build-url $base "/dfr_rest_services.get_compliance_summary" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"output": $output, "p_id": $p_id, "callback": $callback} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"output": $output, "p_id": $p_id, "callback": $callback} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Detailed Facility Report Compliance Summary Service
@@ -608,13 +786,24 @@ export def "dfr-rest-services-get-compliance-summary create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/dfr_rest_services.get_compliance_summary")
+  let full_url = (build-url $base "/dfr_rest_services.get_compliance_summary" $auth.query)
   let req_body = {"output": $output, "p_id": $p_id, "callback": $callback} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/x-www-form-urlencoded"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Downloads a spectific section of the DFR in CSV Format
@@ -634,10 +823,21 @@ export def "dfr-rest-services-get-csv get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/dfr_rest_services.get_csv")
+  let full_url = (build-url $base "/dfr_rest_services.get_csv" $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Downloads a spectific section of the DFR in CSV Format
@@ -657,10 +857,21 @@ export def "dfr-rest-services-get-csv create" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/dfr_rest_services.get_csv")
+  let full_url = (build-url $base "/dfr_rest_services.get_csv" $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Detailed Facility Report 3 Year CWA Facility-Level Status Service
@@ -684,10 +895,21 @@ export def "dfr-rest-services-get-cwa-3yr-compliance get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_id" $p_id "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/dfr_rest_services.get_cwa_3yr_compliance" $qp)
+  let full_url = (build-url $base "/dfr_rest_services.get_cwa_3yr_compliance" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"output": $output, "p_id": $p_id, "callback": $callback} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"output": $output, "p_id": $p_id, "callback": $callback} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Detailed Facility Report 3 Year CWA Facility-Level Status Service
@@ -711,13 +933,24 @@ export def "dfr-rest-services-get-cwa-3yr-compliance create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/dfr_rest_services.get_cwa_3yr_compliance")
+  let full_url = (build-url $base "/dfr_rest_services.get_cwa_3yr_compliance" $auth.query)
   let req_body = {"output": $output, "p_id": $p_id, "callback": $callback} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/x-www-form-urlencoded"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Displays monlthly and quarterly counts of D80 and D90 Effluent Non Reporting Violations Related to the Facility
@@ -741,10 +974,21 @@ export def "dfr-rest-services-get-cwa-3yr-d80d90-counts get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_id" $p_id "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/dfr_rest_services.get_cwa_3yr_d80d90_counts" $qp)
+  let full_url = (build-url $base "/dfr_rest_services.get_cwa_3yr_d80d90_counts" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"output": $output, "p_id": $p_id, "callback": $callback} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"output": $output, "p_id": $p_id, "callback": $callback} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Displays monlthly and quarterly counts of D80 and D90 Effluent Non Reporting Violations Related to the Facility
@@ -768,13 +1012,24 @@ export def "dfr-rest-services-get-cwa-3yr-d80d90-counts create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/dfr_rest_services.get_cwa_3yr_d80d90_counts")
+  let full_url = (build-url $base "/dfr_rest_services.get_cwa_3yr_d80d90_counts" $auth.query)
   let req_body = {"output": $output, "p_id": $p_id, "callback": $callback} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/x-www-form-urlencoded"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Detailed Facility Report CWA CSV Compliance Service
@@ -798,10 +1053,21 @@ export def "dfr-rest-services-get-cwa-cs-compliance get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_id" $p_id "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/dfr_rest_services.get_cwa_cs_compliance" $qp)
+  let full_url = (build-url $base "/dfr_rest_services.get_cwa_cs_compliance" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"output": $output, "p_id": $p_id, "callback": $callback} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"output": $output, "p_id": $p_id, "callback": $callback} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Detailed Facility Report CWA CSV Compliance Service
@@ -825,13 +1091,24 @@ export def "dfr-rest-services-get-cwa-cs-compliance create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/dfr_rest_services.get_cwa_cs_compliance")
+  let full_url = (build-url $base "/dfr_rest_services.get_cwa_cs_compliance" $auth.query)
   let req_body = {"output": $output, "p_id": $p_id, "callback": $callback} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/x-www-form-urlencoded"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Detailed Facility Report CWA Effluent ALR Service
@@ -855,10 +1132,21 @@ export def "dfr-rest-services-get-cwa-eff-alr get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_id" $p_id "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/dfr_rest_services.get_cwa_eff_alr" $qp)
+  let full_url = (build-url $base "/dfr_rest_services.get_cwa_eff_alr" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"output": $output, "p_id": $p_id, "callback": $callback} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"output": $output, "p_id": $p_id, "callback": $callback} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Detailed Facility Report CWA Effluent ALR Service
@@ -882,13 +1170,24 @@ export def "dfr-rest-services-get-cwa-eff-alr create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/dfr_rest_services.get_cwa_eff_alr")
+  let full_url = (build-url $base "/dfr_rest_services.get_cwa_eff_alr" $auth.query)
   let req_body = {"output": $output, "p_id": $p_id, "callback": $callback} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/x-www-form-urlencoded"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Placeholder
@@ -912,10 +1211,21 @@ export def "dfr-rest-services-get-cwa-eff-alr-exp get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_id" $p_id "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/dfr_rest_services.get_cwa_eff_alr_exp" $qp)
+  let full_url = (build-url $base "/dfr_rest_services.get_cwa_eff_alr_exp" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"output": $output, "p_id": $p_id, "callback": $callback} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"output": $output, "p_id": $p_id, "callback": $callback} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Placeholder
@@ -939,13 +1249,24 @@ export def "dfr-rest-services-get-cwa-eff-alr-exp create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/dfr_rest_services.get_cwa_eff_alr_exp")
+  let full_url = (build-url $base "/dfr_rest_services.get_cwa_eff_alr_exp" $auth.query)
   let req_body = {"output": $output, "p_id": $p_id, "callback": $callback} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/x-www-form-urlencoded"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Detailed Facility Report CWA Effluent Compliance Service
@@ -969,10 +1290,21 @@ export def "dfr-rest-services-get-cwa-eff-compliance get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_id" $p_id "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/dfr_rest_services.get_cwa_eff_compliance" $qp)
+  let full_url = (build-url $base "/dfr_rest_services.get_cwa_eff_compliance" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"output": $output, "p_id": $p_id, "callback": $callback} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"output": $output, "p_id": $p_id, "callback": $callback} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Detailed Facility Report CWA Effluent Compliance Service
@@ -996,13 +1328,24 @@ export def "dfr-rest-services-get-cwa-eff-compliance create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/dfr_rest_services.get_cwa_eff_compliance")
+  let full_url = (build-url $base "/dfr_rest_services.get_cwa_eff_compliance" $auth.query)
   let req_body = {"output": $output, "p_id": $p_id, "callback": $callback} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/x-www-form-urlencoded"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Placeholder
@@ -1026,10 +1369,21 @@ export def "dfr-rest-services-get-cwa-eff-compliance-exp get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_id" $p_id "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/dfr_rest_services.get_cwa_eff_compliance_exp" $qp)
+  let full_url = (build-url $base "/dfr_rest_services.get_cwa_eff_compliance_exp" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"output": $output, "p_id": $p_id, "callback": $callback} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"output": $output, "p_id": $p_id, "callback": $callback} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Placeholder
@@ -1053,13 +1407,24 @@ export def "dfr-rest-services-get-cwa-eff-compliance-exp create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/dfr_rest_services.get_cwa_eff_compliance_exp")
+  let full_url = (build-url $base "/dfr_rest_services.get_cwa_eff_compliance_exp" $auth.query)
   let req_body = {"output": $output, "p_id": $p_id, "callback": $callback} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/x-www-form-urlencoded"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Detailed Facility Report CWA PSV Compliance Service
@@ -1083,10 +1448,21 @@ export def "dfr-rest-services-get-cwa-ps-compliance get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_id" $p_id "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/dfr_rest_services.get_cwa_ps_compliance" $qp)
+  let full_url = (build-url $base "/dfr_rest_services.get_cwa_ps_compliance" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"output": $output, "p_id": $p_id, "callback": $callback} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"output": $output, "p_id": $p_id, "callback": $callback} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Detailed Facility Report CWA PSV Compliance Service
@@ -1110,13 +1486,24 @@ export def "dfr-rest-services-get-cwa-ps-compliance create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/dfr_rest_services.get_cwa_ps_compliance")
+  let full_url = (build-url $base "/dfr_rest_services.get_cwa_ps_compliance" $auth.query)
   let req_body = {"output": $output, "p_id": $p_id, "callback": $callback} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/x-www-form-urlencoded"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Detailed Facility Report CWA RNC Compliance Service
@@ -1140,10 +1527,21 @@ export def "dfr-rest-services-get-cwa-rnc-compliance get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_id" $p_id "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/dfr_rest_services.get_cwa_rnc_compliance" $qp)
+  let full_url = (build-url $base "/dfr_rest_services.get_cwa_rnc_compliance" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"output": $output, "p_id": $p_id, "callback": $callback} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"output": $output, "p_id": $p_id, "callback": $callback} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Detailed Facility Report CWA RNC Compliance Service
@@ -1167,13 +1565,24 @@ export def "dfr-rest-services-get-cwa-rnc-compliance create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/dfr_rest_services.get_cwa_rnc_compliance")
+  let full_url = (build-url $base "/dfr_rest_services.get_cwa_rnc_compliance" $auth.query)
   let req_body = {"output": $output, "p_id": $p_id, "callback": $callback} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/x-www-form-urlencoded"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Detailed Facility Report CWA SEV Compliance Service
@@ -1197,10 +1606,21 @@ export def "dfr-rest-services-get-cwa-se-compliance get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_id" $p_id "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/dfr_rest_services.get_cwa_se_compliance" $qp)
+  let full_url = (build-url $base "/dfr_rest_services.get_cwa_se_compliance" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"output": $output, "p_id": $p_id, "callback": $callback} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"output": $output, "p_id": $p_id, "callback": $callback} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Detailed Facility Report CWA SEV Compliance Service
@@ -1224,13 +1644,24 @@ export def "dfr-rest-services-get-cwa-se-compliance create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/dfr_rest_services.get_cwa_se_compliance")
+  let full_url = (build-url $base "/dfr_rest_services.get_cwa_se_compliance" $auth.query)
   let req_body = {"output": $output, "p_id": $p_id, "callback": $callback} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/x-www-form-urlencoded"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Display detailed D80/D90 information for the facility for a given quarter or month
@@ -1257,10 +1688,21 @@ export def "dfr-rest-services-get-d80d90s-details get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_npdes_id" $p_npdes_id "scalar") (serialize-qp "p_missinglate" $p_missinglate "scalar") (serialize-qp "p_qmtype" $p_qmtype "scalar") (serialize-qp "p_qmvalue" $p_qmvalue "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/dfr_rest_services.get_d80d90s_details" $qp)
+  let full_url = (build-url $base "/dfr_rest_services.get_d80d90s_details" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"output": $output, "p_npdes_id": $p_npdes_id, "p_missinglate": $p_missinglate, "p_qmtype": $p_qmtype, "p_qmvalue": $p_qmvalue, "callback": $callback} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"output": $output, "p_npdes_id": $p_npdes_id, "p_missinglate": $p_missinglate, "p_qmtype": $p_qmtype, "p_qmvalue": $p_qmvalue, "callback": $callback} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Display detailed D80/D90 information for the facility for a given quarter or month
@@ -1287,10 +1729,21 @@ export def "dfr-rest-services-get-d80d90s-details create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_npdes_id" $p_npdes_id "scalar") (serialize-qp "p_missinglate" $p_missinglate "scalar") (serialize-qp "p_qmtype" $p_qmtype "scalar") (serialize-qp "p_qmvalue" $p_qmvalue "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/dfr_rest_services.get_d80d90s_details" $qp)
+  let full_url = (build-url $base "/dfr_rest_services.get_d80d90s_details" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"output": $output, "p_npdes_id": $p_npdes_id, "p_missinglate": $p_missinglate, "p_qmtype": $p_qmtype, "p_qmvalue": $p_qmvalue, "callback": $callback} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"output": $output, "p_npdes_id": $p_npdes_id, "p_missinglate": $p_missinglate, "p_qmtype": $p_qmtype, "p_qmvalue": $p_qmvalue, "callback": $callback} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Displays 2010 Census and ACS demographics by Facility ID
@@ -1314,10 +1767,21 @@ export def "dfr-rest-services-get-demographics-by-id get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_id" $p_id "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/dfr_rest_services.get_demographics_by_id" $qp)
+  let full_url = (build-url $base "/dfr_rest_services.get_demographics_by_id" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"output": $output, "p_id": $p_id, "callback": $callback} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"output": $output, "p_id": $p_id, "callback": $callback} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Displays 2010 Census and ACS demographics by Facility ID
@@ -1341,13 +1805,24 @@ export def "dfr-rest-services-get-demographics-by-id create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/dfr_rest_services.get_demographics_by_id")
+  let full_url = (build-url $base "/dfr_rest_services.get_demographics_by_id" $auth.query)
   let req_body = {"output": $output, "p_id": $p_id, "callback": $callback} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/x-www-form-urlencoded"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Detailed Facility Report Service
@@ -1372,10 +1847,21 @@ export def "dfr-rest-services-get-dfr get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_id" $p_id "scalar") (serialize-qp "p_system" $p_system "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/dfr_rest_services.get_dfr" $qp)
+  let full_url = (build-url $base "/dfr_rest_services.get_dfr" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"output": $output, "p_id": $p_id, "p_system": $p_system, "callback": $callback} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"output": $output, "p_id": $p_id, "p_system": $p_system, "callback": $callback} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Detailed Facility Report Service
@@ -1400,13 +1886,24 @@ export def "dfr-rest-services-get-dfr create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/dfr_rest_services.get_dfr")
+  let full_url = (build-url $base "/dfr_rest_services.get_dfr" $auth.query)
   let req_body = {"output": $output, "p_id": $p_id, "p_system": $p_system, "callback": $callback} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/x-www-form-urlencoded"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Detailed Facility Report EJScreen Indexes Service
@@ -1430,10 +1927,21 @@ export def "dfr-rest-services-get-ejscreen-indexes get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_id" $p_id "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/dfr_rest_services.get_ejscreen_indexes" $qp)
+  let full_url = (build-url $base "/dfr_rest_services.get_ejscreen_indexes" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"output": $output, "p_id": $p_id, "callback": $callback} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"output": $output, "p_id": $p_id, "callback": $callback} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Detailed Facility Report EJScreen Indexes Service
@@ -1457,13 +1965,24 @@ export def "dfr-rest-services-get-ejscreen-indexes create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/dfr_rest_services.get_ejscreen_indexes")
+  let full_url = (build-url $base "/dfr_rest_services.get_ejscreen_indexes" $auth.query)
   let req_body = {"output": $output, "p_id": $p_id, "callback": $callback} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/x-www-form-urlencoded"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Detailed Facility Report Enforcement Summary Service
@@ -1487,10 +2006,21 @@ export def "dfr-rest-services-get-enforcement-summary get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_id" $p_id "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/dfr_rest_services.get_enforcement_summary" $qp)
+  let full_url = (build-url $base "/dfr_rest_services.get_enforcement_summary" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"output": $output, "p_id": $p_id, "callback": $callback} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"output": $output, "p_id": $p_id, "callback": $callback} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Detailed Facility Report Enforcement Summary Service
@@ -1514,13 +2044,24 @@ export def "dfr-rest-services-get-enforcement-summary create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/dfr_rest_services.get_enforcement_summary")
+  let full_url = (build-url $base "/dfr_rest_services.get_enforcement_summary" $auth.query)
   let req_body = {"output": $output, "p_id": $p_id, "callback": $callback} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/x-www-form-urlencoded"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Displays the dates that data was extracted from native EPA systems for the DFR.
@@ -1544,10 +2085,21 @@ export def "dfr-rest-services-get-extract-dates get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_id" $p_id "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/dfr_rest_services.get_extract_dates" $qp)
+  let full_url = (build-url $base "/dfr_rest_services.get_extract_dates" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"output": $output, "p_id": $p_id, "callback": $callback} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"output": $output, "p_id": $p_id, "callback": $callback} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Displays the dates that data was extracted from native EPA systems for the DFR.
@@ -1571,13 +2123,24 @@ export def "dfr-rest-services-get-extract-dates create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/dfr_rest_services.get_extract_dates")
+  let full_url = (build-url $base "/dfr_rest_services.get_extract_dates" $auth.query)
   let req_body = {"output": $output, "p_id": $p_id, "callback": $callback} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/x-www-form-urlencoded"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Detailed Facility Report Formal Actions Service
@@ -1601,10 +2164,21 @@ export def "dfr-rest-services-get-formal-actions get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_id" $p_id "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/dfr_rest_services.get_formal_actions" $qp)
+  let full_url = (build-url $base "/dfr_rest_services.get_formal_actions" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"output": $output, "p_id": $p_id, "callback": $callback} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"output": $output, "p_id": $p_id, "callback": $callback} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Detailed Facility Report Formal Actions Service
@@ -1628,13 +2202,24 @@ export def "dfr-rest-services-get-formal-actions create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/dfr_rest_services.get_formal_actions")
+  let full_url = (build-url $base "/dfr_rest_services.get_formal_actions" $auth.query)
   let req_body = {"output": $output, "p_id": $p_id, "callback": $callback} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/x-www-form-urlencoded"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Detailed Facility Report ICIS Formal Actions Service
@@ -1658,10 +2243,21 @@ export def "dfr-rest-services-get-icis-formal-actions get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_id" $p_id "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/dfr_rest_services.get_icis_formal_actions" $qp)
+  let full_url = (build-url $base "/dfr_rest_services.get_icis_formal_actions" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"output": $output, "p_id": $p_id, "callback": $callback} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"output": $output, "p_id": $p_id, "callback": $callback} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Detailed Facility Report ICIS Formal Actions Service
@@ -1685,13 +2281,24 @@ export def "dfr-rest-services-get-icis-formal-actions create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/dfr_rest_services.get_icis_formal_actions")
+  let full_url = (build-url $base "/dfr_rest_services.get_icis_formal_actions" $auth.query)
   let req_body = {"output": $output, "p_id": $p_id, "callback": $callback} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/x-www-form-urlencoded"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Detailed Facility Report Inspections Summary Service
@@ -1715,10 +2322,21 @@ export def "dfr-rest-services-get-inspections get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_id" $p_id "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/dfr_rest_services.get_inspections" $qp)
+  let full_url = (build-url $base "/dfr_rest_services.get_inspections" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"output": $output, "p_id": $p_id, "callback": $callback} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"output": $output, "p_id": $p_id, "callback": $callback} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Detailed Facility Report Inspections Summary Service
@@ -1742,13 +2360,24 @@ export def "dfr-rest-services-get-inspections create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/dfr_rest_services.get_inspections")
+  let full_url = (build-url $base "/dfr_rest_services.get_inspections" $auth.query)
   let req_body = {"output": $output, "p_id": $p_id, "callback": $callback} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/x-www-form-urlencoded"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Detailed Facility Report Map Service
@@ -1772,10 +2401,21 @@ export def "dfr-rest-services-get-map get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_id" $p_id "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/dfr_rest_services.get_map" $qp)
+  let full_url = (build-url $base "/dfr_rest_services.get_map" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"output": $output, "p_id": $p_id, "callback": $callback} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"output": $output, "p_id": $p_id, "callback": $callback} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Detailed Facility Report Map Service
@@ -1799,13 +2439,24 @@ export def "dfr-rest-services-get-map create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/dfr_rest_services.get_map")
+  let full_url = (build-url $base "/dfr_rest_services.get_map" $auth.query)
   let req_body = {"output": $output, "p_id": $p_id, "callback": $callback} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/x-www-form-urlencoded"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Detailed Facility Report NAICS Code Service
@@ -1829,10 +2480,21 @@ export def "dfr-rest-services-get-naics get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_id" $p_id "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/dfr_rest_services.get_naics" $qp)
+  let full_url = (build-url $base "/dfr_rest_services.get_naics" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"output": $output, "p_id": $p_id, "callback": $callback} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"output": $output, "p_id": $p_id, "callback": $callback} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Detailed Facility Report NAICS Code Service
@@ -1856,13 +2518,24 @@ export def "dfr-rest-services-get-naics create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/dfr_rest_services.get_naics")
+  let full_url = (build-url $base "/dfr_rest_services.get_naics" $auth.query)
   let req_body = {"output": $output, "p_id": $p_id, "callback": $callback} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/x-www-form-urlencoded"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Detailed Facility Report Notices Service
@@ -1886,10 +2559,21 @@ export def "dfr-rest-services-get-notices get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_id" $p_id "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/dfr_rest_services.get_notices" $qp)
+  let full_url = (build-url $base "/dfr_rest_services.get_notices" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"output": $output, "p_id": $p_id, "callback": $callback} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"output": $output, "p_id": $p_id, "callback": $callback} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Detailed Facility Report Notices Service
@@ -1913,13 +2597,24 @@ export def "dfr-rest-services-get-notices create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/dfr_rest_services.get_notices")
+  let full_url = (build-url $base "/dfr_rest_services.get_notices" $auth.query)
   let req_body = {"output": $output, "p_id": $p_id, "callback": $callback} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/x-www-form-urlencoded"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Detailed Facility Report Permits Service
@@ -1943,10 +2638,21 @@ export def "dfr-rest-services-get-permits get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_id" $p_id "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/dfr_rest_services.get_permits" $qp)
+  let full_url = (build-url $base "/dfr_rest_services.get_permits" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"output": $output, "p_id": $p_id, "callback": $callback} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"output": $output, "p_id": $p_id, "callback": $callback} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Detailed Facility Report Permits Service
@@ -1970,13 +2676,24 @@ export def "dfr-rest-services-get-permits create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/dfr_rest_services.get_permits")
+  let full_url = (build-url $base "/dfr_rest_services.get_permits" $auth.query)
   let req_body = {"output": $output, "p_id": $p_id, "callback": $callback} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/x-www-form-urlencoded"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Detailed Facility Report RCRA Compliance Service
@@ -2000,10 +2717,21 @@ export def "dfr-rest-services-get-rcra-compliance get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_id" $p_id "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/dfr_rest_services.get_rcra_compliance" $qp)
+  let full_url = (build-url $base "/dfr_rest_services.get_rcra_compliance" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"output": $output, "p_id": $p_id, "callback": $callback} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"output": $output, "p_id": $p_id, "callback": $callback} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Detailed Facility Report RCRA Compliance Service
@@ -2027,13 +2755,24 @@ export def "dfr-rest-services-get-rcra-compliance create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/dfr_rest_services.get_rcra_compliance")
+  let full_url = (build-url $base "/dfr_rest_services.get_rcra_compliance" $auth.query)
   let req_body = {"output": $output, "p_id": $p_id, "callback": $callback} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/x-www-form-urlencoded"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Detailed Facility Report SDWA Lead and Copper Service
@@ -2057,10 +2796,21 @@ export def "dfr-rest-services-get-sdwa-lead-and-copper get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_id" $p_id "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/dfr_rest_services.get_sdwa_lead_and_copper" $qp)
+  let full_url = (build-url $base "/dfr_rest_services.get_sdwa_lead_and_copper" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"output": $output, "p_id": $p_id, "callback": $callback} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"output": $output, "p_id": $p_id, "callback": $callback} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Detailed Facility Report SDWA Lead and Copper Service
@@ -2084,13 +2834,24 @@ export def "dfr-rest-services-get-sdwa-lead-and-copper create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/dfr_rest_services.get_sdwa_lead_and_copper")
+  let full_url = (build-url $base "/dfr_rest_services.get_sdwa_lead_and_copper" $auth.query)
   let req_body = {"output": $output, "p_id": $p_id, "callback": $callback} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/x-www-form-urlencoded"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Detailed Facility Report SDWA Sanitary Surveys Service
@@ -2114,10 +2875,21 @@ export def "dfr-rest-services-get-sdwa-sanitary-surveys get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_id" $p_id "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/dfr_rest_services.get_sdwa_sanitary_surveys" $qp)
+  let full_url = (build-url $base "/dfr_rest_services.get_sdwa_sanitary_surveys" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"output": $output, "p_id": $p_id, "callback": $callback} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"output": $output, "p_id": $p_id, "callback": $callback} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Detailed Facility Report SDWA Sanitary Surveys Service
@@ -2141,13 +2913,24 @@ export def "dfr-rest-services-get-sdwa-sanitary-surveys create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/dfr_rest_services.get_sdwa_sanitary_surveys")
+  let full_url = (build-url $base "/dfr_rest_services.get_sdwa_sanitary_surveys" $auth.query)
   let req_body = {"output": $output, "p_id": $p_id, "callback": $callback} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/x-www-form-urlencoded"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Detailed Facility Report SDWA Sanitary Site Visits Service
@@ -2171,10 +2954,21 @@ export def "dfr-rest-services-get-sdwa-site-visits get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_id" $p_id "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/dfr_rest_services.get_sdwa_site_visits" $qp)
+  let full_url = (build-url $base "/dfr_rest_services.get_sdwa_site_visits" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"output": $output, "p_id": $p_id, "callback": $callback} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"output": $output, "p_id": $p_id, "callback": $callback} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Detailed Facility Report SDWA Sanitary Site Visits Service
@@ -2198,13 +2992,24 @@ export def "dfr-rest-services-get-sdwa-site-visits create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/dfr_rest_services.get_sdwa_site_visits")
+  let full_url = (build-url $base "/dfr_rest_services.get_sdwa_site_visits" $auth.query)
   let req_body = {"output": $output, "p_id": $p_id, "callback": $callback} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/x-www-form-urlencoded"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Detailed Facility Report SDWA Violations Service
@@ -2228,10 +3033,21 @@ export def "dfr-rest-services-get-sdwa-violations get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_id" $p_id "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/dfr_rest_services.get_sdwa_violations" $qp)
+  let full_url = (build-url $base "/dfr_rest_services.get_sdwa_violations" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"output": $output, "p_id": $p_id, "callback": $callback} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"output": $output, "p_id": $p_id, "callback": $callback} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Detailed Facility Report SDWA Violations Service
@@ -2255,13 +3071,24 @@ export def "dfr-rest-services-get-sdwa-violations create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/dfr_rest_services.get_sdwa_violations")
+  let full_url = (build-url $base "/dfr_rest_services.get_sdwa_violations" $auth.query)
   let req_body = {"output": $output, "p_id": $p_id, "callback": $callback} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/x-www-form-urlencoded"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Detailed Facility Report SDWIS Compliance Service
@@ -2285,10 +3112,21 @@ export def "dfr-rest-services-get-sdwis-compliance get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_id" $p_id "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/dfr_rest_services.get_sdwis_compliance" $qp)
+  let full_url = (build-url $base "/dfr_rest_services.get_sdwis_compliance" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"output": $output, "p_id": $p_id, "callback": $callback} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"output": $output, "p_id": $p_id, "callback": $callback} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Detailed Facility Report SDWIS Compliance Service
@@ -2312,13 +3150,24 @@ export def "dfr-rest-services-get-sdwis-compliance create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/dfr_rest_services.get_sdwis_compliance")
+  let full_url = (build-url $base "/dfr_rest_services.get_sdwis_compliance" $auth.query)
   let req_body = {"output": $output, "p_id": $p_id, "callback": $callback} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/x-www-form-urlencoded"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Detailed Facility Report SIC Code Service
@@ -2342,10 +3191,21 @@ export def "dfr-rest-services-get-sic-codes get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_id" $p_id "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/dfr_rest_services.get_sic_codes" $qp)
+  let full_url = (build-url $base "/dfr_rest_services.get_sic_codes" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"output": $output, "p_id": $p_id, "callback": $callback} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"output": $output, "p_id": $p_id, "callback": $callback} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Detailed Facility Report SIC Code Service
@@ -2369,13 +3229,24 @@ export def "dfr-rest-services-get-sic-codes create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/dfr_rest_services.get_sic_codes")
+  let full_url = (build-url $base "/dfr_rest_services.get_sic_codes" $auth.query)
   let req_body = {"output": $output, "p_id": $p_id, "callback": $callback} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/x-www-form-urlencoded"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Detailed Facility Report Spatial Metadata Service
@@ -2399,10 +3270,21 @@ export def "dfr-rest-services-get-spatial-metadata get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_id" $p_id "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/dfr_rest_services.get_spatial_metadata" $qp)
+  let full_url = (build-url $base "/dfr_rest_services.get_spatial_metadata" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"output": $output, "p_id": $p_id, "callback": $callback} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"output": $output, "p_id": $p_id, "callback": $callback} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Detailed Facility Report Spatial Metadata Service
@@ -2426,13 +3308,24 @@ export def "dfr-rest-services-get-spatial-metadata create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/dfr_rest_services.get_spatial_metadata")
+  let full_url = (build-url $base "/dfr_rest_services.get_spatial_metadata" $auth.query)
   let req_body = {"output": $output, "p_id": $p_id, "callback": $callback} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/x-www-form-urlencoded"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Detailed Facility Report TRI History Service
@@ -2456,10 +3349,21 @@ export def "dfr-rest-services-get-tri-history get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_id" $p_id "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/dfr_rest_services.get_tri_history" $qp)
+  let full_url = (build-url $base "/dfr_rest_services.get_tri_history" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"output": $output, "p_id": $p_id, "callback": $callback} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"output": $output, "p_id": $p_id, "callback": $callback} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Detailed Facility Report TRI History Service
@@ -2483,13 +3387,24 @@ export def "dfr-rest-services-get-tri-history create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/dfr_rest_services.get_tri_history")
+  let full_url = (build-url $base "/dfr_rest_services.get_tri_history" $auth.query)
   let req_body = {"output": $output, "p_id": $p_id, "callback": $callback} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/x-www-form-urlencoded"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Detailed Facility Report TRI Releases Service
@@ -2513,10 +3428,21 @@ export def "dfr-rest-services-get-tri-releases get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_id" $p_id "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/dfr_rest_services.get_tri_releases" $qp)
+  let full_url = (build-url $base "/dfr_rest_services.get_tri_releases" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"output": $output, "p_id": $p_id, "callback": $callback} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"output": $output, "p_id": $p_id, "callback": $callback} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Detailed Facility Report TRI Releases Service
@@ -2540,13 +3466,24 @@ export def "dfr-rest-services-get-tri-releases create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/dfr_rest_services.get_tri_releases")
+  let full_url = (build-url $base "/dfr_rest_services.get_tri_releases" $auth.query)
   let req_body = {"output": $output, "p_id": $p_id, "callback": $callback} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/x-www-form-urlencoded"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Detailed Facility Report Tribes Service
@@ -2570,10 +3507,21 @@ export def "dfr-rest-services-get-tribes get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_id" $p_id "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/dfr_rest_services.get_tribes" $qp)
+  let full_url = (build-url $base "/dfr_rest_services.get_tribes" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"output": $output, "p_id": $p_id, "callback": $callback} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"output": $output, "p_id": $p_id, "callback": $callback} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Detailed Facility Report Tribes Service
@@ -2597,13 +3545,24 @@ export def "dfr-rest-services-get-tribes create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/dfr_rest_services.get_tribes")
+  let full_url = (build-url $base "/dfr_rest_services.get_tribes" $auth.query)
   let req_body = {"output": $output, "p_id": $p_id, "callback": $callback} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/x-www-form-urlencoded"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Detailed Facility Report Water Quality Service
@@ -2627,10 +3586,21 @@ export def "dfr-rest-services-get-water-quality get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_id" $p_id "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/dfr_rest_services.get_water_quality" $qp)
+  let full_url = (build-url $base "/dfr_rest_services.get_water_quality" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"output": $output, "p_id": $p_id, "callback": $callback} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"output": $output, "p_id": $p_id, "callback": $callback} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Detailed Facility Report Water Quality Service
@@ -2654,13 +3624,24 @@ export def "dfr-rest-services-get-water-quality create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/dfr_rest_services.get_water_quality")
+  let full_url = (build-url $base "/dfr_rest_services.get_water_quality" $auth.query)
   let req_body = {"output": $output, "p_id": $p_id, "callback": $callback} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/x-www-form-urlencoded"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Displays detailed Water Quality information from EPA's Office of Water Systems
@@ -2684,10 +3665,21 @@ export def "dfr-rest-services-get-water-quality-details get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_id" $p_id "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/dfr_rest_services.get_water_quality_details" $qp)
+  let full_url = (build-url $base "/dfr_rest_services.get_water_quality_details" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"output": $output, "p_id": $p_id, "callback": $callback} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"output": $output, "p_id": $p_id, "callback": $callback} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Displays detailed Water Quality information from EPA's Office of Water Systems
@@ -2711,13 +3703,24 @@ export def "dfr-rest-services-get-water-quality-details create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/dfr_rest_services.get_water_quality_details")
+  let full_url = (build-url $base "/dfr_rest_services.get_water_quality_details" $auth.query)
   let req_body = {"output": $output, "p_id": $p_id, "callback": $callback} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/x-www-form-urlencoded"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Downloads the complete RCRA Compliance History Section of the DFR
@@ -2737,10 +3740,21 @@ export def "dfr-rest-services-rcra-3-yr-download get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/dfr_rest_services.rcra_3_yr_download")
+  let full_url = (build-url $base "/dfr_rest_services.rcra_3_yr_download" $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Downloads the complete RCRA Compliance History Section of the DFR
@@ -2760,8 +3774,19 @@ export def "dfr-rest-services-rcra-3-yr-download create" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/dfr_rest_services.rcra_3_yr_download")
+  let full_url = (build-url $base "/dfr_rest_services.rcra_3_yr_download" $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }

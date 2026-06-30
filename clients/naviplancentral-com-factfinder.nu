@@ -8,7 +8,7 @@ const BASE_URL = "https://demo.uat.naviplancentral.com/factfinder"
 # `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
 # where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o ADVICENT_FACTFINDERSERVICE_TOKEN | default "" }
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o ADVICENT_FACTFINDERSERVICE_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
@@ -40,14 +40,11 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
-# Trick: `url encode --all` over-encodes, then we decode the four unreserved
-# punctuation chars back. Pre-existing %XX sequences in the input survive
-# because `url encode --all` first turns their % into %25.
 def encode-path-segment [v: any]: nothing -> string {
   $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
-# Serialize an array-typed path parameter (issue 49.A). OpenAPI 3 `style: simple`
+# Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
 # (the default for path params) and Swagger 2 `collectionFormat: csv` both join
 # the elements with a literal comma WITHIN the single path segment, each element
 # RFC-3986-encoded individually (so a comma inside an element stays %2C). Without
@@ -58,51 +55,57 @@ def encode-path-array [v: any]: nothing -> string {
   if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
 }
 
-# Build URL from base, path, and optional query string
-def build-url [base: string, path: string, query?: string]: nothing -> string {
+# Build the request URL from base, path, and any number of pre-encoded query
+# fragments (param serializer output and/or the auth query). Each fragment is an
+# `&`-joinable `key=value` string already percent-encoded by its producer; empty
+# fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
+# delimiters are hand-spliced — and any query already on the base URL is merged in.
+def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
   let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
-  let result = ($parsed | upsert path $full_path)
-  if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
+  let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
+  $parsed | upsert path $full_path | upsert query $query | url join
 }
 
-# Build the dry-run record returned by --dry-run. Shape:
-#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
-#    auth: {scheme, location}}
-# `meta` carries logical-form data (the query record by spec name, the pre-serialization
-# body) that do-request itself cannot reconstruct from its wire-format args.
-def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
-  let m = ($meta | default {})
-  {
-    dry_run: true
-    method: $method
-    url: $url
-    query: ($m | get -o query | default {})
-    headers: $auth.headers
-    body: ($m | get -o body)
-    content_type: $content_type
-    timeout: $timeout
-    auth: {scheme: $auth.scheme, location: $auth.location}
-  }
+# Success policy: did this response succeed? Single source of truth, consulted by
+# handle-response and the HEAD header-unwrap. Empty ok_codes means the spec listed
+# none, so fall back to < 400. Otherwise: any 2xx, plus documented success codes.
+def status-ok [status: int, ok_codes: list<int>]: nothing -> bool {
+  if ($ok_codes | is-empty) { $status < 400 } else { ($status >= 200 and $status < 300) or ($status in $ok_codes) }
 }
 
-# Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
-  let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
-  let timeout = ($max_time | default 30min)
-  let ct = ($content_type | default "application/json")
-  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
-  let resp = match $method {
-    "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
-  }
-  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
-  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
+# Unwrap a `--full` HTTP response into the user-facing value. Response arrives
+# via pipeline; ok_codes gates the error throw (see status-ok).
+def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: record -> any {
+  let resp = $in
+  if $allow_errors { return $resp }
+  if not (status-ok $resp.status $ok_codes) { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } }
+  if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
+  if $resp.status == 204 { return null }
+  $resp.body
+}
+
+# GET — bodyless, honours --raw
+def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+}
+
+# POST — body + content-type
+def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# PUT — body + content-type
+def send-put [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http put --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http put --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# DELETE — body via --data
+def send-delete [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http delete --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url } else { http delete --headers $req.headers --content-type $req.content_type --data $body --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url }
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 def base-url-completer [] { ["https://demo.uat.naviplancentral.com/factfinder" "http://demo.uat.naviplancentral.com/factfinder"] }
@@ -178,10 +181,21 @@ export def "account-types get-by-country" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "country" $country "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/AccountTypes" $qp)
+  let full_url = (build-url $base "/api/AccountTypes" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"country": $country} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"country": $country} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Description: This operation retrieves all Account Types for the specified id. Purpose: Provides access to the Account Types including id and type description.
@@ -204,10 +218,21 @@ export def "account-types get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/AccountTypes/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/AccountTypes/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Description: This operation retrieves all Accounts for the specified Fact Finder ID and/or external source ID. Purpose: Provides access to the Account information including description and market value.
@@ -231,10 +256,21 @@ export def "accounts get-by-fact-finder-by-factfinderid-externalsourceid" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "factFinderId" $fact_finder_id "scalar") (serialize-qp "externalSourceId" $external_source_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/Accounts" $qp)
+  let full_url = (build-url $base "/api/Accounts" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"factFinderId": $fact_finder_id, "externalSourceId": $external_source_id} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"factFinderId": $fact_finder_id, "externalSourceId": $external_source_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Description: The operation creates an Account. Purpose: Allows for creation of Accounts on a Fact Finder.
@@ -266,12 +302,23 @@ export def "accounts create-by-model" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/Accounts")
+  let full_url = (build-url $base "/api/Accounts" $auth.query)
   let req_body = {"accountType": $account_type, "description": $description, "externalDestinationId": $external_destination_id, "externalSourceId": $external_source_id, "externalSourceName": $external_source_name, "factFinderId": $fact_finder_id, "lastUpdated": $last_updated, "marketValue": $market_value, "owner": $owner, "ownerDependentId": $owner_dependent_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Retrieves all holdings in the specified Account.
@@ -294,10 +341,21 @@ export def "accounts-holdings list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/api/Accounts/{account_id}/Holdings"))
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/api/Accounts/{account_id}/Holdings") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Creates a holding and adds it to an existing Account.
@@ -328,12 +386,23 @@ export def "accounts-holdings create-by-model" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/api/Accounts/{account_id}/Holdings"))
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/api/Accounts/{account_id}/Holdings") $auth.query)
   let req_body = {"costBasis": $cost_basis, "cusip": $cusip, "description": $description, "externalDestinationId": $external_destination_id, "marketValue": $market_value, "symbol": $symbol, "valuationDate": $valuation_date} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Updates all holdings associated with an account
@@ -359,12 +428,23 @@ export def "accounts-holdings update-by-account-id" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/api/Accounts/{account_id}/Holdings"))
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/api/Accounts/{account_id}/Holdings") $auth.query)
   let req_body = {"holdings": $holdings} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Description: This operation deletes a single Account Holding for the specified Account Holding ID and Account ID. Purpose: Provides the ability to remove individual holdings from a specified Account.
@@ -389,10 +469,21 @@ export def "accounts-holdings delete" [
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), id: (encode-path-segment $id)} | format pattern "/api/Accounts/{account_id}/Holdings/{id}"))
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), id: (encode-path-segment $id)} | format pattern "/api/Accounts/{account_id}/Holdings/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Description: This operation retrieves a single Account Holding for the specified Account Holding ID and Account ID. Purpose: Provides access to the Account Holding information including description and market value.
@@ -417,10 +508,21 @@ export def "accounts-holdings get" [
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), id: (encode-path-segment $id)} | format pattern "/api/Accounts/{account_id}/Holdings/{id}"))
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), id: (encode-path-segment $id)} | format pattern "/api/Accounts/{account_id}/Holdings/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates a holding associated with an account
@@ -453,12 +555,23 @@ export def "accounts-holdings update-by-account-id-1" [
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), id: (encode-path-segment $id)} | format pattern "/api/Accounts/{account_id}/Holdings/{id}"))
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), id: (encode-path-segment $id)} | format pattern "/api/Accounts/{account_id}/Holdings/{id}") $auth.query)
   let req_body = {"costBasis": $cost_basis, "cusip": $cusip, "description": $description, "externalDestinationId": $external_destination_id, "marketValue": $market_value, "symbol": $symbol, "valuationDate": $valuation_date} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes all savings strategies tied to an account
@@ -481,10 +594,21 @@ export def "accounts-savings-strategies delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/api/Accounts/{account_id}/SavingsStrategies"))
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/api/Accounts/{account_id}/SavingsStrategies") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Get all of the savings strategies for a specific account
@@ -507,10 +631,21 @@ export def "accounts-savings-strategies get-by" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/api/Accounts/{account_id}/SavingsStrategies"))
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/api/Accounts/{account_id}/SavingsStrategies") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Creates a savings strategy on a specific account
@@ -546,12 +681,23 @@ export def "accounts-savings-strategies create-strategy-by-savingsstrategy" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/api/Accounts/{account_id}/SavingsStrategies"))
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/api/Accounts/{account_id}/SavingsStrategies") $auth.query)
   let req_body = {"employerSavingsAmount": $employer_savings_amount, "employerSavingsAmountType": $employer_savings_amount_type, "endDate": $end_date, "externalDestinationId": $external_destination_id, "frequencyId": $frequency_id, "mandatoryAmount": $mandatory_amount, "mandatoryAmountType": $mandatory_amount_type, "postTaxSavingsAmount": $post_tax_savings_amount, "postTaxSavingsAmountType": $post_tax_savings_amount_type, "preTaxSavingsAmount": $pre_tax_savings_amount, "preTaxSavingsAmountType": $pre_tax_savings_amount_type, "startDate": $start_date} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Deletes a specific savings strategy
@@ -576,10 +722,21 @@ export def "accounts-savings-strategies delete-strategy" [
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), id: (encode-path-segment $id)} | format pattern "/api/Accounts/{account_id}/SavingsStrategies/{id}"))
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), id: (encode-path-segment $id)} | format pattern "/api/Accounts/{account_id}/SavingsStrategies/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Get a specific savings strategy for an account
@@ -604,10 +761,21 @@ export def "accounts-savings-strategies get-by-and-strategy" [
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), id: (encode-path-segment $id)} | format pattern "/api/Accounts/{account_id}/SavingsStrategies/{id}"))
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), id: (encode-path-segment $id)} | format pattern "/api/Accounts/{account_id}/SavingsStrategies/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates a specific savings strategy
@@ -645,12 +813,23 @@ export def "accounts-savings-strategies update-strategy-by-savingsstrategy" [
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), id: (encode-path-segment $id)} | format pattern "/api/Accounts/{account_id}/SavingsStrategies/{id}"))
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), id: (encode-path-segment $id)} | format pattern "/api/Accounts/{account_id}/SavingsStrategies/{id}") $auth.query)
   let req_body = {"employerSavingsAmount": $employer_savings_amount, "employerSavingsAmountType": $employer_savings_amount_type, "endDate": $end_date, "externalDestinationId": $external_destination_id, "frequencyId": $frequency_id, "mandatoryAmount": $mandatory_amount, "mandatoryAmountType": $mandatory_amount_type, "postTaxSavingsAmount": $post_tax_savings_amount, "postTaxSavingsAmountType": $post_tax_savings_amount_type, "preTaxSavingsAmount": $pre_tax_savings_amount, "preTaxSavingsAmountType": $pre_tax_savings_amount_type, "startDate": $start_date} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Description: The operation removes an Account tied to a Fact Finder. Purpose: Allows for removal of an Account from a Fact Finder.
@@ -673,10 +852,21 @@ export def "accounts delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Accounts/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Accounts/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Description: This operation retrieves a single Account for the specified Account ID. Purpose: Provides access to the Account information including description and market value.
@@ -699,10 +889,21 @@ export def "accounts get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Accounts/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Accounts/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Description: The operation updates an Account, deletes associated saving strategies if the account type changes. Purpose: Allows for complete replacement of an Account on a Fact Finder.
@@ -736,12 +937,23 @@ export def "accounts update-by-model" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Accounts/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Accounts/{id}") $auth.query)
   let req_body = {"accountType": $account_type, "description": $description, "externalDestinationId": $external_destination_id, "externalSourceId": $external_source_id, "externalSourceName": $external_source_name, "factFinderId": $fact_finder_id, "lastUpdated": $last_updated, "marketValue": $market_value, "owner": $owner, "ownerDependentId": $owner_dependent_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Description: This operation submits the Fact Finder data to an external system. Purpose: Allows Fact Finder data to be persisted in another system for that system's consumption and use.
@@ -766,12 +978,23 @@ export def "clients create-by-model" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/Clients")
+  let full_url = (build-url $base "/api/Clients" $auth.query)
   let req_body = {"externalDestinationName": $external_destination_name, "factFinderId": $fact_finder_id, "planAction": $plan_action} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Description: This operation retrieves all Critical Illness Insurance Policies for the specified Fact Finder ID. Purpose: Provides access to the Critical Illness Insurance Policies including description and policy type.
@@ -794,10 +1017,21 @@ export def "critical-illness-insurance-policies get-by-fact-finder-by-factfinder
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "factFinderId" $fact_finder_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/CriticalIllnessInsurancePolicies" $qp)
+  let full_url = (build-url $base "/api/CriticalIllnessInsurancePolicies" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"factFinderId": $fact_finder_id} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"factFinderId": $fact_finder_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Description: The operation creates a Critical Illness Insurance Policy. Purpose: Allows for creation of Critical Illness Insurance Policies on a Fact Finder.
@@ -827,12 +1061,23 @@ export def "critical-illness-insurance-policies create-by-model" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/CriticalIllnessInsurancePolicies")
+  let full_url = (build-url $base "/api/CriticalIllnessInsurancePolicies" $auth.query)
   let req_body = {"benefit": $benefit, "description": $description, "externalDestinationId": $external_destination_id, "factFinderId": $fact_finder_id, "frequency": $frequency, "insured": $insured, "policyType": $policy_type, "premium": $premium} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Description: The operation removes a Critical Illness Insurance Policy tied to a Fact Finder. Purpose: Allows for removal of a Critical Illness Insurance Policy from a Fact Finder.
@@ -855,10 +1100,21 @@ export def "critical-illness-insurance-policies delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/CriticalIllnessInsurancePolicies/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/CriticalIllnessInsurancePolicies/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Description: This operation retrieves a single Critical Illness Insurance Policy for the specified Critical Illness Insurance Policy ID. Purpose: Provides access to the Critical Illness Insurance Policy including description and policy type.
@@ -881,10 +1137,21 @@ export def "critical-illness-insurance-policies get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/CriticalIllnessInsurancePolicies/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/CriticalIllnessInsurancePolicies/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Description: The operation updates a Critical Illness Insurance Policy. Purpose: Allows for complete replacement of a Critical Illness Insurance Policy on a Fact Finder.
@@ -916,12 +1183,23 @@ export def "critical-illness-insurance-policies update-by-model" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/CriticalIllnessInsurancePolicies/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/CriticalIllnessInsurancePolicies/{id}") $auth.query)
   let req_body = {"benefit": $benefit, "description": $description, "externalDestinationId": $external_destination_id, "factFinderId": $fact_finder_id, "frequency": $frequency, "insured": $insured, "policyType": $policy_type, "premium": $premium} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Description: This operation retrieves all Critical Illness Insurance Policy Types for the specified country. Purpose: Provides access to the Critical Illness Insurance Policy Types including id and type description.
@@ -944,10 +1222,21 @@ export def "critical-illness-insurance-policy-types get-by-country" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "country" $country "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/CriticalIllnessInsurancePolicyTypes" $qp)
+  let full_url = (build-url $base "/api/CriticalIllnessInsurancePolicyTypes" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"country": $country} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"country": $country} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Description: This operation retrieves the Critical Illness Insurance Policy Type for the specified id. Purpose: Provides access to the Critical Illness Insurance Policy Types including id and type description.
@@ -970,10 +1259,21 @@ export def "critical-illness-insurance-policy-types get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/CriticalIllnessInsurancePolicyTypes/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/CriticalIllnessInsurancePolicyTypes/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Description: This operation retrieves all Defined Benefit Pensions for the specified Fact Finder ID. Purpose: Provides access to the Defined Benefit Pensions including description and start date.
@@ -996,10 +1296,21 @@ export def "defined-benefit-pensions get-by-fact-finder-by-factfinderid" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "factFinderId" $fact_finder_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/DefinedBenefitPensions" $qp)
+  let full_url = (build-url $base "/api/DefinedBenefitPensions" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"factFinderId": $fact_finder_id} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"factFinderId": $fact_finder_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Description: The operation creates a Defined Benefit Pension. Purpose: Allows for creation of Defined Benefit Pensions on a Fact Finder.
@@ -1027,12 +1338,23 @@ export def "defined-benefit-pensions create-by-model" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/DefinedBenefitPensions")
+  let full_url = (build-url $base "/api/DefinedBenefitPensions" $auth.query)
   let req_body = {"description": $description, "estimatedAmount": $estimated_amount, "externalDestinationId": $external_destination_id, "factFinderId": $fact_finder_id, "member": $member, "startDate": $start_date} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200 201]
 }
 
 # Description: The operation removes a Defined Benefit Pension tied to a Fact Finder. Purpose: Allows for removal of a Defined Benefit Pension from a Fact Finder.
@@ -1055,10 +1377,21 @@ export def "defined-benefit-pensions delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/DefinedBenefitPensions/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/DefinedBenefitPensions/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200 204]
 }
 
 # Description: This operation retrieves a single Defined Benefit Pension for the specified Defined Benefit Pension ID. Purpose: Provides access to the Defined Benefit Pension including description and start date.
@@ -1081,10 +1414,21 @@ export def "defined-benefit-pensions get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/DefinedBenefitPensions/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/DefinedBenefitPensions/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Description: The operation updates a Defined Benefit Pension. Purpose: Allows for complete replacement of a Defined Benefit Pension on a Fact Finder.
@@ -1114,12 +1458,23 @@ export def "defined-benefit-pensions update-by-model" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/DefinedBenefitPensions/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/DefinedBenefitPensions/{id}") $auth.query)
   let req_body = {"description": $description, "estimatedAmount": $estimated_amount, "externalDestinationId": $external_destination_id, "factFinderId": $fact_finder_id, "member": $member, "startDate": $start_date} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Description: This operation retrieves all Demographic information for the specified Fact Finder ID. Purpose: Provides access to the Demographic information including city and state.
@@ -1142,10 +1497,21 @@ export def "demographics get-by-fact-finder-by-factfinderid" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "factFinderId" $fact_finder_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/Demographics" $qp)
+  let full_url = (build-url $base "/api/Demographics" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"factFinderId": $fact_finder_id} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"factFinderId": $fact_finder_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Description: The operation creates Demographic information. Purpose: Allows for creation of Demographic information on a Fact Finder.
@@ -1177,12 +1543,23 @@ export def "demographics create-by-model" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/Demographics")
+  let full_url = (build-url $base "/api/Demographics" $auth.query)
   let req_body = {"city": $city, "externalDestinationId": $external_destination_id, "externalSourceId": $external_source_id, "factFinderId": $fact_finder_id, "head1": $head1, "head2": $head2, "jointAnalysis": $joint_analysis, "state": $state} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Description: This operation retrieves all Dependents for the specified Demographic information ID. Purpose: Provides access to the Dependents including first and last name.
@@ -1205,10 +1582,21 @@ export def "demographics-dependents list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($demographic_id | is-empty) { error make --unspanned { msg: "path parameter 'demographicId' must be non-empty" } }
-  let full_url = (build-url $base ({demographic_id: (encode-path-segment $demographic_id)} | format pattern "/api/Demographics/{demographic_id}/Dependents"))
+  let full_url = (build-url $base ({demographic_id: (encode-path-segment $demographic_id)} | format pattern "/api/Demographics/{demographic_id}/Dependents") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Description: The operation creates a Dependent. Purpose: Allows for creation of Dependents on a Fact Finder.
@@ -1238,12 +1626,23 @@ export def "demographics-dependents create-by-model" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($demographic_id | is-empty) { error make --unspanned { msg: "path parameter 'demographicId' must be non-empty" } }
-  let full_url = (build-url $base ({demographic_id: (encode-path-segment $demographic_id)} | format pattern "/api/Demographics/{demographic_id}/Dependents"))
+  let full_url = (build-url $base ({demographic_id: (encode-path-segment $demographic_id)} | format pattern "/api/Demographics/{demographic_id}/Dependents") $auth.query)
   let req_body = {"birthDate": $birth_date, "dependentOf": $dependent_of, "externalDestinationId": $external_destination_id, "firstName": $first_name, "lastName": $last_name, "relationship": $relationship} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Description: The operation removes a Dependent tied to a Fact Finder. Purpose: Allows for removal of a Dependent from a Fact Finder.
@@ -1268,10 +1667,21 @@ export def "demographics-dependents delete" [
   let base = ($base_url | default $BASE_URL)
   if ($demographic_id | is-empty) { error make --unspanned { msg: "path parameter 'demographicId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({demographic_id: (encode-path-segment $demographic_id), id: (encode-path-segment $id)} | format pattern "/api/Demographics/{demographic_id}/Dependents/{id}"))
+  let full_url = (build-url $base ({demographic_id: (encode-path-segment $demographic_id), id: (encode-path-segment $id)} | format pattern "/api/Demographics/{demographic_id}/Dependents/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Description: This operation retrieves a single Dependent for the specified Dependent ID. Purpose: Provides access to the Dependent including first and last name.
@@ -1296,10 +1706,21 @@ export def "demographics-dependents get" [
   let base = ($base_url | default $BASE_URL)
   if ($demographic_id | is-empty) { error make --unspanned { msg: "path parameter 'demographicId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({demographic_id: (encode-path-segment $demographic_id), id: (encode-path-segment $id)} | format pattern "/api/Demographics/{demographic_id}/Dependents/{id}"))
+  let full_url = (build-url $base ({demographic_id: (encode-path-segment $demographic_id), id: (encode-path-segment $id)} | format pattern "/api/Demographics/{demographic_id}/Dependents/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Description: The operation updates a Dependent. Purpose: Allows for complete replacement of a Dependent on a Fact Finder.
@@ -1331,12 +1752,23 @@ export def "demographics-dependents update-by-model" [
   let base = ($base_url | default $BASE_URL)
   if ($demographic_id | is-empty) { error make --unspanned { msg: "path parameter 'demographicId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({demographic_id: (encode-path-segment $demographic_id), id: (encode-path-segment $id)} | format pattern "/api/Demographics/{demographic_id}/Dependents/{id}"))
+  let full_url = (build-url $base ({demographic_id: (encode-path-segment $demographic_id), id: (encode-path-segment $id)} | format pattern "/api/Demographics/{demographic_id}/Dependents/{id}") $auth.query)
   let req_body = {"birthDate": $birth_date, "dependentOf": $dependent_of, "externalDestinationId": $external_destination_id, "firstName": $first_name, "lastName": $last_name, "relationship": $relationship} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Description: This operation retrieves Demographic information for the specified Demographic information ID. Purpose: Provides access to the Demographic information including city and state.
@@ -1359,10 +1791,21 @@ export def "demographics get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Demographics/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Demographics/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Description: The operation updates Demographic information. Purpose: Allows for complete replacement of Demographic information on a Fact Finder.
@@ -1396,12 +1839,23 @@ export def "demographics update-by-model" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Demographics/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Demographics/{id}") $auth.query)
   let req_body = {"city": $city, "externalDestinationId": $external_destination_id, "externalSourceId": $external_source_id, "factFinderId": $fact_finder_id, "head1": $head1, "head2": $head2, "jointAnalysis": $joint_analysis, "state": $state} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Description: This operation retrieves all Disability Insurance Policies for the specified Fact Finder ID. Purpose: Provides access to the Disability Insurance Policies including description and policy type.
@@ -1424,10 +1878,21 @@ export def "disability-insurance-policies get-by-fact-finder-by-factfinderid" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "factFinderId" $fact_finder_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/DisabilityInsurancePolicies" $qp)
+  let full_url = (build-url $base "/api/DisabilityInsurancePolicies" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"factFinderId": $fact_finder_id} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"factFinderId": $fact_finder_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Description: The operation creates a Disability Insurance Policy. Purpose: Allows for creation of Disability Insurance Policies on a Fact Finder.
@@ -1459,12 +1924,23 @@ export def "disability-insurance-policies create-by-model" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/DisabilityInsurancePolicies")
+  let full_url = (build-url $base "/api/DisabilityInsurancePolicies" $auth.query)
   let req_body = {"benefit": $benefit, "benefitFrequency": $benefit_frequency, "benefitType": $benefit_type, "description": $description, "externalDestinationId": $external_destination_id, "factFinderId": $fact_finder_id, "insured": $insured, "policyType": $policy_type, "premium": $premium, "premiumFrequency": $premium_frequency} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Description: The operation removes a Disability Insurance Policy tied to a Fact Finder. Purpose: Allows for removal of a Disability Insurance Policy from a Fact Finder.
@@ -1487,10 +1963,21 @@ export def "disability-insurance-policies delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/DisabilityInsurancePolicies/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/DisabilityInsurancePolicies/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Description: This operation retrieves a single Disability Insurance Policy for the specified Disability Insurance Policy ID. Purpose: Provides access to the Disability Insurance Policy including description and policy type.
@@ -1513,10 +2000,21 @@ export def "disability-insurance-policies get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/DisabilityInsurancePolicies/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/DisabilityInsurancePolicies/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Description: The operation updates a Disability Insurance Policy. Purpose: Allows for complete replacement of a Disability Insurance Policy on a Fact Finder.
@@ -1550,12 +2048,23 @@ export def "disability-insurance-policies update-by-model" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/DisabilityInsurancePolicies/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/DisabilityInsurancePolicies/{id}") $auth.query)
   let req_body = {"benefit": $benefit, "benefitFrequency": $benefit_frequency, "benefitType": $benefit_type, "description": $description, "externalDestinationId": $external_destination_id, "factFinderId": $fact_finder_id, "insured": $insured, "policyType": $policy_type, "premium": $premium, "premiumFrequency": $premium_frequency} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Description: This operation retrieves all Disability Insurance Policy Types for the specified country. Purpose: Provides access to the Disability Insurance Policy Types including id and type description.
@@ -1578,10 +2087,21 @@ export def "disability-insurance-policy-types get-by-country" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "country" $country "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/DisabilityInsurancePolicyTypes" $qp)
+  let full_url = (build-url $base "/api/DisabilityInsurancePolicyTypes" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"country": $country} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"country": $country} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Description: This operation retrieves all Disability Insurance Policy Types for the specified id. Purpose: Provides access to the Disability Insurance Policy Types including id and type description.
@@ -1604,10 +2124,21 @@ export def "disability-insurance-policy-types get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/DisabilityInsurancePolicyTypes/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/DisabilityInsurancePolicyTypes/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Description: This operation retrieves all Education Goals for the specified Fact Finder ID. Purpose: Provides access to the Education Goals including description and projected cost.
@@ -1630,10 +2161,21 @@ export def "education-goals get-by-fact-finder-by-factfinderid" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "factFinderId" $fact_finder_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/EducationGoals" $qp)
+  let full_url = (build-url $base "/api/EducationGoals" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"factFinderId": $fact_finder_id} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"factFinderId": $fact_finder_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Description: The operation creates an Education Goal. Purpose: Allows for creation of Education Goals on a Fact Finder.
@@ -1659,12 +2201,23 @@ export def "education-goals create-by-model" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/EducationGoals")
+  let full_url = (build-url $base "/api/EducationGoals" $auth.query)
   let req_body = {"description": $description, "externalDestinationId": $external_destination_id, "factFinderId": $fact_finder_id, "projectedCost": $projected_cost} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Description: This operation retrieves all Education Goal Expenses for the specified Education Goal ID. Purpose: Provides access to the Education Goal Expenses including description and annual cost.
@@ -1687,10 +2240,21 @@ export def "education-goals-expenses get-by" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($education_goal_id | is-empty) { error make --unspanned { msg: "path parameter 'educationGoalId' must be non-empty" } }
-  let full_url = (build-url $base ({education_goal_id: (encode-path-segment $education_goal_id)} | format pattern "/api/EducationGoals/{education_goal_id}/Expenses"))
+  let full_url = (build-url $base ({education_goal_id: (encode-path-segment $education_goal_id)} | format pattern "/api/EducationGoals/{education_goal_id}/Expenses") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Description: The operation creates an Education Goal Expense. Purpose: Allows for creation of Education Goal Expenses on a Fact Finder.
@@ -1720,12 +2284,23 @@ export def "education-goals-expenses create-by-model" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($education_goal_id | is-empty) { error make --unspanned { msg: "path parameter 'educationGoalId' must be non-empty" } }
-  let full_url = (build-url $base ({education_goal_id: (encode-path-segment $education_goal_id)} | format pattern "/api/EducationGoals/{education_goal_id}/Expenses"))
+  let full_url = (build-url $base ({education_goal_id: (encode-path-segment $education_goal_id)} | format pattern "/api/EducationGoals/{education_goal_id}/Expenses") $auth.query)
   let req_body = {"annualCost": $annual_cost, "externalDestinationId": $external_destination_id, "member": $member, "memberDependentId": $member_dependent_id, "startYear": $start_year, "years": $years} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Description: The operation removes an Education Goal Expense tied to a Fact Finder. Purpose: Allows for removal of an Education Goal Expense from a Fact Finder.
@@ -1750,10 +2325,21 @@ export def "education-goals-expenses delete" [
   let base = ($base_url | default $BASE_URL)
   if ($education_goal_id | is-empty) { error make --unspanned { msg: "path parameter 'educationGoalId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({education_goal_id: (encode-path-segment $education_goal_id), id: (encode-path-segment $id)} | format pattern "/api/EducationGoals/{education_goal_id}/Expenses/{id}"))
+  let full_url = (build-url $base ({education_goal_id: (encode-path-segment $education_goal_id), id: (encode-path-segment $id)} | format pattern "/api/EducationGoals/{education_goal_id}/Expenses/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Description: This operation retrieves a single Education Goal Expense for the specified Education Goal Expense ID. Purpose: Provides access to the Education Goal Expense including description and annual cost.
@@ -1778,10 +2364,21 @@ export def "education-goals-expenses get" [
   let base = ($base_url | default $BASE_URL)
   if ($education_goal_id | is-empty) { error make --unspanned { msg: "path parameter 'educationGoalId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({education_goal_id: (encode-path-segment $education_goal_id), id: (encode-path-segment $id)} | format pattern "/api/EducationGoals/{education_goal_id}/Expenses/{id}"))
+  let full_url = (build-url $base ({education_goal_id: (encode-path-segment $education_goal_id), id: (encode-path-segment $id)} | format pattern "/api/EducationGoals/{education_goal_id}/Expenses/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Description: The operation updates an Education Goal Expense. Purpose: Allows for complete replacement of an Education Goal Expense on a Fact Finder.
@@ -1813,12 +2410,23 @@ export def "education-goals-expenses update-by-model" [
   let base = ($base_url | default $BASE_URL)
   if ($education_goal_id | is-empty) { error make --unspanned { msg: "path parameter 'educationGoalId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({education_goal_id: (encode-path-segment $education_goal_id), id: (encode-path-segment $id)} | format pattern "/api/EducationGoals/{education_goal_id}/Expenses/{id}"))
+  let full_url = (build-url $base ({education_goal_id: (encode-path-segment $education_goal_id), id: (encode-path-segment $id)} | format pattern "/api/EducationGoals/{education_goal_id}/Expenses/{id}") $auth.query)
   let req_body = {"annualCost": $annual_cost, "externalDestinationId": $external_destination_id, "member": $member, "memberDependentId": $member_dependent_id, "startYear": $start_year, "years": $years} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Description: The operation removes an Education Goal tied to a Fact Finder. Purpose: Allows for removal of an Education Goal from a Fact Finder.
@@ -1841,10 +2449,21 @@ export def "education-goals delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/EducationGoals/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/EducationGoals/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Description: This operation retrieves a single Education Goal for the specified Education Goal ID. Purpose: Provides access to the Education Goal including description and projected cost.
@@ -1867,10 +2486,21 @@ export def "education-goals get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/EducationGoals/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/EducationGoals/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Description: The operation creates an Education Goal Expense. Purpose: Allows for creation of Education Goal Expenses on a Fact Finder.
@@ -1898,12 +2528,23 @@ export def "education-goals update-by-model" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/EducationGoals/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/EducationGoals/{id}") $auth.query)
   let req_body = {"description": $description, "externalDestinationId": $external_destination_id, "factFinderId": $fact_finder_id, "projectedCost": $projected_cost} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Description: This operation retrieves all Expense Types for the specified country. Purpose: Provides access to the Expense Types including id and type description.
@@ -1926,10 +2567,21 @@ export def "expense-types get-by-country" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "country" $country "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/ExpenseTypes" $qp)
+  let full_url = (build-url $base "/api/ExpenseTypes" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"country": $country} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"country": $country} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Description: This operation retrieves all Expense Types for the specified country. Purpose: Provides access to the Expense Types including id and type description.
@@ -1952,10 +2604,21 @@ export def "expense-types get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/ExpenseTypes/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/ExpenseTypes/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Description: This operation retrieves all Expenses for the specified Fact Finder ID. Purpose: Provides access to the Expenses including description and Expense type.
@@ -1978,10 +2641,21 @@ export def "expenses get-by-fact-finder-by-factfinderid" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "factFinderId" $fact_finder_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/Expenses" $qp)
+  let full_url = (build-url $base "/api/Expenses" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"factFinderId": $fact_finder_id} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"factFinderId": $fact_finder_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Description: The operation creates an Expense. Purpose: Allows for creation of Expenses on a Fact Finder.
@@ -2013,12 +2687,23 @@ export def "expenses create-by-model" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/Expenses")
+  let full_url = (build-url $base "/api/Expenses" $auth.query)
   let req_body = {"annualPeriod": $annual_period, "description": $description, "endDate": $end_date, "expenseAmount": $expense_amount, "expenseTypeId": $expense_type_id, "externalDestinationId": $external_destination_id, "factFinderId": $fact_finder_id, "frequency": $frequency, "member": $member, "startDate": $start_date} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Description: The operation removes an Expense tied to a Fact Finder. Purpose: Allows for removal of an Expense from a Fact Finder.
@@ -2041,10 +2726,21 @@ export def "expenses delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Expenses/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Expenses/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Description: This operation retrieves a single Expense for the specified Expense ID. Purpose: Provides access to the Expense including description and Expense type.
@@ -2067,10 +2763,21 @@ export def "expenses get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Expenses/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Expenses/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Description: The operation updates an Expense. Purpose: Allows for complete replacement of an Expense on a Fact Finder. Note: Expense type cannot be changed for expenses prepopulated from NaviPlan.
@@ -2104,12 +2811,23 @@ export def "expenses update-by-model" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Expenses/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Expenses/{id}") $auth.query)
   let req_body = {"annualPeriod": $annual_period, "description": $description, "endDate": $end_date, "expenseAmount": $expense_amount, "expenseTypeId": $expense_type_id, "externalDestinationId": $external_destination_id, "factFinderId": $fact_finder_id, "frequency": $frequency, "member": $member, "startDate": $start_date} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Description: This operation retrieves all Fact Finders for the specified householdId, or if null, all households associated with the user. Purpose: Provides access to the Fact Finder including status.
@@ -2132,10 +2850,21 @@ export def "fact-finders get-by-household-by-householdid" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "householdId" $household_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/FactFinders" $qp)
+  let full_url = (build-url $base "/api/FactFinders" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"householdId": $household_id} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"householdId": $household_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Description: The operation creates a completely empty draft Fact Finder. Requirements: A householdId and list of modules must be provided. Purpose: Stages a Fact Finder for population.
@@ -2160,12 +2889,23 @@ export def "fact-finders create-by-model" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/FactFinders")
+  let full_url = (build-url $base "/api/FactFinders" $auth.query)
   let req_body = {"householdId": $household_id, "modules": $modules, "planLevel": $plan_level} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200 201]
 }
 
 # Description: The operation creates a new Populated Fact Finder. Requirements: A householdId and list of modules must be provided. Purpose: Creation of a Fact Finder.
@@ -2191,12 +2931,23 @@ export def "fact-finders-populate create-by-model" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/FactFinders/Populate")
+  let full_url = (build-url $base "/api/FactFinders/Populate" $auth.query)
   let req_body = {"householdId": $household_id, "modules": $modules, "planId": $plan_id, "planLevel": $plan_level} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200 201]
 }
 
 # Description: This operation retrieves all Fact Finder Modules for the specified Fact Finder ID. Purpose: Provides access to the Fact Finder Modules including description and policy type.
@@ -2219,10 +2970,21 @@ export def "fact-finders-modules list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($fact_finder_id | is-empty) { error make --unspanned { msg: "path parameter 'factFinderId' must be non-empty" } }
-  let full_url = (build-url $base ({fact_finder_id: (encode-path-segment $fact_finder_id)} | format pattern "/api/FactFinders/{fact_finder_id}/Modules"))
+  let full_url = (build-url $base ({fact_finder_id: (encode-path-segment $fact_finder_id)} | format pattern "/api/FactFinders/{fact_finder_id}/Modules") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Description: This operation retrieves a single Fact Finder Module for the specified Fact Finder Module ID. Purpose: Provides access to the Fact Finder Module including description and policy type.
@@ -2247,10 +3009,21 @@ export def "fact-finders-modules get" [
   let base = ($base_url | default $BASE_URL)
   if ($fact_finder_id | is-empty) { error make --unspanned { msg: "path parameter 'factFinderId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({fact_finder_id: (encode-path-segment $fact_finder_id), id: (encode-path-segment $id)} | format pattern "/api/FactFinders/{fact_finder_id}/Modules/{id}"))
+  let full_url = (build-url $base ({fact_finder_id: (encode-path-segment $fact_finder_id), id: (encode-path-segment $id)} | format pattern "/api/FactFinders/{fact_finder_id}/Modules/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Description: The operation updates a Fact Finder Module. Purpose: Allows for complete replacement of a Fact Finder Module on a Fact Finder.
@@ -2279,12 +3052,23 @@ export def "fact-finders-modules update-by-model" [
   let base = ($base_url | default $BASE_URL)
   if ($fact_finder_id | is-empty) { error make --unspanned { msg: "path parameter 'factFinderId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({fact_finder_id: (encode-path-segment $fact_finder_id), id: (encode-path-segment $id)} | format pattern "/api/FactFinders/{fact_finder_id}/Modules/{id}"))
+  let full_url = (build-url $base ({fact_finder_id: (encode-path-segment $fact_finder_id), id: (encode-path-segment $id)} | format pattern "/api/FactFinders/{fact_finder_id}/Modules/{id}") $auth.query)
   let req_body = {"available": $available, "moduleName": $module_name, "visited": $visited} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Description: The operation retrieves Snapshots of a Fact Finder. Purpose: Allows for advisors to view all Snapshots taken of a Fact Finder.
@@ -2307,10 +3091,21 @@ export def "fact-finders-snapshots get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($fact_finder_id | is-empty) { error make --unspanned { msg: "path parameter 'factFinderId' must be non-empty" } }
-  let full_url = (build-url $base ({fact_finder_id: (encode-path-segment $fact_finder_id)} | format pattern "/api/FactFinders/{fact_finder_id}/Snapshots"))
+  let full_url = (build-url $base ({fact_finder_id: (encode-path-segment $fact_finder_id)} | format pattern "/api/FactFinders/{fact_finder_id}/Snapshots") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Description: The operation creates a Snapshot of a Fact Finder. Purpose: Allows for advisors to compare the current fact finder to a snapshot prior to acceptance.
@@ -2333,10 +3128,21 @@ export def "fact-finders-snapshots create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($fact_finder_id | is-empty) { error make --unspanned { msg: "path parameter 'factFinderId' must be non-empty" } }
-  let full_url = (build-url $base ({fact_finder_id: (encode-path-segment $fact_finder_id)} | format pattern "/api/FactFinders/{fact_finder_id}/Snapshots"))
+  let full_url = (build-url $base ({fact_finder_id: (encode-path-segment $fact_finder_id)} | format pattern "/api/FactFinders/{fact_finder_id}/Snapshots") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200 201]
 }
 
 # Description: This operation deletes a single Fact Finder for the specified Fact Finder ID. Purpose: Deletes the fact finder.
@@ -2359,10 +3165,21 @@ export def "fact-finders delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/FactFinders/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/FactFinders/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200 204]
 }
 
 # Description: This operation retrieves a single Fact Finder for the specified Fact Finder ID. Purpose: Provides access to the Fact Finder including status.
@@ -2385,10 +3202,21 @@ export def "fact-finders get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/FactFinders/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/FactFinders/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Description: The operation updates a Fact Finder. Purpose: Allows for the updating of a Fact Finder.
@@ -2413,12 +3241,23 @@ export def "fact-finders update-by-model" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/FactFinders/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/FactFinders/{id}") $auth.query)
   let req_body = {"status": $status} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Description: The operation populates a fact finder. Purpose: Allows for the population of a Fact Finder based on a NaviPlan plan or client. This operation cannot be performed on a Fact Finder more than once.
@@ -2443,12 +3282,23 @@ export def "fact-finders-populate update-by-model" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/FactFinders/{id}/Populate"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/FactFinders/{id}/Populate") $auth.query)
   let req_body = {"planId": $plan_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Description: This operation retrieves all Filing Status Types for the specified country. Purpose: Provides access to the Filing Status Types including id and type description.
@@ -2471,10 +3321,21 @@ export def "filing-status-types get-by-country" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "country" $country "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/FilingStatusTypes" $qp)
+  let full_url = (build-url $base "/api/FilingStatusTypes" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"country": $country} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"country": $country} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Description: This operation retrieves all Filing Status Type for the specified id. Purpose: Provides access to the Filing Status Types including id and type description.
@@ -2497,10 +3358,21 @@ export def "filing-status-types get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/FilingStatusTypes/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/FilingStatusTypes/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Description: This operation retrieves all Frequency Types for the specified country and entity. Purpose: Provides access to the Frequency Types including id and type description.
@@ -2524,10 +3396,21 @@ export def "frequency-types get-by-entity-country" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "entity" $entity "scalar") (serialize-qp "country" $country "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/FrequencyTypes" $qp)
+  let full_url = (build-url $base "/api/FrequencyTypes" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"entity": $entity, "country": $country} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"entity": $entity, "country": $country} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Description: This operation retrieves the Frequency Type for the specified id. Purpose: Provides access to the Frequency Types including id and type description.
@@ -2550,10 +3433,21 @@ export def "frequency-types get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/FrequencyTypes/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/FrequencyTypes/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Description: This operation retrieves all Income Types for the specified country. Purpose: Provides access to the Income Types including id and type description.
@@ -2576,10 +3470,21 @@ export def "income-types get-by-country" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "country" $country "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/IncomeTypes" $qp)
+  let full_url = (build-url $base "/api/IncomeTypes" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"country": $country} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"country": $country} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Description: This operation retrieves the Income Type for the specified id. Purpose: Provides access to the Income Types including id and type description.
@@ -2602,10 +3507,21 @@ export def "income-types get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/IncomeTypes/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/IncomeTypes/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Description: This operation retrieves all Incomes for the specified Fact Finder ID. Purpose: Provides access to the Incomes including annual amount and start date.
@@ -2628,10 +3544,21 @@ export def "incomes get-by-fact-finder-by-factfinderid" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "factFinderId" $fact_finder_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/Incomes" $qp)
+  let full_url = (build-url $base "/api/Incomes" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"factFinderId": $fact_finder_id} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"factFinderId": $fact_finder_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Description: The operation creates an Income. Purpose: Allows for creation of Incomes on a Fact Finder.
@@ -2661,12 +3588,23 @@ export def "incomes create-by-model" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/Incomes")
+  let full_url = (build-url $base "/api/Incomes" $auth.query)
   let req_body = {"annualAmount": $annual_amount, "description": $description, "endDate": $end_date, "externalDestinationId": $external_destination_id, "factFinderId": $fact_finder_id, "incomeTypeId": $income_type_id, "owner": $owner, "startDate": $start_date} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Description: The operation removes an Income tied to a Fact Finder. Purpose: Allows for removal of an Income from a Fact Finder.
@@ -2689,10 +3627,21 @@ export def "incomes delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Incomes/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Incomes/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Description: This operation retrieves a single Income for the specified Income ID. Purpose: Provides access to the Income including annual amount and start date.
@@ -2715,10 +3664,21 @@ export def "incomes get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Incomes/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Incomes/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Description: The operation updates an Income. Purpose: Allows for complete replacement of an Income on a Fact Finder.
@@ -2750,12 +3710,23 @@ export def "incomes update-by-model" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Incomes/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Incomes/{id}") $auth.query)
   let req_body = {"annualAmount": $annual_amount, "description": $description, "endDate": $end_date, "externalDestinationId": $external_destination_id, "factFinderId": $fact_finder_id, "incomeTypeId": $income_type_id, "owner": $owner, "startDate": $start_date} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Description: This operation retrieves all Liabilities for the specified Fact Finder ID. Purpose: Provides access to the Liabilities including owner and type.
@@ -2779,10 +3750,21 @@ export def "liabilities get-by-fact-finder-by-factfinderid-externalsourceid" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "factFinderId" $fact_finder_id "scalar") (serialize-qp "externalSourceId" $external_source_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/Liabilities" $qp)
+  let full_url = (build-url $base "/api/Liabilities" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"factFinderId": $fact_finder_id, "externalSourceId": $external_source_id} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"factFinderId": $fact_finder_id, "externalSourceId": $external_source_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Description: The operation creates a Liability. Purpose: Allows for creation of Liabilities on a Fact Finder.
@@ -2820,12 +3802,23 @@ export def "liabilities create-by-model" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/Liabilities")
+  let full_url = (build-url $base "/api/Liabilities" $auth.query)
   let req_body = {"balance": $balance, "balanceAsOfDate": $balance_as_of_date, "description": $description, "externalDestinationId": $external_destination_id, "externalSourceId": $external_source_id, "externalSourceName": $external_source_name, "factFinderId": $fact_finder_id, "frequency": $frequency, "interestRate": $interest_rate, "lastUpdated": $last_updated, "liabilityType": $liability_type, "loanDate": $loan_date, "originalPrincipal": $original_principal, "owner": $owner, "payment": $payment, "paymentType": $payment_type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Description: The operation removes a Liability tied to a Fact Finder. Purpose: Allows for removal of a Liability from a Fact Finder.
@@ -2848,10 +3841,21 @@ export def "liabilities delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Liabilities/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Liabilities/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Description: This operation retrieves a single Liability for the specified Liability ID. Purpose: Provides access to the Liability including owner and type.
@@ -2874,10 +3878,21 @@ export def "liabilities get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Liabilities/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Liabilities/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Description: The operation updates a Liability. Purpose: Allows for complete replacement of a Liability on a Fact Finder.
@@ -2917,12 +3932,23 @@ export def "liabilities update-by-model" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Liabilities/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Liabilities/{id}") $auth.query)
   let req_body = {"balance": $balance, "balanceAsOfDate": $balance_as_of_date, "description": $description, "externalDestinationId": $external_destination_id, "externalSourceId": $external_source_id, "externalSourceName": $external_source_name, "factFinderId": $fact_finder_id, "frequency": $frequency, "interestRate": $interest_rate, "lastUpdated": $last_updated, "liabilityType": $liability_type, "loanDate": $loan_date, "originalPrincipal": $original_principal, "owner": $owner, "payment": $payment, "paymentType": $payment_type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Description: This operation retrieves all Liability Types for the specified country. Purpose: Provides access to the Liability Types including id and type description.
@@ -2945,10 +3971,21 @@ export def "liability-types get-by-country" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "country" $country "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/LiabilityTypes" $qp)
+  let full_url = (build-url $base "/api/LiabilityTypes" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"country": $country} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"country": $country} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Description: This operation retrieves the Liability Type for the specified id. Purpose: Provides access to the Liability Types including id and type description.
@@ -2971,10 +4008,21 @@ export def "liability-types get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/LiabilityTypes/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/LiabilityTypes/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Description: This operation retrieves all Life Insurance Policies for the specified Fact Finder ID. Purpose: Provides access to the Life Insurance Policies including description and policy type.
@@ -2997,10 +4045,21 @@ export def "life-insurance-policies get-by-fact-finder-by-factfinderid" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "factFinderId" $fact_finder_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/LifeInsurancePolicies" $qp)
+  let full_url = (build-url $base "/api/LifeInsurancePolicies" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"factFinderId": $fact_finder_id} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"factFinderId": $fact_finder_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Description: The operation creates a Life Insurance Policy. Purpose: Allows for creation of Life Insurance Policies on a Fact Finder.
@@ -3034,12 +4093,23 @@ export def "life-insurance-policies create-by-model" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/LifeInsurancePolicies")
+  let full_url = (build-url $base "/api/LifeInsurancePolicies" $auth.query)
   let req_body = {"beneficiary": $beneficiary, "beneficiaryDependentId": $beneficiary_dependent_id, "benefit": $benefit, "description": $description, "externalDestinationId": $external_destination_id, "factFinderId": $fact_finder_id, "frequency": $frequency, "generalAccountMarketValue": $general_account_market_value, "insured": $insured, "payer": $payer, "policyType": $policy_type, "premium": $premium} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Description: The operation removes a Life Insurance Policy tied to a Fact Finder. Purpose: Allows for removal of a Life Insurance Policy and associated subaccounts from a Fact Finder.
@@ -3062,10 +4132,21 @@ export def "life-insurance-policies delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/LifeInsurancePolicies/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/LifeInsurancePolicies/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Description: This operation retrieves a single Life Insurance Policy for the specified Life Insurance Policy ID. Purpose: Provides access to the Life Insurance Policy including description and policy type.
@@ -3088,10 +4169,21 @@ export def "life-insurance-policies get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/LifeInsurancePolicies/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/LifeInsurancePolicies/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Description: The operation updates a Life Insurance Policy, deletes associated sub-accounts if the policy type changes. Purpose: Allows for complete replacement of a Life Insurance Policy on a Fact Finder.
@@ -3127,12 +4219,23 @@ export def "life-insurance-policies update-by-model" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/LifeInsurancePolicies/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/LifeInsurancePolicies/{id}") $auth.query)
   let req_body = {"beneficiary": $beneficiary, "beneficiaryDependentId": $beneficiary_dependent_id, "benefit": $benefit, "description": $description, "externalDestinationId": $external_destination_id, "factFinderId": $fact_finder_id, "frequency": $frequency, "generalAccountMarketValue": $general_account_market_value, "insured": $insured, "payer": $payer, "policyType": $policy_type, "premium": $premium} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Description: Get all the subaccounts for an existing Life Insurance Policy. Purpose: Provides access to all the Life Insurance Policy subaccounts.
@@ -3155,10 +4258,21 @@ export def "life-insurance-policies-subaccounts list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($life_insurance_policy_id | is-empty) { error make --unspanned { msg: "path parameter 'lifeInsurancePolicyId' must be non-empty" } }
-  let full_url = (build-url $base ({life_insurance_policy_id: (encode-path-segment $life_insurance_policy_id)} | format pattern "/api/LifeInsurancePolicies/{life_insurance_policy_id}/Subaccounts"))
+  let full_url = (build-url $base ({life_insurance_policy_id: (encode-path-segment $life_insurance_policy_id)} | format pattern "/api/LifeInsurancePolicies/{life_insurance_policy_id}/Subaccounts") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Description: Creates a subaccount and adds it to an existing Life Insurance Policy. Purpose: Allows for creation of subaccount on a Life Insurance Policy.
@@ -3186,12 +4300,23 @@ export def "life-insurance-policies-subaccounts create-by-model" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($life_insurance_policy_id | is-empty) { error make --unspanned { msg: "path parameter 'lifeInsurancePolicyId' must be non-empty" } }
-  let full_url = (build-url $base ({life_insurance_policy_id: (encode-path-segment $life_insurance_policy_id)} | format pattern "/api/LifeInsurancePolicies/{life_insurance_policy_id}/Subaccounts"))
+  let full_url = (build-url $base ({life_insurance_policy_id: (encode-path-segment $life_insurance_policy_id)} | format pattern "/api/LifeInsurancePolicies/{life_insurance_policy_id}/Subaccounts") $auth.query)
   let req_body = {"description": $description, "externalDestinationId": $external_destination_id, "marketValue": $market_value, "symbol": $symbol} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Description: Deletes an existing Life Insurance Policy Subaccount for an existing Life Insurance Policy. Purpose: Allows for removal of a subaccount from a Life Insurance Policy.
@@ -3216,10 +4341,21 @@ export def "life-insurance-policies-subaccounts delete" [
   let base = ($base_url | default $BASE_URL)
   if ($life_insurance_policy_id | is-empty) { error make --unspanned { msg: "path parameter 'lifeInsurancePolicyId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({life_insurance_policy_id: (encode-path-segment $life_insurance_policy_id), id: (encode-path-segment $id)} | format pattern "/api/LifeInsurancePolicies/{life_insurance_policy_id}/Subaccounts/{id}"))
+  let full_url = (build-url $base ({life_insurance_policy_id: (encode-path-segment $life_insurance_policy_id), id: (encode-path-segment $id)} | format pattern "/api/LifeInsurancePolicies/{life_insurance_policy_id}/Subaccounts/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Description: Get a specific subaccount for an existing Life Insurance Policy. Purpose: Provides access to the Life Insurance Policy subaccount.
@@ -3244,10 +4380,21 @@ export def "life-insurance-policies-subaccounts get" [
   let base = ($base_url | default $BASE_URL)
   if ($life_insurance_policy_id | is-empty) { error make --unspanned { msg: "path parameter 'lifeInsurancePolicyId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({life_insurance_policy_id: (encode-path-segment $life_insurance_policy_id), id: (encode-path-segment $id)} | format pattern "/api/LifeInsurancePolicies/{life_insurance_policy_id}/Subaccounts/{id}"))
+  let full_url = (build-url $base ({life_insurance_policy_id: (encode-path-segment $life_insurance_policy_id), id: (encode-path-segment $id)} | format pattern "/api/LifeInsurancePolicies/{life_insurance_policy_id}/Subaccounts/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Description: Updates an existing Life Insurance Policy Subaccount for an existing Life Insurance Policy. Purpose: Allows for complete replacement of a subaccount on a Life Insurance Policy.
@@ -3277,12 +4424,23 @@ export def "life-insurance-policies-subaccounts update-by-model" [
   let base = ($base_url | default $BASE_URL)
   if ($life_insurance_policy_id | is-empty) { error make --unspanned { msg: "path parameter 'lifeInsurancePolicyId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({life_insurance_policy_id: (encode-path-segment $life_insurance_policy_id), id: (encode-path-segment $id)} | format pattern "/api/LifeInsurancePolicies/{life_insurance_policy_id}/Subaccounts/{id}"))
+  let full_url = (build-url $base ({life_insurance_policy_id: (encode-path-segment $life_insurance_policy_id), id: (encode-path-segment $id)} | format pattern "/api/LifeInsurancePolicies/{life_insurance_policy_id}/Subaccounts/{id}") $auth.query)
   let req_body = {"description": $description, "externalDestinationId": $external_destination_id, "marketValue": $market_value, "symbol": $symbol} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Description: This operation retrieves all Life Insurance Policy Types for the specified country. Purpose: Provides access to the Life Insurance Policy Types including id and type description.
@@ -3305,10 +4463,21 @@ export def "life-insurance-policy-types get-by-country" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "country" $country "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/LifeInsurancePolicyTypes" $qp)
+  let full_url = (build-url $base "/api/LifeInsurancePolicyTypes" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"country": $country} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"country": $country} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Description: This operation retrieves the Life Insurance Policy Type for the specified id. Purpose: Provides access to the Life Insurance Policy Types including id and type description.
@@ -3331,10 +4500,21 @@ export def "life-insurance-policy-types get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/LifeInsurancePolicyTypes/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/LifeInsurancePolicyTypes/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Description: This operation retrieves all Lifestyle Asset Types for the specified country. Purpose: Provides access to the Lifestyle Asset Types including id and type description.
@@ -3357,10 +4537,21 @@ export def "lifestyle-asset-types get-by-country" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "country" $country "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/LifestyleAssetTypes" $qp)
+  let full_url = (build-url $base "/api/LifestyleAssetTypes" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"country": $country} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"country": $country} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Description: This operation retrieves the Lifestyle Asset Type for the specified id. Purpose: Provides access to the Lifestyle Asset Types including id and type description.
@@ -3383,10 +4574,21 @@ export def "lifestyle-asset-types get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/LifestyleAssetTypes/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/LifestyleAssetTypes/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Description: This operation retrieves all Lifestyle Assets for the specified Fact Finder ID. Purpose: Provides access to the Lifestyle Assets including description and market value.
@@ -3409,10 +4611,21 @@ export def "lifestyle-assets get-by-fact-finder-by-factfinderid" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "factFinderId" $fact_finder_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/LifestyleAssets" $qp)
+  let full_url = (build-url $base "/api/LifestyleAssets" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"factFinderId": $fact_finder_id} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"factFinderId": $fact_finder_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Description: The operation creates a Lifestyle Asset. Purpose: Allows for creation of Lifestyle Assets on a Fact Finder.
@@ -3442,12 +4655,23 @@ export def "lifestyle-assets create-by-model" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/LifestyleAssets")
+  let full_url = (build-url $base "/api/LifestyleAssets" $auth.query)
   let req_body = {"description": $description, "externalDestinationId": $external_destination_id, "factFinderId": $fact_finder_id, "marketValue": $market_value, "owner": $owner, "purchaseAmount": $purchase_amount, "purchaseDate": $purchase_date, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Description: The operation removes a Lifestyle Asset tied to a Fact Finder. Purpose: Allows for removal of a Lifestyle Asset from a Fact Finder.
@@ -3470,10 +4694,21 @@ export def "lifestyle-assets delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/LifestyleAssets/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/LifestyleAssets/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Description: This operation retrieves a single Lifestyle Asset for the specified Lifestyle Asset ID. Purpose: Provides access to the Lifestyle Asset including description and market value.
@@ -3496,10 +4731,21 @@ export def "lifestyle-assets get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/LifestyleAssets/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/LifestyleAssets/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Description: The operation updates a Lifestyle Asset. Purpose: Allows for complete replacement of a Lifestyle Asset on a Fact Finder.
@@ -3531,12 +4777,23 @@ export def "lifestyle-assets update-by-model" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/LifestyleAssets/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/LifestyleAssets/{id}") $auth.query)
   let req_body = {"description": $description, "externalDestinationId": $external_destination_id, "factFinderId": $fact_finder_id, "marketValue": $market_value, "owner": $owner, "purchaseAmount": $purchase_amount, "purchaseDate": $purchase_date, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Description: This operation retrieves all Long Term Care Insurance Policies for the specified Fact Finder ID. Purpose: Provides access to the Long Term Care Insurance Policies including description and premium.
@@ -3559,10 +4816,21 @@ export def "long-term-care-insurance-policies get-by-fact-finder-by-factfinderid
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "factFinderId" $fact_finder_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/LongTermCareInsurancePolicies" $qp)
+  let full_url = (build-url $base "/api/LongTermCareInsurancePolicies" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"factFinderId": $fact_finder_id} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"factFinderId": $fact_finder_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Description: The operation creates a Long Term Care Insurance Policy. Purpose: Allows for creation of Long Term Care Insurance Policies on a Fact Finder.
@@ -3592,12 +4860,23 @@ export def "long-term-care-insurance-policies create-by-model" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/LongTermCareInsurancePolicies")
+  let full_url = (build-url $base "/api/LongTermCareInsurancePolicies" $auth.query)
   let req_body = {"benefit": $benefit, "benefitFrequency": $benefit_frequency, "description": $description, "externalDestinationId": $external_destination_id, "factFinderId": $fact_finder_id, "insured": $insured, "premium": $premium, "premiumFrequency": $premium_frequency} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Description: The operation removes a Long Term Care Insurance Policy tied to a Fact Finder. Purpose: Allows for removal of a Long Term Care Insurance Policy from a Fact Finder.
@@ -3620,10 +4899,21 @@ export def "long-term-care-insurance-policies delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/LongTermCareInsurancePolicies/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/LongTermCareInsurancePolicies/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Description: This operation retrieves a single Long Term Care Insurance Policy for the specified Long Term Care Insurance Policy ID. Purpose: Provides access to the Long Term Care Insurance Policy including description and premium.
@@ -3646,10 +4936,21 @@ export def "long-term-care-insurance-policies get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/LongTermCareInsurancePolicies/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/LongTermCareInsurancePolicies/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Description: The operation updates a Long Term Care Insurance Policy. Purpose: Allows for complete replacement of a Long Term Care Insurance Policy on a Fact Finder.
@@ -3681,12 +4982,23 @@ export def "long-term-care-insurance-policies update-by-model" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/LongTermCareInsurancePolicies/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/LongTermCareInsurancePolicies/{id}") $auth.query)
   let req_body = {"benefit": $benefit, "benefitFrequency": $benefit_frequency, "description": $description, "externalDestinationId": $external_destination_id, "factFinderId": $fact_finder_id, "insured": $insured, "premium": $premium, "premiumFrequency": $premium_frequency} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Description: This operation retrieves all Major Purchase Goal Types for the specified country. Purpose: Provides access to the Major Purchase Goal Types including id and type description.
@@ -3709,10 +5021,21 @@ export def "major-purchase-goal-types get-by-country" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "country" $country "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/MajorPurchaseGoalTypes" $qp)
+  let full_url = (build-url $base "/api/MajorPurchaseGoalTypes" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"country": $country} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"country": $country} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Description: This operation retrieves the Major Purchase Goal Type for the specified id. Purpose: Provides access to the Major Purchase Goal Types including id and type description.
@@ -3735,10 +5058,21 @@ export def "major-purchase-goal-types get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/MajorPurchaseGoalTypes/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/MajorPurchaseGoalTypes/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Description: This operation retrieves all Major Purchases for the specified Fact Finder ID. Purpose: Provides access to the Major Purchases including description and amount.
@@ -3761,10 +5095,21 @@ export def "major-purchase-goals get-by-fact-finder-by-factfinderid" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "factFinderId" $fact_finder_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/MajorPurchaseGoals" $qp)
+  let full_url = (build-url $base "/api/MajorPurchaseGoals" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"factFinderId": $fact_finder_id} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"factFinderId": $fact_finder_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Description: The operation creates a Major Purchase. Purpose: Allows for creation of Major Purchases on a Fact Finder.
@@ -3793,12 +5138,23 @@ export def "major-purchase-goals create-by-model" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/MajorPurchaseGoals")
+  let full_url = (build-url $base "/api/MajorPurchaseGoals" $auth.query)
   let req_body = {"amount": $amount, "description": $description, "externalDestinationId": $external_destination_id, "factFinderId": $fact_finder_id, "majorPurchaseGoalTypeId": $major_purchase_goal_type_id, "member": $member, "targetDate": $target_date} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Description: The operation removes a Major Purchase tied to a Fact Finder. Purpose: Allows for removal of a Major Purchase from a Fact Finder.
@@ -3821,10 +5177,21 @@ export def "major-purchase-goals delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/MajorPurchaseGoals/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/MajorPurchaseGoals/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Description: This operation retrieves a single Major Purchase for the specified Major Purchase ID. Purpose: Provides access to the Major Purchase including description and amount.
@@ -3847,10 +5214,21 @@ export def "major-purchase-goals get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/MajorPurchaseGoals/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/MajorPurchaseGoals/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Description: The operation updates a Major Purchase. Purpose: Allows for complete replacement of a Major Purchase on a Fact Finder.
@@ -3881,12 +5259,23 @@ export def "major-purchase-goals update-by-model" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/MajorPurchaseGoals/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/MajorPurchaseGoals/{id}") $auth.query)
   let req_body = {"amount": $amount, "description": $description, "externalDestinationId": $external_destination_id, "factFinderId": $fact_finder_id, "majorPurchaseGoalTypeId": $major_purchase_goal_type_id, "member": $member, "targetDate": $target_date} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Description: This operation retrieves all current Accounts for the specified Fact Finder ID, as well as all of the holdings and savings strategies belonging to those accounts. Purpose: Provides access to the Accounts in a Fact Finder as well as any sub-entities belonging to them.
@@ -3910,10 +5299,21 @@ export def "presentation-accounts get-by-factfinderid-externalsourceid" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "factFinderId" $fact_finder_id "scalar") (serialize-qp "externalSourceId" $external_source_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/Presentation/Accounts" $qp)
+  let full_url = (build-url $base "/api/Presentation/Accounts" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"factFinderId": $fact_finder_id, "externalSourceId": $external_source_id} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"factFinderId": $fact_finder_id, "externalSourceId": $external_source_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Description: This operation retrieves owner values for the fact finder based on demographics data Purpose: Provides the list of valid options for owner, student, beneficiary, etc.
@@ -3936,10 +5336,21 @@ export def "presentation-demographics-owners get-by-factfinderid" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "factFinderId" $fact_finder_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/Presentation/Demographics/Owners" $qp)
+  let full_url = (build-url $base "/api/Presentation/Demographics/Owners" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"factFinderId": $fact_finder_id} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"factFinderId": $fact_finder_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Description: This operation retrieves all relationship types relevant to demographics. Purpose: Provides a list of relationship types organized by whether or not they can be defined as children.
@@ -3960,10 +5371,21 @@ export def "presentation-demographics-relationships get" [
 ]: nothing -> record<relationshipTypes: table<id: int, isChildType: bool, relationshipType: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/Presentation/Demographics/Relationships")
+  let full_url = (build-url $base "/api/Presentation/Demographics/Relationships" $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Description: This operation retrieves all current Incomes for the specified Fact Finder ID. Purpose: Provides access to the Incomes in a Fact Finder, filtered by Incomes that are current.
@@ -3986,10 +5408,21 @@ export def "presentation-incomes get-by-factfinderid" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "factFinderId" $fact_finder_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/Presentation/Incomes" $qp)
+  let full_url = (build-url $base "/api/Presentation/Incomes" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"factFinderId": $fact_finder_id} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"factFinderId": $fact_finder_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Description: This operation retrieves all current Liabilities for the specified Fact Finder ID. Purpose: Provides access to the Liabilities in a Fact Finder, filtered by Liabilities that are current.
@@ -4012,10 +5445,21 @@ export def "presentation-liabilities get-by-factfinderid" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "factFinderId" $fact_finder_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/Presentation/Liabilities" $qp)
+  let full_url = (build-url $base "/api/Presentation/Liabilities" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"factFinderId": $fact_finder_id} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"factFinderId": $fact_finder_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Description: This operation retrieves all life insurance policies, including subaccounts if available, for the specified Fact Finder ID. Purpose: Provides access to the Life Insurance Policies in a Fact Finder.
@@ -4038,10 +5482,21 @@ export def "presentation-life-insurance-policies get-by-factfinderid" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "factFinderId" $fact_finder_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/Presentation/LifeInsurancePolicies" $qp)
+  let full_url = (build-url $base "/api/Presentation/LifeInsurancePolicies" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"factFinderId": $fact_finder_id} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"factFinderId": $fact_finder_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Description: This operation retrieves all future Defined Benefit Pensions for the specified Fact Finder ID. Purpose: Provides access to the Pensions in a Fact Finder, filtered by Pensions that are in the future.
@@ -4064,10 +5519,21 @@ export def "presentation-pensions get-by-factfinderid" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "factFinderId" $fact_finder_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/Presentation/Pensions" $qp)
+  let full_url = (build-url $base "/api/Presentation/Pensions" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"factFinderId": $fact_finder_id} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"factFinderId": $fact_finder_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Description: This operation retrieves all Real Estate Assets for the specified Fact Finder ID. Purpose: Provides access to the Real Estate Assets including description and market value.
@@ -4090,10 +5556,21 @@ export def "real-estate-assets get-by-fact-finder-by-factfinderid" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "factFinderId" $fact_finder_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/RealEstateAssets" $qp)
+  let full_url = (build-url $base "/api/RealEstateAssets" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"factFinderId": $fact_finder_id} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"factFinderId": $fact_finder_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Description: The operation creates a Real Estate Asset. Purpose: Allows for creation of Real Estate Assets on a Fact Finder.
@@ -4124,12 +5601,23 @@ export def "real-estate-assets create-by-model" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/RealEstateAssets")
+  let full_url = (build-url $base "/api/RealEstateAssets" $auth.query)
   let req_body = {"description": $description, "externalDestinationId": $external_destination_id, "factFinderId": $fact_finder_id, "frequency": $frequency, "marketValue": $market_value, "owner": $owner, "purchaseAmount": $purchase_amount, "purchaseDate": $purchase_date, "rentalIncome": $rental_income} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Description: The operation removes a Real Estate Asset tied to a Fact Finder. Purpose: Allows for removal of a Real Estate Asset from a Fact Finder.
@@ -4152,10 +5640,21 @@ export def "real-estate-assets delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/RealEstateAssets/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/RealEstateAssets/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Description: This operation retrieves a single Real Estate Asset for the specified Real Estate Asset ID. Purpose: Provides access to the Real Estate Asset including description and market value.
@@ -4178,10 +5677,21 @@ export def "real-estate-assets get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/RealEstateAssets/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/RealEstateAssets/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Description: The operation updates a Real Estate Asset. Purpose: Allows for complete replacement of a Real Estate Asset on a Fact Finder.
@@ -4214,12 +5724,23 @@ export def "real-estate-assets update-by-model" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/RealEstateAssets/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/RealEstateAssets/{id}") $auth.query)
   let req_body = {"description": $description, "externalDestinationId": $external_destination_id, "factFinderId": $fact_finder_id, "frequency": $frequency, "marketValue": $market_value, "owner": $owner, "purchaseAmount": $purchase_amount, "purchaseDate": $purchase_date, "rentalIncome": $rental_income} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Description: This operation retrieves all Retirement Goals for the specified Fact Finder ID. Purpose: Provides access to the Retirement Goals including retirement date.
@@ -4242,10 +5763,21 @@ export def "retirement-goals get-by-fact-finder-by-factfinderid" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "factFinderId" $fact_finder_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/RetirementGoals" $qp)
+  let full_url = (build-url $base "/api/RetirementGoals" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"factFinderId": $fact_finder_id} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"factFinderId": $fact_finder_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Description: The operation creates a Retirement Goal. Purpose: Allows for creation of Retirement Goals on a Fact Finder.
@@ -4271,12 +5803,23 @@ export def "retirement-goals create-by-model" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/RetirementGoals")
+  let full_url = (build-url $base "/api/RetirementGoals" $auth.query)
   let req_body = {"externalDestinationId": $external_destination_id, "factFinderId": $fact_finder_id, "head1RetirementDate": $head1_retirement_date, "head2RetirementDate": $head2_retirement_date} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Description: The operation removes a Retirement Goal tied to a Fact Finder. Purpose: Allows for removal of a Retirement Goal from a Fact Finder.
@@ -4299,10 +5842,21 @@ export def "retirement-goals delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/RetirementGoals/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/RetirementGoals/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Description: This operation retrieves a single Retirement Goal for the specified Retirement Goal ID. Purpose: Provides access to the Retirement Goal including retirement date.
@@ -4325,10 +5879,21 @@ export def "retirement-goals get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/RetirementGoals/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/RetirementGoals/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Description: The operation updates a Retirement Goal. Purpose: Allows for complete replacement of a Retirement Goal on a Fact Finder.
@@ -4356,12 +5921,23 @@ export def "retirement-goals update-by-model" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/RetirementGoals/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/RetirementGoals/{id}") $auth.query)
   let req_body = {"externalDestinationId": $external_destination_id, "factFinderId": $fact_finder_id, "head1RetirementDate": $head1_retirement_date, "head2RetirementDate": $head2_retirement_date} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Description: This operation retrieves all Retirement Goal Expenses for the specified Retirement Goal ID. Purpose: Provides access to the Retirement Goal Expenses including description and amount.
@@ -4384,10 +5960,21 @@ export def "retirement-goals-expenses get-by" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($retirement_goal_id | is-empty) { error make --unspanned { msg: "path parameter 'retirementGoalId' must be non-empty" } }
-  let full_url = (build-url $base ({retirement_goal_id: (encode-path-segment $retirement_goal_id)} | format pattern "/api/RetirementGoals/{retirement_goal_id}/Expenses"))
+  let full_url = (build-url $base ({retirement_goal_id: (encode-path-segment $retirement_goal_id)} | format pattern "/api/RetirementGoals/{retirement_goal_id}/Expenses") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Description: The operation creates a Retirement Goal Expense. Purpose: Allows for creation of Retirement Goal Expenses on a Fact Finder.
@@ -4419,12 +6006,23 @@ export def "retirement-goals-expenses create-by-model" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($retirement_goal_id | is-empty) { error make --unspanned { msg: "path parameter 'retirementGoalId' must be non-empty" } }
-  let full_url = (build-url $base ({retirement_goal_id: (encode-path-segment $retirement_goal_id)} | format pattern "/api/RetirementGoals/{retirement_goal_id}/Expenses"))
+  let full_url = (build-url $base ({retirement_goal_id: (encode-path-segment $retirement_goal_id)} | format pattern "/api/RetirementGoals/{retirement_goal_id}/Expenses") $auth.query)
   let req_body = {"amount": $amount, "annualPeriod": $annual_period, "description": $description, "endDate": $end_date, "externalDestinationId": $external_destination_id, "frequency": $frequency, "member": $member, "startDate": $start_date} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Description: The operation removes a Retirement Goal Expense tied to a Fact Finder. Purpose: Allows for removal of a Retirement Goal Expense from a Fact Finder.
@@ -4449,10 +6047,21 @@ export def "retirement-goals-expenses delete" [
   let base = ($base_url | default $BASE_URL)
   if ($retirement_goal_id | is-empty) { error make --unspanned { msg: "path parameter 'retirementGoalId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({retirement_goal_id: (encode-path-segment $retirement_goal_id), id: (encode-path-segment $id)} | format pattern "/api/RetirementGoals/{retirement_goal_id}/Expenses/{id}"))
+  let full_url = (build-url $base ({retirement_goal_id: (encode-path-segment $retirement_goal_id), id: (encode-path-segment $id)} | format pattern "/api/RetirementGoals/{retirement_goal_id}/Expenses/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Description: This operation retrieves a single Retirement Goal Expense for the specified Retirement Goal Expense ID. Purpose: Provides access to the Retirement Goal Expense including description and amount.
@@ -4477,10 +6086,21 @@ export def "retirement-goals-expenses get" [
   let base = ($base_url | default $BASE_URL)
   if ($retirement_goal_id | is-empty) { error make --unspanned { msg: "path parameter 'retirementGoalId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({retirement_goal_id: (encode-path-segment $retirement_goal_id), id: (encode-path-segment $id)} | format pattern "/api/RetirementGoals/{retirement_goal_id}/Expenses/{id}"))
+  let full_url = (build-url $base ({retirement_goal_id: (encode-path-segment $retirement_goal_id), id: (encode-path-segment $id)} | format pattern "/api/RetirementGoals/{retirement_goal_id}/Expenses/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Description: The operation updates a Retirement Goal Expense. Purpose: Allows for complete replacement of a Retirement Goal Expense on a Fact Finder.
@@ -4514,12 +6134,23 @@ export def "retirement-goals-expenses update-by-model" [
   let base = ($base_url | default $BASE_URL)
   if ($retirement_goal_id | is-empty) { error make --unspanned { msg: "path parameter 'retirementGoalId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({retirement_goal_id: (encode-path-segment $retirement_goal_id), id: (encode-path-segment $id)} | format pattern "/api/RetirementGoals/{retirement_goal_id}/Expenses/{id}"))
+  let full_url = (build-url $base ({retirement_goal_id: (encode-path-segment $retirement_goal_id), id: (encode-path-segment $id)} | format pattern "/api/RetirementGoals/{retirement_goal_id}/Expenses/{id}") $auth.query)
   let req_body = {"amount": $amount, "annualPeriod": $annual_period, "description": $description, "endDate": $end_date, "externalDestinationId": $external_destination_id, "frequency": $frequency, "member": $member, "startDate": $start_date} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Description: This operation retrieves information statistics for the current service. Purpose: Provides access to Service Information.
@@ -4540,10 +6171,21 @@ export def "service-information get-fact-finder" [
 ]: nothing -> record<name: string, schemaVersion: int, serviceVersion: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/ServiceInformation")
+  let full_url = (build-url $base "/api/ServiceInformation" $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Description: This operation retrieves all States and Provinces for the specified country. Purpose: Provides access to the States and Provinces.
@@ -4566,10 +6208,21 @@ export def "states-provinces get-by-country" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "country" $country "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/StatesProvinces" $qp)
+  let full_url = (build-url $base "/api/StatesProvinces" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"country": $country} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"country": $country} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Description: This operation retrieves the States and Provinces for the specified id. Purpose: Provides access to the States and Provinces.
@@ -4592,8 +6245,19 @@ export def "states-provinces get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/StatesProvinces/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/StatesProvinces/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }

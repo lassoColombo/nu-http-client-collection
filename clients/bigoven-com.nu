@@ -8,7 +8,7 @@ const BASE_URL = "https://api2.bigoven.com"
 # `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
 # where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o 1_000_000_RECIPE_AND_GROCERY_LIST_API_V2_TOKEN | default "" }
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o 1_000_000_RECIPE_AND_GROCERY_LIST_API_V2_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
@@ -43,14 +43,11 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
-# Trick: `url encode --all` over-encodes, then we decode the four unreserved
-# punctuation chars back. Pre-existing %XX sequences in the input survive
-# because `url encode --all` first turns their % into %25.
 def encode-path-segment [v: any]: nothing -> string {
   $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
-# Serialize an array-typed path parameter (issue 49.A). OpenAPI 3 `style: simple`
+# Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
 # (the default for path params) and Swagger 2 `collectionFormat: csv` both join
 # the elements with a literal comma WITHIN the single path segment, each element
 # RFC-3986-encoded individually (so a comma inside an element stays %2C). Without
@@ -61,51 +58,57 @@ def encode-path-array [v: any]: nothing -> string {
   if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
 }
 
-# Build URL from base, path, and optional query string
-def build-url [base: string, path: string, query?: string]: nothing -> string {
+# Build the request URL from base, path, and any number of pre-encoded query
+# fragments (param serializer output and/or the auth query). Each fragment is an
+# `&`-joinable `key=value` string already percent-encoded by its producer; empty
+# fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
+# delimiters are hand-spliced — and any query already on the base URL is merged in.
+def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
   let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
-  let result = ($parsed | upsert path $full_path)
-  if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
+  let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
+  $parsed | upsert path $full_path | upsert query $query | url join
 }
 
-# Build the dry-run record returned by --dry-run. Shape:
-#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
-#    auth: {scheme, location}}
-# `meta` carries logical-form data (the query record by spec name, the pre-serialization
-# body) that do-request itself cannot reconstruct from its wire-format args.
-def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
-  let m = ($meta | default {})
-  {
-    dry_run: true
-    method: $method
-    url: $url
-    query: ($m | get -o query | default {})
-    headers: $auth.headers
-    body: ($m | get -o body)
-    content_type: $content_type
-    timeout: $timeout
-    auth: {scheme: $auth.scheme, location: $auth.location}
-  }
+# Success policy: did this response succeed? Single source of truth, consulted by
+# handle-response and the HEAD header-unwrap. Empty ok_codes means the spec listed
+# none, so fall back to < 400. Otherwise: any 2xx, plus documented success codes.
+def status-ok [status: int, ok_codes: list<int>]: nothing -> bool {
+  if ($ok_codes | is-empty) { $status < 400 } else { ($status >= 200 and $status < 300) or ($status in $ok_codes) }
 }
 
-# Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
-  let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
-  let timeout = ($max_time | default 30min)
-  let ct = ($content_type | default "application/json")
-  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
-  let resp = match $method {
-    "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
-  }
-  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
-  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
+# Unwrap a `--full` HTTP response into the user-facing value. Response arrives
+# via pipeline; ok_codes gates the error throw (see status-ok).
+def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: record -> any {
+  let resp = $in
+  if $allow_errors { return $resp }
+  if not (status-ok $resp.status $ok_codes) { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } }
+  if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
+  if $resp.status == 204 { return null }
+  $resp.body
+}
+
+# GET — bodyless, honours --raw
+def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+}
+
+# POST — body + content-type
+def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# PUT — body + content-type
+def send-put [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http put --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http put --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# DELETE — body via --data
+def send-delete [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http delete --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url } else { http delete --headers $req.headers --content-type $req.content_type --data $body --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url }
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 def base-url-completer [] { ["https://api2.bigoven.com"] }
@@ -162,10 +165,21 @@ export def "collection get" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "rpp" $rpp "scalar") (serialize-qp "pg" $pg "scalar") (serialize-qp "test" $test "scalar") (serialize-qp "sessionForLogging" $session_for_logging "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/collection/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/collection/{id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"rpp": $rpp, "pg": $pg, "test": $test, "sessionForLogging": $session_for_logging} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"rpp": $rpp, "pg": $pg, "test": $test, "sessionForLogging": $session_for_logging} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets a recipe collection metadata. A recipe collection is a curated set of recipes.
@@ -188,10 +202,21 @@ export def "collection-meta get" [
   let auth = (build-auth $token ($auth_scheme | default "x-bigoven-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/collection/{id}/meta"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/collection/{id}/meta") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get the list of current, seasonal recipe collections. From here, you can use the /collection/{id} endpoint to retrieve the recipes in those collections.
@@ -214,10 +239,21 @@ export def "collections get" [
   let auth = (build-auth $token ($auth_scheme | default "x-bigoven-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "test" $test "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/collections" $qp)
+  let full_url = (build-url $base "/collections" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"test": $test} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"test": $test} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Delete all the items on a grocery list; faster operation than a sync with deleted items.
@@ -238,10 +274,21 @@ export def "grocerylist list-grocery-delete" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-bigoven-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/grocerylist")
+  let full_url = (build-url $base "/grocerylist" $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Get the user's grocery list. User is determined by Basic Authentication.
@@ -262,10 +309,21 @@ export def "grocerylist list-grocery-get" [
 ]: nothing -> record<Items: table<BigOvenObject: string, CreationDate: string, Department: string, DisplayQuantity: string, GUID: string, IsChecked: bool, ItemID: int, LastModified: string, LocalStatus: string, Name: string, Notes: string, RecipeID: int, ThirdPartyURL: string>, LastModified: string, Recipes: table<Category: string, CreationDate: string, Cuisine: string, HasVideos: bool, IsBookmark: bool, IsPrivate: bool, IsRecipeScan: bool, Microcategory: string, PhotoUrl: string, Poster: record, RecipeID: int, ReviewCount: int, Servings: float, StarRating: float, Subcategory: string, Title: string, TotalTries: int, WebURL: string>, VersionGuid: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-bigoven-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/grocerylist")
+  let full_url = (build-url $base "/grocerylist" $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Clears the checked lines.
@@ -286,10 +344,21 @@ export def "grocerylist-clearcheckedlines list-grocery-grocery-delete-marked-ite
 ]: nothing -> record<Items: table<BigOvenObject: string, CreationDate: string, Department: string, DisplayQuantity: string, GUID: string, IsChecked: bool, ItemID: int, LastModified: string, LocalStatus: string, Name: string, Notes: string, RecipeID: int, ThirdPartyURL: string>, LastModified: string, Recipes: table<Category: string, CreationDate: string, Cuisine: string, HasVideos: bool, IsBookmark: bool, IsPrivate: bool, IsRecipeScan: bool, Microcategory: string, PhotoUrl: string, Poster: record, RecipeID: int, ReviewCount: int, Servings: float, StarRating: float, Subcategory: string, Title: string, TotalTries: int, WebURL: string>, VersionGuid: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-bigoven-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/grocerylist/clearcheckedlines")
+  let full_url = (build-url $base "/grocerylist/clearcheckedlines" $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Departmentalize a list of strings -- used for ad-hoc grocery list item addition
@@ -312,12 +381,23 @@ export def "grocerylist-department list-grocery" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-bigoven-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/grocerylist/department")
+  let full_url = (build-url $base "/grocerylist/department" $auth.query)
   let req_body = {"items": $items} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Add a single line item to the grocery list
@@ -343,12 +423,23 @@ export def "grocerylist-item create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-bigoven-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/grocerylist/item")
+  let full_url = (build-url $base "/grocerylist/item" $auth.query)
   let req_body = {"department": $department, "name": $name, "notes": $notes, "quantity": $quantity, "unit": $unit} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # /grocerylist/item/{guid} DELETE will delete this item assuming you own it.
@@ -371,10 +462,21 @@ export def "grocerylist-item list-grocery-delete" [
   let auth = (build-auth $token ($auth_scheme | default "x-bigoven-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($guid | is-empty) { error make --unspanned { msg: "path parameter 'guid' must be non-empty" } }
-  let full_url = (build-url $base ({guid: (encode-path-segment $guid)} | format pattern "/grocerylist/item/{guid}"))
+  let full_url = (build-url $base ({guid: (encode-path-segment $guid)} | format pattern "/grocerylist/item/{guid}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Update a grocery item by GUID
@@ -405,12 +507,23 @@ export def "grocerylist-item list-grocery-grocery" [
   let auth = (build-auth $token ($auth_scheme | default "x-bigoven-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($guid | is-empty) { error make --unspanned { msg: "path parameter 'guid' must be non-empty" } }
-  let full_url = (build-url $base ({guid: (encode-path-segment $guid)} | format pattern "/grocerylist/item/{guid}"))
+  let full_url = (build-url $base ({guid: (encode-path-segment $guid)} | format pattern "/grocerylist/item/{guid}") $auth.query)
   let req_body = {"department": $department, "guid": $body_guid, "ischecked": $ischecked, "name": $name, "notes": $notes, "quantity": $quantity, "unit": $unit} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Add a single line item to the grocery list
@@ -433,12 +546,23 @@ export def "grocerylist-line list-grocery-create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-bigoven-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/grocerylist/line")
+  let full_url = (build-url $base "/grocerylist/line" $auth.query)
   let req_body = {"text": $text} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Add a Recipe to the grocery list. In the request data, pass in recipeId, scale (scale=1.0 says to keep the recipe the same size as originally posted), markAsPending (true/false) to indicate that the lines in the recipe should be marked in a "pending" (unconfirmed by user) state.
@@ -463,12 +587,23 @@ export def "grocerylist-recipe list-grocery-create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-bigoven-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/grocerylist/recipe")
+  let full_url = (build-url $base "/grocerylist/recipe" $auth.query)
   let req_body = {"markAsPending": $mark_as_pending, "recipeId": $recipe_id, "scale": $scale} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Synchronize the grocery list. Call this with a POST to /grocerylist/sync
@@ -493,12 +628,23 @@ export def "grocerylist-sync list-grocery-create-grocery" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-bigoven-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/grocerylist/sync")
+  let full_url = (build-url $base "/grocerylist/sync" $auth.query)
   let req_body = {"list": $list, "since": $since} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # POST: /image/avatar Testing with Postman (validated 11/20/2015): 1) Remove the Content-Type header; add authentication information 2) On the request, click Body and choose "form-data", then add a line item with "key" column set to "file" and on the right, change the type of the input from Text to File. Browse and choose a JPG.
@@ -519,10 +665,21 @@ export def "image-avatar upload-user" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-bigoven-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/image/avatar")
+  let full_url = (build-url $base "/image/avatar" $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Indexes this instance.
@@ -543,10 +700,21 @@ export def "me get-index" [
 ]: nothing -> record<Accounting: record<CreditBalance: int, MemberSince: string, PremiumExpiryDate: string, UserLevel: string>, BOAuthToken: string, LastChangeLogID: string, Personal: record<Email: string, Location: record<City: string, Country: string, DMA: int>>, Preferences: record<EatingStyle: string>, Profile: record<AboutMe: string, BackgroundUrl: string, Counts: record<AddedCount: int, FollowersCount: int, FollowingCount: int, PrivateRecipeCount: int, PublicRecipeCount: int, TotalRecipes: int>, FirstName: string, FullName: string, HomeUrl: string, LastName: string, PhotoUrl: string, UserID: int, UserName: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-bigoven-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/me")
+  let full_url = (build-url $base "/me" $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Puts me.
@@ -578,12 +746,23 @@ export def "me update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-bigoven-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/me")
+  let full_url = (build-url $base "/me" $auth.query)
   let req_body = {"Accounting": $accounting, "BOAuthToken": $bo_auth_token, "LastChangeLogID": $last_change_log_id, "Personal": $personal, "Preferences": $preferences, "Profile": $profile} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Puts me personal.
@@ -608,12 +787,23 @@ export def "me-personal update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-bigoven-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/me/personal")
+  let full_url = (build-url $base "/me/personal" $auth.query)
   let req_body = {"Email": $email, "Location": $location} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Puts me preferences.
@@ -636,12 +826,23 @@ export def "me-preferences update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-bigoven-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/me/preferences")
+  let full_url = (build-url $base "/me/preferences" $auth.query)
   let req_body = {"EatingStyle": $eating_style} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the options.
@@ -662,10 +863,21 @@ export def "me-preferences-options get" [
 ]: nothing -> record<EatingStyle: record<Options: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "x-bigoven-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/me/preferences/options")
+  let full_url = (build-url $base "/me/preferences/options" $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Puts me.
@@ -697,12 +909,23 @@ export def "me-profile update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-bigoven-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/me/profile")
+  let full_url = (build-url $base "/me/profile" $auth.query)
   let req_body = {"AboutMe": $about_me, "BackgroundUrl": $background_url, "Counts": $counts, "FirstName": $first_name, "FullName": $full_name, "HomeUrl": $home_url, "LastName": $last_name, "PhotoUrl": $photo_url, "UserID": $user_id, "UserName": $user_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Skinnies this instance.
@@ -723,10 +946,21 @@ export def "me-skinny get" [
 ]: nothing -> record<Accounting: record<CreditBalance: int, MemberSince: string, PremiumExpiryDate: string, UserLevel: string>, BOAuthToken: string, LastChangeLogID: string, Personal: record<Email: string, Location: record<City: string, Country: string, DMA: int>>, Preferences: record<EatingStyle: string>, Profile: record<AboutMe: string, BackgroundUrl: string, Counts: record<AddedCount: int, FollowersCount: int, FollowingCount: int, PrivateRecipeCount: int, PublicRecipeCount: int, TotalRecipes: int>, FirstName: string, FullName: string, HomeUrl: string, LastName: string, PhotoUrl: string, UserID: int, UserName: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-bigoven-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/me/skinny")
+  let full_url = (build-url $base "/me/skinny" $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Add a new recipe
@@ -796,12 +1030,23 @@ export def "recipe create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-bigoven-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/recipe")
+  let full_url = (build-url $base "/recipe" $auth.query)
   let req_body = {"ActiveMinutes": $active_minutes, "AdTags": $ad_tags, "AdminBoost": $admin_boost, "AllCategoriesText": $all_categories_text, "BookmarkImageURL": $bookmark_image_url, "BookmarkSiteLogo": $bookmark_site_logo, "BookmarkURL": $bookmark_url, "Category": $category, "Collection": $collection, "CollectionID": $collection_id, "CreationDate": $creation_date, "Cuisine": $cuisine, "Description": $description, "FavoriteCount": $favorite_count, "HeroPhotoUrl": $hero_photo_url, "ImageSquares": $image_squares, "ImageURL": $image_url, "Ingredients": $ingredients, "IngredientsTextBlock": $ingredients_text_block, "Instructions": $instructions, "IsBookmark": $is_bookmark, "IsPrivate": $is_private, "IsRecipeScan": $is_recipe_scan, "IsSponsored": $is_sponsored, "LastModified": $last_modified, "MaxImageSquare": $max_image_square, "MedalCount": $medal_count, "MenuCount": $menu_count, "Microcategory": $microcategory, "NotesCount": $notes_count, "NutritionInfo": $nutrition_info, "Poster": $poster, "PrimaryIngredient": $primary_ingredient, "RecipeID": $recipe_id, "ReviewCount": $review_count, "StarRating": $star_rating, "Subcategory": $subcategory, "Title": $title, "TotalMinutes": $total_minutes, "VariantOfRecipeID": $variant_of_recipe_id, "VerifiedByClass": $verified_by_class, "VerifiedDateTime": $verified_date_time, "WebURL": $web_url, "YieldNumber": $yield_number, "YieldUnit": $yield_unit} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Update a recipe
@@ -871,12 +1116,23 @@ export def "recipe update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-bigoven-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/recipe")
+  let full_url = (build-url $base "/recipe" $auth.query)
   let req_body = {"ActiveMinutes": $active_minutes, "AdTags": $ad_tags, "AdminBoost": $admin_boost, "AllCategoriesText": $all_categories_text, "BookmarkImageURL": $bookmark_image_url, "BookmarkSiteLogo": $bookmark_site_logo, "BookmarkURL": $bookmark_url, "Category": $category, "Collection": $collection, "CollectionID": $collection_id, "CreationDate": $creation_date, "Cuisine": $cuisine, "Description": $description, "FavoriteCount": $favorite_count, "HeroPhotoUrl": $hero_photo_url, "ImageSquares": $image_squares, "ImageURL": $image_url, "Ingredients": $ingredients, "IngredientsTextBlock": $ingredients_text_block, "Instructions": $instructions, "IsBookmark": $is_bookmark, "IsPrivate": $is_private, "IsRecipeScan": $is_recipe_scan, "IsSponsored": $is_sponsored, "LastModified": $last_modified, "MaxImageSquare": $max_image_square, "MedalCount": $medal_count, "MenuCount": $menu_count, "Microcategory": $microcategory, "NotesCount": $notes_count, "NutritionInfo": $nutrition_info, "Poster": $poster, "PrimaryIngredient": $primary_ingredient, "RecipeID": $recipe_id, "ReviewCount": $review_count, "StarRating": $star_rating, "Subcategory": $subcategory, "Title": $title, "TotalMinutes": $total_minutes, "VariantOfRecipeID": $variant_of_recipe_id, "VerifiedByClass": $verified_by_class, "VerifiedDateTime": $verified_date_time, "WebURL": $web_url, "YieldNumber": $yield_number, "YieldUnit": $yield_unit} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Given a query, return recipe titles starting with query. Query must be at least 3 chars in length.
@@ -900,10 +1156,21 @@ export def "recipe-autocomplete complete-auto" [
   let auth = (build-auth $token ($auth_scheme | default "x-bigoven-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/recipe/autocomplete" $qp)
+  let full_url = (build-url $base "/recipe/autocomplete" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"query": $query, "limit": $limit} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"query": $query, "limit": $limit} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Automatics the complete all recipes.
@@ -927,10 +1194,21 @@ export def "recipe-autocomplete-all complete-auto" [
   let auth = (build-auth $token ($auth_scheme | default "x-bigoven-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/recipe/autocomplete/all" $qp)
+  let full_url = (build-url $base "/recipe/autocomplete/all" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"query": $query, "limit": $limit} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"query": $query, "limit": $limit} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Automatics the complete my recipes.
@@ -954,10 +1232,21 @@ export def "recipe-autocomplete-mine complete-auto-my" [
   let auth = (build-auth $token ($auth_scheme | default "x-bigoven-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/recipe/autocomplete/mine" $qp)
+  let full_url = (build-url $base "/recipe/autocomplete/mine" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"query": $query, "limit": $limit} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"query": $query, "limit": $limit} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get a list of recipe categories (the ID field can be used for include_cat in search parameters)
@@ -978,10 +1267,21 @@ export def "recipe-categories get" [
 ]: nothing -> table<Category: string, DefaultActiveMinutes: int, DefaultTotalMinutes: int, ID: int, ParentID: int, PrimaryImage: string, ShortDescription: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-bigoven-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/recipe/categories")
+  let full_url = (build-url $base "/recipe/categories" $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns last active recipe for the user
@@ -1004,10 +1304,21 @@ export def "recipe-get-active-recipe get" [
   let auth = (build-auth $token ($auth_scheme | default "x-bigoven-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "userName" $user_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/recipe/get/active/recipe" $qp)
+  let full_url = (build-url $base "/recipe/get/active/recipe" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"userName": $user_name} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"userName": $user_name} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets recipe single step as text
@@ -1032,10 +1343,21 @@ export def "recipe-get-saved-step get" [
   let auth = (build-auth $token ($auth_scheme | default "x-bigoven-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "userName" $user_name "scalar") (serialize-qp "recipeId" $recipe_id "scalar") (serialize-qp "stepId" $step_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/recipe/get/saved/step" $qp)
+  let full_url = (build-url $base "/recipe/get/saved/step" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"userName": $user_name, "recipeId": $recipe_id, "stepId": $step_id} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"userName": $user_name, "recipeId": $recipe_id, "stepId": $step_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Returns stored step number and number of steps in recipe
@@ -1059,10 +1381,21 @@ export def "recipe-get-step-number get" [
   let auth = (build-auth $token ($auth_scheme | default "x-bigoven-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "userName" $user_name "scalar") (serialize-qp "recipeId" $recipe_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/recipe/get/step/number" $qp)
+  let full_url = (build-url $base "/recipe/get/step/number" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"userName": $user_name, "recipeId": $recipe_id} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"userName": $user_name, "recipeId": $recipe_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the pending by user.
@@ -1083,10 +1416,21 @@ export def "recipe-photos-pending get-images-by-user" [
 ]: nothing -> record<ResultCount: int, Results: table<Caption: string, CreationDate: string, ImageID: int, IsPrimary: bool, MaxImageSquare: int, PhotoUrl: string, Poster: record>> {
   let auth = (build-auth $token ($auth_scheme | default "x-bigoven-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/recipe/photos/pending")
+  let full_url = (build-url $base "/recipe/photos/pending" $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Stores recipe step number and returns saved step data
@@ -1111,10 +1455,21 @@ export def "recipe-post-step get" [
   let auth = (build-auth $token ($auth_scheme | default "x-bigoven-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "userName" $user_name "scalar") (serialize-qp "recipeId" $recipe_id "scalar") (serialize-qp "stepId" $step_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/recipe/post/step" $qp)
+  let full_url = (build-url $base "/recipe/post/step" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"userName": $user_name, "recipeId": $recipe_id, "stepId": $step_id} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"userName": $user_name, "recipeId": $recipe_id, "stepId": $step_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # DELETE a reply to a given review. Authenticated user must be the one who originally posted the reply.
@@ -1137,10 +1492,21 @@ export def "recipe-review-replies delete-reply" [
   let auth = (build-auth $token ($auth_scheme | default "x-bigoven-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($reply_id | is-empty) { error make --unspanned { msg: "path parameter 'replyId' must be non-empty" } }
-  let full_url = (build-url $base ({reply_id: (encode-path-segment $reply_id)} | format pattern "/recipe/review/replies/{reply_id}"))
+  let full_url = (build-url $base ({reply_id: (encode-path-segment $reply_id)} | format pattern "/recipe/review/replies/{reply_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Update (PUT) a reply to a given review. Authenticated user must be the original one that posted the reply.
@@ -1165,12 +1531,23 @@ export def "recipe-review-replies update-reply" [
   let auth = (build-auth $token ($auth_scheme | default "x-bigoven-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($reply_id | is-empty) { error make --unspanned { msg: "path parameter 'replyId' must be non-empty" } }
-  let full_url = (build-url $base ({reply_id: (encode-path-segment $reply_id)} | format pattern "/recipe/review/replies/{reply_id}"))
+  let full_url = (build-url $base ({reply_id: (encode-path-segment $reply_id)} | format pattern "/recipe/review/replies/{reply_id}") $auth.query)
   let req_body = {"Comment": $comment} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get a given review by string-style ID. This will return a payload with FeaturedReply, ReplyCount. Recommended display is to list top-level reviews with one featured reply underneath. Currently, the FeaturedReply is the most recent one for that rating.
@@ -1192,10 +1569,21 @@ export def "recipe-review get-by-review-id" [
   let auth = (build-auth $token ($auth_scheme | default "x-bigoven-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($review_id | is-empty) { error make --unspanned { msg: "path parameter 'reviewId' must be non-empty" } }
-  let full_url = (build-url $base ({review_id: (encode-path-segment $review_id)} | format pattern "/recipe/review/{review_id}"))
+  let full_url = (build-url $base ({review_id: (encode-path-segment $review_id)} | format pattern "/recipe/review/{review_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update a given top-level review.
@@ -1224,12 +1612,23 @@ export def "recipe-review update" [
   let auth = (build-auth $token ($auth_scheme | default "x-bigoven-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($review_id | is-empty) { error make --unspanned { msg: "path parameter 'reviewId' must be non-empty" } }
-  let full_url = (build-url $base ({review_id: (encode-path-segment $review_id)} | format pattern "/recipe/review/{review_id}"))
+  let full_url = (build-url $base ({review_id: (encode-path-segment $review_id)} | format pattern "/recipe/review/{review_id}") $auth.query)
   let req_body = {"ActiveMinutes": $active_minutes, "Comment": $comment, "MakeAgain": $make_again, "StarRating": $star_rating, "TotalMinutes": $total_minutes} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get a paged list of replies for a given review.
@@ -1255,10 +1654,21 @@ export def "recipe-review-replies get" [
   let base = ($base_url | default $BASE_URL)
   if ($review_id | is-empty) { error make --unspanned { msg: "path parameter 'reviewId' must be non-empty" } }
   let qp = [(serialize-qp "pg" $pg "scalar") (serialize-qp "rpp" $rpp "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({review_id: (encode-path-segment $review_id)} | format pattern "/recipe/review/{review_id}/replies") $qp)
+  let full_url = (build-url $base ({review_id: (encode-path-segment $review_id)} | format pattern "/recipe/review/{review_id}/replies") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"pg": $pg, "rpp": $rpp} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"pg": $pg, "rpp": $rpp} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # POST a reply to a given review. The date will be set by server. Note that replies no longer have star ratings, only top-level reviews do.
@@ -1283,12 +1693,23 @@ export def "recipe-review-replies create-reply" [
   let auth = (build-auth $token ($auth_scheme | default "x-bigoven-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($review_id | is-empty) { error make --unspanned { msg: "path parameter 'reviewId' must be non-empty" } }
-  let full_url = (build-url $base ({review_id: (encode-path-segment $review_id)} | format pattern "/recipe/review/{review_id}/replies"))
+  let full_url = (build-url $base ({review_id: (encode-path-segment $review_id)} | format pattern "/recipe/review/{review_id}/replies") $auth.query)
   let req_body = {"Comment": $comment} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # POST an image as a new RecipeScan request 1) Fetch the filename -- DONE 2) Copy it to the pics/scan folder - ENSURE NO NAMING COLLISIONS -- DONE 3) Create 120 thumbnail size in pics/scan/120 -- DONE 4) Insert the CloudTasks record 5) Create the HIT 6) Update the CloudTasks record with the HIT ID 7) Email the requesing user 8) Call out to www.bigoven.com to fetch the image and re-create the thumbnail
@@ -1313,10 +1734,21 @@ export def "recipe-scan create" [
   let auth = (build-auth $token ($auth_scheme | default "x-bigoven-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "test" $test "scalar") (serialize-qp "devicetype" $devicetype "scalar") (serialize-qp "lat" $lat "scalar") (serialize-qp "lng" $lng "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/recipe/scan" $qp)
+  let full_url = (build-url $base "/recipe/scan" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"test": $test, "devicetype": $devicetype, "lat": $lat, "lng": $lng} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"test": $test, "devicetype": $devicetype, "lat": $lat, "lng": $lng} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full []
 }
 
 # Return full Recipe detail with steps. Returns 403 if the recipe is owned by someone else.
@@ -1341,10 +1773,21 @@ export def "recipe-steps get" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "prefetch" $prefetch "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/recipe/steps/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/recipe/steps/{id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"prefetch": $prefetch} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"prefetch": $prefetch} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Delete a Recipe (you must be authenticated as an owner of the recipe)
@@ -1367,10 +1810,21 @@ export def "recipe delete" [
   let auth = (build-auth $token ($auth_scheme | default "x-bigoven-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/recipe/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/recipe/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Return full Recipe detail. Returns 403 if the recipe is owned by someone else.
@@ -1395,10 +1849,21 @@ export def "recipe get" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "prefetch" $prefetch "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/recipe/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/recipe/{id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"prefetch": $prefetch} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"prefetch": $prefetch} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Zaps the recipe.
@@ -1421,10 +1886,21 @@ export def "recipe-zap get" [
   let auth = (build-auth $token ($auth_scheme | default "x-bigoven-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/recipe/{id}/zap"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/recipe/{id}/zap") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Feedback on a Recipe -- for internal BigOven editors
@@ -1449,12 +1925,23 @@ export def "recipe-feedback create" [
   let auth = (build-auth $token ($auth_scheme | default "x-bigoven-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($recipe_id | is-empty) { error make --unspanned { msg: "path parameter 'recipeId' must be non-empty" } }
-  let full_url = (build-url $base ({recipe_id: (encode-path-segment $recipe_id)} | format pattern "/recipe/{recipe_id}/feedback"))
+  let full_url = (build-url $base ({recipe_id: (encode-path-segment $recipe_id)} | format pattern "/recipe/{recipe_id}/feedback") $auth.query)
   let req_body = {"feedback": $feedback} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # POST: /recipe/{recipeId}/image?lat=42&lng=21&caption=this%20is%20my%20caption Note that caption, lng and lat are all optional, but must go on the request URI as params because this endpoint needs a multipart/mime content header and will not parse JSON in the body along with it. Testing with Postman (validated 11/20/2015): 1) Remove the Content-Type header; add authentication information 2) On the request, click Body and choose "form-data", then add a line item with "key" column set to "file" and on the right, change the type of the input from Text to File. Browse and choose a JPG.
@@ -1481,10 +1968,21 @@ export def "recipe-image upload" [
   let base = ($base_url | default $BASE_URL)
   if ($recipe_id | is-empty) { error make --unspanned { msg: "path parameter 'recipeId' must be non-empty" } }
   let qp = [(serialize-qp "caption" $caption "scalar") (serialize-qp "lat" $lat "scalar") (serialize-qp "lng" $lng "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({recipe_id: (encode-path-segment $recipe_id)} | format pattern "/recipe/{recipe_id}/image") $qp)
+  let full_url = (build-url $base ({recipe_id: (encode-path-segment $recipe_id)} | format pattern "/recipe/{recipe_id}/image") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"caption": $caption, "lat": $lat, "lng": $lng} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"caption": $caption, "lat": $lat, "lng": $lng} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Get all the images for a recipe. DEPRECATED. Please use /recipe/{recipeId}/photos.
@@ -1507,10 +2005,21 @@ export def "recipe-images get" [
   let auth = (build-auth $token ($auth_scheme | default "x-bigoven-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($recipe_id | is-empty) { error make --unspanned { msg: "path parameter 'recipeId' must be non-empty" } }
-  let full_url = (build-url $base ({recipe_id: (encode-path-segment $recipe_id)} | format pattern "/recipe/{recipe_id}/images"))
+  let full_url = (build-url $base ({recipe_id: (encode-path-segment $recipe_id)} | format pattern "/recipe/{recipe_id}/images") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # HTTP POST a new note into the system.
@@ -1544,12 +2053,23 @@ export def "recipe-note create" [
   let auth = (build-auth $token ($auth_scheme | default "x-bigoven-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($recipe_id | is-empty) { error make --unspanned { msg: "path parameter 'recipeId' must be non-empty" } }
-  let full_url = (build-url $base ({recipe_id: (encode-path-segment $recipe_id)} | format pattern "/recipe/{recipe_id}/note"))
+  let full_url = (build-url $base ({recipe_id: (encode-path-segment $recipe_id)} | format pattern "/recipe/{recipe_id}/note") $auth.query)
   let req_body = {"CreationDate": $creation_date, "Date": $date, "DateDT": $date_dt, "GUID": $guid, "ID": $id, "Notes": $notes, "People": $people, "RecipeID": $body_recipe_id, "UserID": $user_id, "Variations": $variations} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Delete a review do a DELETE Http request of /note/{ID}
@@ -1574,10 +2094,21 @@ export def "recipe-note delete" [
   let base = ($base_url | default $BASE_URL)
   if ($recipe_id | is-empty) { error make --unspanned { msg: "path parameter 'recipeId' must be non-empty" } }
   if ($note_id | is-empty) { error make --unspanned { msg: "path parameter 'noteId' must be non-empty" } }
-  let full_url = (build-url $base ({recipe_id: (encode-path-segment $recipe_id), note_id: (encode-path-segment $note_id)} | format pattern "/recipe/{recipe_id}/note/{note_id}"))
+  let full_url = (build-url $base ({recipe_id: (encode-path-segment $recipe_id), note_id: (encode-path-segment $note_id)} | format pattern "/recipe/{recipe_id}/note/{note_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Get a given note. Make sure you're passing authentication information in the header for the user who owns the note.
@@ -1602,10 +2133,21 @@ export def "recipe-note get" [
   let base = ($base_url | default $BASE_URL)
   if ($recipe_id | is-empty) { error make --unspanned { msg: "path parameter 'recipeId' must be non-empty" } }
   if ($note_id | is-empty) { error make --unspanned { msg: "path parameter 'noteId' must be non-empty" } }
-  let full_url = (build-url $base ({recipe_id: (encode-path-segment $recipe_id), note_id: (encode-path-segment $note_id)} | format pattern "/recipe/{recipe_id}/note/{note_id}"))
+  let full_url = (build-url $base ({recipe_id: (encode-path-segment $recipe_id), note_id: (encode-path-segment $note_id)} | format pattern "/recipe/{recipe_id}/note/{note_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # HTTP PUT (update) a Recipe note (RecipeNote).
@@ -1641,12 +2183,23 @@ export def "recipe-note update" [
   let base = ($base_url | default $BASE_URL)
   if ($recipe_id | is-empty) { error make --unspanned { msg: "path parameter 'recipeId' must be non-empty" } }
   if ($note_id | is-empty) { error make --unspanned { msg: "path parameter 'noteId' must be non-empty" } }
-  let full_url = (build-url $base ({recipe_id: (encode-path-segment $recipe_id), note_id: (encode-path-segment $note_id)} | format pattern "/recipe/{recipe_id}/note/{note_id}"))
+  let full_url = (build-url $base ({recipe_id: (encode-path-segment $recipe_id), note_id: (encode-path-segment $note_id)} | format pattern "/recipe/{recipe_id}/note/{note_id}") $auth.query)
   let req_body = {"CreationDate": $creation_date, "Date": $date, "DateDT": $date_dt, "GUID": $guid, "ID": $id, "Notes": $notes, "People": $people, "RecipeID": $body_recipe_id, "UserID": $user_id, "Variations": $variations} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # recipe/100/notes
@@ -1672,10 +2225,21 @@ export def "recipe-notes get" [
   let base = ($base_url | default $BASE_URL)
   if ($recipe_id | is-empty) { error make --unspanned { msg: "path parameter 'recipeId' must be non-empty" } }
   let qp = [(serialize-qp "pg" $pg "scalar") (serialize-qp "rpp" $rpp "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({recipe_id: (encode-path-segment $recipe_id)} | format pattern "/recipe/{recipe_id}/notes") $qp)
+  let full_url = (build-url $base ({recipe_id: (encode-path-segment $recipe_id)} | format pattern "/recipe/{recipe_id}/notes") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"pg": $pg, "rpp": $rpp} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"pg": $pg, "rpp": $rpp} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get all the photos for a recipe
@@ -1701,10 +2265,21 @@ export def "recipe-photos get-images" [
   let base = ($base_url | default $BASE_URL)
   if ($recipe_id | is-empty) { error make --unspanned { msg: "path parameter 'recipeId' must be non-empty" } }
   let qp = [(serialize-qp "pg" $pg "scalar") (serialize-qp "rpp" $rpp "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({recipe_id: (encode-path-segment $recipe_id)} | format pattern "/recipe/{recipe_id}/photos") $qp)
+  let full_url = (build-url $base ({recipe_id: (encode-path-segment $recipe_id)} | format pattern "/recipe/{recipe_id}/photos") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"pg": $pg, "rpp": $rpp} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"pg": $pg, "rpp": $rpp} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get recipes related to the given recipeId
@@ -1730,10 +2305,21 @@ export def "recipe-related get" [
   let base = ($base_url | default $BASE_URL)
   if ($recipe_id | is-empty) { error make --unspanned { msg: "path parameter 'recipeId' must be non-empty" } }
   let qp = [(serialize-qp "pg" $pg "scalar") (serialize-qp "rpp" $rpp "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({recipe_id: (encode-path-segment $recipe_id)} | format pattern "/recipe/{recipe_id}/related") $qp)
+  let full_url = (build-url $base ({recipe_id: (encode-path-segment $recipe_id)} | format pattern "/recipe/{recipe_id}/related") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"pg": $pg, "rpp": $rpp} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"pg": $pg, "rpp": $rpp} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get *my* review for the recipe {recipeId}, where "me" is determined by standard authentication headers
@@ -1755,10 +2341,21 @@ export def "recipe-review get-by-recipe-id" [
   let auth = (build-auth $token ($auth_scheme | default "x-bigoven-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($recipe_id | is-empty) { error make --unspanned { msg: "path parameter 'recipeId' must be non-empty" } }
-  let full_url = (build-url $base ({recipe_id: (encode-path-segment $recipe_id)} | format pattern "/recipe/{recipe_id}/review"))
+  let full_url = (build-url $base ({recipe_id: (encode-path-segment $recipe_id)} | format pattern "/recipe/{recipe_id}/review") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Add a new review. Only one review can be provided per {userId, recipeId} pair. Otherwise your review will be updated.
@@ -1787,12 +2384,23 @@ export def "recipe-review create" [
   let auth = (build-auth $token ($auth_scheme | default "x-bigoven-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($recipe_id | is-empty) { error make --unspanned { msg: "path parameter 'recipeId' must be non-empty" } }
-  let full_url = (build-url $base ({recipe_id: (encode-path-segment $recipe_id)} | format pattern "/recipe/{recipe_id}/review"))
+  let full_url = (build-url $base ({recipe_id: (encode-path-segment $recipe_id)} | format pattern "/recipe/{recipe_id}/review") $auth.query)
   let req_body = {"ActiveMinutes": $active_minutes, "Comment": $comment, "MakeAgain": $make_again, "StarRating": $star_rating, "TotalMinutes": $total_minutes} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # DEPRECATED! - Deletes a review by recipeId and reviewId. Please use recipe/review/{reviewId} instead.
@@ -1817,10 +2425,21 @@ export def "recipe-review delete" [
   let base = ($base_url | default $BASE_URL)
   if ($recipe_id | is-empty) { error make --unspanned { msg: "path parameter 'recipeId' must be non-empty" } }
   if ($review_id | is-empty) { error make --unspanned { msg: "path parameter 'reviewId' must be non-empty" } }
-  let full_url = (build-url $base ({recipe_id: (encode-path-segment $recipe_id), review_id: (encode-path-segment $review_id)} | format pattern "/recipe/{recipe_id}/review/{review_id}"))
+  let full_url = (build-url $base ({recipe_id: (encode-path-segment $recipe_id), review_id: (encode-path-segment $review_id)} | format pattern "/recipe/{recipe_id}/review/{review_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Get a given review - DEPRECATED. See recipe/review/{reviewId} for the current usage. Beginning in January 2017, BigOven moded from an integer-based ID system to a GUID-style string-based ID system for reviews and replies. We are also supporting more of a "Google Play" style model for Reviews and Replies. That is, there are top-level Reviews and then an unlimited list of replies (which do not carry star ratings) underneath existing reviews. Also, a given user can only have one review per recipe. Existing legacy endpoints will continue to work, but we strongly recommend you migrate to using the newer endpoints listed which do NOT carry the "DEPRECATED" flag.
@@ -1845,10 +2464,21 @@ export def "recipe-review get-by-recipe-id-review-id" [
   let base = ($base_url | default $BASE_URL)
   if ($recipe_id | is-empty) { error make --unspanned { msg: "path parameter 'recipeId' must be non-empty" } }
   if ($review_id | is-empty) { error make --unspanned { msg: "path parameter 'reviewId' must be non-empty" } }
-  let full_url = (build-url $base ({recipe_id: (encode-path-segment $recipe_id), review_id: (encode-path-segment $review_id)} | format pattern "/recipe/{recipe_id}/review/{review_id}"))
+  let full_url = (build-url $base ({recipe_id: (encode-path-segment $recipe_id), review_id: (encode-path-segment $review_id)} | format pattern "/recipe/{recipe_id}/review/{review_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # HTTP PUT (update) a recipe review. DEPRECATED. Please see recipe/review/{reviewId} PUT for the new endpoint. We are moving to a string-based primary key system, no longer integers, for reviews and replies.
@@ -1881,12 +2511,23 @@ export def "recipe-review update-legacy" [
   let base = ($base_url | default $BASE_URL)
   if ($recipe_id | is-empty) { error make --unspanned { msg: "path parameter 'recipeId' must be non-empty" } }
   if ($review_id | is-empty) { error make --unspanned { msg: "path parameter 'reviewId' must be non-empty" } }
-  let full_url = (build-url $base ({recipe_id: (encode-path-segment $recipe_id), review_id: (encode-path-segment $review_id)} | format pattern "/recipe/{recipe_id}/review/{review_id}"))
+  let full_url = (build-url $base ({recipe_id: (encode-path-segment $recipe_id), review_id: (encode-path-segment $review_id)} | format pattern "/recipe/{recipe_id}/review/{review_id}") $auth.query)
   let req_body = {"ActiveMinutes": $active_minutes, "Comment": $comment, "GUID": $guid, "MakeAgain": $make_again, "ParentID": $parent_id, "StarRating": $star_rating, "TotalMinutes": $total_minutes} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get paged list of reviews for a recipe. Each review will have at most one FeaturedReply, as well as a ReplyCount.
@@ -1912,10 +2553,21 @@ export def "recipe-reviews get" [
   let base = ($base_url | default $BASE_URL)
   if ($recipe_id | is-empty) { error make --unspanned { msg: "path parameter 'recipeId' must be non-empty" } }
   let qp = [(serialize-qp "pg" $pg "scalar") (serialize-qp "rpp" $rpp "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({recipe_id: (encode-path-segment $recipe_id)} | format pattern "/recipe/{recipe_id}/reviews") $qp)
+  let full_url = (build-url $base ({recipe_id: (encode-path-segment $recipe_id)} | format pattern "/recipe/{recipe_id}/reviews") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"pg": $pg, "rpp": $rpp} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"pg": $pg, "rpp": $rpp} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets a list of RecipeScan images for the recipe. There will be at most 3 per recipe.
@@ -1938,10 +2590,21 @@ export def "recipe-scans get-images-images" [
   let auth = (build-auth $token ($auth_scheme | default "x-bigoven-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($recipe_id | is-empty) { error make --unspanned { msg: "path parameter 'recipeId' must be non-empty" } }
-  let full_url = (build-url $base ({recipe_id: (encode-path-segment $recipe_id)} | format pattern "/recipe/{recipe_id}/scans"))
+  let full_url = (build-url $base ({recipe_id: (encode-path-segment $recipe_id)} | format pattern "/recipe/{recipe_id}/scans") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Search for recipes. There are many parameters that you can apply. Starting with the most common, use title_kw to search within a title. Use any_kw to search across the entire recipe. If you'd like to limit by course, set the parameter "include_primarycat" to one of (appetizers,bread,breakfast,dessert,drinks,maindish,salad,sidedish,soup,marinades,other). If you'd like to exclude a category, set exclude_cat to one or more (comma-separated) list of those categories to exclude. If you'd like to include a category, set include_cat to one or more (comma-separated) of those categories to include. To explicitly include an ingredient in your search, set the parameter "include_ing" to a CSV of up to three ingredients, e.g.:include_ing=mustard,chicken,beef%20tips To explicitly exclude an ingredient in your search, set the parameter "exclude_ing" to a CSV of up to three ingredients. All searches must contain the paging parameters pg and rpp, which are integers, and represent the page number (1-based) and results per page (rpp). So, to get the third page of a result set paged with 25 recipes per page, you'd pass pg=3&rpp=25 If you'd like to target searches to just a single target user's recipes, set userId=the target userId (number). Or, you can set username=theirusername vtn;vgn;chs;glf;ntf;dyf;sff;slf;tnf;wmf;rmf;cps cuisine photos filter=added,try,favorites,myrecipes\r\n\r\n folder=FolderNameCaseSensitive coll=ID of Collection
@@ -2002,10 +2665,21 @@ export def "recipes list" [
   let auth = (build-auth $token ($auth_scheme | default "x-bigoven-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "any_kw" $any_kw "scalar") (serialize-qp "folder" $folder "scalar") (serialize-qp "coll" $coll "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "title_kw" $title_kw "scalar") (serialize-qp "userId" $user_id "scalar") (serialize-qp "username" $username "scalar") (serialize-qp "token" $qp_token "scalar") (serialize-qp "photos" $photos "scalar") (serialize-qp "boostmine" $boostmine "scalar") (serialize-qp "include_cat" $include_cat "scalar") (serialize-qp "exclude_cat" $exclude_cat "scalar") (serialize-qp "include_primarycat" $include_primarycat "scalar") (serialize-qp "exclude_primarycat" $exclude_primarycat "scalar") (serialize-qp "include_ing" $include_ing "scalar") (serialize-qp "exclude_ing" $exclude_ing "scalar") (serialize-qp "cuisine" $cuisine "scalar") (serialize-qp "db" $db "scalar") (serialize-qp "userset" $userset "scalar") (serialize-qp "servingsMin" $servings_min "scalar") (serialize-qp "totalMins" $total_mins "scalar") (serialize-qp "maxIngredients" $max_ingredients "scalar") (serialize-qp "minIngredients" $min_ingredients "scalar") (serialize-qp "rpp" $rpp "scalar") (serialize-qp "pg" $pg "scalar") (serialize-qp "vtn" $vtn "scalar") (serialize-qp "vgn" $vgn "scalar") (serialize-qp "chs" $chs "scalar") (serialize-qp "glf" $glf "scalar") (serialize-qp "ntf" $ntf "scalar") (serialize-qp "dyf" $dyf "scalar") (serialize-qp "sff" $sff "scalar") (serialize-qp "slf" $slf "scalar") (serialize-qp "tnf" $tnf "scalar") (serialize-qp "wmf" $wmf "scalar") (serialize-qp "rmf" $rmf "scalar") (serialize-qp "cps" $cps "scalar") (serialize-qp "champion" $champion "scalar") (serialize-qp "synonyms" $synonyms "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/recipes" $qp)
+  let full_url = (build-url $base "/recipes" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"any_kw": $any_kw, "folder": $folder, "coll": $coll, "filter": $filter, "title_kw": $title_kw, "userId": $user_id, "username": $username, "token": $qp_token, "photos": $photos, "boostmine": $boostmine, "include_cat": $include_cat, "exclude_cat": $exclude_cat, "include_primarycat": $include_primarycat, "exclude_primarycat": $exclude_primarycat, "include_ing": $include_ing, "exclude_ing": $exclude_ing, "cuisine": $cuisine, "db": $db, "userset": $userset, "servingsMin": $servings_min, "totalMins": $total_mins, "maxIngredients": $max_ingredients, "minIngredients": $min_ingredients, "rpp": $rpp, "pg": $pg, "vtn": $vtn, "vgn": $vgn, "chs": $chs, "glf": $glf, "ntf": $ntf, "dyf": $dyf, "sff": $sff, "slf": $slf, "tnf": $tnf, "wmf": $wmf, "rmf": $rmf, "cps": $cps, "champion": $champion, "synonyms": $synonyms} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"any_kw": $any_kw, "folder": $folder, "coll": $coll, "filter": $filter, "title_kw": $title_kw, "userId": $user_id, "username": $username, "token": $qp_token, "photos": $photos, "boostmine": $boostmine, "include_cat": $include_cat, "exclude_cat": $exclude_cat, "include_primarycat": $include_primarycat, "exclude_primarycat": $exclude_primarycat, "include_ing": $include_ing, "exclude_ing": $exclude_ing, "cuisine": $cuisine, "db": $db, "userset": $userset, "servingsMin": $servings_min, "totalMins": $total_mins, "maxIngredients": $max_ingredients, "minIngredients": $min_ingredients, "rpp": $rpp, "pg": $pg, "vtn": $vtn, "vgn": $vgn, "chs": $chs, "glf": $glf, "ntf": $ntf, "dyf": $dyf, "sff": $sff, "slf": $slf, "tnf": $tnf, "wmf": $wmf, "rmf": $rmf, "cps": $cps, "champion": $champion, "synonyms": $synonyms} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get a random, home-page-quality Recipe.
@@ -2026,10 +2700,21 @@ export def "recipes-random get" [
 ]: nothing -> record<ActiveMinutes: int, AdTags: string, AdminBoost: int, AllCategoriesText: string, BookmarkImageURL: string, BookmarkSiteLogo: string, BookmarkURL: string, Category: string, Collection: string, CollectionID: int, CreationDate: string, Cuisine: string, Description: string, FavoriteCount: int, HeroPhotoUrl: string, ImageSquares: list<int>, ImageURL: string, Ingredients: table<DisplayIndex: int, DisplayQuantity: string, HTMLName: string, IngredientID: int, IngredientInfo: record, IsHeading: bool, IsLinked: bool, MetricDisplayQuantity: string, MetricQuantity: float, MetricUnit: string, Name: string, PreparationNotes: string, Quantity: float, Unit: string>, IngredientsTextBlock: string, Instructions: string, IsBookmark: bool, IsPrivate: bool, IsRecipeScan: bool, IsSponsored: bool, LastModified: string, MaxImageSquare: int, MedalCount: int, MenuCount: int, Microcategory: string, NotesCount: int, NutritionInfo: record<CaloriesFromFat: float, Cholesterol: float, CholesterolPct: float, DietaryFiber: float, DietaryFiberPct: float, MonoFat: float, PolyFat: float, Potassium: float, PotassiumPct: float, Protein: float, ProteinPct: float, SatFat: float, SatFatPct: float, SingularYieldUnit: string, Sodium: float, SodiumPct: float, Sugar: float, TotalCalories: float, TotalCarbs: float, TotalCarbsPct: float, TotalFat: float, TotalFatPct: float, TransFat: float>, Poster: record<FirstName: string, ImageUrl48: string, IsKitchenHelper: bool, IsPremium: bool, IsUsingRecurly: bool, LastName: string, MemberSince: string, PhotoUrl: string, PhotoUrl48: string, PremiumExpiryDate: string, UserID: int, UserName: string, WebUrl: string>, PrimaryIngredient: string, RecipeID: int, ReviewCount: int, StarRating: float, Subcategory: string, Title: string, TotalMinutes: int, VariantOfRecipeID: int, VerifiedByClass: string, VerifiedDateTime: string, WebURL: string, YieldNumber: float, YieldUnit: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-bigoven-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/recipes/random")
+  let full_url = (build-url $base "/recipes/random" $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get the recipe/comment tuples for those recipes with 4 or 5 star ratings
@@ -2053,10 +2738,21 @@ export def "recipes-raves get" [
   let auth = (build-auth $token ($auth_scheme | default "x-bigoven-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pg" $pg "scalar") (serialize-qp "rpp" $rpp "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/recipes/raves" $qp)
+  let full_url = (build-url $base "/recipes/raves" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"pg": $pg, "rpp": $rpp} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"pg": $pg, "rpp": $rpp} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get a list of recipes that the authenticated user has most recently viewed
@@ -2080,10 +2776,21 @@ export def "recipes-recentviews get-recent-views" [
   let auth = (build-auth $token ($auth_scheme | default "x-bigoven-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pg" $pg "scalar") (serialize-qp "rpp" $rpp "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/recipes/recentviews" $qp)
+  let full_url = (build-url $base "/recipes/recentviews" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"pg": $pg, "rpp": $rpp} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"pg": $pg, "rpp": $rpp} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Search for recipes. There are many parameters that you can apply. Starting with the most common, use title_kw to search within a title. Use any_kw to search across the entire recipe. If you'd like to limit by course, set the parameter "include_primarycat" to one of (appetizers,bread,breakfast,dessert,drinks,maindish,salad,sidedish,soup,marinades,other). If you'd like to exclude a category, set exclude_cat to one or more (comma-separated) list of those categories to exclude. If you'd like to include a category, set include_cat to one or more (comma-separated) of those categories to include. To explicitly include an ingredient in your search, set the parameter "include_ing" to a CSV of up to three ingredients, e.g.:include_ing=mustard,chicken,beef%20tips To explicitly exclude an ingredient in your search, set the parameter "exclude_ing" to a CSV of up to three ingredients. All searches must contain the paging parameters pg and rpp, which are integers, and represent the page number (1-based) and results per page (rpp). So, to get the third page of a result set paged with 25 recipes per page, you'd pass pg=3&rpp=25 If you'd like to target searches to just a single target user's recipes, set userId=the target userId (number). Or, you can set username=theirusername vtn;vgn;chs;glf;ntf;dyf;sff;slf;tnf;wmf;rmf;cps cuisine photos filter=added,try,favorites,myrecipes\r\n\r\n folder=FolderNameCaseSensitive coll=ID of Collection
@@ -2142,10 +2849,21 @@ export def "recipes-top25random list-random" [
   let auth = (build-auth $token ($auth_scheme | default "x-bigoven-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "any_kw" $any_kw "scalar") (serialize-qp "folder" $folder "scalar") (serialize-qp "coll" $coll "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "title_kw" $title_kw "scalar") (serialize-qp "userId" $user_id "scalar") (serialize-qp "username" $username "scalar") (serialize-qp "token" $qp_token "scalar") (serialize-qp "photos" $photos "scalar") (serialize-qp "boostmine" $boostmine "scalar") (serialize-qp "include_cat" $include_cat "scalar") (serialize-qp "exclude_cat" $exclude_cat "scalar") (serialize-qp "include_primarycat" $include_primarycat "scalar") (serialize-qp "exclude_primarycat" $exclude_primarycat "scalar") (serialize-qp "include_ing" $include_ing "scalar") (serialize-qp "exclude_ing" $exclude_ing "scalar") (serialize-qp "cuisine" $cuisine "scalar") (serialize-qp "db" $db "scalar") (serialize-qp "userset" $userset "scalar") (serialize-qp "servingsMin" $servings_min "scalar") (serialize-qp "totalMins" $total_mins "scalar") (serialize-qp "maxIngredients" $max_ingredients "scalar") (serialize-qp "minIngredients" $min_ingredients "scalar") (serialize-qp "vtn" $vtn "scalar") (serialize-qp "vgn" $vgn "scalar") (serialize-qp "chs" $chs "scalar") (serialize-qp "glf" $glf "scalar") (serialize-qp "ntf" $ntf "scalar") (serialize-qp "dyf" $dyf "scalar") (serialize-qp "sff" $sff "scalar") (serialize-qp "slf" $slf "scalar") (serialize-qp "tnf" $tnf "scalar") (serialize-qp "wmf" $wmf "scalar") (serialize-qp "rmf" $rmf "scalar") (serialize-qp "cps" $cps "scalar") (serialize-qp "champion" $champion "scalar") (serialize-qp "synonyms" $synonyms "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/recipes/top25random" $qp)
+  let full_url = (build-url $base "/recipes/top25random" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"any_kw": $any_kw, "folder": $folder, "coll": $coll, "filter": $filter, "title_kw": $title_kw, "userId": $user_id, "username": $username, "token": $qp_token, "photos": $photos, "boostmine": $boostmine, "include_cat": $include_cat, "exclude_cat": $exclude_cat, "include_primarycat": $include_primarycat, "exclude_primarycat": $exclude_primarycat, "include_ing": $include_ing, "exclude_ing": $exclude_ing, "cuisine": $cuisine, "db": $db, "userset": $userset, "servingsMin": $servings_min, "totalMins": $total_mins, "maxIngredients": $max_ingredients, "minIngredients": $min_ingredients, "vtn": $vtn, "vgn": $vgn, "chs": $chs, "glf": $glf, "ntf": $ntf, "dyf": $dyf, "sff": $sff, "slf": $slf, "tnf": $tnf, "wmf": $wmf, "rmf": $rmf, "cps": $cps, "champion": $champion, "synonyms": $synonyms} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"any_kw": $any_kw, "folder": $folder, "coll": $coll, "filter": $filter, "title_kw": $title_kw, "userId": $user_id, "username": $username, "token": $qp_token, "photos": $photos, "boostmine": $boostmine, "include_cat": $include_cat, "exclude_cat": $exclude_cat, "include_primarycat": $include_primarycat, "exclude_primarycat": $exclude_primarycat, "include_ing": $include_ing, "exclude_ing": $exclude_ing, "cuisine": $cuisine, "db": $db, "userset": $userset, "servingsMin": $servings_min, "totalMins": $total_mins, "maxIngredients": $max_ingredients, "minIngredients": $min_ingredients, "vtn": $vtn, "vgn": $vgn, "chs": $chs, "glf": $glf, "ntf": $ntf, "dyf": $dyf, "sff": $sff, "slf": $slf, "tnf": $tnf, "wmf": $wmf, "rmf": $rmf, "cps": $cps, "champion": $champion, "synonyms": $synonyms} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Same as GET recipe but also includes the recipe videos (if any)
@@ -2170,8 +2888,19 @@ export def "recipes get" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "prefetch" $prefetch "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/recipes/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/recipes/{id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"prefetch": $prefetch} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"prefetch": $prefetch} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }

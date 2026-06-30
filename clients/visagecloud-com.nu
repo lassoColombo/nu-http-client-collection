@@ -8,7 +8,7 @@ const BASE_URL = "https://visagecloud.com"
 # `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
 # where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o VISAGECLOUD_TOKEN | default "" }
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o VISAGECLOUD_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
@@ -40,14 +40,11 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
-# Trick: `url encode --all` over-encodes, then we decode the four unreserved
-# punctuation chars back. Pre-existing %XX sequences in the input survive
-# because `url encode --all` first turns their % into %25.
 def encode-path-segment [v: any]: nothing -> string {
   $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
-# Serialize an array-typed path parameter (issue 49.A). OpenAPI 3 `style: simple`
+# Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
 # (the default for path params) and Swagger 2 `collectionFormat: csv` both join
 # the elements with a literal comma WITHIN the single path segment, each element
 # RFC-3986-encoded individually (so a comma inside an element stays %2C). Without
@@ -58,51 +55,63 @@ def encode-path-array [v: any]: nothing -> string {
   if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
 }
 
-# Build URL from base, path, and optional query string
-def build-url [base: string, path: string, query?: string]: nothing -> string {
+# Build the request URL from base, path, and any number of pre-encoded query
+# fragments (param serializer output and/or the auth query). Each fragment is an
+# `&`-joinable `key=value` string already percent-encoded by its producer; empty
+# fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
+# delimiters are hand-spliced — and any query already on the base URL is merged in.
+def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
   let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
-  let result = ($parsed | upsert path $full_path)
-  if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
+  let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
+  $parsed | upsert path $full_path | upsert query $query | url join
 }
 
-# Build the dry-run record returned by --dry-run. Shape:
-#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
-#    auth: {scheme, location}}
-# `meta` carries logical-form data (the query record by spec name, the pre-serialization
-# body) that do-request itself cannot reconstruct from its wire-format args.
-def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
-  let m = ($meta | default {})
-  {
-    dry_run: true
-    method: $method
-    url: $url
-    query: ($m | get -o query | default {})
-    headers: $auth.headers
-    body: ($m | get -o body)
-    content_type: $content_type
-    timeout: $timeout
-    auth: {scheme: $auth.scheme, location: $auth.location}
-  }
+# Success policy: did this response succeed? Single source of truth, consulted by
+# handle-response and the HEAD header-unwrap. Empty ok_codes means the spec listed
+# none, so fall back to < 400. Otherwise: any 2xx, plus documented success codes.
+def status-ok [status: int, ok_codes: list<int>]: nothing -> bool {
+  if ($ok_codes | is-empty) { $status < 400 } else { ($status >= 200 and $status < 300) or ($status in $ok_codes) }
 }
 
-# Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
-  let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
-  let timeout = ($max_time | default 30min)
-  let ct = ($content_type | default "application/json")
-  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
-  let resp = match $method {
-    "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
-  }
-  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
-  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
+# Unwrap a `--full` HTTP response into the user-facing value. Response arrives
+# via pipeline; ok_codes gates the error throw (see status-ok).
+def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: record -> any {
+  let resp = $in
+  if $allow_errors { return $resp }
+  if not (status-ok $resp.status $ok_codes) { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } }
+  if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
+  if $resp.status == 204 { return null }
+  $resp.body
+}
+
+# GET — bodyless, honours --raw
+def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+}
+
+# POST — body + content-type
+def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# PUT — body + content-type
+def send-put [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http put --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http put --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# PATCH — body + content-type
+def send-patch [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http patch --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http patch --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# DELETE — body via --data
+def send-delete [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http delete --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url } else { http delete --headers $req.headers --content-type $req.content_type --data $body --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url }
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 def base-url-completer [] { ["https://visagecloud.com"] }
@@ -157,10 +166,21 @@ export def "rest-v1-1-account-account get-by-access-key-using" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/rest/v1.1/account/account" $qp)
+  let full_url = (build-url $base "/rest/v1.1/account/account" $qp $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"accessKey": $access_key, "secretKey": $secret_key} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"accessKey": $access_key, "secretKey": $secret_key} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get billing information by accessKey and secretKey
@@ -186,10 +206,21 @@ export def "rest-v1-1-account-billing get-per-using" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "startDateTime" $start_date_time "scalar") (serialize-qp "endDateTime" $end_date_time "scalar") (serialize-qp "dateTemplate" $date_template "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/rest/v1.1/account/billing" $qp)
+  let full_url = (build-url $base "/rest/v1.1/account/billing" $qp $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"accessKey": $access_key, "secretKey": $secret_key, "startDateTime": $start_date_time, "endDateTime": $end_date_time, "dateTemplate": $date_template} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"accessKey": $access_key, "secretKey": $secret_key, "startDateTime": $start_date_time, "endDateTime": $end_date_time, "dateTemplate": $date_template} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Change password for an account using old password
@@ -213,10 +244,21 @@ export def "rest-v1-1-account-change-password create-using" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "email" $email "scalar") (serialize-qp "oldPassword" $old_password "scalar") (serialize-qp "newPassword" $new_password "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/rest/v1.1/account/changePassword" $qp)
+  let full_url = (build-url $base "/rest/v1.1/account/changePassword" $qp $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"email": $email, "oldPassword": $old_password, "newPassword": $new_password} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"email": $email, "oldPassword": $old_password, "newPassword": $new_password} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200 201]
 }
 
 # Get account information including accessKey and secretKey by email and password
@@ -239,10 +281,21 @@ export def "rest-v1-1-account-login create-with-email-using" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "email" $email "scalar") (serialize-qp "password" $password "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/rest/v1.1/account/login" $qp)
+  let full_url = (build-url $base "/rest/v1.1/account/login" $qp $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"email": $email, "password": $password} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"email": $email, "password": $password} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200 201]
 }
 
 # Compare several faces identified by faceHash, without depending on mapping faces to profiles
@@ -267,10 +320,21 @@ export def "rest-v1-1-analysis-compare get-faces-using" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "faceHashes" $face_hashes "multi") (serialize-qp "showDetails" $show_details "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/rest/v1.1/analysis/compare" $qp)
+  let full_url = (build-url $base "/rest/v1.1/analysis/compare" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"accessKey": $access_key, "secretKey": $secret_key, "faceHashes": $face_hashes, "showDetails": $show_details} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"accessKey": $access_key, "secretKey": $secret_key, "faceHashes": $face_hashes, "showDetails": $show_details} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Perform detection on a given picture or picture URL
@@ -306,13 +370,24 @@ export def "rest-v1-1-analysis-detection create-perform-using" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "storeAnalysisPicture" $store_analysis_picture "scalar") (serialize-qp "storeFacePictures" $store_face_pictures "scalar") (serialize-qp "storeResult" $store_result "scalar") (serialize-qp "retentionTime" $retention_time "scalar") (serialize-qp "pictureURL" $picture_url "scalar") (serialize-qp "algorithmVersion" $algorithm_version "scalar") (serialize-qp "autoRotate" $auto_rotate "scalar") (serialize-qp "skipEXIF" $skip_exif "scalar") (serialize-qp "waitForPictureUpload" $wait_for_picture_upload "scalar") (serialize-qp "filters" $filters "multi") (serialize-qp "options" $options "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/rest/v1.1/analysis/detection" $qp)
+  let full_url = (build-url $base "/rest/v1.1/analysis/detection" $qp $auth.query)
   let req_body = {"picture": $picture} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: ({"accessKey": $access_key, "secretKey": $secret_key, "storeAnalysisPicture": $store_analysis_picture, "storeFacePictures": $store_face_pictures, "storeResult": $store_result, "retentionTime": $retention_time, "pictureURL": $picture_url, "algorithmVersion": $algorithm_version, "autoRotate": $auto_rotate, "skipEXIF": $skip_exif, "waitForPictureUpload": $wait_for_picture_upload, "filters": $filters, "options": $options} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"accessKey": $access_key, "secretKey": $secret_key, "storeAnalysisPicture": $store_analysis_picture, "storeFacePictures": $store_face_pictures, "storeResult": $store_result, "retentionTime": $retention_time, "pictureURL": $picture_url, "algorithmVersion": $algorithm_version, "autoRotate": $auto_rotate, "skipEXIF": $skip_exif, "waitForPictureUpload": $wait_for_picture_upload, "filters": $filters, "options": $options} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/x-www-form-urlencoded"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200 201]
 }
 
 # Retrieve the last *count* operations per current account
@@ -336,10 +411,21 @@ export def "rest-v1-1-analysis-list-latest get-retrive-using" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/rest/v1.1/analysis/listLatest" $qp)
+  let full_url = (build-url $base "/rest/v1.1/analysis/listLatest" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"accessKey": $access_key, "secretKey": $secret_key, "count": $count} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"accessKey": $access_key, "secretKey": $secret_key, "count": $count} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Perform labeled recognition on a given picture or picture URL
@@ -378,13 +464,24 @@ export def "rest-v1-1-analysis-recognition create-perform-using" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "storeAnalysisPicture" $store_analysis_picture "scalar") (serialize-qp "storeFacePictures" $store_face_pictures "scalar") (serialize-qp "storeResult" $store_result "scalar") (serialize-qp "retentionTime" $retention_time "scalar") (serialize-qp "collectionId" $collection_id "scalar") (serialize-qp "labels" $labels "multi") (serialize-qp "attributeFilters" $attribute_filters "multi") (serialize-qp "pictureURL" $picture_url "scalar") (serialize-qp "algorithmVersion" $algorithm_version "scalar") (serialize-qp "autoRotate" $auto_rotate "scalar") (serialize-qp "skipEXIF rotation processing" $skip_exif_rotation_processing "scalar") (serialize-qp "waitForPictureUpload" $wait_for_picture_upload "scalar") (serialize-qp "filters" $filters "multi") (serialize-qp "options" $options "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/rest/v1.1/analysis/recognition" $qp)
+  let full_url = (build-url $base "/rest/v1.1/analysis/recognition" $qp $auth.query)
   let req_body = {"picture": $picture} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: ({"accessKey": $access_key, "secretKey": $secret_key, "storeAnalysisPicture": $store_analysis_picture, "storeFacePictures": $store_face_pictures, "storeResult": $store_result, "retentionTime": $retention_time, "collectionId": $collection_id, "labels": $labels, "attributeFilters": $attribute_filters, "pictureURL": $picture_url, "algorithmVersion": $algorithm_version, "autoRotate": $auto_rotate, "skipEXIF rotation processing": $skip_exif_rotation_processing, "waitForPictureUpload": $wait_for_picture_upload, "filters": $filters, "options": $options} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"accessKey": $access_key, "secretKey": $secret_key, "storeAnalysisPicture": $store_analysis_picture, "storeFacePictures": $store_face_pictures, "storeResult": $store_result, "retentionTime": $retention_time, "collectionId": $collection_id, "labels": $labels, "attributeFilters": $attribute_filters, "pictureURL": $picture_url, "algorithmVersion": $algorithm_version, "autoRotate": $auto_rotate, "skipEXIF rotation processing": $skip_exif_rotation_processing, "waitForPictureUpload": $wait_for_picture_upload, "filters": $filters, "options": $options} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/x-www-form-urlencoded"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200 201]
 }
 
 # Retrieve a complete analysis object including both detection and recognition information
@@ -408,10 +505,21 @@ export def "rest-v1-1-analysis-retrieve get-using" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "analysisId" $analysis_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/rest/v1.1/analysis/retrieve" $qp)
+  let full_url = (build-url $base "/rest/v1.1/analysis/retrieve" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"accessKey": $access_key, "secretKey": $secret_key, "analysisId": $analysis_id} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"accessKey": $access_key, "secretKey": $secret_key, "analysisId": $analysis_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Count individuals in streams or collections
@@ -444,10 +552,21 @@ export def "rest-v1-1-analytics-counting create-counter-using" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "collectionIds" $collection_ids "multi") (serialize-qp "streamIds" $stream_ids "multi") (serialize-qp "startDateTime" $start_date_time "scalar") (serialize-qp "endDateTime" $end_date_time "scalar") (serialize-qp "visitDuration" $visit_duration "scalar") (serialize-qp "maxIterations" $max_iterations "scalar") (serialize-qp "maxBatchIterations" $max_batch_iterations "scalar") (serialize-qp "minNeighborsMergedPerIteration" $min_neighbors_merged_per_iteration "scalar") (serialize-qp "mergingStep" $merging_step "scalar") (serialize-qp "shuffling" $shuffling "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/rest/v1.1/analytics/counting" $qp)
+  let full_url = (build-url $base "/rest/v1.1/analytics/counting" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"accessKey": $access_key, "secretKey": $secret_key, "collectionIds": $collection_ids, "streamIds": $stream_ids, "startDateTime": $start_date_time, "endDateTime": $end_date_time, "visitDuration": $visit_duration, "maxIterations": $max_iterations, "maxBatchIterations": $max_batch_iterations, "minNeighborsMergedPerIteration": $min_neighbors_merged_per_iteration, "mergingStep": $merging_step, "shuffling": $shuffling} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"accessKey": $access_key, "secretKey": $secret_key, "collectionIds": $collection_ids, "streamIds": $stream_ids, "startDateTime": $start_date_time, "endDateTime": $end_date_time, "visitDuration": $visit_duration, "maxIterations": $max_iterations, "maxBatchIterations": $max_batch_iterations, "minNeighborsMergedPerIteration": $min_neighbors_merged_per_iteration, "mergingStep": $merging_step, "shuffling": $shuffling} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200 201]
 }
 
 # Show audience (based on number of occurrences of each person) breakdown per declared attribute (age, gender).
@@ -475,10 +594,21 @@ export def "rest-v1-1-analytics-presence-timeseries create-using" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "streamIds" $stream_ids "multi") (serialize-qp "startDateTime" $start_date_time "scalar") (serialize-qp "endDateTime" $end_date_time "scalar") (serialize-qp "step" $step "scalar") (serialize-qp "attributes" $attributes "multi")] | flatten | str join "&"
-  let full_url = (build-url $base "/rest/v1.1/analytics/presence/timeseries" $qp)
+  let full_url = (build-url $base "/rest/v1.1/analytics/presence/timeseries" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"accessKey": $access_key, "secretKey": $secret_key, "streamIds": $stream_ids, "startDateTime": $start_date_time, "endDateTime": $end_date_time, "step": $step, "attributes": $attributes} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"accessKey": $access_key, "secretKey": $secret_key, "streamIds": $stream_ids, "startDateTime": $start_date_time, "endDateTime": $end_date_time, "step": $step, "attributes": $attributes} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200 201]
 }
 
 # Show presence (based on number of occurences of each face) breakdown per declared attribute (age, gender)
@@ -505,10 +635,21 @@ export def "rest-v1-1-analytics-presence-total create-using" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "streamIds" $stream_ids "multi") (serialize-qp "startDateTime" $start_date_time "scalar") (serialize-qp "endDateTime" $end_date_time "scalar") (serialize-qp "attributes" $attributes "multi")] | flatten | str join "&"
-  let full_url = (build-url $base "/rest/v1.1/analytics/presence/total" $qp)
+  let full_url = (build-url $base "/rest/v1.1/analytics/presence/total" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"accessKey": $access_key, "secretKey": $secret_key, "streamIds": $stream_ids, "startDateTime": $start_date_time, "endDateTime": $end_date_time, "attributes": $attributes} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"accessKey": $access_key, "secretKey": $secret_key, "streamIds": $stream_ids, "startDateTime": $start_date_time, "endDateTime": $end_date_time, "attributes": $attributes} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200 201]
 }
 
 # Delete existing classifier
@@ -532,10 +673,21 @@ export def "rest-v1-1-classifier-svm delete-classifer-using" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "id" $id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/rest/v1.1/classifier/svm" $qp)
+  let full_url = (build-url $base "/rest/v1.1/classifier/svm" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"accessKey": $access_key, "secretKey": $secret_key, "id": $id} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"accessKey": $access_key, "secretKey": $secret_key, "id": $id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200 204]
 }
 
 # Get classifier full
@@ -559,10 +711,21 @@ export def "rest-v1-1-classifier-svm get-classifer-full-using" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "id" $id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/rest/v1.1/classifier/svm" $qp)
+  let full_url = (build-url $base "/rest/v1.1/classifier/svm" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"accessKey": $access_key, "secretKey": $secret_key, "id": $id} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"accessKey": $access_key, "secretKey": $secret_key, "id": $id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create new SVM classifier with given name
@@ -600,10 +763,21 @@ export def "rest-v1-1-classifier-svm create-using" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "collectionIds" $collection_ids "multi") (serialize-qp "preprocessor" $preprocessor "scalar") (serialize-qp "classificationAttributeName" $classification_attribute_name "scalar") (serialize-qp "considerViewPoints" $consider_view_points "scalar") (serialize-qp "seed" $seed "scalar") (serialize-qp "trainingRatio" $training_ratio "scalar") (serialize-qp "probabilityParameter" $probability_parameter "scalar") (serialize-qp "gammaParameter" $gamma_parameter "scalar") (serialize-qp "nuParameter" $nu_parameter "scalar") (serialize-qp "cParameter" $c_parameter "scalar") (serialize-qp "svmTypeParameter" $svm_type_parameter "scalar") (serialize-qp "kernelTypeParameter" $kernel_type_parameter "scalar") (serialize-qp "cacheSizeParameter" $cache_size_parameter "scalar") (serialize-qp "epsParameter" $eps_parameter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/rest/v1.1/classifier/svm" $qp)
+  let full_url = (build-url $base "/rest/v1.1/classifier/svm" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"accessKey": $access_key, "secretKey": $secret_key, "name": $name, "collectionIds": $collection_ids, "preprocessor": $preprocessor, "classificationAttributeName": $classification_attribute_name, "considerViewPoints": $consider_view_points, "seed": $seed, "trainingRatio": $training_ratio, "probabilityParameter": $probability_parameter, "gammaParameter": $gamma_parameter, "nuParameter": $nu_parameter, "cParameter": $c_parameter, "svmTypeParameter": $svm_type_parameter, "kernelTypeParameter": $kernel_type_parameter, "cacheSizeParameter": $cache_size_parameter, "epsParameter": $eps_parameter} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"accessKey": $access_key, "secretKey": $secret_key, "name": $name, "collectionIds": $collection_ids, "preprocessor": $preprocessor, "classificationAttributeName": $classification_attribute_name, "considerViewPoints": $consider_view_points, "seed": $seed, "trainingRatio": $training_ratio, "probabilityParameter": $probability_parameter, "gammaParameter": $gamma_parameter, "nuParameter": $nu_parameter, "cParameter": $c_parameter, "svmTypeParameter": $svm_type_parameter, "kernelTypeParameter": $kernel_type_parameter, "cacheSizeParameter": $cache_size_parameter, "epsParameter": $eps_parameter} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200 201]
 }
 
 # Get classifer status
@@ -627,10 +801,21 @@ export def "rest-v1-1-classifier-svm-status get-classifer-using" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "id" $id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/rest/v1.1/classifier/svm/status" $qp)
+  let full_url = (build-url $base "/rest/v1.1/classifier/svm/status" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"accessKey": $access_key, "secretKey": $secret_key, "id": $id} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"accessKey": $access_key, "secretKey": $secret_key, "id": $id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve all collections
@@ -653,10 +838,21 @@ export def "rest-v1-1-collection get-list-using" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/rest/v1.1/collection/" $qp)
+  let full_url = (build-url $base "/rest/v1.1/collection/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"accessKey": $access_key, "secretKey": $secret_key} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"accessKey": $access_key, "secretKey": $secret_key} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create new empty collection with given name
@@ -683,13 +879,24 @@ export def "rest-v1-1-collection create-using" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/rest/v1.1/collection/")
+  let full_url = (build-url $base "/rest/v1.1/collection/" $auth.query)
   let req_body = {"accessKey": $access_key, "secretKey": $secret_key, "name": $name, "preload": $preload, "evictable": $evictable, "purposes": $purposes} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/x-www-form-urlencoded"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200 201]
 }
 
 # Retrieve all collections
@@ -714,10 +921,21 @@ export def "rest-v1-1-collection-all get-collections2-using" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/rest/v1.1/collection/all" $qp)
+  let full_url = (build-url $base "/rest/v1.1/collection/all" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"accessKey": $access_key, "secretKey": $secret_key} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"accessKey": $access_key, "secretKey": $secret_key} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Delete existing collection with associated profiles and faces.
@@ -743,10 +961,21 @@ export def "rest-v1-1-collection-collection delete-collection2-using" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "collectionId" $collection_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/rest/v1.1/collection/collection" $qp)
+  let full_url = (build-url $base "/rest/v1.1/collection/collection" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"accessKey": $access_key, "secretKey": $secret_key, "collectionId": $collection_id} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"accessKey": $access_key, "secretKey": $secret_key, "collectionId": $collection_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200 204]
 }
 
 # Retrieve existing collection content
@@ -772,10 +1001,21 @@ export def "rest-v1-1-collection-collection get-collection2-using" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "collectionId" $collection_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/rest/v1.1/collection/collection" $qp)
+  let full_url = (build-url $base "/rest/v1.1/collection/collection" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"accessKey": $access_key, "secretKey": $secret_key, "collectionId": $collection_id} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"accessKey": $access_key, "secretKey": $secret_key, "collectionId": $collection_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create new empty collection with given name
@@ -804,10 +1044,21 @@ export def "rest-v1-1-collection-collection create-collection2-using" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "collectionName" $collection_name "scalar") (serialize-qp "preload" $preload "scalar") (serialize-qp "evictable" $evictable "scalar") (serialize-qp "purposes" $purposes "multi")] | flatten | str join "&"
-  let full_url = (build-url $base "/rest/v1.1/collection/collection" $qp)
+  let full_url = (build-url $base "/rest/v1.1/collection/collection" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"accessKey": $access_key, "secretKey": $secret_key, "collectionName": $collection_name, "preload": $preload, "evictable": $evictable, "purposes": $purposes} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"accessKey": $access_key, "secretKey": $secret_key, "collectionName": $collection_name, "preload": $preload, "evictable": $evictable, "purposes": $purposes} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200 201]
 }
 
 # Retrieve collection content for data analysis.
@@ -831,10 +1082,21 @@ export def "rest-v1-1-collection-export-csv get-using" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "collectionId" $collection_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/rest/v1.1/collection/export/csv" $qp)
+  let full_url = (build-url $base "/rest/v1.1/collection/export/csv" $qp $auth.query)
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"accessKey": $access_key, "secretKey": $secret_key, "collectionId": $collection_id} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"accessKey": $access_key, "secretKey": $secret_key, "collectionId": $collection_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Change purpose of existing collection
@@ -861,10 +1123,21 @@ export def "rest-v1-1-collection-purpose update-repurpose-using" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "collectionId" $collection_id "scalar") (serialize-qp "purposes" $purposes "multi")] | flatten | str join "&"
-  let full_url = (build-url $base "/rest/v1.1/collection/purpose" $qp)
+  let full_url = (build-url $base "/rest/v1.1/collection/purpose" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"accessKey": $access_key, "secretKey": $secret_key, "collectionId": $collection_id, "purposes": $purposes} | compact), body: null}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"accessKey": $access_key, "secretKey": $secret_key, "collectionId": $collection_id, "purposes": $purposes} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req null $insecure $raw $allow_errors $full [200 201]
 }
 
 # Delete existing collection with associated profiles and faces.
@@ -889,10 +1162,21 @@ export def "rest-v1-1-collection delete-using" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/v1.1/collection/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/v1.1/collection/{id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"accessKey": $access_key, "secretKey": $secret_key} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"accessKey": $access_key, "secretKey": $secret_key} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200 204]
 }
 
 # Retrieve existing collection content
@@ -917,10 +1201,21 @@ export def "rest-v1-1-collection get-using" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/v1.1/collection/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/v1.1/collection/{id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"accessKey": $access_key, "secretKey": $secret_key} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"accessKey": $access_key, "secretKey": $secret_key} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update an existing collection with a given id
@@ -947,10 +1242,21 @@ export def "rest-v1-1-collection update-using" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "purposes" $purposes "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/v1.1/collection/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/v1.1/collection/{id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"accessKey": $access_key, "secretKey": $secret_key, "name": $name, "purposes": $purposes} | compact), body: null}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: ({"accessKey": $access_key, "secretKey": $secret_key, "name": $name, "purposes": $purposes} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req null $insecure $raw $allow_errors $full [200 204]
 }
 
 # Update an existing collection with a given id
@@ -979,10 +1285,21 @@ export def "rest-v1-1-collection update-collection2-using-create" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "purposes" $purposes "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/v1.1/collection/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/v1.1/collection/{id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"accessKey": $access_key, "secretKey": $secret_key, "name": $name, "purposes": $purposes} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"accessKey": $access_key, "secretKey": $secret_key, "name": $name, "purposes": $purposes} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200 201]
 }
 
 # Gets all the profiles associated to a collection
@@ -1007,10 +1324,21 @@ export def "rest-v1-1-collection-profile get-list-using" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/v1.1/collection/{id}/profile") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/v1.1/collection/{id}/profile") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"accessKey": $access_key, "secretKey": $secret_key} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"accessKey": $access_key, "secretKey": $secret_key} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Removes classification attributes from a profile
@@ -1037,10 +1365,21 @@ export def "rest-v1-1-profile-classification-attributes delete-from-using" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "profileId" $profile_id "scalar") (serialize-qp "collectionId" $collection_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/rest/v1.1/profile/classificationAttributes" $qp)
+  let full_url = (build-url $base "/rest/v1.1/profile/classificationAttributes" $qp $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"accessKey": $access_key, "secretKey": $secret_key, "profileId": $profile_id, "collectionId": $collection_id} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"accessKey": $access_key, "secretKey": $secret_key, "profileId": $profile_id, "collectionId": $collection_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200 204]
 }
 
 # Gets classification attributes from a profile
@@ -1067,10 +1406,21 @@ export def "rest-v1-1-profile-classification-attributes get-from-using" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "profileId" $profile_id "scalar") (serialize-qp "collectionId" $collection_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/rest/v1.1/profile/classificationAttributes" $qp)
+  let full_url = (build-url $base "/rest/v1.1/profile/classificationAttributes" $qp $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"accessKey": $access_key, "secretKey": $secret_key, "profileId": $profile_id, "collectionId": $collection_id} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"accessKey": $access_key, "secretKey": $secret_key, "profileId": $profile_id, "collectionId": $collection_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Maps classification attributes to a profile
@@ -1098,10 +1448,21 @@ export def "rest-v1-1-profile-classification-attributes update-map-to-using" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "profileId" $profile_id "scalar") (serialize-qp "collectionId" $collection_id "scalar") (serialize-qp "classificationAttributes" $classification_attributes "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/rest/v1.1/profile/classificationAttributes" $qp)
+  let full_url = (build-url $base "/rest/v1.1/profile/classificationAttributes" $qp $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"accessKey": $access_key, "secretKey": $secret_key, "profileId": $profile_id, "collectionId": $collection_id, "classificationAttributes": $classification_attributes} | compact), body: null}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"accessKey": $access_key, "secretKey": $secret_key, "profileId": $profile_id, "collectionId": $collection_id, "classificationAttributes": $classification_attributes} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req null $insecure $raw $allow_errors $full [200 201]
 }
 
 # Gets the enrollment status of a profile: information on whether it is suitable for authentication.
@@ -1126,10 +1487,21 @@ export def "rest-v1-1-profile-enrollment-status get-using" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "profileId" $profile_id "scalar") (serialize-qp "collectionId" $collection_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/rest/v1.1/profile/enrollmentStatus" $qp)
+  let full_url = (build-url $base "/rest/v1.1/profile/enrollmentStatus" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"accessKey": $access_key, "secretKey": $secret_key, "profileId": $profile_id, "collectionId": $collection_id} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"accessKey": $access_key, "secretKey": $secret_key, "profileId": $profile_id, "collectionId": $collection_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Removes (unmaps) a list of faces, identified by faceHashes, from a profile, identified by profileId
@@ -1155,10 +1527,21 @@ export def "rest-v1-1-profile-map delete-faces-from-using" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "faceHashes" $face_hashes "scalar") (serialize-qp "profileId" $profile_id "scalar") (serialize-qp "collectionId" $collection_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/rest/v1.1/profile/map" $qp)
+  let full_url = (build-url $base "/rest/v1.1/profile/map" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"accessKey": $access_key, "secretKey": $secret_key, "faceHashes": $face_hashes, "profileId": $profile_id, "collectionId": $collection_id} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"accessKey": $access_key, "secretKey": $secret_key, "faceHashes": $face_hashes, "profileId": $profile_id, "collectionId": $collection_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200 204]
 }
 
 # Gets all the faceHashes associated to a profile
@@ -1183,10 +1566,21 @@ export def "rest-v1-1-profile-map get-faces-from-using" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "profileId" $profile_id "scalar") (serialize-qp "collectionId" $collection_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/rest/v1.1/profile/map" $qp)
+  let full_url = (build-url $base "/rest/v1.1/profile/map" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"accessKey": $access_key, "secretKey": $secret_key, "profileId": $profile_id, "collectionId": $collection_id} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"accessKey": $access_key, "secretKey": $secret_key, "profileId": $profile_id, "collectionId": $collection_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Adds (maps) a list of faces, identified by faceHashes, to a profile, identified by profileId
@@ -1212,10 +1606,21 @@ export def "rest-v1-1-profile-map create-faces-to-using" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "faceHashes" $face_hashes "scalar") (serialize-qp "profileId" $profile_id "scalar") (serialize-qp "collectionId" $collection_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/rest/v1.1/profile/map" $qp)
+  let full_url = (build-url $base "/rest/v1.1/profile/map" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"accessKey": $access_key, "secretKey": $secret_key, "faceHashes": $face_hashes, "profileId": $profile_id, "collectionId": $collection_id} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"accessKey": $access_key, "secretKey": $secret_key, "faceHashes": $face_hashes, "profileId": $profile_id, "collectionId": $collection_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200 201]
 }
 
 # Deletes a profile and unmaps all its faces
@@ -1242,10 +1647,21 @@ export def "rest-v1-1-profile-profile delete-profile2-using" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "collectionId" $collection_id "scalar") (serialize-qp "profileId" $profile_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/rest/v1.1/profile/profile" $qp)
+  let full_url = (build-url $base "/rest/v1.1/profile/profile" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"accessKey": $access_key, "secretKey": $secret_key, "collectionId": $collection_id, "profileId": $profile_id} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"accessKey": $access_key, "secretKey": $secret_key, "collectionId": $collection_id, "profileId": $profile_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200 204]
 }
 
 # Creates a new profile with no faces associated to it (empty profile)
@@ -1274,10 +1690,21 @@ export def "rest-v1-1-profile-profile create-using" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "collectionId" $collection_id "scalar") (serialize-qp "externalId" $external_id "scalar") (serialize-qp "screenName" $screen_name "scalar") (serialize-qp "labels" $labels "multi") (serialize-qp "classificationAttributes" $classification_attributes "scalar") (serialize-qp "details" $details "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/rest/v1.1/profile/profile" $qp)
+  let full_url = (build-url $base "/rest/v1.1/profile/profile" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"accessKey": $access_key, "secretKey": $secret_key, "collectionId": $collection_id, "externalId": $external_id, "screenName": $screen_name, "labels": $labels, "classificationAttributes": $classification_attributes, "details": $details} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"accessKey": $access_key, "secretKey": $secret_key, "collectionId": $collection_id, "externalId": $external_id, "screenName": $screen_name, "labels": $labels, "classificationAttributes": $classification_attributes, "details": $details} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200 201]
 }
 
 # Deletes a profile and unmaps all its faces
@@ -1303,10 +1730,21 @@ export def "rest-v1-1-profile delete-using" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "collectionId" $collection_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/v1.1/profile/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/v1.1/profile/{id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"accessKey": $access_key, "secretKey": $secret_key, "collectionId": $collection_id} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"accessKey": $access_key, "secretKey": $secret_key, "collectionId": $collection_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200 204]
 }
 
 # Retrieves a profile
@@ -1333,10 +1771,21 @@ export def "rest-v1-1-profile get-using" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "collectionId" $collection_id "scalar") (serialize-qp "withFaces" $with_faces "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/v1.1/profile/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/v1.1/profile/{id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"accessKey": $access_key, "secretKey": $secret_key, "collectionId": $collection_id, "withFaces": $with_faces} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"accessKey": $access_key, "secretKey": $secret_key, "collectionId": $collection_id, "withFaces": $with_faces} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update an existing profile with a given id
@@ -1367,10 +1816,21 @@ export def "rest-v1-1-profile update-using" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "collectionId" $collection_id "scalar") (serialize-qp "externalId" $external_id "scalar") (serialize-qp "screenName" $screen_name "scalar") (serialize-qp "labels" $labels "multi") (serialize-qp "classificationAttributes" $classification_attributes "scalar") (serialize-qp "details" $details "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/v1.1/profile/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/v1.1/profile/{id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"accessKey": $access_key, "secretKey": $secret_key, "collectionId": $collection_id, "externalId": $external_id, "screenName": $screen_name, "labels": $labels, "classificationAttributes": $classification_attributes, "details": $details} | compact), body: null}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: ({"accessKey": $access_key, "secretKey": $secret_key, "collectionId": $collection_id, "externalId": $external_id, "screenName": $screen_name, "labels": $labels, "classificationAttributes": $classification_attributes, "details": $details} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req null $insecure $raw $allow_errors $full [200 204]
 }
 
 # Show status of all streams from account
@@ -1393,10 +1853,21 @@ export def "rest-v1-1-stream-all get-by-account-using" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/rest/v1.1/stream/all" $qp)
+  let full_url = (build-url $base "/rest/v1.1/stream/all" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"accessKey": $access_key, "secretKey": $secret_key} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"accessKey": $access_key, "secretKey": $secret_key} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get last N recognized individuals from stream
@@ -1421,10 +1892,21 @@ export def "rest-v1-1-stream-attendance get-last-n-attedance-using" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "streamIds" $stream_ids "multi") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/rest/v1.1/stream/attendance" $qp)
+  let full_url = (build-url $base "/rest/v1.1/stream/attendance" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"accessKey": $access_key, "secretKey": $secret_key, "streamIds": $stream_ids, "count": $count} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"accessKey": $access_key, "secretKey": $secret_key, "streamIds": $stream_ids, "count": $count} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Cleanup frames older than specified timeframe
@@ -1449,10 +1931,21 @@ export def "rest-v1-1-stream-cleanup update-using" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "streamId" $stream_id "scalar") (serialize-qp "interval" $interval "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/rest/v1.1/stream/cleanup" $qp)
+  let full_url = (build-url $base "/rest/v1.1/stream/cleanup" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"accessKey": $access_key, "secretKey": $secret_key, "streamId": $stream_id, "interval": $interval} | compact), body: null}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: ({"accessKey": $access_key, "secretKey": $secret_key, "streamId": $stream_id, "interval": $interval} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req null $insecure $raw $allow_errors $full [200 204]
 }
 
 # Get individual frame image
@@ -1477,10 +1970,21 @@ export def "rest-v1-1-stream-frame-image get-using" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "streamId" $stream_id "scalar") (serialize-qp "timestamp" $timestamp "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/rest/v1.1/stream/frameImage" $qp)
+  let full_url = (build-url $base "/rest/v1.1/stream/frameImage" $qp $auth.query)
   let accept_val = "image/jpeg"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"accessKey": $access_key, "secretKey": $secret_key, "streamId": $stream_id, "timestamp": $timestamp} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"accessKey": $access_key, "secretKey": $secret_key, "streamId": $stream_id, "timestamp": $timestamp} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get last processed N frames from stream
@@ -1508,10 +2012,21 @@ export def "rest-v1-1-stream-frames get-last-n-using" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "streamId" $stream_id "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "collectionId" $collection_id "scalar") (serialize-qp "labels" $labels "multi") (serialize-qp "attributeFilters" $attribute_filters "multi")] | flatten | str join "&"
-  let full_url = (build-url $base "/rest/v1.1/stream/frames" $qp)
+  let full_url = (build-url $base "/rest/v1.1/stream/frames" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"accessKey": $access_key, "secretKey": $secret_key, "streamId": $stream_id, "count": $count, "collectionId": $collection_id, "labels": $labels, "attributeFilters": $attribute_filters} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"accessKey": $access_key, "secretKey": $secret_key, "streamId": $stream_id, "count": $count, "collectionId": $collection_id, "labels": $labels, "attributeFilters": $attribute_filters} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Start existing stream
@@ -1535,10 +2050,21 @@ export def "rest-v1-1-stream-start update-using" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "streamId" $stream_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/rest/v1.1/stream/start" $qp)
+  let full_url = (build-url $base "/rest/v1.1/stream/start" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"accessKey": $access_key, "secretKey": $secret_key, "streamId": $stream_id} | compact), body: null}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: ({"accessKey": $access_key, "secretKey": $secret_key, "streamId": $stream_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req null $insecure $raw $allow_errors $full [200 204]
 }
 
 # Stop existing stream
@@ -1562,10 +2088,21 @@ export def "rest-v1-1-stream-stop update-using" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "streamId" $stream_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/rest/v1.1/stream/stop" $qp)
+  let full_url = (build-url $base "/rest/v1.1/stream/stop" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"accessKey": $access_key, "secretKey": $secret_key, "streamId": $stream_id} | compact), body: null}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: ({"accessKey": $access_key, "secretKey": $secret_key, "streamId": $stream_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req null $insecure $raw $allow_errors $full [200 204]
 }
 
 # Create new stream with given name
@@ -1601,10 +2138,21 @@ export def "rest-v1-1-stream-stream create-using" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "url" $url "scalar") (serialize-qp "method" $method "scalar") (serialize-qp "username" $username "scalar") (serialize-qp "password" $password "scalar") (serialize-qp "skipFramesWithNoFaces" $skip_frames_with_no_faces "scalar") (serialize-qp "retentionTime" $retention_time "scalar") (serialize-qp "storeOriginalFrames" $store_original_frames "scalar") (serialize-qp "storeAttendanceFaces" $store_attendance_faces "scalar") (serialize-qp "storeAttendanceFrames" $store_attendance_frames "scalar") (serialize-qp "isActive" $is_active "scalar") (serialize-qp "associatedCollections" $associated_collections "multi") (serialize-qp "attributes" $attributes "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/rest/v1.1/stream/stream" $qp)
+  let full_url = (build-url $base "/rest/v1.1/stream/stream" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"accessKey": $access_key, "secretKey": $secret_key, "name": $name, "url": $url, "method": $method, "username": $username, "password": $password, "skipFramesWithNoFaces": $skip_frames_with_no_faces, "retentionTime": $retention_time, "storeOriginalFrames": $store_original_frames, "storeAttendanceFaces": $store_attendance_faces, "storeAttendanceFrames": $store_attendance_frames, "isActive": $is_active, "associatedCollections": $associated_collections, "attributes": $attributes} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"accessKey": $access_key, "secretKey": $secret_key, "name": $name, "url": $url, "method": $method, "username": $username, "password": $password, "skipFramesWithNoFaces": $skip_frames_with_no_faces, "retentionTime": $retention_time, "storeOriginalFrames": $store_original_frames, "storeAttendanceFaces": $store_attendance_faces, "storeAttendanceFrames": $store_attendance_frames, "isActive": $is_active, "associatedCollections": $associated_collections, "attributes": $attributes} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200 201]
 }
 
 # Delete existing stream
@@ -1629,10 +2177,21 @@ export def "rest-v1-1-stream delete-using" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/v1.1/stream/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/v1.1/stream/{id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"accessKey": $access_key, "secretKey": $secret_key} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"accessKey": $access_key, "secretKey": $secret_key} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200 204]
 }
 
 # Get an existing stream with a given ID
@@ -1657,10 +2216,21 @@ export def "rest-v1-1-stream get-using" [
   let base = ($base_url | default $BASE_URL)
   if ($stream_id | is-empty) { error make --unspanned { msg: "path parameter 'streamId' must be non-empty" } }
   let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({stream_id: (encode-path-segment $stream_id)} | format pattern "/rest/v1.1/stream/{stream_id}") $qp)
+  let full_url = (build-url $base ({stream_id: (encode-path-segment $stream_id)} | format pattern "/rest/v1.1/stream/{stream_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"accessKey": $access_key, "secretKey": $secret_key} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"accessKey": $access_key, "secretKey": $secret_key} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update an existing stream with a given ID
@@ -1698,8 +2268,19 @@ export def "rest-v1-1-stream update-using" [
   let base = ($base_url | default $BASE_URL)
   if ($stream_id | is-empty) { error make --unspanned { msg: "path parameter 'streamId' must be non-empty" } }
   let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "url" $url "scalar") (serialize-qp "method" $method "scalar") (serialize-qp "username" $username "scalar") (serialize-qp "password" $password "scalar") (serialize-qp "skipFramesWithNoFaces" $skip_frames_with_no_faces "scalar") (serialize-qp "retentionTime" $retention_time "scalar") (serialize-qp "storeOriginalFrames" $store_original_frames "scalar") (serialize-qp "storeAttendanceFaces" $store_attendance_faces "scalar") (serialize-qp "storeAttendanceFrames" $store_attendance_frames "scalar") (serialize-qp "isActive" $is_active "scalar") (serialize-qp "associatedCollections" $associated_collections "multi") (serialize-qp "attributes" $attributes "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({stream_id: (encode-path-segment $stream_id)} | format pattern "/rest/v1.1/stream/{stream_id}") $qp)
+  let full_url = (build-url $base ({stream_id: (encode-path-segment $stream_id)} | format pattern "/rest/v1.1/stream/{stream_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"accessKey": $access_key, "secretKey": $secret_key, "name": $name, "url": $url, "method": $method, "username": $username, "password": $password, "skipFramesWithNoFaces": $skip_frames_with_no_faces, "retentionTime": $retention_time, "storeOriginalFrames": $store_original_frames, "storeAttendanceFaces": $store_attendance_faces, "storeAttendanceFrames": $store_attendance_frames, "isActive": $is_active, "associatedCollections": $associated_collections, "attributes": $attributes} | compact), body: null}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: ({"accessKey": $access_key, "secretKey": $secret_key, "name": $name, "url": $url, "method": $method, "username": $username, "password": $password, "skipFramesWithNoFaces": $skip_frames_with_no_faces, "retentionTime": $retention_time, "storeOriginalFrames": $store_original_frames, "storeAttendanceFaces": $store_attendance_faces, "storeAttendanceFrames": $store_attendance_frames, "isActive": $is_active, "associatedCollections": $associated_collections, "attributes": $attributes} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req null $insecure $raw $allow_errors $full [200 204]
 }

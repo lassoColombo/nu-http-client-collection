@@ -8,7 +8,7 @@ const BASE_URL = "https://echodata.epa.gov/echo"
 # `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
 # where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o U_S_EPA_ENFORCEMENT_AND_COMPLIANCE_HISTORY_ONLINE_ECHO_ALL_DATA_TOKEN | default "" }
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o U_S_EPA_ENFORCEMENT_AND_COMPLIANCE_HISTORY_ONLINE_ECHO_ALL_DATA_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
@@ -40,14 +40,11 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
-# Trick: `url encode --all` over-encodes, then we decode the four unreserved
-# punctuation chars back. Pre-existing %XX sequences in the input survive
-# because `url encode --all` first turns their % into %25.
 def encode-path-segment [v: any]: nothing -> string {
   $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
-# Serialize an array-typed path parameter (issue 49.A). OpenAPI 3 `style: simple`
+# Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
 # (the default for path params) and Swagger 2 `collectionFormat: csv` both join
 # the elements with a literal comma WITHIN the single path segment, each element
 # RFC-3986-encoded individually (so a comma inside an element stays %2C). Without
@@ -58,51 +55,45 @@ def encode-path-array [v: any]: nothing -> string {
   if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
 }
 
-# Build URL from base, path, and optional query string
-def build-url [base: string, path: string, query?: string]: nothing -> string {
+# Build the request URL from base, path, and any number of pre-encoded query
+# fragments (param serializer output and/or the auth query). Each fragment is an
+# `&`-joinable `key=value` string already percent-encoded by its producer; empty
+# fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
+# delimiters are hand-spliced — and any query already on the base URL is merged in.
+def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
   let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
-  let result = ($parsed | upsert path $full_path)
-  if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
+  let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
+  $parsed | upsert path $full_path | upsert query $query | url join
 }
 
-# Build the dry-run record returned by --dry-run. Shape:
-#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
-#    auth: {scheme, location}}
-# `meta` carries logical-form data (the query record by spec name, the pre-serialization
-# body) that do-request itself cannot reconstruct from its wire-format args.
-def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
-  let m = ($meta | default {})
-  {
-    dry_run: true
-    method: $method
-    url: $url
-    query: ($m | get -o query | default {})
-    headers: $auth.headers
-    body: ($m | get -o body)
-    content_type: $content_type
-    timeout: $timeout
-    auth: {scheme: $auth.scheme, location: $auth.location}
-  }
+# Success policy: did this response succeed? Single source of truth, consulted by
+# handle-response and the HEAD header-unwrap. Empty ok_codes means the spec listed
+# none, so fall back to < 400. Otherwise: any 2xx, plus documented success codes.
+def status-ok [status: int, ok_codes: list<int>]: nothing -> bool {
+  if ($ok_codes | is-empty) { $status < 400 } else { ($status >= 200 and $status < 300) or ($status in $ok_codes) }
 }
 
-# Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
-  let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
-  let timeout = ($max_time | default 30min)
-  let ct = ($content_type | default "application/json")
-  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
-  let resp = match $method {
-    "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
-  }
-  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
-  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
+# Unwrap a `--full` HTTP response into the user-facing value. Response arrives
+# via pipeline; ok_codes gates the error throw (see status-ok).
+def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: record -> any {
+  let resp = $in
+  if $allow_errors { return $resp }
+  if not (status-ok $resp.status $ok_codes) { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } }
+  if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
+  if $resp.status == 204 { return null }
+  $resp.body
+}
+
+# GET — bodyless, honours --raw
+def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+}
+
+# POST — body + content-type
+def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 def base-url-completer [] { ["https://echodata.epa.gov/echo"] }
@@ -188,10 +179,21 @@ export def "echo-rest-services-get-download get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "qid" $qid "scalar") (serialize-qp "qcolumns" $qcolumns "scalar") (serialize-qp "p_pretty_print" $p_pretty_print "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/echo_rest_services.get_download" $qp)
+  let full_url = (build-url $base "/echo_rest_services.get_download" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"output": $output, "qid": $qid, "qcolumns": $qcolumns, "p_pretty_print": $p_pretty_print} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"output": $output, "qid": $qid, "qcolumns": $qcolumns, "p_pretty_print": $p_pretty_print} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Combined ECHO Download Data Service
@@ -216,13 +218,24 @@ export def "echo-rest-services-get-download create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/echo_rest_services.get_download")
+  let full_url = (build-url $base "/echo_rest_services.get_download" $auth.query)
   let req_body = {"output": $output, "qid": $qid, "qcolumns": $qcolumns, "p_pretty_print": $p_pretty_print} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/x-www-form-urlencoded"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Combined ECHO Facility Search Service
@@ -319,10 +332,21 @@ export def "echo-rest-services-get-facilities get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_fn" $p_fn "scalar") (serialize-qp "p_sa" $p_sa "scalar") (serialize-qp "p_sa1" $p_sa1 "scalar") (serialize-qp "p_ct" $p_ct "scalar") (serialize-qp "p_co" $p_co "scalar") (serialize-qp "p_fips" $p_fips "scalar") (serialize-qp "p_st" $p_st "scalar") (serialize-qp "p_zip" $p_zip "scalar") (serialize-qp "p_frs" $p_frs "scalar") (serialize-qp "p_reg" $p_reg "scalar") (serialize-qp "p_sic" $p_sic "scalar") (serialize-qp "p_ncs" $p_ncs "scalar") (serialize-qp "p_pen" $p_pen "scalar") (serialize-qp "p_c1lat" $p_c1lat "scalar") (serialize-qp "p_c1lon" $p_c1lon "scalar") (serialize-qp "p_c2lat" $p_c2lat "scalar") (serialize-qp "p_c2lon" $p_c2lon "scalar") (serialize-qp "p_usmex" $p_usmex "scalar") (serialize-qp "p_sic2" $p_sic2 "scalar") (serialize-qp "p_sic4" $p_sic4 "scalar") (serialize-qp "p_fa" $p_fa "scalar") (serialize-qp "p_ff" $p_ff "scalar") (serialize-qp "p_act" $p_act "scalar") (serialize-qp "p_maj" $p_maj "scalar") (serialize-qp "p_mact" $p_mact "scalar") (serialize-qp "p_fea" $p_fea "scalar") (serialize-qp "p_feay" $p_feay "scalar") (serialize-qp "p_feaa" $p_feaa "scalar") (serialize-qp "p_feac" $p_feac "scalar") (serialize-qp "p_fea_5yr" $p_fea_5yr "scalar") (serialize-qp "p_iea" $p_iea "scalar") (serialize-qp "p_ieay" $p_ieay "scalar") (serialize-qp "p_ieaa" $p_ieaa "scalar") (serialize-qp "p_iea_5yr" $p_iea_5yr "scalar") (serialize-qp "p_cs" $p_cs "scalar") (serialize-qp "p_qiv" $p_qiv "scalar") (serialize-qp "p_naa" $p_naa "scalar") (serialize-qp "p_impw" $p_impw "scalar") (serialize-qp "p_trep" $p_trep "scalar") (serialize-qp "p_ocr" $p_ocr "scalar") (serialize-qp "p_oct" $p_oct "scalar") (serialize-qp "p_pm" $p_pm "scalar") (serialize-qp "p_pd" $p_pd "scalar") (serialize-qp "p_ico" $p_ico "scalar") (serialize-qp "p_huc" $p_huc "scalar") (serialize-qp "p_pid" $p_pid "scalar") (serialize-qp "p_med" $p_med "scalar") (serialize-qp "p_istatute" $p_istatute "scalar") (serialize-qp "p_ysl" $p_ysl "scalar") (serialize-qp "p_ysly" $p_ysly "scalar") (serialize-qp "p_ysla" $p_ysla "scalar") (serialize-qp "p_qs" $p_qs "scalar") (serialize-qp "p_sfs" $p_sfs "scalar") (serialize-qp "p_tribeid" $p_tribeid "scalar") (serialize-qp "p_tribename" $p_tribename "scalar") (serialize-qp "p_tribedist" $p_tribedist "scalar") (serialize-qp "p_wbd" $p_wbd "scalar") (serialize-qp "p_fntype" $p_fntype "scalar") (serialize-qp "p_icoo" $p_icoo "scalar") (serialize-qp "p_fac_icos" $p_fac_icos "scalar") (serialize-qp "p_ejscreen" $p_ejscreen "scalar") (serialize-qp "p_limit_addr" $p_limit_addr "scalar") (serialize-qp "p_lat" $p_lat "scalar") (serialize-qp "p_long" $p_long "scalar") (serialize-qp "p_radius" $p_radius "scalar") (serialize-qp "p_ejscreen_over80cnt" $p_ejscreen_over80cnt "scalar") (serialize-qp "p_agoo" $p_agoo "scalar") (serialize-qp "p_neiu" $p_neiu "scalar") (serialize-qp "queryset" $queryset "scalar") (serialize-qp "responseset" $responseset "scalar") (serialize-qp "tablelist" $tablelist "scalar") (serialize-qp "maplist" $maplist "scalar") (serialize-qp "summarylist" $summarylist "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "qcolumns" $qcolumns "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/echo_rest_services.get_facilities" $qp)
+  let full_url = (build-url $base "/echo_rest_services.get_facilities" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"output": $output, "p_fn": $p_fn, "p_sa": $p_sa, "p_sa1": $p_sa1, "p_ct": $p_ct, "p_co": $p_co, "p_fips": $p_fips, "p_st": $p_st, "p_zip": $p_zip, "p_frs": $p_frs, "p_reg": $p_reg, "p_sic": $p_sic, "p_ncs": $p_ncs, "p_pen": $p_pen, "p_c1lat": $p_c1lat, "p_c1lon": $p_c1lon, "p_c2lat": $p_c2lat, "p_c2lon": $p_c2lon, "p_usmex": $p_usmex, "p_sic2": $p_sic2, "p_sic4": $p_sic4, "p_fa": $p_fa, "p_ff": $p_ff, "p_act": $p_act, "p_maj": $p_maj, "p_mact": $p_mact, "p_fea": $p_fea, "p_feay": $p_feay, "p_feaa": $p_feaa, "p_feac": $p_feac, "p_fea_5yr": $p_fea_5yr, "p_iea": $p_iea, "p_ieay": $p_ieay, "p_ieaa": $p_ieaa, "p_iea_5yr": $p_iea_5yr, "p_cs": $p_cs, "p_qiv": $p_qiv, "p_naa": $p_naa, "p_impw": $p_impw, "p_trep": $p_trep, "p_ocr": $p_ocr, "p_oct": $p_oct, "p_pm": $p_pm, "p_pd": $p_pd, "p_ico": $p_ico, "p_huc": $p_huc, "p_pid": $p_pid, "p_med": $p_med, "p_istatute": $p_istatute, "p_ysl": $p_ysl, "p_ysly": $p_ysly, "p_ysla": $p_ysla, "p_qs": $p_qs, "p_sfs": $p_sfs, "p_tribeid": $p_tribeid, "p_tribename": $p_tribename, "p_tribedist": $p_tribedist, "p_wbd": $p_wbd, "p_fntype": $p_fntype, "p_icoo": $p_icoo, "p_fac_icos": $p_fac_icos, "p_ejscreen": $p_ejscreen, "p_limit_addr": $p_limit_addr, "p_lat": $p_lat, "p_long": $p_long, "p_radius": $p_radius, "p_ejscreen_over80cnt": $p_ejscreen_over80cnt, "p_agoo": $p_agoo, "p_neiu": $p_neiu, "queryset": $queryset, "responseset": $responseset, "tablelist": $tablelist, "maplist": $maplist, "summarylist": $summarylist, "callback": $callback, "qcolumns": $qcolumns} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"output": $output, "p_fn": $p_fn, "p_sa": $p_sa, "p_sa1": $p_sa1, "p_ct": $p_ct, "p_co": $p_co, "p_fips": $p_fips, "p_st": $p_st, "p_zip": $p_zip, "p_frs": $p_frs, "p_reg": $p_reg, "p_sic": $p_sic, "p_ncs": $p_ncs, "p_pen": $p_pen, "p_c1lat": $p_c1lat, "p_c1lon": $p_c1lon, "p_c2lat": $p_c2lat, "p_c2lon": $p_c2lon, "p_usmex": $p_usmex, "p_sic2": $p_sic2, "p_sic4": $p_sic4, "p_fa": $p_fa, "p_ff": $p_ff, "p_act": $p_act, "p_maj": $p_maj, "p_mact": $p_mact, "p_fea": $p_fea, "p_feay": $p_feay, "p_feaa": $p_feaa, "p_feac": $p_feac, "p_fea_5yr": $p_fea_5yr, "p_iea": $p_iea, "p_ieay": $p_ieay, "p_ieaa": $p_ieaa, "p_iea_5yr": $p_iea_5yr, "p_cs": $p_cs, "p_qiv": $p_qiv, "p_naa": $p_naa, "p_impw": $p_impw, "p_trep": $p_trep, "p_ocr": $p_ocr, "p_oct": $p_oct, "p_pm": $p_pm, "p_pd": $p_pd, "p_ico": $p_ico, "p_huc": $p_huc, "p_pid": $p_pid, "p_med": $p_med, "p_istatute": $p_istatute, "p_ysl": $p_ysl, "p_ysly": $p_ysly, "p_ysla": $p_ysla, "p_qs": $p_qs, "p_sfs": $p_sfs, "p_tribeid": $p_tribeid, "p_tribename": $p_tribename, "p_tribedist": $p_tribedist, "p_wbd": $p_wbd, "p_fntype": $p_fntype, "p_icoo": $p_icoo, "p_fac_icos": $p_fac_icos, "p_ejscreen": $p_ejscreen, "p_limit_addr": $p_limit_addr, "p_lat": $p_lat, "p_long": $p_long, "p_radius": $p_radius, "p_ejscreen_over80cnt": $p_ejscreen_over80cnt, "p_agoo": $p_agoo, "p_neiu": $p_neiu, "queryset": $queryset, "responseset": $responseset, "tablelist": $tablelist, "maplist": $maplist, "summarylist": $summarylist, "callback": $callback, "qcolumns": $qcolumns} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Combined ECHO Facility Search Service
@@ -419,13 +443,24 @@ export def "echo-rest-services-get-facilities create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/echo_rest_services.get_facilities")
+  let full_url = (build-url $base "/echo_rest_services.get_facilities" $auth.query)
   let req_body = {"output": $output, "p_fn": $p_fn, "p_sa": $p_sa, "p_sa1": $p_sa1, "p_ct": $p_ct, "p_co": $p_co, "p_fips": $p_fips, "p_st": $p_st, "p_zip": $p_zip, "p_frs": $p_frs, "p_reg": $p_reg, "p_sic": $p_sic, "p_ncs": $p_ncs, "p_pen": $p_pen, "p_c1lat": $p_c1lat, "p_c1lon": $p_c1lon, "p_c2lat": $p_c2lat, "p_c2lon": $p_c2lon, "p_usmex": $p_usmex, "p_sic2": $p_sic2, "p_sic4": $p_sic4, "p_fa": $p_fa, "p_ff": $p_ff, "p_act": $p_act, "p_maj": $p_maj, "p_mact": $p_mact, "p_fea": $p_fea, "p_feay": $p_feay, "p_feaa": $p_feaa, "p_feac": $p_feac, "p_fea_5yr": $p_fea_5yr, "p_iea": $p_iea, "p_ieay": $p_ieay, "p_ieaa": $p_ieaa, "p_iea_5yr": $p_iea_5yr, "p_cs": $p_cs, "p_qiv": $p_qiv, "p_naa": $p_naa, "p_impw": $p_impw, "p_trep": $p_trep, "p_ocr": $p_ocr, "p_oct": $p_oct, "p_pm": $p_pm, "p_pd": $p_pd, "p_ico": $p_ico, "p_huc": $p_huc, "p_pid": $p_pid, "p_med": $p_med, "p_istatute": $p_istatute, "p_ysl": $p_ysl, "p_ysly": $p_ysly, "p_ysla": $p_ysla, "p_qs": $p_qs, "p_sfs": $p_sfs, "p_tribeid": $p_tribeid, "p_tribename": $p_tribename, "p_tribedist": $p_tribedist, "p_wbd": $p_wbd, "p_fntype": $p_fntype, "p_icoo": $p_icoo, "p_fac_icos": $p_fac_icos, "p_ejscreen": $p_ejscreen, "p_limit_addr": $p_limit_addr, "p_lat": $p_lat, "p_long": $p_long, "p_radius": $p_radius, "p_ejscreen_over80cnt": $p_ejscreen_over80cnt, "p_agoo": $p_agoo, "p_neiu": $p_neiu, "queryset": $queryset, "responseset": $responseset, "tablelist": $tablelist, "maplist": $maplist, "summarylist": $summarylist, "callback": $callback, "qcolumns": $qcolumns} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/x-www-form-urlencoded"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Combined ECHO Facility Enhanced Search Service
@@ -519,10 +554,21 @@ export def "echo-rest-services-get-facility-info get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_fn" $p_fn "scalar") (serialize-qp "p_sa" $p_sa "scalar") (serialize-qp "p_sa1" $p_sa1 "scalar") (serialize-qp "p_ct" $p_ct "scalar") (serialize-qp "p_co" $p_co "scalar") (serialize-qp "p_fips" $p_fips "scalar") (serialize-qp "p_st" $p_st "scalar") (serialize-qp "p_zip" $p_zip "scalar") (serialize-qp "p_frs" $p_frs "scalar") (serialize-qp "p_reg" $p_reg "scalar") (serialize-qp "p_sic" $p_sic "scalar") (serialize-qp "p_ncs" $p_ncs "scalar") (serialize-qp "p_pen" $p_pen "scalar") (serialize-qp "xmin" $xmin "scalar") (serialize-qp "ymin" $ymin "scalar") (serialize-qp "xmax" $xmax "scalar") (serialize-qp "ymax" $ymax "scalar") (serialize-qp "p_usmex" $p_usmex "scalar") (serialize-qp "p_sic2" $p_sic2 "scalar") (serialize-qp "p_sic4" $p_sic4 "scalar") (serialize-qp "p_fa" $p_fa "scalar") (serialize-qp "p_ff" $p_ff "scalar") (serialize-qp "p_act" $p_act "scalar") (serialize-qp "p_maj" $p_maj "scalar") (serialize-qp "p_mact" $p_mact "scalar") (serialize-qp "p_fea" $p_fea "scalar") (serialize-qp "p_feay" $p_feay "scalar") (serialize-qp "p_feaa" $p_feaa "scalar") (serialize-qp "p_feac" $p_feac "scalar") (serialize-qp "p_feac_5yr" $p_feac_5yr "scalar") (serialize-qp "p_iea" $p_iea "scalar") (serialize-qp "p_ieay" $p_ieay "scalar") (serialize-qp "p_ieaa" $p_ieaa "scalar") (serialize-qp "p_iea_5yr" $p_iea_5yr "scalar") (serialize-qp "p_cs" $p_cs "scalar") (serialize-qp "p_qiv" $p_qiv "scalar") (serialize-qp "p_naa" $p_naa "scalar") (serialize-qp "p_impw" $p_impw "scalar") (serialize-qp "p_trep" $p_trep "scalar") (serialize-qp "p_ocr" $p_ocr "scalar") (serialize-qp "p_oct" $p_oct "scalar") (serialize-qp "p_pm" $p_pm "scalar") (serialize-qp "p_pd" $p_pd "scalar") (serialize-qp "p_ico" $p_ico "scalar") (serialize-qp "p_huc" $p_huc "scalar") (serialize-qp "p_pid" $p_pid "scalar") (serialize-qp "p_med" $p_med "scalar") (serialize-qp "p_istatute" $p_istatute "scalar") (serialize-qp "p_ysl" $p_ysl "scalar") (serialize-qp "p_ysly" $p_ysly "scalar") (serialize-qp "p_ysla" $p_ysla "scalar") (serialize-qp "p_qs" $p_qs "scalar") (serialize-qp "p_sfs" $p_sfs "scalar") (serialize-qp "p_tribeid" $p_tribeid "scalar") (serialize-qp "p_tribename" $p_tribename "scalar") (serialize-qp "p_tribedist" $p_tribedist "scalar") (serialize-qp "p_wbd" $p_wbd "scalar") (serialize-qp "p_fntype" $p_fntype "scalar") (serialize-qp "p_icoo" $p_icoo "scalar") (serialize-qp "p_fac_icos" $p_fac_icos "scalar") (serialize-qp "p_ejscreen" $p_ejscreen "scalar") (serialize-qp "p_limit_addr" $p_limit_addr "scalar") (serialize-qp "p_lat" $p_lat "scalar") (serialize-qp "p_long" $p_long "scalar") (serialize-qp "p_radius" $p_radius "scalar") (serialize-qp "p_ejscreen_over80cnt" $p_ejscreen_over80cnt "scalar") (serialize-qp "p_agoo" $p_agoo "scalar") (serialize-qp "p_neiu" $p_neiu "scalar") (serialize-qp "responseset" $responseset "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "qcolumns" $qcolumns "scalar") (serialize-qp "p_pretty_print" $p_pretty_print "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/echo_rest_services.get_facility_info" $qp)
+  let full_url = (build-url $base "/echo_rest_services.get_facility_info" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"output": $output, "p_fn": $p_fn, "p_sa": $p_sa, "p_sa1": $p_sa1, "p_ct": $p_ct, "p_co": $p_co, "p_fips": $p_fips, "p_st": $p_st, "p_zip": $p_zip, "p_frs": $p_frs, "p_reg": $p_reg, "p_sic": $p_sic, "p_ncs": $p_ncs, "p_pen": $p_pen, "xmin": $xmin, "ymin": $ymin, "xmax": $xmax, "ymax": $ymax, "p_usmex": $p_usmex, "p_sic2": $p_sic2, "p_sic4": $p_sic4, "p_fa": $p_fa, "p_ff": $p_ff, "p_act": $p_act, "p_maj": $p_maj, "p_mact": $p_mact, "p_fea": $p_fea, "p_feay": $p_feay, "p_feaa": $p_feaa, "p_feac": $p_feac, "p_feac_5yr": $p_feac_5yr, "p_iea": $p_iea, "p_ieay": $p_ieay, "p_ieaa": $p_ieaa, "p_iea_5yr": $p_iea_5yr, "p_cs": $p_cs, "p_qiv": $p_qiv, "p_naa": $p_naa, "p_impw": $p_impw, "p_trep": $p_trep, "p_ocr": $p_ocr, "p_oct": $p_oct, "p_pm": $p_pm, "p_pd": $p_pd, "p_ico": $p_ico, "p_huc": $p_huc, "p_pid": $p_pid, "p_med": $p_med, "p_istatute": $p_istatute, "p_ysl": $p_ysl, "p_ysly": $p_ysly, "p_ysla": $p_ysla, "p_qs": $p_qs, "p_sfs": $p_sfs, "p_tribeid": $p_tribeid, "p_tribename": $p_tribename, "p_tribedist": $p_tribedist, "p_wbd": $p_wbd, "p_fntype": $p_fntype, "p_icoo": $p_icoo, "p_fac_icos": $p_fac_icos, "p_ejscreen": $p_ejscreen, "p_limit_addr": $p_limit_addr, "p_lat": $p_lat, "p_long": $p_long, "p_radius": $p_radius, "p_ejscreen_over80cnt": $p_ejscreen_over80cnt, "p_agoo": $p_agoo, "p_neiu": $p_neiu, "responseset": $responseset, "callback": $callback, "qcolumns": $qcolumns, "p_pretty_print": $p_pretty_print} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"output": $output, "p_fn": $p_fn, "p_sa": $p_sa, "p_sa1": $p_sa1, "p_ct": $p_ct, "p_co": $p_co, "p_fips": $p_fips, "p_st": $p_st, "p_zip": $p_zip, "p_frs": $p_frs, "p_reg": $p_reg, "p_sic": $p_sic, "p_ncs": $p_ncs, "p_pen": $p_pen, "xmin": $xmin, "ymin": $ymin, "xmax": $xmax, "ymax": $ymax, "p_usmex": $p_usmex, "p_sic2": $p_sic2, "p_sic4": $p_sic4, "p_fa": $p_fa, "p_ff": $p_ff, "p_act": $p_act, "p_maj": $p_maj, "p_mact": $p_mact, "p_fea": $p_fea, "p_feay": $p_feay, "p_feaa": $p_feaa, "p_feac": $p_feac, "p_feac_5yr": $p_feac_5yr, "p_iea": $p_iea, "p_ieay": $p_ieay, "p_ieaa": $p_ieaa, "p_iea_5yr": $p_iea_5yr, "p_cs": $p_cs, "p_qiv": $p_qiv, "p_naa": $p_naa, "p_impw": $p_impw, "p_trep": $p_trep, "p_ocr": $p_ocr, "p_oct": $p_oct, "p_pm": $p_pm, "p_pd": $p_pd, "p_ico": $p_ico, "p_huc": $p_huc, "p_pid": $p_pid, "p_med": $p_med, "p_istatute": $p_istatute, "p_ysl": $p_ysl, "p_ysly": $p_ysly, "p_ysla": $p_ysla, "p_qs": $p_qs, "p_sfs": $p_sfs, "p_tribeid": $p_tribeid, "p_tribename": $p_tribename, "p_tribedist": $p_tribedist, "p_wbd": $p_wbd, "p_fntype": $p_fntype, "p_icoo": $p_icoo, "p_fac_icos": $p_fac_icos, "p_ejscreen": $p_ejscreen, "p_limit_addr": $p_limit_addr, "p_lat": $p_lat, "p_long": $p_long, "p_radius": $p_radius, "p_ejscreen_over80cnt": $p_ejscreen_over80cnt, "p_agoo": $p_agoo, "p_neiu": $p_neiu, "responseset": $responseset, "callback": $callback, "qcolumns": $qcolumns, "p_pretty_print": $p_pretty_print} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Combined ECHO Facility Enhanced Search Service
@@ -616,13 +662,24 @@ export def "echo-rest-services-get-facility-info create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/echo_rest_services.get_facility_info")
+  let full_url = (build-url $base "/echo_rest_services.get_facility_info" $auth.query)
   let req_body = {"output": $output, "p_fn": $p_fn, "p_sa": $p_sa, "p_sa1": $p_sa1, "p_ct": $p_ct, "p_co": $p_co, "p_fips": $p_fips, "p_st": $p_st, "p_zip": $p_zip, "p_frs": $p_frs, "p_reg": $p_reg, "p_sic": $p_sic, "p_ncs": $p_ncs, "p_pen": $p_pen, "xmin": $xmin, "ymin": $ymin, "xmax": $xmax, "ymax": $ymax, "p_usmex": $p_usmex, "p_sic2": $p_sic2, "p_sic4": $p_sic4, "p_fa": $p_fa, "p_ff": $p_ff, "p_act": $p_act, "p_maj": $p_maj, "p_mact": $p_mact, "p_fea": $p_fea, "p_feay": $p_feay, "p_feaa": $p_feaa, "p_feac": $p_feac, "p_feac_5yr": $p_feac_5yr, "p_iea": $p_iea, "p_ieay": $p_ieay, "p_ieaa": $p_ieaa, "p_iea_5yr": $p_iea_5yr, "p_cs": $p_cs, "p_qiv": $p_qiv, "p_naa": $p_naa, "p_impw": $p_impw, "p_trep": $p_trep, "p_ocr": $p_ocr, "p_oct": $p_oct, "p_pm": $p_pm, "p_pd": $p_pd, "p_ico": $p_ico, "p_huc": $p_huc, "p_pid": $p_pid, "p_med": $p_med, "p_istatute": $p_istatute, "p_ysl": $p_ysl, "p_ysly": $p_ysly, "p_ysla": $p_ysla, "p_qs": $p_qs, "p_sfs": $p_sfs, "p_tribeid": $p_tribeid, "p_tribename": $p_tribename, "p_tribedist": $p_tribedist, "p_wbd": $p_wbd, "p_fntype": $p_fntype, "p_icoo": $p_icoo, "p_fac_icos": $p_fac_icos, "p_ejscreen": $p_ejscreen, "p_limit_addr": $p_limit_addr, "p_lat": $p_lat, "p_long": $p_long, "p_radius": $p_radius, "p_ejscreen_over80cnt": $p_ejscreen_over80cnt, "p_agoo": $p_agoo, "p_neiu": $p_neiu, "responseset": $responseset, "callback": $callback, "qcolumns": $qcolumns, "p_pretty_print": $p_pretty_print} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/x-www-form-urlencoded"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Combined ECHO GeoJSON Service
@@ -650,10 +707,21 @@ export def "echo-rest-services-get-geojson get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "qid" $qid "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "newsort" $newsort "scalar") (serialize-qp "descending" $descending "scalar") (serialize-qp "qcolumns" $qcolumns "scalar") (serialize-qp "p_pretty_print" $p_pretty_print "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/echo_rest_services.get_geojson" $qp)
+  let full_url = (build-url $base "/echo_rest_services.get_geojson" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"output": $output, "qid": $qid, "callback": $callback, "newsort": $newsort, "descending": $descending, "qcolumns": $qcolumns, "p_pretty_print": $p_pretty_print} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"output": $output, "qid": $qid, "callback": $callback, "newsort": $newsort, "descending": $descending, "qcolumns": $qcolumns, "p_pretty_print": $p_pretty_print} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Combined ECHO GeoJSON Service
@@ -681,13 +749,24 @@ export def "echo-rest-services-get-geojson create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/echo_rest_services.get_geojson")
+  let full_url = (build-url $base "/echo_rest_services.get_geojson" $auth.query)
   let req_body = {"output": $output, "qid": $qid, "callback": $callback, "newsort": $newsort, "descending": $descending, "qcolumns": $qcolumns, "p_pretty_print": $p_pretty_print} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/x-www-form-urlencoded"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Combined ECHO Info Clusters Service
@@ -711,10 +790,21 @@ export def "echo-rest-services-get-info-clusters get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_qid" $p_qid "scalar") (serialize-qp "p_pretty_print" $p_pretty_print "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/echo_rest_services.get_info_clusters" $qp)
+  let full_url = (build-url $base "/echo_rest_services.get_info_clusters" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"output": $output, "p_qid": $p_qid, "p_pretty_print": $p_pretty_print} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"output": $output, "p_qid": $p_qid, "p_pretty_print": $p_pretty_print} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Combined ECHO Info Clusters Service
@@ -738,13 +828,24 @@ export def "echo-rest-services-get-info-clusters create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/echo_rest_services.get_info_clusters")
+  let full_url = (build-url $base "/echo_rest_services.get_info_clusters" $auth.query)
   let req_body = {"output": $output, "p_qid": $p_qid, "p_pretty_print": $p_pretty_print} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/x-www-form-urlencoded"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Combined ECHO Map Service
@@ -774,10 +875,21 @@ export def "echo-rest-services-get-map get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "qid" $qid "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "tablelist" $tablelist "scalar") (serialize-qp "c1_lat" $c1_lat "scalar") (serialize-qp "c1_long" $c1_long "scalar") (serialize-qp "c2_lat" $c2_lat "scalar") (serialize-qp "c2_long" $c2_long "scalar") (serialize-qp "p_id" $p_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/echo_rest_services.get_map" $qp)
+  let full_url = (build-url $base "/echo_rest_services.get_map" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"output": $output, "qid": $qid, "callback": $callback, "tablelist": $tablelist, "c1_lat": $c1_lat, "c1_long": $c1_long, "c2_lat": $c2_lat, "c2_long": $c2_long, "p_id": $p_id} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"output": $output, "qid": $qid, "callback": $callback, "tablelist": $tablelist, "c1_lat": $c1_lat, "c1_long": $c1_long, "c2_lat": $c2_lat, "c2_long": $c2_long, "p_id": $p_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Combined ECHO Map Service
@@ -807,13 +919,24 @@ export def "echo-rest-services-get-map create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/echo_rest_services.get_map")
+  let full_url = (build-url $base "/echo_rest_services.get_map" $auth.query)
   let req_body = {"output": $output, "qid": $qid, "callback": $callback, "tablelist": $tablelist, "c1_lat": $c1_lat, "c1_long": $c1_long, "c2_lat": $c2_lat, "c2_long": $c2_long, "p_id": $p_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/x-www-form-urlencoded"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Combined ECHO Paginated Results Service
@@ -841,10 +964,21 @@ export def "echo-rest-services-get-qid get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "qid" $qid "scalar") (serialize-qp "pageno" $pageno "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "newsort" $newsort "scalar") (serialize-qp "descending" $descending "scalar") (serialize-qp "qcolumns" $qcolumns "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/echo_rest_services.get_qid" $qp)
+  let full_url = (build-url $base "/echo_rest_services.get_qid" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"output": $output, "qid": $qid, "pageno": $pageno, "callback": $callback, "newsort": $newsort, "descending": $descending, "qcolumns": $qcolumns} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"output": $output, "qid": $qid, "pageno": $pageno, "callback": $callback, "newsort": $newsort, "descending": $descending, "qcolumns": $qcolumns} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Combined ECHO Paginated Results Service
@@ -872,13 +1006,24 @@ export def "echo-rest-services-get-qid create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/echo_rest_services.get_qid")
+  let full_url = (build-url $base "/echo_rest_services.get_qid" $auth.query)
   let req_body = {"output": $output, "qid": $qid, "pageno": $pageno, "callback": $callback, "newsort": $newsort, "descending": $descending, "qcolumns": $qcolumns} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/x-www-form-urlencoded"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Combined ECHO Metadata Service
@@ -901,10 +1046,21 @@ export def "echo-rest-services-metadata get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/echo_rest_services.metadata" $qp)
+  let full_url = (build-url $base "/echo_rest_services.metadata" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"output": $output, "callback": $callback} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"output": $output, "callback": $callback} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Combined ECHO Metadata Service
@@ -927,11 +1083,22 @@ export def "echo-rest-services-metadata create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/echo_rest_services.metadata")
+  let full_url = (build-url $base "/echo_rest_services.metadata" $auth.query)
   let req_body = {"output": $output, "callback": $callback} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/x-www-form-urlencoded"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }

@@ -8,7 +8,7 @@ const BASE_URL = "https://www.googleapis.com/calendar/v3"
 # `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
 # where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o CALENDAR_API_TOKEN | default "" }
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o CALENDAR_API_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
@@ -51,14 +51,11 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
-# Trick: `url encode --all` over-encodes, then we decode the four unreserved
-# punctuation chars back. Pre-existing %XX sequences in the input survive
-# because `url encode --all` first turns their % into %25.
 def encode-path-segment [v: any]: nothing -> string {
   $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
-# Serialize an array-typed path parameter (issue 49.A). OpenAPI 3 `style: simple`
+# Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
 # (the default for path params) and Swagger 2 `collectionFormat: csv` both join
 # the elements with a literal comma WITHIN the single path segment, each element
 # RFC-3986-encoded individually (so a comma inside an element stays %2C). Without
@@ -69,51 +66,63 @@ def encode-path-array [v: any]: nothing -> string {
   if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
 }
 
-# Build URL from base, path, and optional query string
-def build-url [base: string, path: string, query?: string]: nothing -> string {
+# Build the request URL from base, path, and any number of pre-encoded query
+# fragments (param serializer output and/or the auth query). Each fragment is an
+# `&`-joinable `key=value` string already percent-encoded by its producer; empty
+# fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
+# delimiters are hand-spliced — and any query already on the base URL is merged in.
+def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
   let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
-  let result = ($parsed | upsert path $full_path)
-  if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
+  let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
+  $parsed | upsert path $full_path | upsert query $query | url join
 }
 
-# Build the dry-run record returned by --dry-run. Shape:
-#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
-#    auth: {scheme, location}}
-# `meta` carries logical-form data (the query record by spec name, the pre-serialization
-# body) that do-request itself cannot reconstruct from its wire-format args.
-def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
-  let m = ($meta | default {})
-  {
-    dry_run: true
-    method: $method
-    url: $url
-    query: ($m | get -o query | default {})
-    headers: $auth.headers
-    body: ($m | get -o body)
-    content_type: $content_type
-    timeout: $timeout
-    auth: {scheme: $auth.scheme, location: $auth.location}
-  }
+# Success policy: did this response succeed? Single source of truth, consulted by
+# handle-response and the HEAD header-unwrap. Empty ok_codes means the spec listed
+# none, so fall back to < 400. Otherwise: any 2xx, plus documented success codes.
+def status-ok [status: int, ok_codes: list<int>]: nothing -> bool {
+  if ($ok_codes | is-empty) { $status < 400 } else { ($status >= 200 and $status < 300) or ($status in $ok_codes) }
 }
 
-# Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
-  let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
-  let timeout = ($max_time | default 30min)
-  let ct = ($content_type | default "application/json")
-  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
-  let resp = match $method {
-    "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
-  }
-  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
-  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
+# Unwrap a `--full` HTTP response into the user-facing value. Response arrives
+# via pipeline; ok_codes gates the error throw (see status-ok).
+def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: record -> any {
+  let resp = $in
+  if $allow_errors { return $resp }
+  if not (status-ok $resp.status $ok_codes) { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } }
+  if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
+  if $resp.status == 204 { return null }
+  $resp.body
+}
+
+# GET — bodyless, honours --raw
+def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+}
+
+# POST — body + content-type
+def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# PUT — body + content-type
+def send-put [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http put --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http put --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# PATCH — body + content-type
+def send-patch [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http patch --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http patch --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# DELETE — body via --data
+def send-delete [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http delete --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url } else { http delete --headers $req.headers --content-type $req.content_type --data $body --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url }
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 def base-url-completer [] { ["https://www.googleapis.com/calendar/v3"] }
@@ -183,12 +192,23 @@ export def "calendars create" [
   let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CALENDAR_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CALENDAR_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/calendars" $qp)
+  let full_url = (build-url $base "/calendars" $qp $auth.query)
   let req_body = {"conferenceProperties": $conference_properties, "description": $description, "etag": $etag, "id": $id, "kind": $kind, "location": $location, "summary": $summary, "timeZone": $time_zone} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes a secondary calendar. Use calendars.clear for clearing all events on primary calendars.
@@ -218,10 +238,21 @@ export def "calendars delete" [
   let base = ($base_url | default $BASE_URL)
   if ($calendar_id | is-empty) { error make --unspanned { msg: "path parameter 'calendarId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({calendar_id: (encode-path-segment $calendar_id)} | format pattern "/calendars/{calendar_id}") $qp)
+  let full_url = (build-url $base ({calendar_id: (encode-path-segment $calendar_id)} | format pattern "/calendars/{calendar_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Returns metadata for a calendar.
@@ -251,10 +282,21 @@ export def "calendars get" [
   let base = ($base_url | default $BASE_URL)
   if ($calendar_id | is-empty) { error make --unspanned { msg: "path parameter 'calendarId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({calendar_id: (encode-path-segment $calendar_id)} | format pattern "/calendars/{calendar_id}") $qp)
+  let full_url = (build-url $base ({calendar_id: (encode-path-segment $calendar_id)} | format pattern "/calendars/{calendar_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates metadata for a calendar. This method supports patch semantics.
@@ -294,12 +336,23 @@ export def "calendars update-by-calendar-id" [
   let base = ($base_url | default $BASE_URL)
   if ($calendar_id | is-empty) { error make --unspanned { msg: "path parameter 'calendarId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({calendar_id: (encode-path-segment $calendar_id)} | format pattern "/calendars/{calendar_id}") $qp)
+  let full_url = (build-url $base ({calendar_id: (encode-path-segment $calendar_id)} | format pattern "/calendars/{calendar_id}") $qp $auth.query)
   let req_body = {"conferenceProperties": $conference_properties, "description": $description, "etag": $etag, "id": $id, "kind": $kind, "location": $location, "summary": $summary, "timeZone": $time_zone} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact), body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Updates metadata for a calendar.
@@ -339,12 +392,23 @@ export def "calendars update-by-calendar-id-1" [
   let base = ($base_url | default $BASE_URL)
   if ($calendar_id | is-empty) { error make --unspanned { msg: "path parameter 'calendarId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({calendar_id: (encode-path-segment $calendar_id)} | format pattern "/calendars/{calendar_id}") $qp)
+  let full_url = (build-url $base ({calendar_id: (encode-path-segment $calendar_id)} | format pattern "/calendars/{calendar_id}") $qp $auth.query)
   let req_body = {"conferenceProperties": $conference_properties, "description": $description, "etag": $etag, "id": $id, "kind": $kind, "location": $location, "summary": $summary, "timeZone": $time_zone} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the rules in the access control list for the calendar.
@@ -378,10 +442,21 @@ export def "calendars-acl list" [
   let base = ($base_url | default $BASE_URL)
   if ($calendar_id | is-empty) { error make --unspanned { msg: "path parameter 'calendarId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "showDeleted" $show_deleted "scalar") (serialize-qp "syncToken" $sync_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({calendar_id: (encode-path-segment $calendar_id)} | format pattern "/calendars/{calendar_id}/acl") $qp)
+  let full_url = (build-url $base ({calendar_id: (encode-path-segment $calendar_id)} | format pattern "/calendars/{calendar_id}/acl") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "maxResults": $max_results, "pageToken": $page_token, "showDeleted": $show_deleted, "syncToken": $sync_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "maxResults": $max_results, "pageToken": $page_token, "showDeleted": $show_deleted, "syncToken": $sync_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Creates an access control rule.
@@ -419,12 +494,23 @@ export def "calendars-acl create" [
   let base = ($base_url | default $BASE_URL)
   if ($calendar_id | is-empty) { error make --unspanned { msg: "path parameter 'calendarId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "sendNotifications" $send_notifications "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({calendar_id: (encode-path-segment $calendar_id)} | format pattern "/calendars/{calendar_id}/acl") $qp)
+  let full_url = (build-url $base ({calendar_id: (encode-path-segment $calendar_id)} | format pattern "/calendars/{calendar_id}/acl") $qp $auth.query)
   let req_body = {"etag": $etag, "id": $id, "kind": $kind, "role": $role, "scope": $scope} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "sendNotifications": $send_notifications} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "sendNotifications": $send_notifications} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Watch for changes to ACL resources.
@@ -469,12 +555,23 @@ export def "calendars-acl-watch watch" [
   let base = ($base_url | default $BASE_URL)
   if ($calendar_id | is-empty) { error make --unspanned { msg: "path parameter 'calendarId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "showDeleted" $show_deleted "scalar") (serialize-qp "syncToken" $sync_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({calendar_id: (encode-path-segment $calendar_id)} | format pattern "/calendars/{calendar_id}/acl/watch") $qp)
+  let full_url = (build-url $base ({calendar_id: (encode-path-segment $calendar_id)} | format pattern "/calendars/{calendar_id}/acl/watch") $qp $auth.query)
   let req_body = {"address": $address, "expiration": $expiration, "id": $id, "kind": $kind, "params": $params, "payload": $payload, "resourceId": $resource_id, "resourceUri": $resource_uri, "token": $body_token, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "maxResults": $max_results, "pageToken": $page_token, "showDeleted": $show_deleted, "syncToken": $sync_token} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "maxResults": $max_results, "pageToken": $page_token, "showDeleted": $show_deleted, "syncToken": $sync_token} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes an access control rule.
@@ -506,10 +603,21 @@ export def "calendars-acl delete" [
   if ($calendar_id | is-empty) { error make --unspanned { msg: "path parameter 'calendarId' must be non-empty" } }
   if ($rule_id | is-empty) { error make --unspanned { msg: "path parameter 'ruleId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({calendar_id: (encode-path-segment $calendar_id), rule_id: (encode-path-segment $rule_id)} | format pattern "/calendars/{calendar_id}/acl/{rule_id}") $qp)
+  let full_url = (build-url $base ({calendar_id: (encode-path-segment $calendar_id), rule_id: (encode-path-segment $rule_id)} | format pattern "/calendars/{calendar_id}/acl/{rule_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Returns an access control rule.
@@ -541,10 +649,21 @@ export def "calendars-acl get" [
   if ($calendar_id | is-empty) { error make --unspanned { msg: "path parameter 'calendarId' must be non-empty" } }
   if ($rule_id | is-empty) { error make --unspanned { msg: "path parameter 'ruleId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({calendar_id: (encode-path-segment $calendar_id), rule_id: (encode-path-segment $rule_id)} | format pattern "/calendars/{calendar_id}/acl/{rule_id}") $qp)
+  let full_url = (build-url $base ({calendar_id: (encode-path-segment $calendar_id), rule_id: (encode-path-segment $rule_id)} | format pattern "/calendars/{calendar_id}/acl/{rule_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates an access control rule. This method supports patch semantics.
@@ -584,12 +703,23 @@ export def "calendars-acl update-by-calendar-id-rule-id" [
   if ($calendar_id | is-empty) { error make --unspanned { msg: "path parameter 'calendarId' must be non-empty" } }
   if ($rule_id | is-empty) { error make --unspanned { msg: "path parameter 'ruleId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "sendNotifications" $send_notifications "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({calendar_id: (encode-path-segment $calendar_id), rule_id: (encode-path-segment $rule_id)} | format pattern "/calendars/{calendar_id}/acl/{rule_id}") $qp)
+  let full_url = (build-url $base ({calendar_id: (encode-path-segment $calendar_id), rule_id: (encode-path-segment $rule_id)} | format pattern "/calendars/{calendar_id}/acl/{rule_id}") $qp $auth.query)
   let req_body = {"etag": $etag, "id": $id, "kind": $kind, "role": $role, "scope": $scope} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "sendNotifications": $send_notifications} | compact), body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "sendNotifications": $send_notifications} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Updates an access control rule.
@@ -629,12 +759,23 @@ export def "calendars-acl update-by-calendar-id-rule-id-1" [
   if ($calendar_id | is-empty) { error make --unspanned { msg: "path parameter 'calendarId' must be non-empty" } }
   if ($rule_id | is-empty) { error make --unspanned { msg: "path parameter 'ruleId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "sendNotifications" $send_notifications "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({calendar_id: (encode-path-segment $calendar_id), rule_id: (encode-path-segment $rule_id)} | format pattern "/calendars/{calendar_id}/acl/{rule_id}") $qp)
+  let full_url = (build-url $base ({calendar_id: (encode-path-segment $calendar_id), rule_id: (encode-path-segment $rule_id)} | format pattern "/calendars/{calendar_id}/acl/{rule_id}") $qp $auth.query)
   let req_body = {"etag": $etag, "id": $id, "kind": $kind, "role": $role, "scope": $scope} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "sendNotifications": $send_notifications} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "sendNotifications": $send_notifications} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Clears a primary calendar. This operation deletes all events associated with the primary calendar of an account.
@@ -664,10 +805,21 @@ export def "calendars-clear create" [
   let base = ($base_url | default $BASE_URL)
   if ($calendar_id | is-empty) { error make --unspanned { msg: "path parameter 'calendarId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({calendar_id: (encode-path-segment $calendar_id)} | format pattern "/calendars/{calendar_id}/clear") $qp)
+  let full_url = (build-url $base ({calendar_id: (encode-path-segment $calendar_id)} | format pattern "/calendars/{calendar_id}/clear") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Returns events on the specified calendar.
@@ -715,10 +867,21 @@ export def "calendars-events list" [
   let base = ($base_url | default $BASE_URL)
   if ($calendar_id | is-empty) { error make --unspanned { msg: "path parameter 'calendarId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "alwaysIncludeEmail" $always_include_email "scalar") (serialize-qp "eventTypes" $event_types "multi") (serialize-qp "iCalUID" $i_cal_uid "scalar") (serialize-qp "maxAttendees" $max_attendees "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "privateExtendedProperty" $private_extended_property "multi") (serialize-qp "q" $q "scalar") (serialize-qp "sharedExtendedProperty" $shared_extended_property "multi") (serialize-qp "showDeleted" $show_deleted "scalar") (serialize-qp "showHiddenInvitations" $show_hidden_invitations "scalar") (serialize-qp "singleEvents" $single_events "scalar") (serialize-qp "syncToken" $sync_token "scalar") (serialize-qp "timeMax" $time_max "scalar") (serialize-qp "timeMin" $time_min "scalar") (serialize-qp "timeZone" $time_zone "scalar") (serialize-qp "updatedMin" $updated_min "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({calendar_id: (encode-path-segment $calendar_id)} | format pattern "/calendars/{calendar_id}/events") $qp)
+  let full_url = (build-url $base ({calendar_id: (encode-path-segment $calendar_id)} | format pattern "/calendars/{calendar_id}/events") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "alwaysIncludeEmail": $always_include_email, "eventTypes": $event_types, "iCalUID": $i_cal_uid, "maxAttendees": $max_attendees, "maxResults": $max_results, "orderBy": $order_by, "pageToken": $page_token, "privateExtendedProperty": $private_extended_property, "q": $q, "sharedExtendedProperty": $shared_extended_property, "showDeleted": $show_deleted, "showHiddenInvitations": $show_hidden_invitations, "singleEvents": $single_events, "syncToken": $sync_token, "timeMax": $time_max, "timeMin": $time_min, "timeZone": $time_zone, "updatedMin": $updated_min} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "alwaysIncludeEmail": $always_include_email, "eventTypes": $event_types, "iCalUID": $i_cal_uid, "maxAttendees": $max_attendees, "maxResults": $max_results, "orderBy": $order_by, "pageToken": $page_token, "privateExtendedProperty": $private_extended_property, "q": $q, "sharedExtendedProperty": $shared_extended_property, "showDeleted": $show_deleted, "showHiddenInvitations": $show_hidden_invitations, "singleEvents": $single_events, "syncToken": $sync_token, "timeMax": $time_max, "timeMin": $time_min, "timeZone": $time_zone, "updatedMin": $updated_min} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Creates an event.
@@ -807,12 +970,23 @@ export def "calendars-events create" [
   let base = ($base_url | default $BASE_URL)
   if ($calendar_id | is-empty) { error make --unspanned { msg: "path parameter 'calendarId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "conferenceDataVersion" $conference_data_version "scalar") (serialize-qp "maxAttendees" $max_attendees "scalar") (serialize-qp "sendNotifications" $send_notifications "scalar") (serialize-qp "sendUpdates" $send_updates "scalar") (serialize-qp "supportsAttachments" $supports_attachments "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({calendar_id: (encode-path-segment $calendar_id)} | format pattern "/calendars/{calendar_id}/events") $qp)
+  let full_url = (build-url $base ({calendar_id: (encode-path-segment $calendar_id)} | format pattern "/calendars/{calendar_id}/events") $qp $auth.query)
   let req_body = {"anyoneCanAddSelf": $anyone_can_add_self, "attachments": $attachments, "attendees": $attendees, "attendeesOmitted": $attendees_omitted, "colorId": $color_id, "conferenceData": $conference_data, "created": $created, "creator": $creator, "description": $description, "end": $end, "endTimeUnspecified": $end_time_unspecified, "etag": $etag, "eventType": $event_type, "extendedProperties": $extended_properties, "gadget": $gadget, "guestsCanInviteOthers": $guests_can_invite_others, "guestsCanModify": $guests_can_modify, "guestsCanSeeOtherGuests": $guests_can_see_other_guests, "hangoutLink": $hangout_link, "htmlLink": $html_link, "iCalUID": $i_cal_uid, "id": $id, "kind": $kind, "location": $location, "locked": $locked, "organizer": $organizer, "originalStartTime": $original_start_time, "privateCopy": $private_copy, "recurrence": $recurrence, "recurringEventId": $recurring_event_id, "reminders": $reminders, "sequence": $sequence, "source": $body_source, "start": $start, "status": $status, "summary": $summary, "transparency": $transparency, "updated": $updated, "visibility": $visibility, "workingLocationProperties": $working_location_properties} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "conferenceDataVersion": $conference_data_version, "maxAttendees": $max_attendees, "sendNotifications": $send_notifications, "sendUpdates": $send_updates, "supportsAttachments": $supports_attachments} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "conferenceDataVersion": $conference_data_version, "maxAttendees": $max_attendees, "sendNotifications": $send_notifications, "sendUpdates": $send_updates, "supportsAttachments": $supports_attachments} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Imports an event. This operation is used to add a private copy of an existing event to a calendar.
@@ -898,12 +1072,23 @@ export def "calendars-events-import import" [
   let base = ($base_url | default $BASE_URL)
   if ($calendar_id | is-empty) { error make --unspanned { msg: "path parameter 'calendarId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "conferenceDataVersion" $conference_data_version "scalar") (serialize-qp "supportsAttachments" $supports_attachments "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({calendar_id: (encode-path-segment $calendar_id)} | format pattern "/calendars/{calendar_id}/events/import") $qp)
+  let full_url = (build-url $base ({calendar_id: (encode-path-segment $calendar_id)} | format pattern "/calendars/{calendar_id}/events/import") $qp $auth.query)
   let req_body = {"anyoneCanAddSelf": $anyone_can_add_self, "attachments": $attachments, "attendees": $attendees, "attendeesOmitted": $attendees_omitted, "colorId": $color_id, "conferenceData": $conference_data, "created": $created, "creator": $creator, "description": $description, "end": $end, "endTimeUnspecified": $end_time_unspecified, "etag": $etag, "eventType": $event_type, "extendedProperties": $extended_properties, "gadget": $gadget, "guestsCanInviteOthers": $guests_can_invite_others, "guestsCanModify": $guests_can_modify, "guestsCanSeeOtherGuests": $guests_can_see_other_guests, "hangoutLink": $hangout_link, "htmlLink": $html_link, "iCalUID": $i_cal_uid, "id": $id, "kind": $kind, "location": $location, "locked": $locked, "organizer": $organizer, "originalStartTime": $original_start_time, "privateCopy": $private_copy, "recurrence": $recurrence, "recurringEventId": $recurring_event_id, "reminders": $reminders, "sequence": $sequence, "source": $body_source, "start": $start, "status": $status, "summary": $summary, "transparency": $transparency, "updated": $updated, "visibility": $visibility, "workingLocationProperties": $working_location_properties} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "conferenceDataVersion": $conference_data_version, "supportsAttachments": $supports_attachments} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "conferenceDataVersion": $conference_data_version, "supportsAttachments": $supports_attachments} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Creates an event based on a simple text string.
@@ -936,10 +1121,21 @@ export def "calendars-events-quick-add create" [
   let base = ($base_url | default $BASE_URL)
   if ($calendar_id | is-empty) { error make --unspanned { msg: "path parameter 'calendarId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "text" $text "scalar") (serialize-qp "sendNotifications" $send_notifications "scalar") (serialize-qp "sendUpdates" $send_updates "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({calendar_id: (encode-path-segment $calendar_id)} | format pattern "/calendars/{calendar_id}/events/quickAdd") $qp)
+  let full_url = (build-url $base ({calendar_id: (encode-path-segment $calendar_id)} | format pattern "/calendars/{calendar_id}/events/quickAdd") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "text": $text, "sendNotifications": $send_notifications, "sendUpdates": $send_updates} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "text": $text, "sendNotifications": $send_notifications, "sendUpdates": $send_updates} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Watch for changes to Events resources.
@@ -998,12 +1194,23 @@ export def "calendars-events-watch watch" [
   let base = ($base_url | default $BASE_URL)
   if ($calendar_id | is-empty) { error make --unspanned { msg: "path parameter 'calendarId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "alwaysIncludeEmail" $always_include_email "scalar") (serialize-qp "eventTypes" $event_types "multi") (serialize-qp "iCalUID" $i_cal_uid "scalar") (serialize-qp "maxAttendees" $max_attendees "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "privateExtendedProperty" $private_extended_property "multi") (serialize-qp "q" $q "scalar") (serialize-qp "sharedExtendedProperty" $shared_extended_property "multi") (serialize-qp "showDeleted" $show_deleted "scalar") (serialize-qp "showHiddenInvitations" $show_hidden_invitations "scalar") (serialize-qp "singleEvents" $single_events "scalar") (serialize-qp "syncToken" $sync_token "scalar") (serialize-qp "timeMax" $time_max "scalar") (serialize-qp "timeMin" $time_min "scalar") (serialize-qp "timeZone" $time_zone "scalar") (serialize-qp "updatedMin" $updated_min "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({calendar_id: (encode-path-segment $calendar_id)} | format pattern "/calendars/{calendar_id}/events/watch") $qp)
+  let full_url = (build-url $base ({calendar_id: (encode-path-segment $calendar_id)} | format pattern "/calendars/{calendar_id}/events/watch") $qp $auth.query)
   let req_body = {"address": $address, "expiration": $expiration, "id": $id, "kind": $kind, "params": $params, "payload": $payload, "resourceId": $resource_id, "resourceUri": $resource_uri, "token": $body_token, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "alwaysIncludeEmail": $always_include_email, "eventTypes": $event_types, "iCalUID": $i_cal_uid, "maxAttendees": $max_attendees, "maxResults": $max_results, "orderBy": $order_by, "pageToken": $page_token, "privateExtendedProperty": $private_extended_property, "q": $q, "sharedExtendedProperty": $shared_extended_property, "showDeleted": $show_deleted, "showHiddenInvitations": $show_hidden_invitations, "singleEvents": $single_events, "syncToken": $sync_token, "timeMax": $time_max, "timeMin": $time_min, "timeZone": $time_zone, "updatedMin": $updated_min} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "alwaysIncludeEmail": $always_include_email, "eventTypes": $event_types, "iCalUID": $i_cal_uid, "maxAttendees": $max_attendees, "maxResults": $max_results, "orderBy": $order_by, "pageToken": $page_token, "privateExtendedProperty": $private_extended_property, "q": $q, "sharedExtendedProperty": $shared_extended_property, "showDeleted": $show_deleted, "showHiddenInvitations": $show_hidden_invitations, "singleEvents": $single_events, "syncToken": $sync_token, "timeMax": $time_max, "timeMin": $time_min, "timeZone": $time_zone, "updatedMin": $updated_min} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes an event.
@@ -1037,10 +1244,21 @@ export def "calendars-events delete" [
   if ($calendar_id | is-empty) { error make --unspanned { msg: "path parameter 'calendarId' must be non-empty" } }
   if ($event_id | is-empty) { error make --unspanned { msg: "path parameter 'eventId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "sendNotifications" $send_notifications "scalar") (serialize-qp "sendUpdates" $send_updates "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({calendar_id: (encode-path-segment $calendar_id), event_id: (encode-path-segment $event_id)} | format pattern "/calendars/{calendar_id}/events/{event_id}") $qp)
+  let full_url = (build-url $base ({calendar_id: (encode-path-segment $calendar_id), event_id: (encode-path-segment $event_id)} | format pattern "/calendars/{calendar_id}/events/{event_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "sendNotifications": $send_notifications, "sendUpdates": $send_updates} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "sendNotifications": $send_notifications, "sendUpdates": $send_updates} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Returns an event based on its Google Calendar ID. To retrieve an event using its iCalendar ID, call the events.list method using the iCalUID parameter.
@@ -1075,10 +1293,21 @@ export def "calendars-events get" [
   if ($calendar_id | is-empty) { error make --unspanned { msg: "path parameter 'calendarId' must be non-empty" } }
   if ($event_id | is-empty) { error make --unspanned { msg: "path parameter 'eventId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "alwaysIncludeEmail" $always_include_email "scalar") (serialize-qp "maxAttendees" $max_attendees "scalar") (serialize-qp "timeZone" $time_zone "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({calendar_id: (encode-path-segment $calendar_id), event_id: (encode-path-segment $event_id)} | format pattern "/calendars/{calendar_id}/events/{event_id}") $qp)
+  let full_url = (build-url $base ({calendar_id: (encode-path-segment $calendar_id), event_id: (encode-path-segment $event_id)} | format pattern "/calendars/{calendar_id}/events/{event_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "alwaysIncludeEmail": $always_include_email, "maxAttendees": $max_attendees, "timeZone": $time_zone} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "alwaysIncludeEmail": $always_include_email, "maxAttendees": $max_attendees, "timeZone": $time_zone} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates an event. This method supports patch semantics.
@@ -1170,12 +1399,23 @@ export def "calendars-events update-by-calendar-id-event-id" [
   if ($calendar_id | is-empty) { error make --unspanned { msg: "path parameter 'calendarId' must be non-empty" } }
   if ($event_id | is-empty) { error make --unspanned { msg: "path parameter 'eventId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "alwaysIncludeEmail" $always_include_email "scalar") (serialize-qp "conferenceDataVersion" $conference_data_version "scalar") (serialize-qp "maxAttendees" $max_attendees "scalar") (serialize-qp "sendNotifications" $send_notifications "scalar") (serialize-qp "sendUpdates" $send_updates "scalar") (serialize-qp "supportsAttachments" $supports_attachments "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({calendar_id: (encode-path-segment $calendar_id), event_id: (encode-path-segment $event_id)} | format pattern "/calendars/{calendar_id}/events/{event_id}") $qp)
+  let full_url = (build-url $base ({calendar_id: (encode-path-segment $calendar_id), event_id: (encode-path-segment $event_id)} | format pattern "/calendars/{calendar_id}/events/{event_id}") $qp $auth.query)
   let req_body = {"anyoneCanAddSelf": $anyone_can_add_self, "attachments": $attachments, "attendees": $attendees, "attendeesOmitted": $attendees_omitted, "colorId": $color_id, "conferenceData": $conference_data, "created": $created, "creator": $creator, "description": $description, "end": $end, "endTimeUnspecified": $end_time_unspecified, "etag": $etag, "eventType": $event_type, "extendedProperties": $extended_properties, "gadget": $gadget, "guestsCanInviteOthers": $guests_can_invite_others, "guestsCanModify": $guests_can_modify, "guestsCanSeeOtherGuests": $guests_can_see_other_guests, "hangoutLink": $hangout_link, "htmlLink": $html_link, "iCalUID": $i_cal_uid, "id": $id, "kind": $kind, "location": $location, "locked": $locked, "organizer": $organizer, "originalStartTime": $original_start_time, "privateCopy": $private_copy, "recurrence": $recurrence, "recurringEventId": $recurring_event_id, "reminders": $reminders, "sequence": $sequence, "source": $body_source, "start": $start, "status": $status, "summary": $summary, "transparency": $transparency, "updated": $updated, "visibility": $visibility, "workingLocationProperties": $working_location_properties} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "alwaysIncludeEmail": $always_include_email, "conferenceDataVersion": $conference_data_version, "maxAttendees": $max_attendees, "sendNotifications": $send_notifications, "sendUpdates": $send_updates, "supportsAttachments": $supports_attachments} | compact), body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "alwaysIncludeEmail": $always_include_email, "conferenceDataVersion": $conference_data_version, "maxAttendees": $max_attendees, "sendNotifications": $send_notifications, "sendUpdates": $send_updates, "supportsAttachments": $supports_attachments} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Updates an event.
@@ -1267,12 +1507,23 @@ export def "calendars-events update-by-calendar-id-event-id-1" [
   if ($calendar_id | is-empty) { error make --unspanned { msg: "path parameter 'calendarId' must be non-empty" } }
   if ($event_id | is-empty) { error make --unspanned { msg: "path parameter 'eventId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "alwaysIncludeEmail" $always_include_email "scalar") (serialize-qp "conferenceDataVersion" $conference_data_version "scalar") (serialize-qp "maxAttendees" $max_attendees "scalar") (serialize-qp "sendNotifications" $send_notifications "scalar") (serialize-qp "sendUpdates" $send_updates "scalar") (serialize-qp "supportsAttachments" $supports_attachments "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({calendar_id: (encode-path-segment $calendar_id), event_id: (encode-path-segment $event_id)} | format pattern "/calendars/{calendar_id}/events/{event_id}") $qp)
+  let full_url = (build-url $base ({calendar_id: (encode-path-segment $calendar_id), event_id: (encode-path-segment $event_id)} | format pattern "/calendars/{calendar_id}/events/{event_id}") $qp $auth.query)
   let req_body = {"anyoneCanAddSelf": $anyone_can_add_self, "attachments": $attachments, "attendees": $attendees, "attendeesOmitted": $attendees_omitted, "colorId": $color_id, "conferenceData": $conference_data, "created": $created, "creator": $creator, "description": $description, "end": $end, "endTimeUnspecified": $end_time_unspecified, "etag": $etag, "eventType": $event_type, "extendedProperties": $extended_properties, "gadget": $gadget, "guestsCanInviteOthers": $guests_can_invite_others, "guestsCanModify": $guests_can_modify, "guestsCanSeeOtherGuests": $guests_can_see_other_guests, "hangoutLink": $hangout_link, "htmlLink": $html_link, "iCalUID": $i_cal_uid, "id": $id, "kind": $kind, "location": $location, "locked": $locked, "organizer": $organizer, "originalStartTime": $original_start_time, "privateCopy": $private_copy, "recurrence": $recurrence, "recurringEventId": $recurring_event_id, "reminders": $reminders, "sequence": $sequence, "source": $body_source, "start": $start, "status": $status, "summary": $summary, "transparency": $transparency, "updated": $updated, "visibility": $visibility, "workingLocationProperties": $working_location_properties} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "alwaysIncludeEmail": $always_include_email, "conferenceDataVersion": $conference_data_version, "maxAttendees": $max_attendees, "sendNotifications": $send_notifications, "sendUpdates": $send_updates, "supportsAttachments": $supports_attachments} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "alwaysIncludeEmail": $always_include_email, "conferenceDataVersion": $conference_data_version, "maxAttendees": $max_attendees, "sendNotifications": $send_notifications, "sendUpdates": $send_updates, "supportsAttachments": $supports_attachments} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Returns instances of the specified recurring event.
@@ -1313,10 +1564,21 @@ export def "calendars-events-instances get" [
   if ($calendar_id | is-empty) { error make --unspanned { msg: "path parameter 'calendarId' must be non-empty" } }
   if ($event_id | is-empty) { error make --unspanned { msg: "path parameter 'eventId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "alwaysIncludeEmail" $always_include_email "scalar") (serialize-qp "maxAttendees" $max_attendees "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "originalStart" $original_start "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "showDeleted" $show_deleted "scalar") (serialize-qp "timeMax" $time_max "scalar") (serialize-qp "timeMin" $time_min "scalar") (serialize-qp "timeZone" $time_zone "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({calendar_id: (encode-path-segment $calendar_id), event_id: (encode-path-segment $event_id)} | format pattern "/calendars/{calendar_id}/events/{event_id}/instances") $qp)
+  let full_url = (build-url $base ({calendar_id: (encode-path-segment $calendar_id), event_id: (encode-path-segment $event_id)} | format pattern "/calendars/{calendar_id}/events/{event_id}/instances") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "alwaysIncludeEmail": $always_include_email, "maxAttendees": $max_attendees, "maxResults": $max_results, "originalStart": $original_start, "pageToken": $page_token, "showDeleted": $show_deleted, "timeMax": $time_max, "timeMin": $time_min, "timeZone": $time_zone} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "alwaysIncludeEmail": $always_include_email, "maxAttendees": $max_attendees, "maxResults": $max_results, "originalStart": $original_start, "pageToken": $page_token, "showDeleted": $show_deleted, "timeMax": $time_max, "timeMin": $time_min, "timeZone": $time_zone} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Moves an event to another calendar, i.e. changes an event's organizer.
@@ -1351,10 +1613,21 @@ export def "calendars-events-move move" [
   if ($calendar_id | is-empty) { error make --unspanned { msg: "path parameter 'calendarId' must be non-empty" } }
   if ($event_id | is-empty) { error make --unspanned { msg: "path parameter 'eventId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "destination" $destination "scalar") (serialize-qp "sendNotifications" $send_notifications "scalar") (serialize-qp "sendUpdates" $send_updates "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({calendar_id: (encode-path-segment $calendar_id), event_id: (encode-path-segment $event_id)} | format pattern "/calendars/{calendar_id}/events/{event_id}/move") $qp)
+  let full_url = (build-url $base ({calendar_id: (encode-path-segment $calendar_id), event_id: (encode-path-segment $event_id)} | format pattern "/calendars/{calendar_id}/events/{event_id}/move") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "destination": $destination, "sendNotifications": $send_notifications, "sendUpdates": $send_updates} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "destination": $destination, "sendNotifications": $send_notifications, "sendUpdates": $send_updates} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Stop watching resources through this channel
@@ -1393,12 +1666,23 @@ export def "channels-stop stop" [
   let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CALENDAR_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CALENDAR_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/channels/stop" $qp)
+  let full_url = (build-url $base "/channels/stop" $qp $auth.query)
   let req_body = {"address": $address, "expiration": $expiration, "id": $id, "kind": $kind, "params": $params, "payload": $payload, "resourceId": $resource_id, "resourceUri": $resource_uri, "token": $body_token, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the color definitions for calendars and events.
@@ -1426,10 +1710,21 @@ export def "colors get" [
   let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CALENDAR_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CALENDAR_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/colors" $qp)
+  let full_url = (build-url $base "/colors" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns free/busy information for a set of calendars.
@@ -1465,12 +1760,23 @@ export def "free-busy list" [
   let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CALENDAR_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CALENDAR_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/freeBusy" $qp)
+  let full_url = (build-url $base "/freeBusy" $qp $auth.query)
   let req_body = {"calendarExpansionMax": $calendar_expansion_max, "groupExpansionMax": $group_expansion_max, "items": $items, "timeMax": $time_max, "timeMin": $time_min, "timeZone": $time_zone} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the calendars on the user's calendar list.
@@ -1504,10 +1810,21 @@ export def "users-me-calendar-list list" [
   let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CALENDAR_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CALENDAR_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "minAccessRole" $min_access_role "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "showDeleted" $show_deleted "scalar") (serialize-qp "showHidden" $show_hidden "scalar") (serialize-qp "syncToken" $sync_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/users/me/calendarList" $qp)
+  let full_url = (build-url $base "/users/me/calendarList" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "maxResults": $max_results, "minAccessRole": $min_access_role, "pageToken": $page_token, "showDeleted": $show_deleted, "showHidden": $show_hidden, "syncToken": $sync_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "maxResults": $max_results, "minAccessRole": $min_access_role, "pageToken": $page_token, "showDeleted": $show_deleted, "showHidden": $show_hidden, "syncToken": $sync_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Inserts an existing calendar into the user's calendar list.
@@ -1559,12 +1876,23 @@ export def "users-me-calendar-list create" [
   let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CALENDAR_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CALENDAR_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "colorRgbFormat" $color_rgb_format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/users/me/calendarList" $qp)
+  let full_url = (build-url $base "/users/me/calendarList" $qp $auth.query)
   let req_body = {"accessRole": $access_role, "backgroundColor": $background_color, "colorId": $color_id, "conferenceProperties": $conference_properties, "defaultReminders": $default_reminders, "deleted": $deleted, "description": $description, "etag": $etag, "foregroundColor": $foreground_color, "hidden": $hidden, "id": $id, "kind": $kind, "location": $location, "notificationSettings": $notification_settings, "primary": $primary, "selected": $selected, "summary": $summary, "summaryOverride": $summary_override, "timeZone": $time_zone} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "colorRgbFormat": $color_rgb_format} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "colorRgbFormat": $color_rgb_format} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Watch for changes to CalendarList resources.
@@ -1609,12 +1937,23 @@ export def "users-me-calendar-list-watch watch" [
   let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CALENDAR_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CALENDAR_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "minAccessRole" $min_access_role "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "showDeleted" $show_deleted "scalar") (serialize-qp "showHidden" $show_hidden "scalar") (serialize-qp "syncToken" $sync_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/users/me/calendarList/watch" $qp)
+  let full_url = (build-url $base "/users/me/calendarList/watch" $qp $auth.query)
   let req_body = {"address": $address, "expiration": $expiration, "id": $id, "kind": $kind, "params": $params, "payload": $payload, "resourceId": $resource_id, "resourceUri": $resource_uri, "token": $body_token, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "maxResults": $max_results, "minAccessRole": $min_access_role, "pageToken": $page_token, "showDeleted": $show_deleted, "showHidden": $show_hidden, "syncToken": $sync_token} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "maxResults": $max_results, "minAccessRole": $min_access_role, "pageToken": $page_token, "showDeleted": $show_deleted, "showHidden": $show_hidden, "syncToken": $sync_token} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Removes a calendar from the user's calendar list.
@@ -1644,10 +1983,21 @@ export def "users-me-calendar-list delete" [
   let base = ($base_url | default $BASE_URL)
   if ($calendar_id | is-empty) { error make --unspanned { msg: "path parameter 'calendarId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({calendar_id: (encode-path-segment $calendar_id)} | format pattern "/users/me/calendarList/{calendar_id}") $qp)
+  let full_url = (build-url $base ({calendar_id: (encode-path-segment $calendar_id)} | format pattern "/users/me/calendarList/{calendar_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Returns a calendar from the user's calendar list.
@@ -1677,10 +2027,21 @@ export def "users-me-calendar-list get" [
   let base = ($base_url | default $BASE_URL)
   if ($calendar_id | is-empty) { error make --unspanned { msg: "path parameter 'calendarId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({calendar_id: (encode-path-segment $calendar_id)} | format pattern "/users/me/calendarList/{calendar_id}") $qp)
+  let full_url = (build-url $base ({calendar_id: (encode-path-segment $calendar_id)} | format pattern "/users/me/calendarList/{calendar_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates an existing calendar on the user's calendar list. This method supports patch semantics.
@@ -1734,12 +2095,23 @@ export def "users-me-calendar-list update-by-calendar-id" [
   let base = ($base_url | default $BASE_URL)
   if ($calendar_id | is-empty) { error make --unspanned { msg: "path parameter 'calendarId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "colorRgbFormat" $color_rgb_format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({calendar_id: (encode-path-segment $calendar_id)} | format pattern "/users/me/calendarList/{calendar_id}") $qp)
+  let full_url = (build-url $base ({calendar_id: (encode-path-segment $calendar_id)} | format pattern "/users/me/calendarList/{calendar_id}") $qp $auth.query)
   let req_body = {"accessRole": $access_role, "backgroundColor": $background_color, "colorId": $color_id, "conferenceProperties": $conference_properties, "defaultReminders": $default_reminders, "deleted": $deleted, "description": $description, "etag": $etag, "foregroundColor": $foreground_color, "hidden": $hidden, "id": $id, "kind": $kind, "location": $location, "notificationSettings": $notification_settings, "primary": $primary, "selected": $selected, "summary": $summary, "summaryOverride": $summary_override, "timeZone": $time_zone} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "colorRgbFormat": $color_rgb_format} | compact), body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "colorRgbFormat": $color_rgb_format} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Updates an existing calendar on the user's calendar list.
@@ -1793,12 +2165,23 @@ export def "users-me-calendar-list update-by-calendar-id-1" [
   let base = ($base_url | default $BASE_URL)
   if ($calendar_id | is-empty) { error make --unspanned { msg: "path parameter 'calendarId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "colorRgbFormat" $color_rgb_format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({calendar_id: (encode-path-segment $calendar_id)} | format pattern "/users/me/calendarList/{calendar_id}") $qp)
+  let full_url = (build-url $base ({calendar_id: (encode-path-segment $calendar_id)} | format pattern "/users/me/calendarList/{calendar_id}") $qp $auth.query)
   let req_body = {"accessRole": $access_role, "backgroundColor": $background_color, "colorId": $color_id, "conferenceProperties": $conference_properties, "defaultReminders": $default_reminders, "deleted": $deleted, "description": $description, "etag": $etag, "foregroundColor": $foreground_color, "hidden": $hidden, "id": $id, "kind": $kind, "location": $location, "notificationSettings": $notification_settings, "primary": $primary, "selected": $selected, "summary": $summary, "summaryOverride": $summary_override, "timeZone": $time_zone} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "colorRgbFormat": $color_rgb_format} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "colorRgbFormat": $color_rgb_format} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Returns all user settings for the authenticated user.
@@ -1829,10 +2212,21 @@ export def "users-me-settings list" [
   let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CALENDAR_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CALENDAR_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "syncToken" $sync_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/users/me/settings" $qp)
+  let full_url = (build-url $base "/users/me/settings" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "maxResults": $max_results, "pageToken": $page_token, "syncToken": $sync_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "maxResults": $max_results, "pageToken": $page_token, "syncToken": $sync_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Watch for changes to Settings resources.
@@ -1874,12 +2268,23 @@ export def "users-me-settings-watch watch" [
   let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CALENDAR_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CALENDAR_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "syncToken" $sync_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/users/me/settings/watch" $qp)
+  let full_url = (build-url $base "/users/me/settings/watch" $qp $auth.query)
   let req_body = {"address": $address, "expiration": $expiration, "id": $id, "kind": $kind, "params": $params, "payload": $payload, "resourceId": $resource_id, "resourceUri": $resource_uri, "token": $body_token, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "maxResults": $max_results, "pageToken": $page_token, "syncToken": $sync_token} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "maxResults": $max_results, "pageToken": $page_token, "syncToken": $sync_token} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Returns a single user setting.
@@ -1909,8 +2314,19 @@ export def "users-me-settings get" [
   let base = ($base_url | default $BASE_URL)
   if ($setting | is-empty) { error make --unspanned { msg: "path parameter 'setting' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({setting: (encode-path-segment $setting)} | format pattern "/users/me/settings/{setting}") $qp)
+  let full_url = (build-url $base ({setting: (encode-path-segment $setting)} | format pattern "/users/me/settings/{setting}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }

@@ -8,7 +8,7 @@ const BASE_URL = "https://batch.core.windows.net"
 # `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
 # where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o BATCHSERVICE_TOKEN | default "" }
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o BATCHSERVICE_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
@@ -40,14 +40,11 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
-# Trick: `url encode --all` over-encodes, then we decode the four unreserved
-# punctuation chars back. Pre-existing %XX sequences in the input survive
-# because `url encode --all` first turns their % into %25.
 def encode-path-segment [v: any]: nothing -> string {
   $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
-# Serialize an array-typed path parameter (issue 49.A). OpenAPI 3 `style: simple`
+# Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
 # (the default for path params) and Swagger 2 `collectionFormat: csv` both join
 # the elements with a literal comma WITHIN the single path segment, each element
 # RFC-3986-encoded individually (so a comma inside an element stays %2C). Without
@@ -58,51 +55,70 @@ def encode-path-array [v: any]: nothing -> string {
   if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
 }
 
-# Build URL from base, path, and optional query string
-def build-url [base: string, path: string, query?: string]: nothing -> string {
+# Build the request URL from base, path, and any number of pre-encoded query
+# fragments (param serializer output and/or the auth query). Each fragment is an
+# `&`-joinable `key=value` string already percent-encoded by its producer; empty
+# fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
+# delimiters are hand-spliced — and any query already on the base URL is merged in.
+def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
   let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
-  let result = ($parsed | upsert path $full_path)
-  if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
+  let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
+  $parsed | upsert path $full_path | upsert query $query | url join
 }
 
-# Build the dry-run record returned by --dry-run. Shape:
-#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
-#    auth: {scheme, location}}
-# `meta` carries logical-form data (the query record by spec name, the pre-serialization
-# body) that do-request itself cannot reconstruct from its wire-format args.
-def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
-  let m = ($meta | default {})
-  {
-    dry_run: true
-    method: $method
-    url: $url
-    query: ($m | get -o query | default {})
-    headers: $auth.headers
-    body: ($m | get -o body)
-    content_type: $content_type
-    timeout: $timeout
-    auth: {scheme: $auth.scheme, location: $auth.location}
-  }
+# Success policy: did this response succeed? Single source of truth, consulted by
+# handle-response and the HEAD header-unwrap. Empty ok_codes means the spec listed
+# none, so fall back to < 400. Otherwise: any 2xx, plus documented success codes.
+def status-ok [status: int, ok_codes: list<int>]: nothing -> bool {
+  if ($ok_codes | is-empty) { $status < 400 } else { ($status >= 200 and $status < 300) or ($status in $ok_codes) }
 }
 
-# Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
-  let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
-  let timeout = ($max_time | default 30min)
-  let ct = ($content_type | default "application/json")
-  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
-  let resp = match $method {
-    "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
-  }
-  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
-  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
+# Unwrap a `--full` HTTP response into the user-facing value. Response arrives
+# via pipeline; ok_codes gates the error throw (see status-ok).
+def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: record -> any {
+  let resp = $in
+  if $allow_errors { return $resp }
+  if not (status-ok $resp.status $ok_codes) { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } }
+  if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
+  if $resp.status == 204 { return null }
+  $resp.body
+}
+
+# GET — bodyless, honours --raw
+def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+}
+
+# HEAD — bodyless; default surfaces just the headers on success
+def send-head [req: record, insecure: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = (http head --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure $req.url)
+  if (not $full) and (not $allow_errors) and (status-ok $resp.status $ok_codes) { return $resp.headers }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# POST — body + content-type
+def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# PUT — body + content-type
+def send-put [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http put --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http put --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# PATCH — body + content-type
+def send-patch [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http patch --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http patch --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# DELETE — body via --data
+def send-delete [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http delete --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url } else { http delete --headers $req.headers --content-type $req.content_type --data $body --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url }
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 def base-url-completer [] { ["https://batch.core.windows.net"] }
@@ -166,12 +182,23 @@ export def "applications list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "maxresults" $maxresults "scalar") (serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/applications" $qp)
+  let full_url = (build-url $base "/applications" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"maxresults": $maxresults, "timeout": $timeout, "api-version": $api_version} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"maxresults": $maxresults, "timeout": $timeout, "api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets information about the specified application.
@@ -199,12 +226,23 @@ export def "applications get" [
   let base = ($base_url | default $BASE_URL)
   if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'applicationId' must be non-empty" } }
   let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({application_id: (encode-path-segment $application_id)} | format pattern "/applications/{application_id}") $qp)
+  let full_url = (build-url $base ({application_id: (encode-path-segment $application_id)} | format pattern "/applications/{application_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"timeout": $timeout, "api-version": $api_version} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"timeout": $timeout, "api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Lists all of the certificates that have been added to the specified account.
@@ -233,12 +271,23 @@ export def "certificates list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "maxresults" $maxresults "scalar") (serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/certificates" $qp)
+  let full_url = (build-url $base "/certificates" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$filter": $filter, "$select": $select, "maxresults": $maxresults, "timeout": $timeout, "api-version": $api_version} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"$filter": $filter, "$select": $select, "maxresults": $maxresults, "timeout": $timeout, "api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Adds a certificate to the specified account.
@@ -270,14 +319,25 @@ export def "certificates create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/certificates" $qp)
+  let full_url = (build-url $base "/certificates" $qp $auth.query)
   let req_body = {"certificateFormat": $certificate_format, "data": $data, "password": $password, "thumbprint": $thumbprint, "thumbprintAlgorithm": $thumbprint_algorithm} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; odata=minimalmetadata" $req_body {query: ({"timeout": $timeout, "api-version": $api_version} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"timeout": $timeout, "api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; odata=minimalmetadata"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Deletes a certificate from the specified account.
@@ -307,12 +367,23 @@ export def "certificates delete" [
   if ($thumbprint_algorithm | is-empty) { error make --unspanned { msg: "path parameter 'thumbprintAlgorithm' must be non-empty" } }
   if ($thumbprint | is-empty) { error make --unspanned { msg: "path parameter 'thumbprint' must be non-empty" } }
   let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({thumbprint_algorithm: (encode-path-segment $thumbprint_algorithm), thumbprint: (encode-path-segment $thumbprint)} | format pattern "/certificates(thumbprintAlgorithm={thumbprint_algorithm},thumbprint={thumbprint})") $qp)
+  let full_url = (build-url $base ({thumbprint_algorithm: (encode-path-segment $thumbprint_algorithm), thumbprint: (encode-path-segment $thumbprint)} | format pattern "/certificates(thumbprintAlgorithm={thumbprint_algorithm},thumbprint={thumbprint})") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"timeout": $timeout, "api-version": $api_version} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"timeout": $timeout, "api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [202]
 }
 
 # Gets information about the specified certificate.
@@ -343,12 +414,23 @@ export def "certificates get" [
   if ($thumbprint_algorithm | is-empty) { error make --unspanned { msg: "path parameter 'thumbprintAlgorithm' must be non-empty" } }
   if ($thumbprint | is-empty) { error make --unspanned { msg: "path parameter 'thumbprint' must be non-empty" } }
   let qp = [(serialize-qp "$select" $select "scalar") (serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({thumbprint_algorithm: (encode-path-segment $thumbprint_algorithm), thumbprint: (encode-path-segment $thumbprint)} | format pattern "/certificates(thumbprintAlgorithm={thumbprint_algorithm},thumbprint={thumbprint})") $qp)
+  let full_url = (build-url $base ({thumbprint_algorithm: (encode-path-segment $thumbprint_algorithm), thumbprint: (encode-path-segment $thumbprint)} | format pattern "/certificates(thumbprintAlgorithm={thumbprint_algorithm},thumbprint={thumbprint})") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$select": $select, "timeout": $timeout, "api-version": $api_version} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"$select": $select, "timeout": $timeout, "api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Cancels a failed deletion of a certificate from the specified account.
@@ -378,12 +460,23 @@ export def "certificates-canceldelete cancel-deletion" [
   if ($thumbprint_algorithm | is-empty) { error make --unspanned { msg: "path parameter 'thumbprintAlgorithm' must be non-empty" } }
   if ($thumbprint | is-empty) { error make --unspanned { msg: "path parameter 'thumbprint' must be non-empty" } }
   let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({thumbprint_algorithm: (encode-path-segment $thumbprint_algorithm), thumbprint: (encode-path-segment $thumbprint)} | format pattern "/certificates(thumbprintAlgorithm={thumbprint_algorithm},thumbprint={thumbprint})/canceldelete") $qp)
+  let full_url = (build-url $base ({thumbprint_algorithm: (encode-path-segment $thumbprint_algorithm), thumbprint: (encode-path-segment $thumbprint)} | format pattern "/certificates(thumbprintAlgorithm={thumbprint_algorithm},thumbprint={thumbprint})/canceldelete") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"timeout": $timeout, "api-version": $api_version} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"timeout": $timeout, "api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Lists all of the jobs in the specified account.
@@ -413,12 +506,23 @@ export def "jobs list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$expand" $expand "scalar") (serialize-qp "maxresults" $maxresults "scalar") (serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/jobs" $qp)
+  let full_url = (build-url $base "/jobs" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$filter": $filter, "$select": $select, "$expand": $expand, "maxresults": $maxresults, "timeout": $timeout, "api-version": $api_version} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"$filter": $filter, "$select": $select, "$expand": $expand, "maxresults": $maxresults, "timeout": $timeout, "api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Adds a job to the specified account.
@@ -465,14 +569,25 @@ export def "jobs create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/jobs" $qp)
+  let full_url = (build-url $base "/jobs" $qp $auth.query)
   let req_body = {"commonEnvironmentSettings": $common_environment_settings, "constraints": $constraints, "displayName": $display_name, "id": $id, "jobManagerTask": $job_manager_task, "jobPreparationTask": $job_preparation_task, "jobReleaseTask": $job_release_task, "metadata": $metadata, "onAllTasksComplete": $on_all_tasks_complete, "onTaskFailure": $on_task_failure, "poolInfo": $pool_info, "priority": $priority, "usesTaskDependencies": $uses_task_dependencies} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; odata=minimalmetadata" $req_body {query: ({"timeout": $timeout, "api-version": $api_version} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"timeout": $timeout, "api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; odata=minimalmetadata"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Deletes a job.
@@ -504,12 +619,23 @@ export def "jobs delete" [
   let base = ($base_url | default $BASE_URL)
   if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'jobId' must be non-empty" } }
   let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/jobs/{job_id}") $qp)
+  let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/jobs/{job_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date, "If-Match": $if_match, "If-None-Match": $if_none_match, "If-Modified-Since": $if_modified_since, "If-Unmodified-Since": $if_unmodified_since} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"timeout": $timeout, "api-version": $api_version} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"timeout": $timeout, "api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [202]
 }
 
 # Gets information about the specified job.
@@ -543,12 +669,23 @@ export def "jobs get" [
   let base = ($base_url | default $BASE_URL)
   if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'jobId' must be non-empty" } }
   let qp = [(serialize-qp "$select" $select "scalar") (serialize-qp "$expand" $expand "scalar") (serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/jobs/{job_id}") $qp)
+  let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/jobs/{job_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date, "If-Match": $if_match, "If-None-Match": $if_none_match, "If-Modified-Since": $if_modified_since, "If-Unmodified-Since": $if_unmodified_since} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$select": $select, "$expand": $expand, "timeout": $timeout, "api-version": $api_version} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"$select": $select, "$expand": $expand, "timeout": $timeout, "api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates the properties of the specified job.
@@ -589,14 +726,25 @@ export def "jobs update-by-job-id" [
   let base = ($base_url | default $BASE_URL)
   if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'jobId' must be non-empty" } }
   let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/jobs/{job_id}") $qp)
+  let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/jobs/{job_id}") $qp $auth.query)
   let req_body = {"constraints": $constraints, "metadata": $metadata, "onAllTasksComplete": $on_all_tasks_complete, "poolInfo": $pool_info, "priority": $priority} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date, "If-Match": $if_match, "If-None-Match": $if_none_match, "If-Modified-Since": $if_modified_since, "If-Unmodified-Since": $if_unmodified_since} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; odata=minimalmetadata" $req_body {query: ({"timeout": $timeout, "api-version": $api_version} | compact), body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: ({"timeout": $timeout, "api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; odata=minimalmetadata"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Updates the properties of the specified job.
@@ -637,14 +785,25 @@ export def "jobs update-by-job-id-1" [
   let base = ($base_url | default $BASE_URL)
   if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'jobId' must be non-empty" } }
   let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/jobs/{job_id}") $qp)
+  let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/jobs/{job_id}") $qp $auth.query)
   let req_body = {"constraints": $constraints, "metadata": $metadata, "onAllTasksComplete": $on_all_tasks_complete, "poolInfo": $pool_info, "priority": $priority} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date, "If-Match": $if_match, "If-None-Match": $if_none_match, "If-Modified-Since": $if_modified_since, "If-Unmodified-Since": $if_unmodified_since} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; odata=minimalmetadata" $req_body {query: ({"timeout": $timeout, "api-version": $api_version} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"timeout": $timeout, "api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; odata=minimalmetadata"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Adds a collection of tasks to the specified job.
@@ -675,14 +834,25 @@ export def "jobs-addtaskcollection create-task-collection" [
   let base = ($base_url | default $BASE_URL)
   if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'jobId' must be non-empty" } }
   let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/jobs/{job_id}/addtaskcollection") $qp)
+  let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/jobs/{job_id}/addtaskcollection") $qp $auth.query)
   let req_body = {"value": $value} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; odata=minimalmetadata" $req_body {query: ({"timeout": $timeout, "api-version": $api_version} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"timeout": $timeout, "api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; odata=minimalmetadata"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Disables the specified job, preventing new tasks from running.
@@ -716,14 +886,25 @@ export def "jobs-disable disable" [
   let base = ($base_url | default $BASE_URL)
   if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'jobId' must be non-empty" } }
   let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/jobs/{job_id}/disable") $qp)
+  let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/jobs/{job_id}/disable") $qp $auth.query)
   let req_body = {"disableTasks": $disable_tasks} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date, "If-Match": $if_match, "If-None-Match": $if_none_match, "If-Modified-Since": $if_modified_since, "If-Unmodified-Since": $if_unmodified_since} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; odata=minimalmetadata" $req_body {query: ({"timeout": $timeout, "api-version": $api_version} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"timeout": $timeout, "api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; odata=minimalmetadata"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [202]
 }
 
 # Enables the specified job, allowing new tasks to run.
@@ -755,12 +936,23 @@ export def "jobs-enable enable" [
   let base = ($base_url | default $BASE_URL)
   if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'jobId' must be non-empty" } }
   let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/jobs/{job_id}/enable") $qp)
+  let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/jobs/{job_id}/enable") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date, "If-Match": $if_match, "If-None-Match": $if_none_match, "If-Modified-Since": $if_modified_since, "If-Unmodified-Since": $if_unmodified_since} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"timeout": $timeout, "api-version": $api_version} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"timeout": $timeout, "api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [202]
 }
 
 # Lists the execution status of the Job Preparation and Job Release task for the specified job across the compute nodes where the job has run.
@@ -791,12 +983,23 @@ export def "jobs-jobpreparationandreleasetaskstatus list-preparation-and-release
   let base = ($base_url | default $BASE_URL)
   if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'jobId' must be non-empty" } }
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "maxresults" $maxresults "scalar") (serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/jobs/{job_id}/jobpreparationandreleasetaskstatus") $qp)
+  let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/jobs/{job_id}/jobpreparationandreleasetaskstatus") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$filter": $filter, "$select": $select, "maxresults": $maxresults, "timeout": $timeout, "api-version": $api_version} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"$filter": $filter, "$select": $select, "maxresults": $maxresults, "timeout": $timeout, "api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the task counts for the specified job.
@@ -824,12 +1027,23 @@ export def "jobs-taskcounts get-task-counts" [
   let base = ($base_url | default $BASE_URL)
   if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'jobId' must be non-empty" } }
   let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/jobs/{job_id}/taskcounts") $qp)
+  let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/jobs/{job_id}/taskcounts") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"timeout": $timeout, "api-version": $api_version} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"timeout": $timeout, "api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Lists all of the tasks that are associated with the specified job.
@@ -861,12 +1075,23 @@ export def "jobs-tasks list" [
   let base = ($base_url | default $BASE_URL)
   if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'jobId' must be non-empty" } }
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$expand" $expand "scalar") (serialize-qp "maxresults" $maxresults "scalar") (serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/jobs/{job_id}/tasks") $qp)
+  let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/jobs/{job_id}/tasks") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$filter": $filter, "$select": $select, "$expand": $expand, "maxresults": $maxresults, "timeout": $timeout, "api-version": $api_version} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"$filter": $filter, "$select": $select, "$expand": $expand, "maxresults": $maxresults, "timeout": $timeout, "api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Adds a task to the specified job.
@@ -922,14 +1147,25 @@ export def "jobs-tasks create" [
   let base = ($base_url | default $BASE_URL)
   if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'jobId' must be non-empty" } }
   let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/jobs/{job_id}/tasks") $qp)
+  let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/jobs/{job_id}/tasks") $qp $auth.query)
   let req_body = {"affinityInfo": $affinity_info, "applicationPackageReferences": $application_package_references, "authenticationTokenSettings": $authentication_token_settings, "commandLine": $command_line, "constraints": $constraints, "containerSettings": $container_settings, "dependsOn": $depends_on, "displayName": $display_name, "environmentSettings": $environment_settings, "exitConditions": $exit_conditions, "id": $id, "multiInstanceSettings": $multi_instance_settings, "outputFiles": $output_files, "resourceFiles": $resource_files, "userIdentity": $user_identity} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; odata=minimalmetadata" $req_body {query: ({"timeout": $timeout, "api-version": $api_version} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"timeout": $timeout, "api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; odata=minimalmetadata"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Deletes a task from the specified job.
@@ -963,12 +1199,23 @@ export def "jobs-tasks delete" [
   if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'jobId' must be non-empty" } }
   if ($task_id | is-empty) { error make --unspanned { msg: "path parameter 'taskId' must be non-empty" } }
   let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({job_id: (encode-path-segment $job_id), task_id: (encode-path-segment $task_id)} | format pattern "/jobs/{job_id}/tasks/{task_id}") $qp)
+  let full_url = (build-url $base ({job_id: (encode-path-segment $job_id), task_id: (encode-path-segment $task_id)} | format pattern "/jobs/{job_id}/tasks/{task_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date, "If-Match": $if_match, "If-None-Match": $if_none_match, "If-Modified-Since": $if_modified_since, "If-Unmodified-Since": $if_unmodified_since} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"timeout": $timeout, "api-version": $api_version} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"timeout": $timeout, "api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Gets information about the specified task.
@@ -1004,12 +1251,23 @@ export def "jobs-tasks get" [
   if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'jobId' must be non-empty" } }
   if ($task_id | is-empty) { error make --unspanned { msg: "path parameter 'taskId' must be non-empty" } }
   let qp = [(serialize-qp "$select" $select "scalar") (serialize-qp "$expand" $expand "scalar") (serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({job_id: (encode-path-segment $job_id), task_id: (encode-path-segment $task_id)} | format pattern "/jobs/{job_id}/tasks/{task_id}") $qp)
+  let full_url = (build-url $base ({job_id: (encode-path-segment $job_id), task_id: (encode-path-segment $task_id)} | format pattern "/jobs/{job_id}/tasks/{task_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date, "If-Match": $if_match, "If-None-Match": $if_none_match, "If-Modified-Since": $if_modified_since, "If-Unmodified-Since": $if_unmodified_since} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$select": $select, "$expand": $expand, "timeout": $timeout, "api-version": $api_version} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"$select": $select, "$expand": $expand, "timeout": $timeout, "api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates the properties of the specified task.
@@ -1046,14 +1304,25 @@ export def "jobs-tasks update" [
   if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'jobId' must be non-empty" } }
   if ($task_id | is-empty) { error make --unspanned { msg: "path parameter 'taskId' must be non-empty" } }
   let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({job_id: (encode-path-segment $job_id), task_id: (encode-path-segment $task_id)} | format pattern "/jobs/{job_id}/tasks/{task_id}") $qp)
+  let full_url = (build-url $base ({job_id: (encode-path-segment $job_id), task_id: (encode-path-segment $task_id)} | format pattern "/jobs/{job_id}/tasks/{task_id}") $qp $auth.query)
   let req_body = {"constraints": $constraints} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date, "If-Match": $if_match, "If-None-Match": $if_none_match, "If-Modified-Since": $if_modified_since, "If-Unmodified-Since": $if_unmodified_since} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; odata=minimalmetadata" $req_body {query: ({"timeout": $timeout, "api-version": $api_version} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"timeout": $timeout, "api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; odata=minimalmetadata"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Lists the files in a task's directory on its compute node.
@@ -1086,12 +1355,23 @@ export def "jobs-tasks-files list" [
   if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'jobId' must be non-empty" } }
   if ($task_id | is-empty) { error make --unspanned { msg: "path parameter 'taskId' must be non-empty" } }
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "recursive" $recursive "scalar") (serialize-qp "maxresults" $maxresults "scalar") (serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({job_id: (encode-path-segment $job_id), task_id: (encode-path-segment $task_id)} | format pattern "/jobs/{job_id}/tasks/{task_id}/files") $qp)
+  let full_url = (build-url $base ({job_id: (encode-path-segment $job_id), task_id: (encode-path-segment $task_id)} | format pattern "/jobs/{job_id}/tasks/{task_id}/files") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$filter": $filter, "recursive": $recursive, "maxresults": $maxresults, "timeout": $timeout, "api-version": $api_version} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"$filter": $filter, "recursive": $recursive, "maxresults": $maxresults, "timeout": $timeout, "api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes the specified task file from the compute node where the task ran.
@@ -1124,12 +1404,23 @@ export def "jobs-tasks-files delete" [
   if ($task_id | is-empty) { error make --unspanned { msg: "path parameter 'taskId' must be non-empty" } }
   if ($file_path | is-empty) { error make --unspanned { msg: "path parameter 'filePath' must be non-empty" } }
   let qp = [(serialize-qp "recursive" $recursive "scalar") (serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({job_id: (encode-path-segment $job_id), task_id: (encode-path-segment $task_id), file_path: (encode-path-segment $file_path)} | format pattern "/jobs/{job_id}/tasks/{task_id}/files/{file_path}") $qp)
+  let full_url = (build-url $base ({job_id: (encode-path-segment $job_id), task_id: (encode-path-segment $task_id), file_path: (encode-path-segment $file_path)} | format pattern "/jobs/{job_id}/tasks/{task_id}/files/{file_path}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"recursive": $recursive, "timeout": $timeout, "api-version": $api_version} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"recursive": $recursive, "timeout": $timeout, "api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the content of the specified task file.
@@ -1165,12 +1456,23 @@ export def "jobs-tasks-files get" [
   if ($task_id | is-empty) { error make --unspanned { msg: "path parameter 'taskId' must be non-empty" } }
   if ($file_path | is-empty) { error make --unspanned { msg: "path parameter 'filePath' must be non-empty" } }
   let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({job_id: (encode-path-segment $job_id), task_id: (encode-path-segment $task_id), file_path: (encode-path-segment $file_path)} | format pattern "/jobs/{job_id}/tasks/{task_id}/files/{file_path}") $qp)
+  let full_url = (build-url $base ({job_id: (encode-path-segment $job_id), task_id: (encode-path-segment $task_id), file_path: (encode-path-segment $file_path)} | format pattern "/jobs/{job_id}/tasks/{task_id}/files/{file_path}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date, "ocp-range": $ocp_range, "If-Modified-Since": $if_modified_since, "If-Unmodified-Since": $if_unmodified_since} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"timeout": $timeout, "api-version": $api_version} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"timeout": $timeout, "api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the properties of the specified task file.
@@ -1204,12 +1506,23 @@ export def "jobs-tasks-files get-properties" [
   if ($task_id | is-empty) { error make --unspanned { msg: "path parameter 'taskId' must be non-empty" } }
   if ($file_path | is-empty) { error make --unspanned { msg: "path parameter 'filePath' must be non-empty" } }
   let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({job_id: (encode-path-segment $job_id), task_id: (encode-path-segment $task_id), file_path: (encode-path-segment $file_path)} | format pattern "/jobs/{job_id}/tasks/{task_id}/files/{file_path}") $qp)
+  let full_url = (build-url $base ({job_id: (encode-path-segment $job_id), task_id: (encode-path-segment $task_id), file_path: (encode-path-segment $file_path)} | format pattern "/jobs/{job_id}/tasks/{task_id}/files/{file_path}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date, "If-Modified-Since": $if_modified_since, "If-Unmodified-Since": $if_unmodified_since} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "head" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"timeout": $timeout, "api-version": $api_version} | compact), body: null}
+  let req = {
+    method: "head"
+    url: $full_url
+    query: ({"timeout": $timeout, "api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-head $req $insecure $allow_errors $full [200]
 }
 
 # Reactivates a task, allowing it to run again even if its retry count has been exhausted.
@@ -1243,12 +1556,23 @@ export def "jobs-tasks-reactivate create" [
   if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'jobId' must be non-empty" } }
   if ($task_id | is-empty) { error make --unspanned { msg: "path parameter 'taskId' must be non-empty" } }
   let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({job_id: (encode-path-segment $job_id), task_id: (encode-path-segment $task_id)} | format pattern "/jobs/{job_id}/tasks/{task_id}/reactivate") $qp)
+  let full_url = (build-url $base ({job_id: (encode-path-segment $job_id), task_id: (encode-path-segment $task_id)} | format pattern "/jobs/{job_id}/tasks/{task_id}/reactivate") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date, "If-Match": $if_match, "If-None-Match": $if_none_match, "If-Modified-Since": $if_modified_since, "If-Unmodified-Since": $if_unmodified_since} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"timeout": $timeout, "api-version": $api_version} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"timeout": $timeout, "api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Lists all of the subtasks that are associated with the specified multi-instance task.
@@ -1279,12 +1603,23 @@ export def "jobs-tasks-subtasksinfo list-subtasks" [
   if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'jobId' must be non-empty" } }
   if ($task_id | is-empty) { error make --unspanned { msg: "path parameter 'taskId' must be non-empty" } }
   let qp = [(serialize-qp "$select" $select "scalar") (serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({job_id: (encode-path-segment $job_id), task_id: (encode-path-segment $task_id)} | format pattern "/jobs/{job_id}/tasks/{task_id}/subtasksinfo") $qp)
+  let full_url = (build-url $base ({job_id: (encode-path-segment $job_id), task_id: (encode-path-segment $task_id)} | format pattern "/jobs/{job_id}/tasks/{task_id}/subtasksinfo") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$select": $select, "timeout": $timeout, "api-version": $api_version} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"$select": $select, "timeout": $timeout, "api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Terminates the specified task.
@@ -1318,12 +1653,23 @@ export def "jobs-tasks-terminate create" [
   if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'jobId' must be non-empty" } }
   if ($task_id | is-empty) { error make --unspanned { msg: "path parameter 'taskId' must be non-empty" } }
   let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({job_id: (encode-path-segment $job_id), task_id: (encode-path-segment $task_id)} | format pattern "/jobs/{job_id}/tasks/{task_id}/terminate") $qp)
+  let full_url = (build-url $base ({job_id: (encode-path-segment $job_id), task_id: (encode-path-segment $task_id)} | format pattern "/jobs/{job_id}/tasks/{task_id}/terminate") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date, "If-Match": $if_match, "If-None-Match": $if_none_match, "If-Modified-Since": $if_modified_since, "If-Unmodified-Since": $if_unmodified_since} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"timeout": $timeout, "api-version": $api_version} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"timeout": $timeout, "api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Terminates the specified job, marking it as completed.
@@ -1357,14 +1703,25 @@ export def "jobs-terminate create" [
   let base = ($base_url | default $BASE_URL)
   if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'jobId' must be non-empty" } }
   let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/jobs/{job_id}/terminate") $qp)
+  let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/jobs/{job_id}/terminate") $qp $auth.query)
   let req_body = {"terminateReason": $terminate_reason} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date, "If-Match": $if_match, "If-None-Match": $if_none_match, "If-Modified-Since": $if_modified_since, "If-Unmodified-Since": $if_unmodified_since} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; odata=minimalmetadata" $req_body {query: ({"timeout": $timeout, "api-version": $api_version} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"timeout": $timeout, "api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; odata=minimalmetadata"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [202]
 }
 
 # Lists all of the job schedules in the specified account.
@@ -1394,12 +1751,23 @@ export def "jobschedules list-job-schedule" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$expand" $expand "scalar") (serialize-qp "maxresults" $maxresults "scalar") (serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/jobschedules" $qp)
+  let full_url = (build-url $base "/jobschedules" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$filter": $filter, "$select": $select, "$expand": $expand, "maxresults": $maxresults, "timeout": $timeout, "api-version": $api_version} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"$filter": $filter, "$select": $select, "$expand": $expand, "maxresults": $maxresults, "timeout": $timeout, "api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Adds a job schedule to the specified account.
@@ -1434,14 +1802,25 @@ export def "jobschedules create-job-schedule" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/jobschedules" $qp)
+  let full_url = (build-url $base "/jobschedules" $qp $auth.query)
   let req_body = {"displayName": $display_name, "id": $id, "jobSpecification": $job_specification, "metadata": $metadata, "schedule": $schedule} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; odata=minimalmetadata" $req_body {query: ({"timeout": $timeout, "api-version": $api_version} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"timeout": $timeout, "api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; odata=minimalmetadata"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Deletes a job schedule from the specified account.
@@ -1473,12 +1852,23 @@ export def "jobschedules delete-job-schedule" [
   let base = ($base_url | default $BASE_URL)
   if ($job_schedule_id | is-empty) { error make --unspanned { msg: "path parameter 'jobScheduleId' must be non-empty" } }
   let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({job_schedule_id: (encode-path-segment $job_schedule_id)} | format pattern "/jobschedules/{job_schedule_id}") $qp)
+  let full_url = (build-url $base ({job_schedule_id: (encode-path-segment $job_schedule_id)} | format pattern "/jobschedules/{job_schedule_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date, "If-Match": $if_match, "If-None-Match": $if_none_match, "If-Modified-Since": $if_modified_since, "If-Unmodified-Since": $if_unmodified_since} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"timeout": $timeout, "api-version": $api_version} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"timeout": $timeout, "api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [202]
 }
 
 # Gets information about the specified job schedule.
@@ -1512,12 +1902,23 @@ export def "jobschedules get-job-schedule" [
   let base = ($base_url | default $BASE_URL)
   if ($job_schedule_id | is-empty) { error make --unspanned { msg: "path parameter 'jobScheduleId' must be non-empty" } }
   let qp = [(serialize-qp "$select" $select "scalar") (serialize-qp "$expand" $expand "scalar") (serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({job_schedule_id: (encode-path-segment $job_schedule_id)} | format pattern "/jobschedules/{job_schedule_id}") $qp)
+  let full_url = (build-url $base ({job_schedule_id: (encode-path-segment $job_schedule_id)} | format pattern "/jobschedules/{job_schedule_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date, "If-Match": $if_match, "If-None-Match": $if_none_match, "If-Modified-Since": $if_modified_since, "If-Unmodified-Since": $if_unmodified_since} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$select": $select, "$expand": $expand, "timeout": $timeout, "api-version": $api_version} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"$select": $select, "$expand": $expand, "timeout": $timeout, "api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Checks the specified job schedule exists.
@@ -1549,12 +1950,23 @@ export def "jobschedules head-job-schedule-exists" [
   let base = ($base_url | default $BASE_URL)
   if ($job_schedule_id | is-empty) { error make --unspanned { msg: "path parameter 'jobScheduleId' must be non-empty" } }
   let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({job_schedule_id: (encode-path-segment $job_schedule_id)} | format pattern "/jobschedules/{job_schedule_id}") $qp)
+  let full_url = (build-url $base ({job_schedule_id: (encode-path-segment $job_schedule_id)} | format pattern "/jobschedules/{job_schedule_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date, "If-Match": $if_match, "If-None-Match": $if_none_match, "If-Modified-Since": $if_modified_since, "If-Unmodified-Since": $if_unmodified_since} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "head" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"timeout": $timeout, "api-version": $api_version} | compact), body: null}
+  let req = {
+    method: "head"
+    url: $full_url
+    query: ({"timeout": $timeout, "api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-head $req $insecure $allow_errors $full [200]
 }
 
 # Updates the properties of the specified job schedule.
@@ -1593,14 +2005,25 @@ export def "jobschedules update-job-schedule-by-job-schedule-id" [
   let base = ($base_url | default $BASE_URL)
   if ($job_schedule_id | is-empty) { error make --unspanned { msg: "path parameter 'jobScheduleId' must be non-empty" } }
   let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({job_schedule_id: (encode-path-segment $job_schedule_id)} | format pattern "/jobschedules/{job_schedule_id}") $qp)
+  let full_url = (build-url $base ({job_schedule_id: (encode-path-segment $job_schedule_id)} | format pattern "/jobschedules/{job_schedule_id}") $qp $auth.query)
   let req_body = {"jobSpecification": $job_specification, "metadata": $metadata, "schedule": $schedule} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date, "If-Match": $if_match, "If-None-Match": $if_none_match, "If-Modified-Since": $if_modified_since, "If-Unmodified-Since": $if_unmodified_since} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; odata=minimalmetadata" $req_body {query: ({"timeout": $timeout, "api-version": $api_version} | compact), body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: ({"timeout": $timeout, "api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; odata=minimalmetadata"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Updates the properties of the specified job schedule.
@@ -1639,14 +2062,25 @@ export def "jobschedules update-job-schedule-by-job-schedule-id-1" [
   let base = ($base_url | default $BASE_URL)
   if ($job_schedule_id | is-empty) { error make --unspanned { msg: "path parameter 'jobScheduleId' must be non-empty" } }
   let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({job_schedule_id: (encode-path-segment $job_schedule_id)} | format pattern "/jobschedules/{job_schedule_id}") $qp)
+  let full_url = (build-url $base ({job_schedule_id: (encode-path-segment $job_schedule_id)} | format pattern "/jobschedules/{job_schedule_id}") $qp $auth.query)
   let req_body = {"jobSpecification": $job_specification, "metadata": $metadata, "schedule": $schedule} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date, "If-Match": $if_match, "If-None-Match": $if_none_match, "If-Modified-Since": $if_modified_since, "If-Unmodified-Since": $if_unmodified_since} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; odata=minimalmetadata" $req_body {query: ({"timeout": $timeout, "api-version": $api_version} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"timeout": $timeout, "api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; odata=minimalmetadata"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Disables a job schedule.
@@ -1678,12 +2112,23 @@ export def "jobschedules-disable disable-job-schedule" [
   let base = ($base_url | default $BASE_URL)
   if ($job_schedule_id | is-empty) { error make --unspanned { msg: "path parameter 'jobScheduleId' must be non-empty" } }
   let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({job_schedule_id: (encode-path-segment $job_schedule_id)} | format pattern "/jobschedules/{job_schedule_id}/disable") $qp)
+  let full_url = (build-url $base ({job_schedule_id: (encode-path-segment $job_schedule_id)} | format pattern "/jobschedules/{job_schedule_id}/disable") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date, "If-Match": $if_match, "If-None-Match": $if_none_match, "If-Modified-Since": $if_modified_since, "If-Unmodified-Since": $if_unmodified_since} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"timeout": $timeout, "api-version": $api_version} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"timeout": $timeout, "api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Enables a job schedule.
@@ -1715,12 +2160,23 @@ export def "jobschedules-enable enable-job-schedule" [
   let base = ($base_url | default $BASE_URL)
   if ($job_schedule_id | is-empty) { error make --unspanned { msg: "path parameter 'jobScheduleId' must be non-empty" } }
   let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({job_schedule_id: (encode-path-segment $job_schedule_id)} | format pattern "/jobschedules/{job_schedule_id}/enable") $qp)
+  let full_url = (build-url $base ({job_schedule_id: (encode-path-segment $job_schedule_id)} | format pattern "/jobschedules/{job_schedule_id}/enable") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date, "If-Match": $if_match, "If-None-Match": $if_none_match, "If-Modified-Since": $if_modified_since, "If-Unmodified-Since": $if_unmodified_since} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"timeout": $timeout, "api-version": $api_version} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"timeout": $timeout, "api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Lists the jobs that have been created under the specified job schedule.
@@ -1752,12 +2208,23 @@ export def "jobschedules-jobs list-from-schedule" [
   let base = ($base_url | default $BASE_URL)
   if ($job_schedule_id | is-empty) { error make --unspanned { msg: "path parameter 'jobScheduleId' must be non-empty" } }
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$expand" $expand "scalar") (serialize-qp "maxresults" $maxresults "scalar") (serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({job_schedule_id: (encode-path-segment $job_schedule_id)} | format pattern "/jobschedules/{job_schedule_id}/jobs") $qp)
+  let full_url = (build-url $base ({job_schedule_id: (encode-path-segment $job_schedule_id)} | format pattern "/jobschedules/{job_schedule_id}/jobs") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$filter": $filter, "$select": $select, "$expand": $expand, "maxresults": $maxresults, "timeout": $timeout, "api-version": $api_version} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"$filter": $filter, "$select": $select, "$expand": $expand, "maxresults": $maxresults, "timeout": $timeout, "api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Terminates a job schedule.
@@ -1789,12 +2256,23 @@ export def "jobschedules-terminate create-job-schedule" [
   let base = ($base_url | default $BASE_URL)
   if ($job_schedule_id | is-empty) { error make --unspanned { msg: "path parameter 'jobScheduleId' must be non-empty" } }
   let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({job_schedule_id: (encode-path-segment $job_schedule_id)} | format pattern "/jobschedules/{job_schedule_id}/terminate") $qp)
+  let full_url = (build-url $base ({job_schedule_id: (encode-path-segment $job_schedule_id)} | format pattern "/jobschedules/{job_schedule_id}/terminate") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date, "If-Match": $if_match, "If-None-Match": $if_none_match, "If-Modified-Since": $if_modified_since, "If-Unmodified-Since": $if_unmodified_since} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"timeout": $timeout, "api-version": $api_version} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"timeout": $timeout, "api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [202]
 }
 
 # Gets lifetime summary statistics for all of the jobs in the specified account.
@@ -1820,12 +2298,23 @@ export def "lifetimejobstats get-job-list-lifetime-statistics" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/lifetimejobstats" $qp)
+  let full_url = (build-url $base "/lifetimejobstats" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"timeout": $timeout, "api-version": $api_version} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"timeout": $timeout, "api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets lifetime summary statistics for all of the pools in the specified account.
@@ -1851,12 +2340,23 @@ export def "lifetimepoolstats get-pool-list-lifetime-statistics" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/lifetimepoolstats" $qp)
+  let full_url = (build-url $base "/lifetimepoolstats" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"timeout": $timeout, "api-version": $api_version} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"timeout": $timeout, "api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Lists all node agent SKUs supported by the Azure Batch service.
@@ -1884,12 +2384,23 @@ export def "nodeagentskus list-account-node-agent-skus" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "maxresults" $maxresults "scalar") (serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/nodeagentskus" $qp)
+  let full_url = (build-url $base "/nodeagentskus" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$filter": $filter, "maxresults": $maxresults, "timeout": $timeout, "api-version": $api_version} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"$filter": $filter, "maxresults": $maxresults, "timeout": $timeout, "api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the number of nodes in each state, grouped by pool.
@@ -1917,12 +2428,23 @@ export def "nodecounts list-account-pool-node-counts" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "maxresults" $maxresults "scalar") (serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/nodecounts" $qp)
+  let full_url = (build-url $base "/nodecounts" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$filter": $filter, "maxresults": $maxresults, "timeout": $timeout, "api-version": $api_version} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"$filter": $filter, "maxresults": $maxresults, "timeout": $timeout, "api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Lists all of the pools in the specified account.
@@ -1952,12 +2474,23 @@ export def "pools list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$expand" $expand "scalar") (serialize-qp "maxresults" $maxresults "scalar") (serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/pools" $qp)
+  let full_url = (build-url $base "/pools" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$filter": $filter, "$select": $select, "$expand": $expand, "maxresults": $maxresults, "timeout": $timeout, "api-version": $api_version} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"$filter": $filter, "$select": $select, "$expand": $expand, "maxresults": $maxresults, "timeout": $timeout, "api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Adds a pool to the specified account.
@@ -2014,14 +2547,25 @@ export def "pools create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/pools" $qp)
+  let full_url = (build-url $base "/pools" $qp $auth.query)
   let req_body = {"applicationLicenses": $application_licenses, "applicationPackageReferences": $application_package_references, "autoScaleEvaluationInterval": $auto_scale_evaluation_interval, "autoScaleFormula": $auto_scale_formula, "certificateReferences": $certificate_references, "cloudServiceConfiguration": $cloud_service_configuration, "displayName": $display_name, "enableAutoScale": $enable_auto_scale, "enableInterNodeCommunication": $enable_inter_node_communication, "id": $id, "maxTasksPerNode": $max_tasks_per_node, "metadata": $metadata, "networkConfiguration": $network_configuration, "resizeTimeout": $resize_timeout, "startTask": $start_task, "targetDedicatedNodes": $target_dedicated_nodes, "targetLowPriorityNodes": $target_low_priority_nodes, "taskSchedulingPolicy": $task_scheduling_policy, "userAccounts": $user_accounts, "virtualMachineConfiguration": $virtual_machine_configuration, "vmSize": $vm_size} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; odata=minimalmetadata" $req_body {query: ({"timeout": $timeout, "api-version": $api_version} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"timeout": $timeout, "api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; odata=minimalmetadata"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Deletes a pool from the specified account.
@@ -2053,12 +2597,23 @@ export def "pools delete" [
   let base = ($base_url | default $BASE_URL)
   if ($pool_id | is-empty) { error make --unspanned { msg: "path parameter 'poolId' must be non-empty" } }
   let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({pool_id: (encode-path-segment $pool_id)} | format pattern "/pools/{pool_id}") $qp)
+  let full_url = (build-url $base ({pool_id: (encode-path-segment $pool_id)} | format pattern "/pools/{pool_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date, "If-Match": $if_match, "If-None-Match": $if_none_match, "If-Modified-Since": $if_modified_since, "If-Unmodified-Since": $if_unmodified_since} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"timeout": $timeout, "api-version": $api_version} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"timeout": $timeout, "api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [202]
 }
 
 # Gets information about the specified pool.
@@ -2092,12 +2647,23 @@ export def "pools get" [
   let base = ($base_url | default $BASE_URL)
   if ($pool_id | is-empty) { error make --unspanned { msg: "path parameter 'poolId' must be non-empty" } }
   let qp = [(serialize-qp "$select" $select "scalar") (serialize-qp "$expand" $expand "scalar") (serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({pool_id: (encode-path-segment $pool_id)} | format pattern "/pools/{pool_id}") $qp)
+  let full_url = (build-url $base ({pool_id: (encode-path-segment $pool_id)} | format pattern "/pools/{pool_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date, "If-Match": $if_match, "If-None-Match": $if_none_match, "If-Modified-Since": $if_modified_since, "If-Unmodified-Since": $if_unmodified_since} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$select": $select, "$expand": $expand, "timeout": $timeout, "api-version": $api_version} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"$select": $select, "$expand": $expand, "timeout": $timeout, "api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets basic properties of a pool.
@@ -2129,12 +2695,23 @@ export def "pools head-exists" [
   let base = ($base_url | default $BASE_URL)
   if ($pool_id | is-empty) { error make --unspanned { msg: "path parameter 'poolId' must be non-empty" } }
   let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({pool_id: (encode-path-segment $pool_id)} | format pattern "/pools/{pool_id}") $qp)
+  let full_url = (build-url $base ({pool_id: (encode-path-segment $pool_id)} | format pattern "/pools/{pool_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date, "If-Match": $if_match, "If-None-Match": $if_none_match, "If-Modified-Since": $if_modified_since, "If-Unmodified-Since": $if_unmodified_since} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "head" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"timeout": $timeout, "api-version": $api_version} | compact), body: null}
+  let req = {
+    method: "head"
+    url: $full_url
+    query: ({"timeout": $timeout, "api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-head $req $insecure $allow_errors $full [200]
 }
 
 # Updates the properties of the specified pool.
@@ -2175,14 +2752,25 @@ export def "pools update" [
   let base = ($base_url | default $BASE_URL)
   if ($pool_id | is-empty) { error make --unspanned { msg: "path parameter 'poolId' must be non-empty" } }
   let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({pool_id: (encode-path-segment $pool_id)} | format pattern "/pools/{pool_id}") $qp)
+  let full_url = (build-url $base ({pool_id: (encode-path-segment $pool_id)} | format pattern "/pools/{pool_id}") $qp $auth.query)
   let req_body = {"applicationPackageReferences": $application_package_references, "certificateReferences": $certificate_references, "metadata": $metadata, "startTask": $start_task} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date, "If-Match": $if_match, "If-None-Match": $if_none_match, "If-Modified-Since": $if_modified_since, "If-Unmodified-Since": $if_unmodified_since} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; odata=minimalmetadata" $req_body {query: ({"timeout": $timeout, "api-version": $api_version} | compact), body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: ({"timeout": $timeout, "api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; odata=minimalmetadata"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Disables automatic scaling for a pool.
@@ -2210,12 +2798,23 @@ export def "pools-disableautoscale disable-auto-scale" [
   let base = ($base_url | default $BASE_URL)
   if ($pool_id | is-empty) { error make --unspanned { msg: "path parameter 'poolId' must be non-empty" } }
   let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({pool_id: (encode-path-segment $pool_id)} | format pattern "/pools/{pool_id}/disableautoscale") $qp)
+  let full_url = (build-url $base ({pool_id: (encode-path-segment $pool_id)} | format pattern "/pools/{pool_id}/disableautoscale") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"timeout": $timeout, "api-version": $api_version} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"timeout": $timeout, "api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Enables automatic scaling for a pool.
@@ -2250,14 +2849,25 @@ export def "pools-enableautoscale enable-auto-scale" [
   let base = ($base_url | default $BASE_URL)
   if ($pool_id | is-empty) { error make --unspanned { msg: "path parameter 'poolId' must be non-empty" } }
   let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({pool_id: (encode-path-segment $pool_id)} | format pattern "/pools/{pool_id}/enableautoscale") $qp)
+  let full_url = (build-url $base ({pool_id: (encode-path-segment $pool_id)} | format pattern "/pools/{pool_id}/enableautoscale") $qp $auth.query)
   let req_body = {"autoScaleEvaluationInterval": $auto_scale_evaluation_interval, "autoScaleFormula": $auto_scale_formula} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date, "If-Match": $if_match, "If-None-Match": $if_none_match, "If-Modified-Since": $if_modified_since, "If-Unmodified-Since": $if_unmodified_since} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; odata=minimalmetadata" $req_body {query: ({"timeout": $timeout, "api-version": $api_version} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"timeout": $timeout, "api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; odata=minimalmetadata"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the result of evaluating an automatic scaling formula on the pool.
@@ -2287,14 +2897,25 @@ export def "pools-evaluateautoscale create-evaluate-auto-scale" [
   let base = ($base_url | default $BASE_URL)
   if ($pool_id | is-empty) { error make --unspanned { msg: "path parameter 'poolId' must be non-empty" } }
   let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({pool_id: (encode-path-segment $pool_id)} | format pattern "/pools/{pool_id}/evaluateautoscale") $qp)
+  let full_url = (build-url $base ({pool_id: (encode-path-segment $pool_id)} | format pattern "/pools/{pool_id}/evaluateautoscale") $qp $auth.query)
   let req_body = {"autoScaleFormula": $auto_scale_formula} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; odata=minimalmetadata" $req_body {query: ({"timeout": $timeout, "api-version": $api_version} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"timeout": $timeout, "api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; odata=minimalmetadata"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Lists the compute nodes in the specified pool.
@@ -2325,12 +2946,23 @@ export def "pools-nodes list-compute" [
   let base = ($base_url | default $BASE_URL)
   if ($pool_id | is-empty) { error make --unspanned { msg: "path parameter 'poolId' must be non-empty" } }
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "maxresults" $maxresults "scalar") (serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({pool_id: (encode-path-segment $pool_id)} | format pattern "/pools/{pool_id}/nodes") $qp)
+  let full_url = (build-url $base ({pool_id: (encode-path-segment $pool_id)} | format pattern "/pools/{pool_id}/nodes") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$filter": $filter, "$select": $select, "maxresults": $maxresults, "timeout": $timeout, "api-version": $api_version} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"$filter": $filter, "$select": $select, "maxresults": $maxresults, "timeout": $timeout, "api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets information about the specified compute node.
@@ -2361,12 +2993,23 @@ export def "pools-nodes get-compute" [
   if ($pool_id | is-empty) { error make --unspanned { msg: "path parameter 'poolId' must be non-empty" } }
   if ($node_id | is-empty) { error make --unspanned { msg: "path parameter 'nodeId' must be non-empty" } }
   let qp = [(serialize-qp "$select" $select "scalar") (serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({pool_id: (encode-path-segment $pool_id), node_id: (encode-path-segment $node_id)} | format pattern "/pools/{pool_id}/nodes/{node_id}") $qp)
+  let full_url = (build-url $base ({pool_id: (encode-path-segment $pool_id), node_id: (encode-path-segment $node_id)} | format pattern "/pools/{pool_id}/nodes/{node_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$select": $select, "timeout": $timeout, "api-version": $api_version} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"$select": $select, "timeout": $timeout, "api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Disables task scheduling on the specified compute node.
@@ -2398,14 +3041,25 @@ export def "pools-nodes-disablescheduling disable-compute-scheduling" [
   if ($pool_id | is-empty) { error make --unspanned { msg: "path parameter 'poolId' must be non-empty" } }
   if ($node_id | is-empty) { error make --unspanned { msg: "path parameter 'nodeId' must be non-empty" } }
   let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({pool_id: (encode-path-segment $pool_id), node_id: (encode-path-segment $node_id)} | format pattern "/pools/{pool_id}/nodes/{node_id}/disablescheduling") $qp)
+  let full_url = (build-url $base ({pool_id: (encode-path-segment $pool_id), node_id: (encode-path-segment $node_id)} | format pattern "/pools/{pool_id}/nodes/{node_id}/disablescheduling") $qp $auth.query)
   let req_body = {"nodeDisableSchedulingOption": $node_disable_scheduling_option} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; odata=minimalmetadata" $req_body {query: ({"timeout": $timeout, "api-version": $api_version} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"timeout": $timeout, "api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; odata=minimalmetadata"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Enables task scheduling on the specified compute node.
@@ -2435,12 +3089,23 @@ export def "pools-nodes-enablescheduling enable-compute-scheduling" [
   if ($pool_id | is-empty) { error make --unspanned { msg: "path parameter 'poolId' must be non-empty" } }
   if ($node_id | is-empty) { error make --unspanned { msg: "path parameter 'nodeId' must be non-empty" } }
   let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({pool_id: (encode-path-segment $pool_id), node_id: (encode-path-segment $node_id)} | format pattern "/pools/{pool_id}/nodes/{node_id}/enablescheduling") $qp)
+  let full_url = (build-url $base ({pool_id: (encode-path-segment $pool_id), node_id: (encode-path-segment $node_id)} | format pattern "/pools/{pool_id}/nodes/{node_id}/enablescheduling") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"timeout": $timeout, "api-version": $api_version} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"timeout": $timeout, "api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Lists all of the files in task directories on the specified compute node.
@@ -2473,12 +3138,23 @@ export def "pools-nodes-files list-from-compute" [
   if ($pool_id | is-empty) { error make --unspanned { msg: "path parameter 'poolId' must be non-empty" } }
   if ($node_id | is-empty) { error make --unspanned { msg: "path parameter 'nodeId' must be non-empty" } }
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "recursive" $recursive "scalar") (serialize-qp "maxresults" $maxresults "scalar") (serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({pool_id: (encode-path-segment $pool_id), node_id: (encode-path-segment $node_id)} | format pattern "/pools/{pool_id}/nodes/{node_id}/files") $qp)
+  let full_url = (build-url $base ({pool_id: (encode-path-segment $pool_id), node_id: (encode-path-segment $node_id)} | format pattern "/pools/{pool_id}/nodes/{node_id}/files") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$filter": $filter, "recursive": $recursive, "maxresults": $maxresults, "timeout": $timeout, "api-version": $api_version} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"$filter": $filter, "recursive": $recursive, "maxresults": $maxresults, "timeout": $timeout, "api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes the specified file from the compute node.
@@ -2511,12 +3187,23 @@ export def "pools-nodes-files delete-from-compute" [
   if ($node_id | is-empty) { error make --unspanned { msg: "path parameter 'nodeId' must be non-empty" } }
   if ($file_path | is-empty) { error make --unspanned { msg: "path parameter 'filePath' must be non-empty" } }
   let qp = [(serialize-qp "recursive" $recursive "scalar") (serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({pool_id: (encode-path-segment $pool_id), node_id: (encode-path-segment $node_id), file_path: (encode-path-segment $file_path)} | format pattern "/pools/{pool_id}/nodes/{node_id}/files/{file_path}") $qp)
+  let full_url = (build-url $base ({pool_id: (encode-path-segment $pool_id), node_id: (encode-path-segment $node_id), file_path: (encode-path-segment $file_path)} | format pattern "/pools/{pool_id}/nodes/{node_id}/files/{file_path}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"recursive": $recursive, "timeout": $timeout, "api-version": $api_version} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"recursive": $recursive, "timeout": $timeout, "api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the content of the specified compute node file.
@@ -2552,12 +3239,23 @@ export def "pools-nodes-files get-from-compute" [
   if ($node_id | is-empty) { error make --unspanned { msg: "path parameter 'nodeId' must be non-empty" } }
   if ($file_path | is-empty) { error make --unspanned { msg: "path parameter 'filePath' must be non-empty" } }
   let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({pool_id: (encode-path-segment $pool_id), node_id: (encode-path-segment $node_id), file_path: (encode-path-segment $file_path)} | format pattern "/pools/{pool_id}/nodes/{node_id}/files/{file_path}") $qp)
+  let full_url = (build-url $base ({pool_id: (encode-path-segment $pool_id), node_id: (encode-path-segment $node_id), file_path: (encode-path-segment $file_path)} | format pattern "/pools/{pool_id}/nodes/{node_id}/files/{file_path}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date, "ocp-range": $ocp_range, "If-Modified-Since": $if_modified_since, "If-Unmodified-Since": $if_unmodified_since} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"timeout": $timeout, "api-version": $api_version} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"timeout": $timeout, "api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the properties of the specified compute node file.
@@ -2591,12 +3289,23 @@ export def "pools-nodes-files get-properties-from-compute" [
   if ($node_id | is-empty) { error make --unspanned { msg: "path parameter 'nodeId' must be non-empty" } }
   if ($file_path | is-empty) { error make --unspanned { msg: "path parameter 'filePath' must be non-empty" } }
   let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({pool_id: (encode-path-segment $pool_id), node_id: (encode-path-segment $node_id), file_path: (encode-path-segment $file_path)} | format pattern "/pools/{pool_id}/nodes/{node_id}/files/{file_path}") $qp)
+  let full_url = (build-url $base ({pool_id: (encode-path-segment $pool_id), node_id: (encode-path-segment $node_id), file_path: (encode-path-segment $file_path)} | format pattern "/pools/{pool_id}/nodes/{node_id}/files/{file_path}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date, "If-Modified-Since": $if_modified_since, "If-Unmodified-Since": $if_unmodified_since} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "head" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"timeout": $timeout, "api-version": $api_version} | compact), body: null}
+  let req = {
+    method: "head"
+    url: $full_url
+    query: ({"timeout": $timeout, "api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-head $req $insecure $allow_errors $full [200]
 }
 
 # Gets the Remote Desktop Protocol file for the specified compute node.
@@ -2627,12 +3336,23 @@ export def "pools-nodes-rdp get-compute-remote-desktop" [
   if ($pool_id | is-empty) { error make --unspanned { msg: "path parameter 'poolId' must be non-empty" } }
   if ($node_id | is-empty) { error make --unspanned { msg: "path parameter 'nodeId' must be non-empty" } }
   let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({pool_id: (encode-path-segment $pool_id), node_id: (encode-path-segment $node_id)} | format pattern "/pools/{pool_id}/nodes/{node_id}/rdp") $qp)
+  let full_url = (build-url $base ({pool_id: (encode-path-segment $pool_id), node_id: (encode-path-segment $node_id)} | format pattern "/pools/{pool_id}/nodes/{node_id}/rdp") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"timeout": $timeout, "api-version": $api_version} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"timeout": $timeout, "api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Restarts the specified compute node.
@@ -2664,14 +3384,25 @@ export def "pools-nodes-reboot create-compute" [
   if ($pool_id | is-empty) { error make --unspanned { msg: "path parameter 'poolId' must be non-empty" } }
   if ($node_id | is-empty) { error make --unspanned { msg: "path parameter 'nodeId' must be non-empty" } }
   let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({pool_id: (encode-path-segment $pool_id), node_id: (encode-path-segment $node_id)} | format pattern "/pools/{pool_id}/nodes/{node_id}/reboot") $qp)
+  let full_url = (build-url $base ({pool_id: (encode-path-segment $pool_id), node_id: (encode-path-segment $node_id)} | format pattern "/pools/{pool_id}/nodes/{node_id}/reboot") $qp $auth.query)
   let req_body = {"nodeRebootOption": $node_reboot_option} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; odata=minimalmetadata" $req_body {query: ({"timeout": $timeout, "api-version": $api_version} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"timeout": $timeout, "api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; odata=minimalmetadata"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [202]
 }
 
 # Reinstalls the operating system on the specified compute node.
@@ -2703,14 +3434,25 @@ export def "pools-nodes-reimage create-compute" [
   if ($pool_id | is-empty) { error make --unspanned { msg: "path parameter 'poolId' must be non-empty" } }
   if ($node_id | is-empty) { error make --unspanned { msg: "path parameter 'nodeId' must be non-empty" } }
   let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({pool_id: (encode-path-segment $pool_id), node_id: (encode-path-segment $node_id)} | format pattern "/pools/{pool_id}/nodes/{node_id}/reimage") $qp)
+  let full_url = (build-url $base ({pool_id: (encode-path-segment $pool_id), node_id: (encode-path-segment $node_id)} | format pattern "/pools/{pool_id}/nodes/{node_id}/reimage") $qp $auth.query)
   let req_body = {"nodeReimageOption": $node_reimage_option} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; odata=minimalmetadata" $req_body {query: ({"timeout": $timeout, "api-version": $api_version} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"timeout": $timeout, "api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; odata=minimalmetadata"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [202]
 }
 
 # Gets the settings required for remote login to a compute node.
@@ -2740,12 +3482,23 @@ export def "pools-nodes-remoteloginsettings get-compute-remote-login-settings" [
   if ($pool_id | is-empty) { error make --unspanned { msg: "path parameter 'poolId' must be non-empty" } }
   if ($node_id | is-empty) { error make --unspanned { msg: "path parameter 'nodeId' must be non-empty" } }
   let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({pool_id: (encode-path-segment $pool_id), node_id: (encode-path-segment $node_id)} | format pattern "/pools/{pool_id}/nodes/{node_id}/remoteloginsettings") $qp)
+  let full_url = (build-url $base ({pool_id: (encode-path-segment $pool_id), node_id: (encode-path-segment $node_id)} | format pattern "/pools/{pool_id}/nodes/{node_id}/remoteloginsettings") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"timeout": $timeout, "api-version": $api_version} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"timeout": $timeout, "api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Upload Azure Batch service log files from the specified compute node to Azure Blob Storage.
@@ -2779,14 +3532,25 @@ export def "pools-nodes-uploadbatchservicelogs upload-compute-batch-service-logs
   if ($pool_id | is-empty) { error make --unspanned { msg: "path parameter 'poolId' must be non-empty" } }
   if ($node_id | is-empty) { error make --unspanned { msg: "path parameter 'nodeId' must be non-empty" } }
   let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({pool_id: (encode-path-segment $pool_id), node_id: (encode-path-segment $node_id)} | format pattern "/pools/{pool_id}/nodes/{node_id}/uploadbatchservicelogs") $qp)
+  let full_url = (build-url $base ({pool_id: (encode-path-segment $pool_id), node_id: (encode-path-segment $node_id)} | format pattern "/pools/{pool_id}/nodes/{node_id}/uploadbatchservicelogs") $qp $auth.query)
   let req_body = {"containerUrl": $container_url, "endTime": $end_time, "startTime": $start_time} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; odata=minimalmetadata" $req_body {query: ({"timeout": $timeout, "api-version": $api_version} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"timeout": $timeout, "api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; odata=minimalmetadata"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Adds a user account to the specified compute node.
@@ -2822,14 +3586,25 @@ export def "pools-nodes-users create-compute" [
   if ($pool_id | is-empty) { error make --unspanned { msg: "path parameter 'poolId' must be non-empty" } }
   if ($node_id | is-empty) { error make --unspanned { msg: "path parameter 'nodeId' must be non-empty" } }
   let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({pool_id: (encode-path-segment $pool_id), node_id: (encode-path-segment $node_id)} | format pattern "/pools/{pool_id}/nodes/{node_id}/users") $qp)
+  let full_url = (build-url $base ({pool_id: (encode-path-segment $pool_id), node_id: (encode-path-segment $node_id)} | format pattern "/pools/{pool_id}/nodes/{node_id}/users") $qp $auth.query)
   let req_body = {"expiryTime": $expiry_time, "isAdmin": $is_admin, "name": $name, "password": $password, "sshPublicKey": $ssh_public_key} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; odata=minimalmetadata" $req_body {query: ({"timeout": $timeout, "api-version": $api_version} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"timeout": $timeout, "api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; odata=minimalmetadata"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Deletes a user account from the specified compute node.
@@ -2861,12 +3636,23 @@ export def "pools-nodes-users delete-compute" [
   if ($node_id | is-empty) { error make --unspanned { msg: "path parameter 'nodeId' must be non-empty" } }
   if ($user_name | is-empty) { error make --unspanned { msg: "path parameter 'userName' must be non-empty" } }
   let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({pool_id: (encode-path-segment $pool_id), node_id: (encode-path-segment $node_id), user_name: (encode-path-segment $user_name)} | format pattern "/pools/{pool_id}/nodes/{node_id}/users/{user_name}") $qp)
+  let full_url = (build-url $base ({pool_id: (encode-path-segment $pool_id), node_id: (encode-path-segment $node_id), user_name: (encode-path-segment $user_name)} | format pattern "/pools/{pool_id}/nodes/{node_id}/users/{user_name}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"timeout": $timeout, "api-version": $api_version} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"timeout": $timeout, "api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Updates the password and expiration time of a user account on the specified compute node.
@@ -2902,14 +3688,25 @@ export def "pools-nodes-users update-compute" [
   if ($node_id | is-empty) { error make --unspanned { msg: "path parameter 'nodeId' must be non-empty" } }
   if ($user_name | is-empty) { error make --unspanned { msg: "path parameter 'userName' must be non-empty" } }
   let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({pool_id: (encode-path-segment $pool_id), node_id: (encode-path-segment $node_id), user_name: (encode-path-segment $user_name)} | format pattern "/pools/{pool_id}/nodes/{node_id}/users/{user_name}") $qp)
+  let full_url = (build-url $base ({pool_id: (encode-path-segment $pool_id), node_id: (encode-path-segment $node_id), user_name: (encode-path-segment $user_name)} | format pattern "/pools/{pool_id}/nodes/{node_id}/users/{user_name}") $qp $auth.query)
   let req_body = {"expiryTime": $expiry_time, "password": $password, "sshPublicKey": $ssh_public_key} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; odata=minimalmetadata" $req_body {query: ({"timeout": $timeout, "api-version": $api_version} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"timeout": $timeout, "api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; odata=minimalmetadata"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Removes compute nodes from the specified pool.
@@ -2945,14 +3742,25 @@ export def "pools-remove-nodes delete" [
   let base = ($base_url | default $BASE_URL)
   if ($pool_id | is-empty) { error make --unspanned { msg: "path parameter 'poolId' must be non-empty" } }
   let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({pool_id: (encode-path-segment $pool_id)} | format pattern "/pools/{pool_id}/removenodes") $qp)
+  let full_url = (build-url $base ({pool_id: (encode-path-segment $pool_id)} | format pattern "/pools/{pool_id}/removenodes") $qp $auth.query)
   let req_body = {"nodeDeallocationOption": $node_deallocation_option, "nodeList": $node_list, "resizeTimeout": $resize_timeout} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date, "If-Match": $if_match, "If-None-Match": $if_none_match, "If-Modified-Since": $if_modified_since, "If-Unmodified-Since": $if_unmodified_since} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; odata=minimalmetadata" $req_body {query: ({"timeout": $timeout, "api-version": $api_version} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"timeout": $timeout, "api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; odata=minimalmetadata"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [202]
 }
 
 # Changes the number of compute nodes that are assigned to a pool.
@@ -2989,14 +3797,25 @@ export def "pools-resize resize" [
   let base = ($base_url | default $BASE_URL)
   if ($pool_id | is-empty) { error make --unspanned { msg: "path parameter 'poolId' must be non-empty" } }
   let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({pool_id: (encode-path-segment $pool_id)} | format pattern "/pools/{pool_id}/resize") $qp)
+  let full_url = (build-url $base ({pool_id: (encode-path-segment $pool_id)} | format pattern "/pools/{pool_id}/resize") $qp $auth.query)
   let req_body = {"nodeDeallocationOption": $node_deallocation_option, "resizeTimeout": $resize_timeout, "targetDedicatedNodes": $target_dedicated_nodes, "targetLowPriorityNodes": $target_low_priority_nodes} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date, "If-Match": $if_match, "If-None-Match": $if_none_match, "If-Modified-Since": $if_modified_since, "If-Unmodified-Since": $if_unmodified_since} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; odata=minimalmetadata" $req_body {query: ({"timeout": $timeout, "api-version": $api_version} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"timeout": $timeout, "api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; odata=minimalmetadata"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [202]
 }
 
 # Stops an ongoing resize operation on the pool.
@@ -3028,12 +3847,23 @@ export def "pools-stopresize stop-resize" [
   let base = ($base_url | default $BASE_URL)
   if ($pool_id | is-empty) { error make --unspanned { msg: "path parameter 'poolId' must be non-empty" } }
   let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({pool_id: (encode-path-segment $pool_id)} | format pattern "/pools/{pool_id}/stopresize") $qp)
+  let full_url = (build-url $base ({pool_id: (encode-path-segment $pool_id)} | format pattern "/pools/{pool_id}/stopresize") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date, "If-Match": $if_match, "If-None-Match": $if_none_match, "If-Modified-Since": $if_modified_since, "If-Unmodified-Since": $if_unmodified_since} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"timeout": $timeout, "api-version": $api_version} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"timeout": $timeout, "api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [202]
 }
 
 # Updates the properties of the specified pool.
@@ -3070,14 +3900,25 @@ export def "pools-update-properties update" [
   let base = ($base_url | default $BASE_URL)
   if ($pool_id | is-empty) { error make --unspanned { msg: "path parameter 'poolId' must be non-empty" } }
   let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({pool_id: (encode-path-segment $pool_id)} | format pattern "/pools/{pool_id}/updateproperties") $qp)
+  let full_url = (build-url $base ({pool_id: (encode-path-segment $pool_id)} | format pattern "/pools/{pool_id}/updateproperties") $qp $auth.query)
   let req_body = {"applicationPackageReferences": $application_package_references, "certificateReferences": $certificate_references, "metadata": $metadata, "startTask": $start_task} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; odata=minimalmetadata" $req_body {query: ({"timeout": $timeout, "api-version": $api_version} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"timeout": $timeout, "api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; odata=minimalmetadata"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Upgrades the operating system of the specified pool.
@@ -3111,14 +3952,25 @@ export def "pools-upgradeos create-upgrade-os" [
   let base = ($base_url | default $BASE_URL)
   if ($pool_id | is-empty) { error make --unspanned { msg: "path parameter 'poolId' must be non-empty" } }
   let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({pool_id: (encode-path-segment $pool_id)} | format pattern "/pools/{pool_id}/upgradeos") $qp)
+  let full_url = (build-url $base ({pool_id: (encode-path-segment $pool_id)} | format pattern "/pools/{pool_id}/upgradeos") $qp $auth.query)
   let req_body = {"targetOSVersion": $target_os_version} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date, "If-Match": $if_match, "If-None-Match": $if_none_match, "If-Modified-Since": $if_modified_since, "If-Unmodified-Since": $if_unmodified_since} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json; odata=minimalmetadata" $req_body {query: ({"timeout": $timeout, "api-version": $api_version} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"timeout": $timeout, "api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json; odata=minimalmetadata"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [202]
 }
 
 # Lists the usage metrics, aggregated by pool across individual time intervals, for the specified account.
@@ -3148,10 +4000,21 @@ export def "poolusagemetrics list-pool-usage-metrics" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "starttime" $starttime "scalar") (serialize-qp "endtime" $endtime "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "maxresults" $maxresults "scalar") (serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/poolusagemetrics" $qp)
+  let full_url = (build-url $base "/poolusagemetrics" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"starttime": $starttime, "endtime": $endtime, "$filter": $filter, "maxresults": $maxresults, "timeout": $timeout, "api-version": $api_version} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"starttime": $starttime, "endtime": $endtime, "$filter": $filter, "maxresults": $maxresults, "timeout": $timeout, "api-version": $api_version} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }

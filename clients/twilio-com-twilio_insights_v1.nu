@@ -8,7 +8,7 @@ const BASE_URL = "https://insights.twilio.com"
 # `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
 # where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o TWILIO_INSIGHTS_TOKEN | default "" }
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o TWILIO_INSIGHTS_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
@@ -42,14 +42,11 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
-# Trick: `url encode --all` over-encodes, then we decode the four unreserved
-# punctuation chars back. Pre-existing %XX sequences in the input survive
-# because `url encode --all` first turns their % into %25.
 def encode-path-segment [v: any]: nothing -> string {
   $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
-# Serialize an array-typed path parameter (issue 49.A). OpenAPI 3 `style: simple`
+# Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
 # (the default for path params) and Swagger 2 `collectionFormat: csv` both join
 # the elements with a literal comma WITHIN the single path segment, each element
 # RFC-3986-encoded individually (so a comma inside an element stays %2C). Without
@@ -60,51 +57,45 @@ def encode-path-array [v: any]: nothing -> string {
   if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
 }
 
-# Build URL from base, path, and optional query string
-def build-url [base: string, path: string, query?: string]: nothing -> string {
+# Build the request URL from base, path, and any number of pre-encoded query
+# fragments (param serializer output and/or the auth query). Each fragment is an
+# `&`-joinable `key=value` string already percent-encoded by its producer; empty
+# fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
+# delimiters are hand-spliced — and any query already on the base URL is merged in.
+def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
   let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
-  let result = ($parsed | upsert path $full_path)
-  if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
+  let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
+  $parsed | upsert path $full_path | upsert query $query | url join
 }
 
-# Build the dry-run record returned by --dry-run. Shape:
-#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
-#    auth: {scheme, location}}
-# `meta` carries logical-form data (the query record by spec name, the pre-serialization
-# body) that do-request itself cannot reconstruct from its wire-format args.
-def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
-  let m = ($meta | default {})
-  {
-    dry_run: true
-    method: $method
-    url: $url
-    query: ($m | get -o query | default {})
-    headers: $auth.headers
-    body: ($m | get -o body)
-    content_type: $content_type
-    timeout: $timeout
-    auth: {scheme: $auth.scheme, location: $auth.location}
-  }
+# Success policy: did this response succeed? Single source of truth, consulted by
+# handle-response and the HEAD header-unwrap. Empty ok_codes means the spec listed
+# none, so fall back to < 400. Otherwise: any 2xx, plus documented success codes.
+def status-ok [status: int, ok_codes: list<int>]: nothing -> bool {
+  if ($ok_codes | is-empty) { $status < 400 } else { ($status >= 200 and $status < 300) or ($status in $ok_codes) }
 }
 
-# Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
-  let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
-  let timeout = ($max_time | default 30min)
-  let ct = ($content_type | default "application/json")
-  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
-  let resp = match $method {
-    "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
-  }
-  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
-  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
+# Unwrap a `--full` HTTP response into the user-facing value. Response arrives
+# via pipeline; ok_codes gates the error throw (see status-ok).
+def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: record -> any {
+  let resp = $in
+  if $allow_errors { return $resp }
+  if not (status-ok $resp.status $ok_codes) { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } }
+  if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
+  if $resp.status == 204 { return null }
+  $resp.body
+}
+
+# GET — bodyless, honours --raw
+def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+}
+
+# POST — body + content-type
+def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 def base-url-completer [] { ["https://insights.twilio.com"] }
@@ -174,10 +165,21 @@ export def "conferences list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://insights.twilio.com")
   let qp = [(serialize-qp "ConferenceSid" $conference_sid "scalar") (serialize-qp "FriendlyName" $friendly_name "scalar") (serialize-qp "Status" $status "scalar") (serialize-qp "CreatedAfter" $created_after "scalar") (serialize-qp "CreatedBefore" $created_before "scalar") (serialize-qp "MixerRegion" $mixer_region "scalar") (serialize-qp "Tags" $tags "scalar") (serialize-qp "Subaccount" $subaccount "scalar") (serialize-qp "DetectedIssues" $detected_issues "scalar") (serialize-qp "EndReason" $end_reason "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v1/Conferences" $qp)
+  let full_url = (build-url $base "/v1/Conferences" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"ConferenceSid": $conference_sid, "FriendlyName": $friendly_name, "Status": $status, "CreatedAfter": $created_after, "CreatedBefore": $created_before, "MixerRegion": $mixer_region, "Tags": $tags, "Subaccount": $subaccount, "DetectedIssues": $detected_issues, "EndReason": $end_reason, "PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"ConferenceSid": $conference_sid, "FriendlyName": $friendly_name, "Status": $status, "CreatedAfter": $created_after, "CreatedBefore": $created_before, "MixerRegion": $mixer_region, "Tags": $tags, "Subaccount": $subaccount, "DetectedIssues": $detected_issues, "EndReason": $end_reason, "PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Fetch a specific Conference.
@@ -199,10 +201,21 @@ export def "conferences get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://insights.twilio.com")
   if ($conference_sid | is-empty) { error make --unspanned { msg: "path parameter 'ConferenceSid' must be non-empty" } }
-  let full_url = (build-url $base ({conference_sid: (encode-path-segment $conference_sid)} | format pattern "/v1/Conferences/{conference_sid}"))
+  let full_url = (build-url $base ({conference_sid: (encode-path-segment $conference_sid)} | format pattern "/v1/Conferences/{conference_sid}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List Conference Participants.
@@ -231,10 +244,21 @@ export def "conferences-participants list" [
   let base = ($base_url | default "https://insights.twilio.com")
   if ($conference_sid | is-empty) { error make --unspanned { msg: "path parameter 'ConferenceSid' must be non-empty" } }
   let qp = [(serialize-qp "ParticipantSid" $participant_sid "scalar") (serialize-qp "Label" $label "scalar") (serialize-qp "Events" $events "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({conference_sid: (encode-path-segment $conference_sid)} | format pattern "/v1/Conferences/{conference_sid}/Participants") $qp)
+  let full_url = (build-url $base ({conference_sid: (encode-path-segment $conference_sid)} | format pattern "/v1/Conferences/{conference_sid}/Participants") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"ParticipantSid": $participant_sid, "Label": $label, "Events": $events, "PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"ParticipantSid": $participant_sid, "Label": $label, "Events": $events, "PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Fetch a specific Conference Participant Summary.
@@ -261,10 +285,21 @@ export def "conferences-participants get" [
   if ($conference_sid | is-empty) { error make --unspanned { msg: "path parameter 'ConferenceSid' must be non-empty" } }
   if ($participant_sid | is-empty) { error make --unspanned { msg: "path parameter 'ParticipantSid' must be non-empty" } }
   let qp = [(serialize-qp "Events" $events "scalar") (serialize-qp "Metrics" $metrics "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({conference_sid: (encode-path-segment $conference_sid), participant_sid: (encode-path-segment $participant_sid)} | format pattern "/v1/Conferences/{conference_sid}/Participants/{participant_sid}") $qp)
+  let full_url = (build-url $base ({conference_sid: (encode-path-segment $conference_sid), participant_sid: (encode-path-segment $participant_sid)} | format pattern "/v1/Conferences/{conference_sid}/Participants/{participant_sid}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"Events": $events, "Metrics": $metrics} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"Events": $events, "Metrics": $metrics} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get a list of Programmable Video Rooms.
@@ -293,10 +328,21 @@ export def "video-rooms list-summary" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://insights.twilio.com")
   let qp = [(serialize-qp "RoomType" $room_type "multi") (serialize-qp "Codec" $codec "multi") (serialize-qp "RoomName" $room_name "scalar") (serialize-qp "CreatedAfter" $created_after "scalar") (serialize-qp "CreatedBefore" $created_before "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v1/Video/Rooms" $qp)
+  let full_url = (build-url $base "/v1/Video/Rooms" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"RoomType": $room_type, "Codec": $codec, "RoomName": $room_name, "CreatedAfter": $created_after, "CreatedBefore": $created_before, "PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"RoomType": $room_type, "Codec": $codec, "RoomName": $room_name, "CreatedAfter": $created_after, "CreatedBefore": $created_before, "PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get Video Log Analyzer data for a Room.
@@ -318,10 +364,21 @@ export def "video-rooms get-summary" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://insights.twilio.com")
   if ($room_sid | is-empty) { error make --unspanned { msg: "path parameter 'RoomSid' must be non-empty" } }
-  let full_url = (build-url $base ({room_sid: (encode-path-segment $room_sid)} | format pattern "/v1/Video/Rooms/{room_sid}"))
+  let full_url = (build-url $base ({room_sid: (encode-path-segment $room_sid)} | format pattern "/v1/Video/Rooms/{room_sid}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get a list of room participants.
@@ -347,10 +404,21 @@ export def "video-rooms-participants list-summary" [
   let base = ($base_url | default "https://insights.twilio.com")
   if ($room_sid | is-empty) { error make --unspanned { msg: "path parameter 'RoomSid' must be non-empty" } }
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({room_sid: (encode-path-segment $room_sid)} | format pattern "/v1/Video/Rooms/{room_sid}/Participants") $qp)
+  let full_url = (build-url $base ({room_sid: (encode-path-segment $room_sid)} | format pattern "/v1/Video/Rooms/{room_sid}/Participants") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get Video Log Analyzer data for a Room Participant.
@@ -374,10 +442,21 @@ export def "video-rooms-participants get-summary" [
   let base = ($base_url | default "https://insights.twilio.com")
   if ($room_sid | is-empty) { error make --unspanned { msg: "path parameter 'RoomSid' must be non-empty" } }
   if ($participant_sid | is-empty) { error make --unspanned { msg: "path parameter 'ParticipantSid' must be non-empty" } }
-  let full_url = (build-url $base ({room_sid: (encode-path-segment $room_sid), participant_sid: (encode-path-segment $participant_sid)} | format pattern "/v1/Video/Rooms/{room_sid}/Participants/{participant_sid}"))
+  let full_url = (build-url $base ({room_sid: (encode-path-segment $room_sid), participant_sid: (encode-path-segment $participant_sid)} | format pattern "/v1/Video/Rooms/{room_sid}/Participants/{participant_sid}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /v1/Voice/Settings
@@ -398,10 +477,21 @@ export def "voice-settings get-account" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://insights.twilio.com")
   let qp = [(serialize-qp "SubaccountSid" $subaccount_sid "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v1/Voice/Settings" $qp)
+  let full_url = (build-url $base "/v1/Voice/Settings" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"SubaccountSid": $subaccount_sid} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"SubaccountSid": $subaccount_sid} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # POST /v1/Voice/Settings
@@ -424,13 +514,24 @@ export def "voice-settings update-account" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://insights.twilio.com")
-  let full_url = (build-url $base "/v1/Voice/Settings")
+  let full_url = (build-url $base "/v1/Voice/Settings" $auth.query)
   let req_body = {"AdvancedFeatures": $advanced_features, "SubaccountSid": $subaccount_sid, "VoiceTrace": $voice_trace} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/x-www-form-urlencoded"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # GET /v1/Voice/Summaries
@@ -472,10 +573,21 @@ export def "voice-summaries list-call" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://insights.twilio.com")
   let qp = [(serialize-qp "From" $qp_from "scalar") (serialize-qp "To" $qp_to "scalar") (serialize-qp "FromCarrier" $from_carrier "scalar") (serialize-qp "ToCarrier" $to_carrier "scalar") (serialize-qp "FromCountryCode" $from_country_code "scalar") (serialize-qp "ToCountryCode" $to_country_code "scalar") (serialize-qp "Branded" $branded "scalar") (serialize-qp "VerifiedCaller" $verified_caller "scalar") (serialize-qp "HasTag" $has_tag "scalar") (serialize-qp "StartTime" $start_time "scalar") (serialize-qp "EndTime" $end_time "scalar") (serialize-qp "CallType" $call_type "scalar") (serialize-qp "CallState" $call_state "scalar") (serialize-qp "Direction" $direction "scalar") (serialize-qp "ProcessingState" $processing_state "scalar") (serialize-qp "SortBy" $sort_by "scalar") (serialize-qp "Subaccount" $subaccount "scalar") (serialize-qp "AbnormalSession" $abnormal_session "scalar") (serialize-qp "AnsweredBy" $answered_by "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v1/Voice/Summaries" $qp)
+  let full_url = (build-url $base "/v1/Voice/Summaries" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"From": $qp_from, "To": $qp_to, "FromCarrier": $from_carrier, "ToCarrier": $to_carrier, "FromCountryCode": $from_country_code, "ToCountryCode": $to_country_code, "Branded": $branded, "VerifiedCaller": $verified_caller, "HasTag": $has_tag, "StartTime": $start_time, "EndTime": $end_time, "CallType": $call_type, "CallState": $call_state, "Direction": $direction, "ProcessingState": $processing_state, "SortBy": $sort_by, "Subaccount": $subaccount, "AbnormalSession": $abnormal_session, "AnsweredBy": $answered_by, "PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"From": $qp_from, "To": $qp_to, "FromCarrier": $from_carrier, "ToCarrier": $to_carrier, "FromCountryCode": $from_country_code, "ToCountryCode": $to_country_code, "Branded": $branded, "VerifiedCaller": $verified_caller, "HasTag": $has_tag, "StartTime": $start_time, "EndTime": $end_time, "CallType": $call_type, "CallState": $call_state, "Direction": $direction, "ProcessingState": $processing_state, "SortBy": $sort_by, "Subaccount": $subaccount, "AbnormalSession": $abnormal_session, "AnsweredBy": $answered_by, "PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Fetch a specific Annotation.
@@ -497,10 +609,21 @@ export def "voice-annotation get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://insights.twilio.com")
   if ($call_sid | is-empty) { error make --unspanned { msg: "path parameter 'CallSid' must be non-empty" } }
-  let full_url = (build-url $base ({call_sid: (encode-path-segment $call_sid)} | format pattern "/v1/Voice/{call_sid}/Annotation"))
+  let full_url = (build-url $base ({call_sid: (encode-path-segment $call_sid)} | format pattern "/v1/Voice/{call_sid}/Annotation") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create/Update the annotation for the call
@@ -530,13 +653,24 @@ export def "voice-annotation update" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://insights.twilio.com")
   if ($call_sid | is-empty) { error make --unspanned { msg: "path parameter 'CallSid' must be non-empty" } }
-  let full_url = (build-url $base ({call_sid: (encode-path-segment $call_sid)} | format pattern "/v1/Voice/{call_sid}/Annotation"))
+  let full_url = (build-url $base ({call_sid: (encode-path-segment $call_sid)} | format pattern "/v1/Voice/{call_sid}/Annotation") $auth.query)
   let req_body = {"AnsweredBy": $answered_by, "CallScore": $call_score, "Comment": $comment, "ConnectivityIssue": $connectivity_issue, "Incident": $incident, "QualityIssues": $quality_issues, "Spam": $spam} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/x-www-form-urlencoded"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # GET /v1/Voice/{CallSid}/Events
@@ -562,10 +696,21 @@ export def "voice-events list" [
   let base = ($base_url | default "https://insights.twilio.com")
   if ($call_sid | is-empty) { error make --unspanned { msg: "path parameter 'CallSid' must be non-empty" } }
   let qp = [(serialize-qp "Edge" $edge "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({call_sid: (encode-path-segment $call_sid)} | format pattern "/v1/Voice/{call_sid}/Events") $qp)
+  let full_url = (build-url $base ({call_sid: (encode-path-segment $call_sid)} | format pattern "/v1/Voice/{call_sid}/Events") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"Edge": $edge, "PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"Edge": $edge, "PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /v1/Voice/{CallSid}/Metrics
@@ -592,10 +737,21 @@ export def "voice-metrics list" [
   let base = ($base_url | default "https://insights.twilio.com")
   if ($call_sid | is-empty) { error make --unspanned { msg: "path parameter 'CallSid' must be non-empty" } }
   let qp = [(serialize-qp "Edge" $edge "scalar") (serialize-qp "Direction" $direction "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({call_sid: (encode-path-segment $call_sid)} | format pattern "/v1/Voice/{call_sid}/Metrics") $qp)
+  let full_url = (build-url $base ({call_sid: (encode-path-segment $call_sid)} | format pattern "/v1/Voice/{call_sid}/Metrics") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"Edge": $edge, "Direction": $direction, "PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"Edge": $edge, "Direction": $direction, "PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /v1/Voice/{CallSid}/Summary
@@ -618,10 +774,21 @@ export def "voice-summary get" [
   let base = ($base_url | default "https://insights.twilio.com")
   if ($call_sid | is-empty) { error make --unspanned { msg: "path parameter 'CallSid' must be non-empty" } }
   let qp = [(serialize-qp "ProcessingState" $processing_state "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({call_sid: (encode-path-segment $call_sid)} | format pattern "/v1/Voice/{call_sid}/Summary") $qp)
+  let full_url = (build-url $base ({call_sid: (encode-path-segment $call_sid)} | format pattern "/v1/Voice/{call_sid}/Summary") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"ProcessingState": $processing_state} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"ProcessingState": $processing_state} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /v1/Voice/{Sid}
@@ -642,8 +809,19 @@ export def "voice get-call" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://insights.twilio.com")
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
-  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/Voice/{sid}"))
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/Voice/{sid}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }

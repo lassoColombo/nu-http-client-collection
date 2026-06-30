@@ -8,7 +8,7 @@ const BASE_URL = "https://api-2445581398133.apicast.io:443/v1"
 # `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
 # where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o DATA2CRM_API_TOKEN | default "" }
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o DATA2CRM_API_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
@@ -40,14 +40,11 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
-# Trick: `url encode --all` over-encodes, then we decode the four unreserved
-# punctuation chars back. Pre-existing %XX sequences in the input survive
-# because `url encode --all` first turns their % into %25.
 def encode-path-segment [v: any]: nothing -> string {
   $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
-# Serialize an array-typed path parameter (issue 49.A). OpenAPI 3 `style: simple`
+# Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
 # (the default for path params) and Swagger 2 `collectionFormat: csv` both join
 # the elements with a literal comma WITHIN the single path segment, each element
 # RFC-3986-encoded individually (so a comma inside an element stays %2C). Without
@@ -58,51 +55,57 @@ def encode-path-array [v: any]: nothing -> string {
   if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
 }
 
-# Build URL from base, path, and optional query string
-def build-url [base: string, path: string, query?: string]: nothing -> string {
+# Build the request URL from base, path, and any number of pre-encoded query
+# fragments (param serializer output and/or the auth query). Each fragment is an
+# `&`-joinable `key=value` string already percent-encoded by its producer; empty
+# fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
+# delimiters are hand-spliced — and any query already on the base URL is merged in.
+def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
   let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
-  let result = ($parsed | upsert path $full_path)
-  if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
+  let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
+  $parsed | upsert path $full_path | upsert query $query | url join
 }
 
-# Build the dry-run record returned by --dry-run. Shape:
-#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
-#    auth: {scheme, location}}
-# `meta` carries logical-form data (the query record by spec name, the pre-serialization
-# body) that do-request itself cannot reconstruct from its wire-format args.
-def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
-  let m = ($meta | default {})
-  {
-    dry_run: true
-    method: $method
-    url: $url
-    query: ($m | get -o query | default {})
-    headers: $auth.headers
-    body: ($m | get -o body)
-    content_type: $content_type
-    timeout: $timeout
-    auth: {scheme: $auth.scheme, location: $auth.location}
-  }
+# Success policy: did this response succeed? Single source of truth, consulted by
+# handle-response and the HEAD header-unwrap. Empty ok_codes means the spec listed
+# none, so fall back to < 400. Otherwise: any 2xx, plus documented success codes.
+def status-ok [status: int, ok_codes: list<int>]: nothing -> bool {
+  if ($ok_codes | is-empty) { $status < 400 } else { ($status >= 200 and $status < 300) or ($status in $ok_codes) }
 }
 
-# Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
-  let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
-  let timeout = ($max_time | default 30min)
-  let ct = ($content_type | default "application/json")
-  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
-  let resp = match $method {
-    "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
-  }
-  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
-  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
+# Unwrap a `--full` HTTP response into the user-facing value. Response arrives
+# via pipeline; ok_codes gates the error throw (see status-ok).
+def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: record -> any {
+  let resp = $in
+  if $allow_errors { return $resp }
+  if not (status-ok $resp.status $ok_codes) { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } }
+  if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
+  if $resp.status == 204 { return null }
+  $resp.body
+}
+
+# GET — bodyless, honours --raw
+def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+}
+
+# POST — body + content-type
+def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# PUT — body + content-type
+def send-put [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http put --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http put --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# DELETE — body via --data
+def send-delete [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http delete --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url } else { http delete --headers $req.headers --content-type $req.content_type --data $body --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url }
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 def base-url-completer [] { ["https://api-2445581398133.apicast.io:443/v1"] }
@@ -165,14 +168,25 @@ export def "application create-entity" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application")
+  let full_url = (build-url $base "/application" $auth.query)
   let req_body = {"authorization": $authorization, "credential": $credential, "description": $description, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # COUNT for application
@@ -195,12 +209,23 @@ export def "application-count get-collection" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/application/count" $qp)
+  let full_url = (build-url $base "/application/count" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"filter": $filter} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # POST for account
@@ -251,14 +276,25 @@ export def "application-entity-account create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/account")
+  let full_url = (build-url $base "/application/entity/account" $auth.query)
   let req_body = {"address": $address, "annual_revenue": $annual_revenue, "category": $category, "created_at": $created_at, "description": $description, "email": $email, "employees": $employees, "id": $id, "industry": $industry, "messenger": $messenger, "name": $name, "ownership": $ownership, "phone": $phone, "rating": $rating, "relation": $relation, "sic_code": $sic_code, "ticker_symbol": $ticker_symbol, "type": $type, "updated_at": $updated_at, "website": $website} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # AGGREGATE for account
@@ -292,12 +328,23 @@ export def "application-entity-account-aggregate get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "pipeline" $pipeline "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/application/entity/account/aggregate" $qp)
+  let full_url = (build-url $base "/application/entity/account/aggregate" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "pipeline": $pipeline} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"filter": $filter, "pipeline": $pipeline} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # DELETE bulk for account
@@ -321,14 +368,25 @@ export def "application-entity-account-bulk delete-collection" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/account/bulk")
+  let full_url = (build-url $base "/application/entity/account/bulk" $auth.query)
   let req_body = {"item": $item} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req $req_body $insecure $raw $allow_errors $full [200 204]
 }
 
 # POST bulk for account
@@ -354,14 +412,25 @@ export def "application-entity-account-bulk create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/account/bulk")
+  let full_url = (build-url $base "/application/entity/account/bulk" $auth.query)
   let req_body = {"item": $item} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # PUT bulk for account
@@ -387,14 +456,25 @@ export def "application-entity-account-bulk update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/account/bulk")
+  let full_url = (build-url $base "/application/entity/account/bulk" $auth.query)
   let req_body = {"item": $item} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # COUNT for account
@@ -425,12 +505,23 @@ export def "application-entity-account-count get-collection" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/application/entity/account/count" $qp)
+  let full_url = (build-url $base "/application/entity/account/count" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"filter": $filter} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # DESCRIBE for account
@@ -460,12 +551,23 @@ export def "application-entity-account-describe get" [
 ]: nothing -> record<entity: string, schema: record<create: record, fetch: record, fetchAll: record, update: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/account/describe")
+  let full_url = (build-url $base "/application/entity/account/describe" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET for account
@@ -504,12 +606,23 @@ export def "application-entity-account-list get-collection" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "unique" $unique "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/application/entity/account/list" $qp)
+  let full_url = (build-url $base "/application/entity/account/list" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page_size": $page_size, "page": $page, "filter": $filter, "expand": $expand, "fields": $fields, "sort": $qp_sort, "unique": $unique} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"page_size": $page_size, "page": $page, "filter": $filter, "expand": $expand, "fields": $fields, "sort": $qp_sort, "unique": $unique} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # DELETE for account
@@ -533,12 +646,23 @@ export def "application-entity-account delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'account_id' must be non-empty" } }
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/application/entity/account/{account_id}"))
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/application/entity/account/{account_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # GET for account
@@ -574,12 +698,23 @@ export def "application-entity-account get" [
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'account_id' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/application/entity/account/{account_id}") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/application/entity/account/{account_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand, "fields": $fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"expand": $expand, "fields": $fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # PUT for account
@@ -632,14 +767,25 @@ export def "application-entity-account update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'account_id' must be non-empty" } }
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/application/entity/account/{account_id}"))
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/application/entity/account/{account_id}") $auth.query)
   let req_body = {"address": $address, "annual_revenue": $annual_revenue, "category": $category, "created_at": $created_at, "description": $description, "email": $email, "employees": $employees, "id": $id, "industry": $industry, "messenger": $messenger, "name": $name, "ownership": $ownership, "phone": $phone, "rating": $rating, "relation": $relation, "sic_code": $sic_code, "ticker_symbol": $ticker_symbol, "type": $type, "updated_at": $updated_at, "website": $website} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # POST for attachment
@@ -674,14 +820,25 @@ export def "application-entity-attachment create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/attachment")
+  let full_url = (build-url $base "/application/entity/attachment" $auth.query)
   let req_body = {"created_at": $created_at, "description": $description, "link": $link, "mime_type": $mime_type, "name": $name, "relation": $relation, "size": $size, "title": $title, "updated_at": $updated_at} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # AGGREGATE for attachment
@@ -715,12 +872,23 @@ export def "application-entity-attachment-aggregate get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "pipeline" $pipeline "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/application/entity/attachment/aggregate" $qp)
+  let full_url = (build-url $base "/application/entity/attachment/aggregate" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "pipeline": $pipeline} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"filter": $filter, "pipeline": $pipeline} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # DELETE bulk for attachment
@@ -744,14 +912,25 @@ export def "application-entity-attachment-bulk delete-collection" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/attachment/bulk")
+  let full_url = (build-url $base "/application/entity/attachment/bulk" $auth.query)
   let req_body = {"item": $item} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req $req_body $insecure $raw $allow_errors $full [200 204]
 }
 
 # POST bulk for attachment
@@ -777,14 +956,25 @@ export def "application-entity-attachment-bulk create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/attachment/bulk")
+  let full_url = (build-url $base "/application/entity/attachment/bulk" $auth.query)
   let req_body = {"item": $item} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # PUT bulk for attachment
@@ -810,14 +1000,25 @@ export def "application-entity-attachment-bulk update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/attachment/bulk")
+  let full_url = (build-url $base "/application/entity/attachment/bulk" $auth.query)
   let req_body = {"item": $item} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # COUNT for attachment
@@ -848,12 +1049,23 @@ export def "application-entity-attachment-count get-collection" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/application/entity/attachment/count" $qp)
+  let full_url = (build-url $base "/application/entity/attachment/count" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"filter": $filter} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # DESCRIBE for attachment
@@ -883,12 +1095,23 @@ export def "application-entity-attachment-describe get" [
 ]: nothing -> record<entity: string, schema: record<create: record, fetch: record, fetchAll: record, update: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/attachment/describe")
+  let full_url = (build-url $base "/application/entity/attachment/describe" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET for attachment
@@ -927,12 +1150,23 @@ export def "application-entity-attachment-list get-collection" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "unique" $unique "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/application/entity/attachment/list" $qp)
+  let full_url = (build-url $base "/application/entity/attachment/list" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page_size": $page_size, "page": $page, "filter": $filter, "expand": $expand, "fields": $fields, "sort": $qp_sort, "unique": $unique} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"page_size": $page_size, "page": $page, "filter": $filter, "expand": $expand, "fields": $fields, "sort": $qp_sort, "unique": $unique} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # DELETE for attachment
@@ -956,12 +1190,23 @@ export def "application-entity-attachment delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($attachment_id | is-empty) { error make --unspanned { msg: "path parameter 'attachment_id' must be non-empty" } }
-  let full_url = (build-url $base ({attachment_id: (encode-path-segment $attachment_id)} | format pattern "/application/entity/attachment/{attachment_id}"))
+  let full_url = (build-url $base ({attachment_id: (encode-path-segment $attachment_id)} | format pattern "/application/entity/attachment/{attachment_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # GET for attachment
@@ -997,12 +1242,23 @@ export def "application-entity-attachment get" [
   let base = ($base_url | default $BASE_URL)
   if ($attachment_id | is-empty) { error make --unspanned { msg: "path parameter 'attachment_id' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({attachment_id: (encode-path-segment $attachment_id)} | format pattern "/application/entity/attachment/{attachment_id}") $qp)
+  let full_url = (build-url $base ({attachment_id: (encode-path-segment $attachment_id)} | format pattern "/application/entity/attachment/{attachment_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand, "fields": $fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"expand": $expand, "fields": $fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # PUT for attachment
@@ -1039,14 +1295,25 @@ export def "application-entity-attachment update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($attachment_id | is-empty) { error make --unspanned { msg: "path parameter 'attachment_id' must be non-empty" } }
-  let full_url = (build-url $base ({attachment_id: (encode-path-segment $attachment_id)} | format pattern "/application/entity/attachment/{attachment_id}"))
+  let full_url = (build-url $base ({attachment_id: (encode-path-segment $attachment_id)} | format pattern "/application/entity/attachment/{attachment_id}") $auth.query)
   let req_body = {"created_at": $created_at, "description": $description, "link": $link, "mime_type": $mime_type, "name": $name, "relation": $relation, "size": $size, "title": $title, "updated_at": $updated_at} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # POST for call
@@ -1084,14 +1351,25 @@ export def "application-entity-call create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/call")
+  let full_url = (build-url $base "/application/entity/call" $auth.query)
   let req_body = {"created_at": $created_at, "description": $description, "direction": $direction, "ended_at": $ended_at, "id": $id, "purpose": $purpose, "relation": $relation, "result": $result, "started_at": $started_at, "status": $status, "subject": $subject, "updated_at": $updated_at} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # AGGREGATE for call
@@ -1125,12 +1403,23 @@ export def "application-entity-call-aggregate get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "pipeline" $pipeline "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/application/entity/call/aggregate" $qp)
+  let full_url = (build-url $base "/application/entity/call/aggregate" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "pipeline": $pipeline} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"filter": $filter, "pipeline": $pipeline} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # DELETE bulk for call
@@ -1154,14 +1443,25 @@ export def "application-entity-call-bulk delete-collection" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/call/bulk")
+  let full_url = (build-url $base "/application/entity/call/bulk" $auth.query)
   let req_body = {"item": $item} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req $req_body $insecure $raw $allow_errors $full [200 204]
 }
 
 # POST bulk for call
@@ -1187,14 +1487,25 @@ export def "application-entity-call-bulk create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/call/bulk")
+  let full_url = (build-url $base "/application/entity/call/bulk" $auth.query)
   let req_body = {"item": $item} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # PUT bulk for call
@@ -1220,14 +1531,25 @@ export def "application-entity-call-bulk update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/call/bulk")
+  let full_url = (build-url $base "/application/entity/call/bulk" $auth.query)
   let req_body = {"item": $item} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # COUNT for call
@@ -1258,12 +1580,23 @@ export def "application-entity-call-count get-collection" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/application/entity/call/count" $qp)
+  let full_url = (build-url $base "/application/entity/call/count" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"filter": $filter} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # DESCRIBE for call
@@ -1293,12 +1626,23 @@ export def "application-entity-call-describe get" [
 ]: nothing -> record<entity: string, schema: record<create: record, fetch: record, fetchAll: record, update: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/call/describe")
+  let full_url = (build-url $base "/application/entity/call/describe" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET for call
@@ -1337,12 +1681,23 @@ export def "application-entity-call-list get-collection" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "unique" $unique "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/application/entity/call/list" $qp)
+  let full_url = (build-url $base "/application/entity/call/list" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page_size": $page_size, "page": $page, "filter": $filter, "expand": $expand, "fields": $fields, "sort": $qp_sort, "unique": $unique} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"page_size": $page_size, "page": $page, "filter": $filter, "expand": $expand, "fields": $fields, "sort": $qp_sort, "unique": $unique} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # DELETE for call
@@ -1366,12 +1721,23 @@ export def "application-entity-call delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($call_id | is-empty) { error make --unspanned { msg: "path parameter 'call_id' must be non-empty" } }
-  let full_url = (build-url $base ({call_id: (encode-path-segment $call_id)} | format pattern "/application/entity/call/{call_id}"))
+  let full_url = (build-url $base ({call_id: (encode-path-segment $call_id)} | format pattern "/application/entity/call/{call_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # GET for call
@@ -1407,12 +1773,23 @@ export def "application-entity-call get" [
   let base = ($base_url | default $BASE_URL)
   if ($call_id | is-empty) { error make --unspanned { msg: "path parameter 'call_id' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({call_id: (encode-path-segment $call_id)} | format pattern "/application/entity/call/{call_id}") $qp)
+  let full_url = (build-url $base ({call_id: (encode-path-segment $call_id)} | format pattern "/application/entity/call/{call_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand, "fields": $fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"expand": $expand, "fields": $fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # PUT for call
@@ -1452,14 +1829,25 @@ export def "application-entity-call update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($call_id | is-empty) { error make --unspanned { msg: "path parameter 'call_id' must be non-empty" } }
-  let full_url = (build-url $base ({call_id: (encode-path-segment $call_id)} | format pattern "/application/entity/call/{call_id}"))
+  let full_url = (build-url $base ({call_id: (encode-path-segment $call_id)} | format pattern "/application/entity/call/{call_id}") $auth.query)
   let req_body = {"created_at": $created_at, "description": $description, "direction": $direction, "ended_at": $ended_at, "id": $id, "purpose": $purpose, "relation": $relation, "result": $result, "started_at": $started_at, "status": $status, "subject": $subject, "updated_at": $updated_at} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # POST for campaign
@@ -1506,14 +1894,25 @@ export def "application-entity-campaign create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/campaign")
+  let full_url = (build-url $base "/application/entity/campaign" $auth.query)
   let req_body = {"actual_cost": $actual_cost, "budgeted_cost": $budgeted_cost, "created_at": $created_at, "currency": $currency, "description": $description, "ended_at": $ended_at, "expected_end_at": $expected_end_at, "expected_response": $expected_response, "expected_revenue": $expected_revenue, "expected_start_at": $expected_start_at, "id": $id, "is_active": $is_active, "name": $name, "numbers_sent": $numbers_sent, "objective": $objective, "relation": $relation, "started_at": $started_at, "status": $status, "type": $type, "updated_at": $updated_at} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # AGGREGATE for campaign
@@ -1547,12 +1946,23 @@ export def "application-entity-campaign-aggregate get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "pipeline" $pipeline "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/application/entity/campaign/aggregate" $qp)
+  let full_url = (build-url $base "/application/entity/campaign/aggregate" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "pipeline": $pipeline} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"filter": $filter, "pipeline": $pipeline} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # DELETE bulk for campaign
@@ -1576,14 +1986,25 @@ export def "application-entity-campaign-bulk delete-collection" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/campaign/bulk")
+  let full_url = (build-url $base "/application/entity/campaign/bulk" $auth.query)
   let req_body = {"item": $item} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req $req_body $insecure $raw $allow_errors $full [200 204]
 }
 
 # POST bulk for campaign
@@ -1609,14 +2030,25 @@ export def "application-entity-campaign-bulk create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/campaign/bulk")
+  let full_url = (build-url $base "/application/entity/campaign/bulk" $auth.query)
   let req_body = {"item": $item} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # PUT bulk for campaign
@@ -1642,14 +2074,25 @@ export def "application-entity-campaign-bulk update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/campaign/bulk")
+  let full_url = (build-url $base "/application/entity/campaign/bulk" $auth.query)
   let req_body = {"item": $item} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # COUNT for campaign
@@ -1680,12 +2123,23 @@ export def "application-entity-campaign-count get-collection" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/application/entity/campaign/count" $qp)
+  let full_url = (build-url $base "/application/entity/campaign/count" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"filter": $filter} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # DESCRIBE for campaign
@@ -1715,12 +2169,23 @@ export def "application-entity-campaign-describe get" [
 ]: nothing -> record<entity: string, schema: record<create: record, fetch: record, fetchAll: record, update: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/campaign/describe")
+  let full_url = (build-url $base "/application/entity/campaign/describe" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET for campaign
@@ -1759,12 +2224,23 @@ export def "application-entity-campaign-list get-collection" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "unique" $unique "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/application/entity/campaign/list" $qp)
+  let full_url = (build-url $base "/application/entity/campaign/list" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page_size": $page_size, "page": $page, "filter": $filter, "expand": $expand, "fields": $fields, "sort": $qp_sort, "unique": $unique} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"page_size": $page_size, "page": $page, "filter": $filter, "expand": $expand, "fields": $fields, "sort": $qp_sort, "unique": $unique} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # DELETE for campaign
@@ -1788,12 +2264,23 @@ export def "application-entity-campaign delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($campaign_id | is-empty) { error make --unspanned { msg: "path parameter 'campaign_id' must be non-empty" } }
-  let full_url = (build-url $base ({campaign_id: (encode-path-segment $campaign_id)} | format pattern "/application/entity/campaign/{campaign_id}"))
+  let full_url = (build-url $base ({campaign_id: (encode-path-segment $campaign_id)} | format pattern "/application/entity/campaign/{campaign_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # GET for campaign
@@ -1829,12 +2316,23 @@ export def "application-entity-campaign get" [
   let base = ($base_url | default $BASE_URL)
   if ($campaign_id | is-empty) { error make --unspanned { msg: "path parameter 'campaign_id' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({campaign_id: (encode-path-segment $campaign_id)} | format pattern "/application/entity/campaign/{campaign_id}") $qp)
+  let full_url = (build-url $base ({campaign_id: (encode-path-segment $campaign_id)} | format pattern "/application/entity/campaign/{campaign_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand, "fields": $fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"expand": $expand, "fields": $fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # PUT for campaign
@@ -1883,14 +2381,25 @@ export def "application-entity-campaign update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($campaign_id | is-empty) { error make --unspanned { msg: "path parameter 'campaign_id' must be non-empty" } }
-  let full_url = (build-url $base ({campaign_id: (encode-path-segment $campaign_id)} | format pattern "/application/entity/campaign/{campaign_id}"))
+  let full_url = (build-url $base ({campaign_id: (encode-path-segment $campaign_id)} | format pattern "/application/entity/campaign/{campaign_id}") $auth.query)
   let req_body = {"actual_cost": $actual_cost, "budgeted_cost": $budgeted_cost, "created_at": $created_at, "currency": $currency, "description": $description, "ended_at": $ended_at, "expected_end_at": $expected_end_at, "expected_response": $expected_response, "expected_revenue": $expected_revenue, "expected_start_at": $expected_start_at, "id": $id, "is_active": $is_active, "name": $name, "numbers_sent": $numbers_sent, "objective": $objective, "relation": $relation, "started_at": $started_at, "status": $status, "type": $type, "updated_at": $updated_at} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # POST for case
@@ -1937,14 +2446,25 @@ export def "application-entity-case create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/case")
+  let full_url = (build-url $base "/application/entity/case" $auth.query)
   let req_body = {"created_at": $created_at, "description": $description, "ended_at": $ended_at, "expected_end_at": $expected_end_at, "id": $id, "internal_comments": $internal_comments, "is_closed": $is_closed, "is_escalated": $is_escalated, "number": $number, "origin": $origin, "pipeline_with_stage": $pipeline_with_stage, "priority": $priority, "reason": $reason, "relation": $relation, "resolution": $resolution, "resolution_comments": $resolution_comments, "satisfaction": $satisfaction, "status": $status, "subject": $subject, "type": $type, "updated_at": $updated_at} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # AGGREGATE for case
@@ -1978,12 +2498,23 @@ export def "application-entity-case-aggregate get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "pipeline" $pipeline "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/application/entity/case/aggregate" $qp)
+  let full_url = (build-url $base "/application/entity/case/aggregate" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "pipeline": $pipeline} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"filter": $filter, "pipeline": $pipeline} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # DELETE bulk for case
@@ -2007,14 +2538,25 @@ export def "application-entity-case-bulk delete-collection" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/case/bulk")
+  let full_url = (build-url $base "/application/entity/case/bulk" $auth.query)
   let req_body = {"item": $item} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req $req_body $insecure $raw $allow_errors $full [200 204]
 }
 
 # POST bulk for case
@@ -2040,14 +2582,25 @@ export def "application-entity-case-bulk create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/case/bulk")
+  let full_url = (build-url $base "/application/entity/case/bulk" $auth.query)
   let req_body = {"item": $item} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # PUT bulk for case
@@ -2073,14 +2626,25 @@ export def "application-entity-case-bulk update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/case/bulk")
+  let full_url = (build-url $base "/application/entity/case/bulk" $auth.query)
   let req_body = {"item": $item} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # COUNT for case
@@ -2111,12 +2675,23 @@ export def "application-entity-case-count get-collection" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/application/entity/case/count" $qp)
+  let full_url = (build-url $base "/application/entity/case/count" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"filter": $filter} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # DESCRIBE for case
@@ -2146,12 +2721,23 @@ export def "application-entity-case-describe get" [
 ]: nothing -> record<entity: string, schema: record<create: record, fetch: record, fetchAll: record, update: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/case/describe")
+  let full_url = (build-url $base "/application/entity/case/describe" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET for case
@@ -2190,12 +2776,23 @@ export def "application-entity-case-list get-collection" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "unique" $unique "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/application/entity/case/list" $qp)
+  let full_url = (build-url $base "/application/entity/case/list" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page_size": $page_size, "page": $page, "filter": $filter, "expand": $expand, "fields": $fields, "sort": $qp_sort, "unique": $unique} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"page_size": $page_size, "page": $page, "filter": $filter, "expand": $expand, "fields": $fields, "sort": $qp_sort, "unique": $unique} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # DELETE for case
@@ -2219,12 +2816,23 @@ export def "application-entity-case delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($case_id | is-empty) { error make --unspanned { msg: "path parameter 'case_id' must be non-empty" } }
-  let full_url = (build-url $base ({case_id: (encode-path-segment $case_id)} | format pattern "/application/entity/case/{case_id}"))
+  let full_url = (build-url $base ({case_id: (encode-path-segment $case_id)} | format pattern "/application/entity/case/{case_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # GET for case
@@ -2260,12 +2868,23 @@ export def "application-entity-case get" [
   let base = ($base_url | default $BASE_URL)
   if ($case_id | is-empty) { error make --unspanned { msg: "path parameter 'case_id' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({case_id: (encode-path-segment $case_id)} | format pattern "/application/entity/case/{case_id}") $qp)
+  let full_url = (build-url $base ({case_id: (encode-path-segment $case_id)} | format pattern "/application/entity/case/{case_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand, "fields": $fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"expand": $expand, "fields": $fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # PUT for case
@@ -2314,14 +2933,25 @@ export def "application-entity-case update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($case_id | is-empty) { error make --unspanned { msg: "path parameter 'case_id' must be non-empty" } }
-  let full_url = (build-url $base ({case_id: (encode-path-segment $case_id)} | format pattern "/application/entity/case/{case_id}"))
+  let full_url = (build-url $base ({case_id: (encode-path-segment $case_id)} | format pattern "/application/entity/case/{case_id}") $auth.query)
   let req_body = {"created_at": $created_at, "description": $description, "ended_at": $ended_at, "expected_end_at": $expected_end_at, "id": $id, "internal_comments": $internal_comments, "is_closed": $is_closed, "is_escalated": $is_escalated, "number": $number, "origin": $origin, "pipeline_with_stage": $pipeline_with_stage, "priority": $priority, "reason": $reason, "relation": $relation, "resolution": $resolution, "resolution_comments": $resolution_comments, "satisfaction": $satisfaction, "status": $status, "subject": $subject, "type": $type, "updated_at": $updated_at} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # POST for comment
@@ -2352,14 +2982,25 @@ export def "application-entity-comment create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/comment")
+  let full_url = (build-url $base "/application/entity/comment" $auth.query)
   let req_body = {"body": $body, "created_at": $created_at, "id": $id, "relation": $relation, "updated_at": $updated_at} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # AGGREGATE for comment
@@ -2393,12 +3034,23 @@ export def "application-entity-comment-aggregate get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "pipeline" $pipeline "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/application/entity/comment/aggregate" $qp)
+  let full_url = (build-url $base "/application/entity/comment/aggregate" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "pipeline": $pipeline} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"filter": $filter, "pipeline": $pipeline} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # DELETE bulk for comment
@@ -2422,14 +3074,25 @@ export def "application-entity-comment-bulk delete-collection" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/comment/bulk")
+  let full_url = (build-url $base "/application/entity/comment/bulk" $auth.query)
   let req_body = {"item": $item} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req $req_body $insecure $raw $allow_errors $full [200 204]
 }
 
 # POST bulk for comment
@@ -2455,14 +3118,25 @@ export def "application-entity-comment-bulk create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/comment/bulk")
+  let full_url = (build-url $base "/application/entity/comment/bulk" $auth.query)
   let req_body = {"item": $item} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # PUT bulk for comment
@@ -2488,14 +3162,25 @@ export def "application-entity-comment-bulk update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/comment/bulk")
+  let full_url = (build-url $base "/application/entity/comment/bulk" $auth.query)
   let req_body = {"item": $item} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # COUNT for comment
@@ -2526,12 +3211,23 @@ export def "application-entity-comment-count get-collection" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/application/entity/comment/count" $qp)
+  let full_url = (build-url $base "/application/entity/comment/count" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"filter": $filter} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # DESCRIBE for comment
@@ -2561,12 +3257,23 @@ export def "application-entity-comment-describe get" [
 ]: nothing -> record<entity: string, schema: record<create: record, fetch: record, fetchAll: record, update: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/comment/describe")
+  let full_url = (build-url $base "/application/entity/comment/describe" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET for comment
@@ -2605,12 +3312,23 @@ export def "application-entity-comment-list get-collection" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "unique" $unique "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/application/entity/comment/list" $qp)
+  let full_url = (build-url $base "/application/entity/comment/list" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page_size": $page_size, "page": $page, "filter": $filter, "expand": $expand, "fields": $fields, "sort": $qp_sort, "unique": $unique} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"page_size": $page_size, "page": $page, "filter": $filter, "expand": $expand, "fields": $fields, "sort": $qp_sort, "unique": $unique} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # DELETE for comment
@@ -2634,12 +3352,23 @@ export def "application-entity-comment delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($comment_id | is-empty) { error make --unspanned { msg: "path parameter 'comment_id' must be non-empty" } }
-  let full_url = (build-url $base ({comment_id: (encode-path-segment $comment_id)} | format pattern "/application/entity/comment/{comment_id}"))
+  let full_url = (build-url $base ({comment_id: (encode-path-segment $comment_id)} | format pattern "/application/entity/comment/{comment_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # GET for comment
@@ -2675,12 +3404,23 @@ export def "application-entity-comment get" [
   let base = ($base_url | default $BASE_URL)
   if ($comment_id | is-empty) { error make --unspanned { msg: "path parameter 'comment_id' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({comment_id: (encode-path-segment $comment_id)} | format pattern "/application/entity/comment/{comment_id}") $qp)
+  let full_url = (build-url $base ({comment_id: (encode-path-segment $comment_id)} | format pattern "/application/entity/comment/{comment_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand, "fields": $fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"expand": $expand, "fields": $fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # PUT for comment
@@ -2713,14 +3453,25 @@ export def "application-entity-comment update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($comment_id | is-empty) { error make --unspanned { msg: "path parameter 'comment_id' must be non-empty" } }
-  let full_url = (build-url $base ({comment_id: (encode-path-segment $comment_id)} | format pattern "/application/entity/comment/{comment_id}"))
+  let full_url = (build-url $base ({comment_id: (encode-path-segment $comment_id)} | format pattern "/application/entity/comment/{comment_id}") $auth.query)
   let req_body = {"body": $body, "created_at": $created_at, "id": $id, "relation": $relation, "updated_at": $updated_at} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # POST for contact
@@ -2773,14 +3524,25 @@ export def "application-entity-contact create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/contact")
+  let full_url = (build-url $base "/application/entity/contact" $auth.query)
   let req_body = {"address": $address, "birth_date": $birth_date, "created_at": $created_at, "department": $department, "description": $description, "do_not_call": $do_not_call, "email": $email, "first_name": $first_name, "id": $id, "last_name": $last_name, "lead_source": $lead_source, "messenger": $messenger, "middle_name": $middle_name, "name_suffix": $name_suffix, "phone": $phone, "position": $position, "relation": $relation, "salutation": $salutation, "sync_to_outlook": $sync_to_outlook, "type": $type, "updated_at": $updated_at, "website": $website} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # AGGREGATE for contact
@@ -2814,12 +3576,23 @@ export def "application-entity-contact-aggregate get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "pipeline" $pipeline "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/application/entity/contact/aggregate" $qp)
+  let full_url = (build-url $base "/application/entity/contact/aggregate" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "pipeline": $pipeline} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"filter": $filter, "pipeline": $pipeline} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # DELETE bulk for contact
@@ -2843,14 +3616,25 @@ export def "application-entity-contact-bulk delete-collection" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/contact/bulk")
+  let full_url = (build-url $base "/application/entity/contact/bulk" $auth.query)
   let req_body = {"item": $item} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req $req_body $insecure $raw $allow_errors $full [200 204]
 }
 
 # POST bulk for contact
@@ -2876,14 +3660,25 @@ export def "application-entity-contact-bulk create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/contact/bulk")
+  let full_url = (build-url $base "/application/entity/contact/bulk" $auth.query)
   let req_body = {"item": $item} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # PUT bulk for contact
@@ -2909,14 +3704,25 @@ export def "application-entity-contact-bulk update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/contact/bulk")
+  let full_url = (build-url $base "/application/entity/contact/bulk" $auth.query)
   let req_body = {"item": $item} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # COUNT for contact
@@ -2947,12 +3753,23 @@ export def "application-entity-contact-count get-collection" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/application/entity/contact/count" $qp)
+  let full_url = (build-url $base "/application/entity/contact/count" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"filter": $filter} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # DESCRIBE for contact
@@ -2982,12 +3799,23 @@ export def "application-entity-contact-describe get" [
 ]: nothing -> record<entity: string, schema: record<create: record, fetch: record, fetchAll: record, update: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/contact/describe")
+  let full_url = (build-url $base "/application/entity/contact/describe" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET for contact
@@ -3026,12 +3854,23 @@ export def "application-entity-contact-list get-collection" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "unique" $unique "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/application/entity/contact/list" $qp)
+  let full_url = (build-url $base "/application/entity/contact/list" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page_size": $page_size, "page": $page, "filter": $filter, "expand": $expand, "fields": $fields, "sort": $qp_sort, "unique": $unique} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"page_size": $page_size, "page": $page, "filter": $filter, "expand": $expand, "fields": $fields, "sort": $qp_sort, "unique": $unique} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # DELETE for contact
@@ -3055,12 +3894,23 @@ export def "application-entity-contact delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($contact_id | is-empty) { error make --unspanned { msg: "path parameter 'contact_id' must be non-empty" } }
-  let full_url = (build-url $base ({contact_id: (encode-path-segment $contact_id)} | format pattern "/application/entity/contact/{contact_id}"))
+  let full_url = (build-url $base ({contact_id: (encode-path-segment $contact_id)} | format pattern "/application/entity/contact/{contact_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # GET for contact
@@ -3096,12 +3946,23 @@ export def "application-entity-contact get" [
   let base = ($base_url | default $BASE_URL)
   if ($contact_id | is-empty) { error make --unspanned { msg: "path parameter 'contact_id' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({contact_id: (encode-path-segment $contact_id)} | format pattern "/application/entity/contact/{contact_id}") $qp)
+  let full_url = (build-url $base ({contact_id: (encode-path-segment $contact_id)} | format pattern "/application/entity/contact/{contact_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand, "fields": $fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"expand": $expand, "fields": $fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # PUT for contact
@@ -3156,14 +4017,25 @@ export def "application-entity-contact update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($contact_id | is-empty) { error make --unspanned { msg: "path parameter 'contact_id' must be non-empty" } }
-  let full_url = (build-url $base ({contact_id: (encode-path-segment $contact_id)} | format pattern "/application/entity/contact/{contact_id}"))
+  let full_url = (build-url $base ({contact_id: (encode-path-segment $contact_id)} | format pattern "/application/entity/contact/{contact_id}") $auth.query)
   let req_body = {"address": $address, "birth_date": $birth_date, "created_at": $created_at, "department": $department, "description": $description, "do_not_call": $do_not_call, "email": $email, "first_name": $first_name, "id": $id, "last_name": $last_name, "lead_source": $lead_source, "messenger": $messenger, "middle_name": $middle_name, "name_suffix": $name_suffix, "phone": $phone, "position": $position, "relation": $relation, "salutation": $salutation, "sync_to_outlook": $sync_to_outlook, "type": $type, "updated_at": $updated_at, "website": $website} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # COUNT for entity
@@ -3185,12 +4057,23 @@ export def "application-entity-count get-collection" [
 ]: nothing -> record<total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/count")
+  let full_url = (build-url $base "/application/entity/count" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # POST for email
@@ -3229,14 +4112,25 @@ export def "application-entity-email create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/email")
+  let full_url = (build-url $base "/application/entity/email" $auth.query)
   let req_body = {"bcc": $bcc, "body": $body, "cc": $cc, "created_at": $created_at, "direction": $direction, "from": $body_from, "id": $id, "relation": $relation, "sent_at": $sent_at, "status": $status, "subject": $subject, "to": $body_to, "updated_at": $updated_at} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # AGGREGATE for email
@@ -3270,12 +4164,23 @@ export def "application-entity-email-aggregate get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "pipeline" $pipeline "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/application/entity/email/aggregate" $qp)
+  let full_url = (build-url $base "/application/entity/email/aggregate" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "pipeline": $pipeline} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"filter": $filter, "pipeline": $pipeline} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # DELETE bulk for email
@@ -3299,14 +4204,25 @@ export def "application-entity-email-bulk delete-collection" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/email/bulk")
+  let full_url = (build-url $base "/application/entity/email/bulk" $auth.query)
   let req_body = {"item": $item} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req $req_body $insecure $raw $allow_errors $full [200 204]
 }
 
 # POST bulk for email
@@ -3332,14 +4248,25 @@ export def "application-entity-email-bulk create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/email/bulk")
+  let full_url = (build-url $base "/application/entity/email/bulk" $auth.query)
   let req_body = {"item": $item} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # PUT bulk for email
@@ -3365,14 +4292,25 @@ export def "application-entity-email-bulk update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/email/bulk")
+  let full_url = (build-url $base "/application/entity/email/bulk" $auth.query)
   let req_body = {"item": $item} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # COUNT for email
@@ -3403,12 +4341,23 @@ export def "application-entity-email-count get-collection" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/application/entity/email/count" $qp)
+  let full_url = (build-url $base "/application/entity/email/count" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"filter": $filter} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # DESCRIBE for email
@@ -3438,12 +4387,23 @@ export def "application-entity-email-describe get" [
 ]: nothing -> record<entity: string, schema: record<create: record, fetch: record, fetchAll: record, update: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/email/describe")
+  let full_url = (build-url $base "/application/entity/email/describe" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET for email
@@ -3482,12 +4442,23 @@ export def "application-entity-email-list get-collection" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "unique" $unique "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/application/entity/email/list" $qp)
+  let full_url = (build-url $base "/application/entity/email/list" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page_size": $page_size, "page": $page, "filter": $filter, "expand": $expand, "fields": $fields, "sort": $qp_sort, "unique": $unique} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"page_size": $page_size, "page": $page, "filter": $filter, "expand": $expand, "fields": $fields, "sort": $qp_sort, "unique": $unique} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # DELETE for email
@@ -3511,12 +4482,23 @@ export def "application-entity-email delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($email_id | is-empty) { error make --unspanned { msg: "path parameter 'email_id' must be non-empty" } }
-  let full_url = (build-url $base ({email_id: (encode-path-segment $email_id)} | format pattern "/application/entity/email/{email_id}"))
+  let full_url = (build-url $base ({email_id: (encode-path-segment $email_id)} | format pattern "/application/entity/email/{email_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # GET for email
@@ -3552,12 +4534,23 @@ export def "application-entity-email get" [
   let base = ($base_url | default $BASE_URL)
   if ($email_id | is-empty) { error make --unspanned { msg: "path parameter 'email_id' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({email_id: (encode-path-segment $email_id)} | format pattern "/application/entity/email/{email_id}") $qp)
+  let full_url = (build-url $base ({email_id: (encode-path-segment $email_id)} | format pattern "/application/entity/email/{email_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand, "fields": $fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"expand": $expand, "fields": $fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # PUT for email
@@ -3598,14 +4591,25 @@ export def "application-entity-email update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($email_id | is-empty) { error make --unspanned { msg: "path parameter 'email_id' must be non-empty" } }
-  let full_url = (build-url $base ({email_id: (encode-path-segment $email_id)} | format pattern "/application/entity/email/{email_id}"))
+  let full_url = (build-url $base ({email_id: (encode-path-segment $email_id)} | format pattern "/application/entity/email/{email_id}") $auth.query)
   let req_body = {"bcc": $bcc, "body": $body, "cc": $cc, "created_at": $created_at, "direction": $direction, "from": $body_from, "id": $id, "relation": $relation, "sent_at": $sent_at, "status": $status, "subject": $subject, "to": $body_to, "updated_at": $updated_at} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # POST for event
@@ -3642,14 +4646,25 @@ export def "application-entity-event create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/event")
+  let full_url = (build-url $base "/application/entity/event" $auth.query)
   let req_body = {"created_at": $created_at, "description": $description, "ended_at": $ended_at, "id": $id, "is_all_day": $is_all_day, "location": $location, "relation": $relation, "started_at": $started_at, "status": $status, "subject": $subject, "updated_at": $updated_at} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # AGGREGATE for event
@@ -3683,12 +4698,23 @@ export def "application-entity-event-aggregate get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "pipeline" $pipeline "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/application/entity/event/aggregate" $qp)
+  let full_url = (build-url $base "/application/entity/event/aggregate" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "pipeline": $pipeline} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"filter": $filter, "pipeline": $pipeline} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # DELETE bulk for event
@@ -3712,14 +4738,25 @@ export def "application-entity-event-bulk delete-collection" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/event/bulk")
+  let full_url = (build-url $base "/application/entity/event/bulk" $auth.query)
   let req_body = {"item": $item} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req $req_body $insecure $raw $allow_errors $full [200 204]
 }
 
 # POST bulk for event
@@ -3745,14 +4782,25 @@ export def "application-entity-event-bulk create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/event/bulk")
+  let full_url = (build-url $base "/application/entity/event/bulk" $auth.query)
   let req_body = {"item": $item} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # PUT bulk for event
@@ -3778,14 +4826,25 @@ export def "application-entity-event-bulk update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/event/bulk")
+  let full_url = (build-url $base "/application/entity/event/bulk" $auth.query)
   let req_body = {"item": $item} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # COUNT for event
@@ -3816,12 +4875,23 @@ export def "application-entity-event-count get-collection" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/application/entity/event/count" $qp)
+  let full_url = (build-url $base "/application/entity/event/count" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"filter": $filter} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # DESCRIBE for event
@@ -3851,12 +4921,23 @@ export def "application-entity-event-describe get" [
 ]: nothing -> record<entity: string, schema: record<create: record, fetch: record, fetchAll: record, update: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/event/describe")
+  let full_url = (build-url $base "/application/entity/event/describe" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET for event
@@ -3895,12 +4976,23 @@ export def "application-entity-event-list get-collection" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "unique" $unique "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/application/entity/event/list" $qp)
+  let full_url = (build-url $base "/application/entity/event/list" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page_size": $page_size, "page": $page, "filter": $filter, "expand": $expand, "fields": $fields, "sort": $qp_sort, "unique": $unique} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"page_size": $page_size, "page": $page, "filter": $filter, "expand": $expand, "fields": $fields, "sort": $qp_sort, "unique": $unique} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # DELETE for event
@@ -3924,12 +5016,23 @@ export def "application-entity-event delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($event_id | is-empty) { error make --unspanned { msg: "path parameter 'event_id' must be non-empty" } }
-  let full_url = (build-url $base ({event_id: (encode-path-segment $event_id)} | format pattern "/application/entity/event/{event_id}"))
+  let full_url = (build-url $base ({event_id: (encode-path-segment $event_id)} | format pattern "/application/entity/event/{event_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # GET for event
@@ -3965,12 +5068,23 @@ export def "application-entity-event get" [
   let base = ($base_url | default $BASE_URL)
   if ($event_id | is-empty) { error make --unspanned { msg: "path parameter 'event_id' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({event_id: (encode-path-segment $event_id)} | format pattern "/application/entity/event/{event_id}") $qp)
+  let full_url = (build-url $base ({event_id: (encode-path-segment $event_id)} | format pattern "/application/entity/event/{event_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand, "fields": $fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"expand": $expand, "fields": $fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # PUT for event
@@ -4009,14 +5123,25 @@ export def "application-entity-event update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($event_id | is-empty) { error make --unspanned { msg: "path parameter 'event_id' must be non-empty" } }
-  let full_url = (build-url $base ({event_id: (encode-path-segment $event_id)} | format pattern "/application/entity/event/{event_id}"))
+  let full_url = (build-url $base ({event_id: (encode-path-segment $event_id)} | format pattern "/application/entity/event/{event_id}") $auth.query)
   let req_body = {"created_at": $created_at, "description": $description, "ended_at": $ended_at, "id": $id, "is_all_day": $is_all_day, "location": $location, "relation": $relation, "started_at": $started_at, "status": $status, "subject": $subject, "updated_at": $updated_at} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # POST for invoice
@@ -4071,14 +5196,25 @@ export def "application-entity-invoice create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/invoice")
+  let full_url = (build-url $base "/application/entity/invoice" $auth.query)
   let req_body = {"address": $address, "adjustment": $adjustment, "balance": $balance, "created_at": $created_at, "currency": $currency, "description": $description, "discount": $discount, "due_date": $due_date, "excise_duty": $excise_duty, "grand_total": $grand_total, "id": $id, "invoice_date": $invoice_date, "number": $number, "purchase_order": $purchase_order, "received": $received, "relation": $relation, "sales_commission": $sales_commission, "shipping_and_handling": $shipping_and_handling, "status": $status, "subject": $subject, "subtotal": $subtotal, "tax": $tax, "terms_and_conditions": $terms_and_conditions, "total_price": $total_price, "updated_at": $updated_at} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # AGGREGATE for invoice
@@ -4112,12 +5248,23 @@ export def "application-entity-invoice-aggregate get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "pipeline" $pipeline "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/application/entity/invoice/aggregate" $qp)
+  let full_url = (build-url $base "/application/entity/invoice/aggregate" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "pipeline": $pipeline} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"filter": $filter, "pipeline": $pipeline} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # DELETE bulk for invoice
@@ -4141,14 +5288,25 @@ export def "application-entity-invoice-bulk delete-collection" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/invoice/bulk")
+  let full_url = (build-url $base "/application/entity/invoice/bulk" $auth.query)
   let req_body = {"item": $item} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req $req_body $insecure $raw $allow_errors $full [200 204]
 }
 
 # POST bulk for invoice
@@ -4174,14 +5332,25 @@ export def "application-entity-invoice-bulk create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/invoice/bulk")
+  let full_url = (build-url $base "/application/entity/invoice/bulk" $auth.query)
   let req_body = {"item": $item} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # PUT bulk for invoice
@@ -4207,14 +5376,25 @@ export def "application-entity-invoice-bulk update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/invoice/bulk")
+  let full_url = (build-url $base "/application/entity/invoice/bulk" $auth.query)
   let req_body = {"item": $item} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # COUNT for invoice
@@ -4245,12 +5425,23 @@ export def "application-entity-invoice-count get-collection" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/application/entity/invoice/count" $qp)
+  let full_url = (build-url $base "/application/entity/invoice/count" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"filter": $filter} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # DESCRIBE for invoice
@@ -4280,12 +5471,23 @@ export def "application-entity-invoice-describe get" [
 ]: nothing -> record<entity: string, schema: record<create: record, fetch: record, fetchAll: record, update: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/invoice/describe")
+  let full_url = (build-url $base "/application/entity/invoice/describe" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET for invoice
@@ -4324,12 +5526,23 @@ export def "application-entity-invoice-list get-collection" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "unique" $unique "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/application/entity/invoice/list" $qp)
+  let full_url = (build-url $base "/application/entity/invoice/list" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page_size": $page_size, "page": $page, "filter": $filter, "expand": $expand, "fields": $fields, "sort": $qp_sort, "unique": $unique} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"page_size": $page_size, "page": $page, "filter": $filter, "expand": $expand, "fields": $fields, "sort": $qp_sort, "unique": $unique} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # DELETE for invoice
@@ -4353,12 +5566,23 @@ export def "application-entity-invoice delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($invoice_id | is-empty) { error make --unspanned { msg: "path parameter 'invoice_id' must be non-empty" } }
-  let full_url = (build-url $base ({invoice_id: (encode-path-segment $invoice_id)} | format pattern "/application/entity/invoice/{invoice_id}"))
+  let full_url = (build-url $base ({invoice_id: (encode-path-segment $invoice_id)} | format pattern "/application/entity/invoice/{invoice_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # GET for invoice
@@ -4394,12 +5618,23 @@ export def "application-entity-invoice get" [
   let base = ($base_url | default $BASE_URL)
   if ($invoice_id | is-empty) { error make --unspanned { msg: "path parameter 'invoice_id' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({invoice_id: (encode-path-segment $invoice_id)} | format pattern "/application/entity/invoice/{invoice_id}") $qp)
+  let full_url = (build-url $base ({invoice_id: (encode-path-segment $invoice_id)} | format pattern "/application/entity/invoice/{invoice_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand, "fields": $fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"expand": $expand, "fields": $fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # PUT for invoice
@@ -4456,14 +5691,25 @@ export def "application-entity-invoice update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($invoice_id | is-empty) { error make --unspanned { msg: "path parameter 'invoice_id' must be non-empty" } }
-  let full_url = (build-url $base ({invoice_id: (encode-path-segment $invoice_id)} | format pattern "/application/entity/invoice/{invoice_id}"))
+  let full_url = (build-url $base ({invoice_id: (encode-path-segment $invoice_id)} | format pattern "/application/entity/invoice/{invoice_id}") $auth.query)
   let req_body = {"address": $address, "adjustment": $adjustment, "balance": $balance, "created_at": $created_at, "currency": $currency, "description": $description, "discount": $discount, "due_date": $due_date, "excise_duty": $excise_duty, "grand_total": $grand_total, "id": $id, "invoice_date": $invoice_date, "number": $number, "purchase_order": $purchase_order, "received": $received, "relation": $relation, "sales_commission": $sales_commission, "shipping_and_handling": $shipping_and_handling, "status": $status, "subject": $subject, "subtotal": $subtotal, "tax": $tax, "terms_and_conditions": $terms_and_conditions, "total_price": $total_price, "updated_at": $updated_at} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # POST for invoiceItem
@@ -4505,14 +5751,25 @@ export def "application-entity-invoice-item create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/invoiceItem")
+  let full_url = (build-url $base "/application/entity/invoiceItem" $auth.query)
   let req_body = {"created_at": $created_at, "description": $description, "discount": $discount, "id": $id, "list_price": $list_price, "number": $number, "quantity": $quantity, "relation": $relation, "sales_price": $sales_price, "subtotal": $subtotal, "tax": $tax, "total_price": $total_price, "unit": $unit, "updated_at": $updated_at} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # AGGREGATE for invoiceItem
@@ -4546,12 +5803,23 @@ export def "application-entity-invoice-item-aggregate get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "pipeline" $pipeline "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/application/entity/invoiceItem/aggregate" $qp)
+  let full_url = (build-url $base "/application/entity/invoiceItem/aggregate" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "pipeline": $pipeline} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"filter": $filter, "pipeline": $pipeline} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # DELETE bulk for invoiceItem
@@ -4575,14 +5843,25 @@ export def "application-entity-invoice-item-bulk delete-collection" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/invoiceItem/bulk")
+  let full_url = (build-url $base "/application/entity/invoiceItem/bulk" $auth.query)
   let req_body = {"item": $item} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req $req_body $insecure $raw $allow_errors $full [200 204]
 }
 
 # POST bulk for invoiceItem
@@ -4608,14 +5887,25 @@ export def "application-entity-invoice-item-bulk create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/invoiceItem/bulk")
+  let full_url = (build-url $base "/application/entity/invoiceItem/bulk" $auth.query)
   let req_body = {"item": $item} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # PUT bulk for invoiceItem
@@ -4641,14 +5931,25 @@ export def "application-entity-invoice-item-bulk update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/invoiceItem/bulk")
+  let full_url = (build-url $base "/application/entity/invoiceItem/bulk" $auth.query)
   let req_body = {"item": $item} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # COUNT for invoiceItem
@@ -4679,12 +5980,23 @@ export def "application-entity-invoice-item-count get-collection" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/application/entity/invoiceItem/count" $qp)
+  let full_url = (build-url $base "/application/entity/invoiceItem/count" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"filter": $filter} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # DESCRIBE for invoiceItem
@@ -4714,12 +6026,23 @@ export def "application-entity-invoice-item-describe get" [
 ]: nothing -> record<entity: string, schema: record<create: record, fetch: record, fetchAll: record, update: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/invoiceItem/describe")
+  let full_url = (build-url $base "/application/entity/invoiceItem/describe" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET for invoiceItem
@@ -4758,12 +6081,23 @@ export def "application-entity-invoice-item-list get-collection" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "unique" $unique "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/application/entity/invoiceItem/list" $qp)
+  let full_url = (build-url $base "/application/entity/invoiceItem/list" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page_size": $page_size, "page": $page, "filter": $filter, "expand": $expand, "fields": $fields, "sort": $qp_sort, "unique": $unique} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"page_size": $page_size, "page": $page, "filter": $filter, "expand": $expand, "fields": $fields, "sort": $qp_sort, "unique": $unique} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # DELETE for invoiceItem
@@ -4787,12 +6121,23 @@ export def "application-entity-invoice-item delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($invoice_item_id | is-empty) { error make --unspanned { msg: "path parameter 'invoiceItem_id' must be non-empty" } }
-  let full_url = (build-url $base ({invoice_item_id: (encode-path-segment $invoice_item_id)} | format pattern "/application/entity/invoiceItem/{invoice_item_id}"))
+  let full_url = (build-url $base ({invoice_item_id: (encode-path-segment $invoice_item_id)} | format pattern "/application/entity/invoiceItem/{invoice_item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # GET for invoiceItem
@@ -4828,12 +6173,23 @@ export def "application-entity-invoice-item get" [
   let base = ($base_url | default $BASE_URL)
   if ($invoice_item_id | is-empty) { error make --unspanned { msg: "path parameter 'invoiceItem_id' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({invoice_item_id: (encode-path-segment $invoice_item_id)} | format pattern "/application/entity/invoiceItem/{invoice_item_id}") $qp)
+  let full_url = (build-url $base ({invoice_item_id: (encode-path-segment $invoice_item_id)} | format pattern "/application/entity/invoiceItem/{invoice_item_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand, "fields": $fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"expand": $expand, "fields": $fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # PUT for invoiceItem
@@ -4877,14 +6233,25 @@ export def "application-entity-invoice-item update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($invoice_item_id | is-empty) { error make --unspanned { msg: "path parameter 'invoiceItem_id' must be non-empty" } }
-  let full_url = (build-url $base ({invoice_item_id: (encode-path-segment $invoice_item_id)} | format pattern "/application/entity/invoiceItem/{invoice_item_id}"))
+  let full_url = (build-url $base ({invoice_item_id: (encode-path-segment $invoice_item_id)} | format pattern "/application/entity/invoiceItem/{invoice_item_id}") $auth.query)
   let req_body = {"created_at": $created_at, "description": $description, "discount": $discount, "id": $id, "list_price": $list_price, "number": $number, "quantity": $quantity, "relation": $relation, "sales_price": $sales_price, "subtotal": $subtotal, "tax": $tax, "total_price": $total_price, "unit": $unit, "updated_at": $updated_at} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # POST for lead
@@ -4943,14 +6310,25 @@ export def "application-entity-lead create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/lead")
+  let full_url = (build-url $base "/application/entity/lead" $auth.query)
   let req_body = {"address": $address, "annual_revenue": $annual_revenue, "birth_date": $birth_date, "company": $company, "created_at": $created_at, "department": $department, "description": $description, "do_not_call": $do_not_call, "email": $email, "first_name": $first_name, "id": $id, "industry": $industry, "last_name": $last_name, "messenger": $messenger, "middle_name": $middle_name, "name_suffix": $name_suffix, "phone": $phone, "position": $position, "rating": $rating, "relation": $relation, "salutation": $salutation, "source": $body_source, "source_description": $source_description, "status": $status, "status_description": $status_description, "type": $type, "updated_at": $updated_at, "website": $website} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # AGGREGATE for lead
@@ -4984,12 +6362,23 @@ export def "application-entity-lead-aggregate get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "pipeline" $pipeline "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/application/entity/lead/aggregate" $qp)
+  let full_url = (build-url $base "/application/entity/lead/aggregate" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "pipeline": $pipeline} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"filter": $filter, "pipeline": $pipeline} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # DELETE bulk for lead
@@ -5013,14 +6402,25 @@ export def "application-entity-lead-bulk delete-collection" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/lead/bulk")
+  let full_url = (build-url $base "/application/entity/lead/bulk" $auth.query)
   let req_body = {"item": $item} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req $req_body $insecure $raw $allow_errors $full [200 204]
 }
 
 # POST bulk for lead
@@ -5046,14 +6446,25 @@ export def "application-entity-lead-bulk create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/lead/bulk")
+  let full_url = (build-url $base "/application/entity/lead/bulk" $auth.query)
   let req_body = {"item": $item} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # PUT bulk for lead
@@ -5079,14 +6490,25 @@ export def "application-entity-lead-bulk update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/lead/bulk")
+  let full_url = (build-url $base "/application/entity/lead/bulk" $auth.query)
   let req_body = {"item": $item} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # COUNT for lead
@@ -5117,12 +6539,23 @@ export def "application-entity-lead-count get-collection" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/application/entity/lead/count" $qp)
+  let full_url = (build-url $base "/application/entity/lead/count" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"filter": $filter} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # DESCRIBE for lead
@@ -5152,12 +6585,23 @@ export def "application-entity-lead-describe get" [
 ]: nothing -> record<entity: string, schema: record<create: record, fetch: record, fetchAll: record, update: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/lead/describe")
+  let full_url = (build-url $base "/application/entity/lead/describe" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET for lead
@@ -5196,12 +6640,23 @@ export def "application-entity-lead-list get-collection" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "unique" $unique "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/application/entity/lead/list" $qp)
+  let full_url = (build-url $base "/application/entity/lead/list" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page_size": $page_size, "page": $page, "filter": $filter, "expand": $expand, "fields": $fields, "sort": $qp_sort, "unique": $unique} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"page_size": $page_size, "page": $page, "filter": $filter, "expand": $expand, "fields": $fields, "sort": $qp_sort, "unique": $unique} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # DELETE for lead
@@ -5225,12 +6680,23 @@ export def "application-entity-lead delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($lead_id | is-empty) { error make --unspanned { msg: "path parameter 'lead_id' must be non-empty" } }
-  let full_url = (build-url $base ({lead_id: (encode-path-segment $lead_id)} | format pattern "/application/entity/lead/{lead_id}"))
+  let full_url = (build-url $base ({lead_id: (encode-path-segment $lead_id)} | format pattern "/application/entity/lead/{lead_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # GET for lead
@@ -5266,12 +6732,23 @@ export def "application-entity-lead get" [
   let base = ($base_url | default $BASE_URL)
   if ($lead_id | is-empty) { error make --unspanned { msg: "path parameter 'lead_id' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({lead_id: (encode-path-segment $lead_id)} | format pattern "/application/entity/lead/{lead_id}") $qp)
+  let full_url = (build-url $base ({lead_id: (encode-path-segment $lead_id)} | format pattern "/application/entity/lead/{lead_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand, "fields": $fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"expand": $expand, "fields": $fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # PUT for lead
@@ -5332,14 +6809,25 @@ export def "application-entity-lead update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($lead_id | is-empty) { error make --unspanned { msg: "path parameter 'lead_id' must be non-empty" } }
-  let full_url = (build-url $base ({lead_id: (encode-path-segment $lead_id)} | format pattern "/application/entity/lead/{lead_id}"))
+  let full_url = (build-url $base ({lead_id: (encode-path-segment $lead_id)} | format pattern "/application/entity/lead/{lead_id}") $auth.query)
   let req_body = {"address": $address, "annual_revenue": $annual_revenue, "birth_date": $birth_date, "company": $company, "created_at": $created_at, "department": $department, "description": $description, "do_not_call": $do_not_call, "email": $email, "first_name": $first_name, "id": $id, "industry": $industry, "last_name": $last_name, "messenger": $messenger, "middle_name": $middle_name, "name_suffix": $name_suffix, "phone": $phone, "position": $position, "rating": $rating, "relation": $relation, "salutation": $salutation, "source": $body_source, "source_description": $source_description, "status": $status, "status_description": $status_description, "type": $type, "updated_at": $updated_at, "website": $website} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # GET for entity
@@ -5368,12 +6856,23 @@ export def "application-entity-list get-collection" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/application/entity/list" $qp)
+  let full_url = (build-url $base "/application/entity/list" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page_size": $page_size, "page": $page, "filter": $filter, "fields": $fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"page_size": $page_size, "page": $page, "filter": $filter, "fields": $fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # POST for meeting
@@ -5410,14 +6909,25 @@ export def "application-entity-meeting create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/meeting")
+  let full_url = (build-url $base "/application/entity/meeting" $auth.query)
   let req_body = {"created_at": $created_at, "description": $description, "ended_at": $ended_at, "id": $id, "location": $location, "relation": $relation, "result": $result, "started_at": $started_at, "status": $status, "subject": $subject, "updated_at": $updated_at} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # AGGREGATE for meeting
@@ -5451,12 +6961,23 @@ export def "application-entity-meeting-aggregate get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "pipeline" $pipeline "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/application/entity/meeting/aggregate" $qp)
+  let full_url = (build-url $base "/application/entity/meeting/aggregate" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "pipeline": $pipeline} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"filter": $filter, "pipeline": $pipeline} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # DELETE bulk for meeting
@@ -5480,14 +7001,25 @@ export def "application-entity-meeting-bulk delete-collection" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/meeting/bulk")
+  let full_url = (build-url $base "/application/entity/meeting/bulk" $auth.query)
   let req_body = {"item": $item} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req $req_body $insecure $raw $allow_errors $full [200 204]
 }
 
 # POST bulk for meeting
@@ -5513,14 +7045,25 @@ export def "application-entity-meeting-bulk create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/meeting/bulk")
+  let full_url = (build-url $base "/application/entity/meeting/bulk" $auth.query)
   let req_body = {"item": $item} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # PUT bulk for meeting
@@ -5546,14 +7089,25 @@ export def "application-entity-meeting-bulk update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/meeting/bulk")
+  let full_url = (build-url $base "/application/entity/meeting/bulk" $auth.query)
   let req_body = {"item": $item} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # COUNT for meeting
@@ -5584,12 +7138,23 @@ export def "application-entity-meeting-count get-collection" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/application/entity/meeting/count" $qp)
+  let full_url = (build-url $base "/application/entity/meeting/count" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"filter": $filter} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # DESCRIBE for meeting
@@ -5619,12 +7184,23 @@ export def "application-entity-meeting-describe get" [
 ]: nothing -> record<entity: string, schema: record<create: record, fetch: record, fetchAll: record, update: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/meeting/describe")
+  let full_url = (build-url $base "/application/entity/meeting/describe" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET for meeting
@@ -5663,12 +7239,23 @@ export def "application-entity-meeting-list get-collection" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "unique" $unique "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/application/entity/meeting/list" $qp)
+  let full_url = (build-url $base "/application/entity/meeting/list" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page_size": $page_size, "page": $page, "filter": $filter, "expand": $expand, "fields": $fields, "sort": $qp_sort, "unique": $unique} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"page_size": $page_size, "page": $page, "filter": $filter, "expand": $expand, "fields": $fields, "sort": $qp_sort, "unique": $unique} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # DELETE for meeting
@@ -5692,12 +7279,23 @@ export def "application-entity-meeting delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($meeting_id | is-empty) { error make --unspanned { msg: "path parameter 'meeting_id' must be non-empty" } }
-  let full_url = (build-url $base ({meeting_id: (encode-path-segment $meeting_id)} | format pattern "/application/entity/meeting/{meeting_id}"))
+  let full_url = (build-url $base ({meeting_id: (encode-path-segment $meeting_id)} | format pattern "/application/entity/meeting/{meeting_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # GET for meeting
@@ -5733,12 +7331,23 @@ export def "application-entity-meeting get" [
   let base = ($base_url | default $BASE_URL)
   if ($meeting_id | is-empty) { error make --unspanned { msg: "path parameter 'meeting_id' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({meeting_id: (encode-path-segment $meeting_id)} | format pattern "/application/entity/meeting/{meeting_id}") $qp)
+  let full_url = (build-url $base ({meeting_id: (encode-path-segment $meeting_id)} | format pattern "/application/entity/meeting/{meeting_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand, "fields": $fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"expand": $expand, "fields": $fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # PUT for meeting
@@ -5777,14 +7386,25 @@ export def "application-entity-meeting update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($meeting_id | is-empty) { error make --unspanned { msg: "path parameter 'meeting_id' must be non-empty" } }
-  let full_url = (build-url $base ({meeting_id: (encode-path-segment $meeting_id)} | format pattern "/application/entity/meeting/{meeting_id}"))
+  let full_url = (build-url $base ({meeting_id: (encode-path-segment $meeting_id)} | format pattern "/application/entity/meeting/{meeting_id}") $auth.query)
   let req_body = {"created_at": $created_at, "description": $description, "ended_at": $ended_at, "id": $id, "location": $location, "relation": $relation, "result": $result, "started_at": $started_at, "status": $status, "subject": $subject, "updated_at": $updated_at} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # POST for note
@@ -5816,14 +7436,25 @@ export def "application-entity-note create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/note")
+  let full_url = (build-url $base "/application/entity/note" $auth.query)
   let req_body = {"body": $body, "created_at": $created_at, "id": $id, "relation": $relation, "subject": $subject, "updated_at": $updated_at} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # AGGREGATE for note
@@ -5857,12 +7488,23 @@ export def "application-entity-note-aggregate get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "pipeline" $pipeline "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/application/entity/note/aggregate" $qp)
+  let full_url = (build-url $base "/application/entity/note/aggregate" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "pipeline": $pipeline} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"filter": $filter, "pipeline": $pipeline} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # DELETE bulk for note
@@ -5886,14 +7528,25 @@ export def "application-entity-note-bulk delete-collection" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/note/bulk")
+  let full_url = (build-url $base "/application/entity/note/bulk" $auth.query)
   let req_body = {"item": $item} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req $req_body $insecure $raw $allow_errors $full [200 204]
 }
 
 # POST bulk for note
@@ -5919,14 +7572,25 @@ export def "application-entity-note-bulk create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/note/bulk")
+  let full_url = (build-url $base "/application/entity/note/bulk" $auth.query)
   let req_body = {"item": $item} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # PUT bulk for note
@@ -5952,14 +7616,25 @@ export def "application-entity-note-bulk update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/note/bulk")
+  let full_url = (build-url $base "/application/entity/note/bulk" $auth.query)
   let req_body = {"item": $item} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # COUNT for note
@@ -5990,12 +7665,23 @@ export def "application-entity-note-count get-collection" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/application/entity/note/count" $qp)
+  let full_url = (build-url $base "/application/entity/note/count" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"filter": $filter} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # DESCRIBE for note
@@ -6025,12 +7711,23 @@ export def "application-entity-note-describe get" [
 ]: nothing -> record<entity: string, schema: record<create: record, fetch: record, fetchAll: record, update: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/note/describe")
+  let full_url = (build-url $base "/application/entity/note/describe" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET for note
@@ -6069,12 +7766,23 @@ export def "application-entity-note-list get-collection" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "unique" $unique "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/application/entity/note/list" $qp)
+  let full_url = (build-url $base "/application/entity/note/list" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page_size": $page_size, "page": $page, "filter": $filter, "expand": $expand, "fields": $fields, "sort": $qp_sort, "unique": $unique} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"page_size": $page_size, "page": $page, "filter": $filter, "expand": $expand, "fields": $fields, "sort": $qp_sort, "unique": $unique} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # DELETE for note
@@ -6098,12 +7806,23 @@ export def "application-entity-note delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($note_id | is-empty) { error make --unspanned { msg: "path parameter 'note_id' must be non-empty" } }
-  let full_url = (build-url $base ({note_id: (encode-path-segment $note_id)} | format pattern "/application/entity/note/{note_id}"))
+  let full_url = (build-url $base ({note_id: (encode-path-segment $note_id)} | format pattern "/application/entity/note/{note_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # GET for note
@@ -6139,12 +7858,23 @@ export def "application-entity-note get" [
   let base = ($base_url | default $BASE_URL)
   if ($note_id | is-empty) { error make --unspanned { msg: "path parameter 'note_id' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({note_id: (encode-path-segment $note_id)} | format pattern "/application/entity/note/{note_id}") $qp)
+  let full_url = (build-url $base ({note_id: (encode-path-segment $note_id)} | format pattern "/application/entity/note/{note_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand, "fields": $fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"expand": $expand, "fields": $fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # PUT for note
@@ -6178,14 +7908,25 @@ export def "application-entity-note update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($note_id | is-empty) { error make --unspanned { msg: "path parameter 'note_id' must be non-empty" } }
-  let full_url = (build-url $base ({note_id: (encode-path-segment $note_id)} | format pattern "/application/entity/note/{note_id}"))
+  let full_url = (build-url $base ({note_id: (encode-path-segment $note_id)} | format pattern "/application/entity/note/{note_id}") $auth.query)
   let req_body = {"body": $body, "created_at": $created_at, "id": $id, "relation": $relation, "subject": $subject, "updated_at": $updated_at} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # POST for opportunity
@@ -6229,14 +7970,25 @@ export def "application-entity-opportunity create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/opportunity")
+  let full_url = (build-url $base "/application/entity/opportunity" $auth.query)
   let req_body = {"amount": $amount, "created_at": $created_at, "currency": $currency, "description": $description, "ended_at": $ended_at, "expected_amount": $expected_amount, "expected_end_at": $expected_end_at, "id": $id, "lead_source": $lead_source, "name": $name, "next_step": $next_step, "pipeline_with_stage": $pipeline_with_stage, "probability": $probability, "relation": $relation, "state": $state, "type": $type, "updated_at": $updated_at} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # AGGREGATE for opportunity
@@ -6270,12 +8022,23 @@ export def "application-entity-opportunity-aggregate get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "pipeline" $pipeline "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/application/entity/opportunity/aggregate" $qp)
+  let full_url = (build-url $base "/application/entity/opportunity/aggregate" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "pipeline": $pipeline} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"filter": $filter, "pipeline": $pipeline} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # DELETE bulk for opportunity
@@ -6299,14 +8062,25 @@ export def "application-entity-opportunity-bulk delete-collection" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/opportunity/bulk")
+  let full_url = (build-url $base "/application/entity/opportunity/bulk" $auth.query)
   let req_body = {"item": $item} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req $req_body $insecure $raw $allow_errors $full [200 204]
 }
 
 # POST bulk for opportunity
@@ -6332,14 +8106,25 @@ export def "application-entity-opportunity-bulk create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/opportunity/bulk")
+  let full_url = (build-url $base "/application/entity/opportunity/bulk" $auth.query)
   let req_body = {"item": $item} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # PUT bulk for opportunity
@@ -6365,14 +8150,25 @@ export def "application-entity-opportunity-bulk update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/opportunity/bulk")
+  let full_url = (build-url $base "/application/entity/opportunity/bulk" $auth.query)
   let req_body = {"item": $item} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # COUNT for opportunity
@@ -6403,12 +8199,23 @@ export def "application-entity-opportunity-count get-collection" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/application/entity/opportunity/count" $qp)
+  let full_url = (build-url $base "/application/entity/opportunity/count" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"filter": $filter} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # DESCRIBE for opportunity
@@ -6438,12 +8245,23 @@ export def "application-entity-opportunity-describe get" [
 ]: nothing -> record<entity: string, schema: record<create: record, fetch: record, fetchAll: record, update: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/opportunity/describe")
+  let full_url = (build-url $base "/application/entity/opportunity/describe" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET for opportunity
@@ -6482,12 +8300,23 @@ export def "application-entity-opportunity-list get-collection" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "unique" $unique "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/application/entity/opportunity/list" $qp)
+  let full_url = (build-url $base "/application/entity/opportunity/list" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page_size": $page_size, "page": $page, "filter": $filter, "expand": $expand, "fields": $fields, "sort": $qp_sort, "unique": $unique} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"page_size": $page_size, "page": $page, "filter": $filter, "expand": $expand, "fields": $fields, "sort": $qp_sort, "unique": $unique} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # DELETE for opportunity
@@ -6511,12 +8340,23 @@ export def "application-entity-opportunity delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($opportunity_id | is-empty) { error make --unspanned { msg: "path parameter 'opportunity_id' must be non-empty" } }
-  let full_url = (build-url $base ({opportunity_id: (encode-path-segment $opportunity_id)} | format pattern "/application/entity/opportunity/{opportunity_id}"))
+  let full_url = (build-url $base ({opportunity_id: (encode-path-segment $opportunity_id)} | format pattern "/application/entity/opportunity/{opportunity_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # GET for opportunity
@@ -6552,12 +8392,23 @@ export def "application-entity-opportunity get" [
   let base = ($base_url | default $BASE_URL)
   if ($opportunity_id | is-empty) { error make --unspanned { msg: "path parameter 'opportunity_id' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({opportunity_id: (encode-path-segment $opportunity_id)} | format pattern "/application/entity/opportunity/{opportunity_id}") $qp)
+  let full_url = (build-url $base ({opportunity_id: (encode-path-segment $opportunity_id)} | format pattern "/application/entity/opportunity/{opportunity_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand, "fields": $fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"expand": $expand, "fields": $fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # PUT for opportunity
@@ -6603,14 +8454,25 @@ export def "application-entity-opportunity update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($opportunity_id | is-empty) { error make --unspanned { msg: "path parameter 'opportunity_id' must be non-empty" } }
-  let full_url = (build-url $base ({opportunity_id: (encode-path-segment $opportunity_id)} | format pattern "/application/entity/opportunity/{opportunity_id}"))
+  let full_url = (build-url $base ({opportunity_id: (encode-path-segment $opportunity_id)} | format pattern "/application/entity/opportunity/{opportunity_id}") $auth.query)
   let req_body = {"amount": $amount, "created_at": $created_at, "currency": $currency, "description": $description, "ended_at": $ended_at, "expected_amount": $expected_amount, "expected_end_at": $expected_end_at, "id": $id, "lead_source": $lead_source, "name": $name, "next_step": $next_step, "pipeline_with_stage": $pipeline_with_stage, "probability": $probability, "relation": $relation, "state": $state, "type": $type, "updated_at": $updated_at} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # POST for opportunityProduct
@@ -6655,14 +8517,25 @@ export def "application-entity-opportunity-product create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/opportunityProduct")
+  let full_url = (build-url $base "/application/entity/opportunityProduct" $auth.query)
   let req_body = {"created_at": $created_at, "currency": $currency, "description": $description, "discount": $discount, "id": $id, "list_price": $list_price, "name": $name, "number": $number, "quantity": $quantity, "relation": $relation, "sales_price": $sales_price, "subtotal": $subtotal, "tax": $tax, "total_price": $total_price, "unit": $unit, "updated_at": $updated_at} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # AGGREGATE for opportunityProduct
@@ -6696,12 +8569,23 @@ export def "application-entity-opportunity-product-aggregate get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "pipeline" $pipeline "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/application/entity/opportunityProduct/aggregate" $qp)
+  let full_url = (build-url $base "/application/entity/opportunityProduct/aggregate" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "pipeline": $pipeline} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"filter": $filter, "pipeline": $pipeline} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # DELETE bulk for opportunityProduct
@@ -6725,14 +8609,25 @@ export def "application-entity-opportunity-product-bulk delete-collection" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/opportunityProduct/bulk")
+  let full_url = (build-url $base "/application/entity/opportunityProduct/bulk" $auth.query)
   let req_body = {"item": $item} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req $req_body $insecure $raw $allow_errors $full [200 204]
 }
 
 # POST bulk for opportunityProduct
@@ -6758,14 +8653,25 @@ export def "application-entity-opportunity-product-bulk create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/opportunityProduct/bulk")
+  let full_url = (build-url $base "/application/entity/opportunityProduct/bulk" $auth.query)
   let req_body = {"item": $item} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # PUT bulk for opportunityProduct
@@ -6791,14 +8697,25 @@ export def "application-entity-opportunity-product-bulk update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/opportunityProduct/bulk")
+  let full_url = (build-url $base "/application/entity/opportunityProduct/bulk" $auth.query)
   let req_body = {"item": $item} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # COUNT for opportunityProduct
@@ -6829,12 +8746,23 @@ export def "application-entity-opportunity-product-count get-collection" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/application/entity/opportunityProduct/count" $qp)
+  let full_url = (build-url $base "/application/entity/opportunityProduct/count" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"filter": $filter} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # DESCRIBE for opportunityProduct
@@ -6864,12 +8792,23 @@ export def "application-entity-opportunity-product-describe get" [
 ]: nothing -> record<entity: string, schema: record<create: record, fetch: record, fetchAll: record, update: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/opportunityProduct/describe")
+  let full_url = (build-url $base "/application/entity/opportunityProduct/describe" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET for opportunityProduct
@@ -6908,12 +8847,23 @@ export def "application-entity-opportunity-product-list get-collection" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "unique" $unique "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/application/entity/opportunityProduct/list" $qp)
+  let full_url = (build-url $base "/application/entity/opportunityProduct/list" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page_size": $page_size, "page": $page, "filter": $filter, "expand": $expand, "fields": $fields, "sort": $qp_sort, "unique": $unique} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"page_size": $page_size, "page": $page, "filter": $filter, "expand": $expand, "fields": $fields, "sort": $qp_sort, "unique": $unique} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # DELETE for opportunityProduct
@@ -6937,12 +8887,23 @@ export def "application-entity-opportunity-product delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($opportunity_product_id | is-empty) { error make --unspanned { msg: "path parameter 'opportunityProduct_id' must be non-empty" } }
-  let full_url = (build-url $base ({opportunity_product_id: (encode-path-segment $opportunity_product_id)} | format pattern "/application/entity/opportunityProduct/{opportunity_product_id}"))
+  let full_url = (build-url $base ({opportunity_product_id: (encode-path-segment $opportunity_product_id)} | format pattern "/application/entity/opportunityProduct/{opportunity_product_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # GET for opportunityProduct
@@ -6978,12 +8939,23 @@ export def "application-entity-opportunity-product get" [
   let base = ($base_url | default $BASE_URL)
   if ($opportunity_product_id | is-empty) { error make --unspanned { msg: "path parameter 'opportunityProduct_id' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({opportunity_product_id: (encode-path-segment $opportunity_product_id)} | format pattern "/application/entity/opportunityProduct/{opportunity_product_id}") $qp)
+  let full_url = (build-url $base ({opportunity_product_id: (encode-path-segment $opportunity_product_id)} | format pattern "/application/entity/opportunityProduct/{opportunity_product_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand, "fields": $fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"expand": $expand, "fields": $fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # PUT for opportunityProduct
@@ -7030,14 +9002,25 @@ export def "application-entity-opportunity-product update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($opportunity_product_id | is-empty) { error make --unspanned { msg: "path parameter 'opportunityProduct_id' must be non-empty" } }
-  let full_url = (build-url $base ({opportunity_product_id: (encode-path-segment $opportunity_product_id)} | format pattern "/application/entity/opportunityProduct/{opportunity_product_id}"))
+  let full_url = (build-url $base ({opportunity_product_id: (encode-path-segment $opportunity_product_id)} | format pattern "/application/entity/opportunityProduct/{opportunity_product_id}") $auth.query)
   let req_body = {"created_at": $created_at, "currency": $currency, "description": $description, "discount": $discount, "id": $id, "list_price": $list_price, "name": $name, "number": $number, "quantity": $quantity, "relation": $relation, "sales_price": $sales_price, "subtotal": $subtotal, "tax": $tax, "total_price": $total_price, "unit": $unit, "updated_at": $updated_at} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # POST for post
@@ -7068,14 +9051,25 @@ export def "application-entity-post create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/post")
+  let full_url = (build-url $base "/application/entity/post" $auth.query)
   let req_body = {"body": $body, "created_at": $created_at, "id": $id, "relation": $relation, "updated_at": $updated_at} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # AGGREGATE for post
@@ -7109,12 +9103,23 @@ export def "application-entity-post-aggregate get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "pipeline" $pipeline "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/application/entity/post/aggregate" $qp)
+  let full_url = (build-url $base "/application/entity/post/aggregate" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "pipeline": $pipeline} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"filter": $filter, "pipeline": $pipeline} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # DELETE bulk for post
@@ -7138,14 +9143,25 @@ export def "application-entity-post-bulk delete-collection" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/post/bulk")
+  let full_url = (build-url $base "/application/entity/post/bulk" $auth.query)
   let req_body = {"item": $item} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req $req_body $insecure $raw $allow_errors $full [200 204]
 }
 
 # POST bulk for post
@@ -7171,14 +9187,25 @@ export def "application-entity-post-bulk create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/post/bulk")
+  let full_url = (build-url $base "/application/entity/post/bulk" $auth.query)
   let req_body = {"item": $item} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # PUT bulk for post
@@ -7204,14 +9231,25 @@ export def "application-entity-post-bulk update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/post/bulk")
+  let full_url = (build-url $base "/application/entity/post/bulk" $auth.query)
   let req_body = {"item": $item} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # COUNT for post
@@ -7242,12 +9280,23 @@ export def "application-entity-post-count get-collection" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/application/entity/post/count" $qp)
+  let full_url = (build-url $base "/application/entity/post/count" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"filter": $filter} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # DESCRIBE for post
@@ -7277,12 +9326,23 @@ export def "application-entity-post-describe get" [
 ]: nothing -> record<entity: string, schema: record<create: record, fetch: record, fetchAll: record, update: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/post/describe")
+  let full_url = (build-url $base "/application/entity/post/describe" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET for post
@@ -7321,12 +9381,23 @@ export def "application-entity-post-list get-collection" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "unique" $unique "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/application/entity/post/list" $qp)
+  let full_url = (build-url $base "/application/entity/post/list" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page_size": $page_size, "page": $page, "filter": $filter, "expand": $expand, "fields": $fields, "sort": $qp_sort, "unique": $unique} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"page_size": $page_size, "page": $page, "filter": $filter, "expand": $expand, "fields": $fields, "sort": $qp_sort, "unique": $unique} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # DELETE for post
@@ -7350,12 +9421,23 @@ export def "application-entity-post delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($post_id | is-empty) { error make --unspanned { msg: "path parameter 'post_id' must be non-empty" } }
-  let full_url = (build-url $base ({post_id: (encode-path-segment $post_id)} | format pattern "/application/entity/post/{post_id}"))
+  let full_url = (build-url $base ({post_id: (encode-path-segment $post_id)} | format pattern "/application/entity/post/{post_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # GET for post
@@ -7391,12 +9473,23 @@ export def "application-entity-post get" [
   let base = ($base_url | default $BASE_URL)
   if ($post_id | is-empty) { error make --unspanned { msg: "path parameter 'post_id' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({post_id: (encode-path-segment $post_id)} | format pattern "/application/entity/post/{post_id}") $qp)
+  let full_url = (build-url $base ({post_id: (encode-path-segment $post_id)} | format pattern "/application/entity/post/{post_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand, "fields": $fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"expand": $expand, "fields": $fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # PUT for post
@@ -7429,14 +9522,25 @@ export def "application-entity-post update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($post_id | is-empty) { error make --unspanned { msg: "path parameter 'post_id' must be non-empty" } }
-  let full_url = (build-url $base ({post_id: (encode-path-segment $post_id)} | format pattern "/application/entity/post/{post_id}"))
+  let full_url = (build-url $base ({post_id: (encode-path-segment $post_id)} | format pattern "/application/entity/post/{post_id}") $auth.query)
   let req_body = {"body": $body, "created_at": $created_at, "id": $id, "relation": $relation, "updated_at": $updated_at} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # POST for priceBook
@@ -7473,14 +9577,25 @@ export def "application-entity-price-book create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/priceBook")
+  let full_url = (build-url $base "/application/entity/priceBook" $auth.query)
   let req_body = {"created_at": $created_at, "currency": $currency, "description": $description, "id": $id, "is_active": $is_active, "is_standard": $is_standard, "name": $name, "relation": $relation, "type": $type, "updated_at": $updated_at} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # AGGREGATE for priceBook
@@ -7514,12 +9629,23 @@ export def "application-entity-price-book-aggregate get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "pipeline" $pipeline "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/application/entity/priceBook/aggregate" $qp)
+  let full_url = (build-url $base "/application/entity/priceBook/aggregate" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "pipeline": $pipeline} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"filter": $filter, "pipeline": $pipeline} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # DELETE bulk for priceBook
@@ -7543,14 +9669,25 @@ export def "application-entity-price-book-bulk delete-collection" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/priceBook/bulk")
+  let full_url = (build-url $base "/application/entity/priceBook/bulk" $auth.query)
   let req_body = {"item": $item} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req $req_body $insecure $raw $allow_errors $full [200 204]
 }
 
 # POST bulk for priceBook
@@ -7576,14 +9713,25 @@ export def "application-entity-price-book-bulk create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/priceBook/bulk")
+  let full_url = (build-url $base "/application/entity/priceBook/bulk" $auth.query)
   let req_body = {"item": $item} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # PUT bulk for priceBook
@@ -7609,14 +9757,25 @@ export def "application-entity-price-book-bulk update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/priceBook/bulk")
+  let full_url = (build-url $base "/application/entity/priceBook/bulk" $auth.query)
   let req_body = {"item": $item} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # COUNT for priceBook
@@ -7647,12 +9806,23 @@ export def "application-entity-price-book-count get-collection" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/application/entity/priceBook/count" $qp)
+  let full_url = (build-url $base "/application/entity/priceBook/count" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"filter": $filter} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # DESCRIBE for priceBook
@@ -7682,12 +9852,23 @@ export def "application-entity-price-book-describe get" [
 ]: nothing -> record<entity: string, schema: record<create: record, fetch: record, fetchAll: record, update: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/priceBook/describe")
+  let full_url = (build-url $base "/application/entity/priceBook/describe" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET for priceBook
@@ -7726,12 +9907,23 @@ export def "application-entity-price-book-list get-collection" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "unique" $unique "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/application/entity/priceBook/list" $qp)
+  let full_url = (build-url $base "/application/entity/priceBook/list" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page_size": $page_size, "page": $page, "filter": $filter, "expand": $expand, "fields": $fields, "sort": $qp_sort, "unique": $unique} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"page_size": $page_size, "page": $page, "filter": $filter, "expand": $expand, "fields": $fields, "sort": $qp_sort, "unique": $unique} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # DELETE for priceBook
@@ -7755,12 +9947,23 @@ export def "application-entity-price-book delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($price_book_id | is-empty) { error make --unspanned { msg: "path parameter 'priceBook_id' must be non-empty" } }
-  let full_url = (build-url $base ({price_book_id: (encode-path-segment $price_book_id)} | format pattern "/application/entity/priceBook/{price_book_id}"))
+  let full_url = (build-url $base ({price_book_id: (encode-path-segment $price_book_id)} | format pattern "/application/entity/priceBook/{price_book_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # GET for priceBook
@@ -7796,12 +9999,23 @@ export def "application-entity-price-book get" [
   let base = ($base_url | default $BASE_URL)
   if ($price_book_id | is-empty) { error make --unspanned { msg: "path parameter 'priceBook_id' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({price_book_id: (encode-path-segment $price_book_id)} | format pattern "/application/entity/priceBook/{price_book_id}") $qp)
+  let full_url = (build-url $base ({price_book_id: (encode-path-segment $price_book_id)} | format pattern "/application/entity/priceBook/{price_book_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand, "fields": $fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"expand": $expand, "fields": $fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # PUT for priceBook
@@ -7840,14 +10054,25 @@ export def "application-entity-price-book update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($price_book_id | is-empty) { error make --unspanned { msg: "path parameter 'priceBook_id' must be non-empty" } }
-  let full_url = (build-url $base ({price_book_id: (encode-path-segment $price_book_id)} | format pattern "/application/entity/priceBook/{price_book_id}"))
+  let full_url = (build-url $base ({price_book_id: (encode-path-segment $price_book_id)} | format pattern "/application/entity/priceBook/{price_book_id}") $auth.query)
   let req_body = {"created_at": $created_at, "currency": $currency, "description": $description, "id": $id, "is_active": $is_active, "is_standard": $is_standard, "name": $name, "relation": $relation, "type": $type, "updated_at": $updated_at} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # POST for priceBookItem
@@ -7883,14 +10108,25 @@ export def "application-entity-price-book-item create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/priceBookItem")
+  let full_url = (build-url $base "/application/entity/priceBookItem" $auth.query)
   let req_body = {"code": $code, "created_at": $created_at, "id": $id, "is_active": $is_active, "name": $name, "price": $price, "relation": $relation, "updated_at": $updated_at, "use_standard_price": $use_standard_price} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # AGGREGATE for priceBookItem
@@ -7924,12 +10160,23 @@ export def "application-entity-price-book-item-aggregate get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "pipeline" $pipeline "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/application/entity/priceBookItem/aggregate" $qp)
+  let full_url = (build-url $base "/application/entity/priceBookItem/aggregate" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "pipeline": $pipeline} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"filter": $filter, "pipeline": $pipeline} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # DELETE bulk for priceBookItem
@@ -7953,14 +10200,25 @@ export def "application-entity-price-book-item-bulk delete-collection" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/priceBookItem/bulk")
+  let full_url = (build-url $base "/application/entity/priceBookItem/bulk" $auth.query)
   let req_body = {"item": $item} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req $req_body $insecure $raw $allow_errors $full [200 204]
 }
 
 # POST bulk for priceBookItem
@@ -7986,14 +10244,25 @@ export def "application-entity-price-book-item-bulk create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/priceBookItem/bulk")
+  let full_url = (build-url $base "/application/entity/priceBookItem/bulk" $auth.query)
   let req_body = {"item": $item} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # PUT bulk for priceBookItem
@@ -8019,14 +10288,25 @@ export def "application-entity-price-book-item-bulk update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/priceBookItem/bulk")
+  let full_url = (build-url $base "/application/entity/priceBookItem/bulk" $auth.query)
   let req_body = {"item": $item} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # COUNT for priceBookItem
@@ -8057,12 +10337,23 @@ export def "application-entity-price-book-item-count get-collection" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/application/entity/priceBookItem/count" $qp)
+  let full_url = (build-url $base "/application/entity/priceBookItem/count" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"filter": $filter} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # DESCRIBE for priceBookItem
@@ -8092,12 +10383,23 @@ export def "application-entity-price-book-item-describe get" [
 ]: nothing -> record<entity: string, schema: record<create: record, fetch: record, fetchAll: record, update: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/priceBookItem/describe")
+  let full_url = (build-url $base "/application/entity/priceBookItem/describe" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET for priceBookItem
@@ -8136,12 +10438,23 @@ export def "application-entity-price-book-item-list get-collection" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "unique" $unique "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/application/entity/priceBookItem/list" $qp)
+  let full_url = (build-url $base "/application/entity/priceBookItem/list" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page_size": $page_size, "page": $page, "filter": $filter, "expand": $expand, "fields": $fields, "sort": $qp_sort, "unique": $unique} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"page_size": $page_size, "page": $page, "filter": $filter, "expand": $expand, "fields": $fields, "sort": $qp_sort, "unique": $unique} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # DELETE for priceBookItem
@@ -8165,12 +10478,23 @@ export def "application-entity-price-book-item delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($price_book_item_id | is-empty) { error make --unspanned { msg: "path parameter 'priceBookItem_id' must be non-empty" } }
-  let full_url = (build-url $base ({price_book_item_id: (encode-path-segment $price_book_item_id)} | format pattern "/application/entity/priceBookItem/{price_book_item_id}"))
+  let full_url = (build-url $base ({price_book_item_id: (encode-path-segment $price_book_item_id)} | format pattern "/application/entity/priceBookItem/{price_book_item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # GET for priceBookItem
@@ -8206,12 +10530,23 @@ export def "application-entity-price-book-item get" [
   let base = ($base_url | default $BASE_URL)
   if ($price_book_item_id | is-empty) { error make --unspanned { msg: "path parameter 'priceBookItem_id' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({price_book_item_id: (encode-path-segment $price_book_item_id)} | format pattern "/application/entity/priceBookItem/{price_book_item_id}") $qp)
+  let full_url = (build-url $base ({price_book_item_id: (encode-path-segment $price_book_item_id)} | format pattern "/application/entity/priceBookItem/{price_book_item_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand, "fields": $fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"expand": $expand, "fields": $fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # PUT for priceBookItem
@@ -8249,14 +10584,25 @@ export def "application-entity-price-book-item update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($price_book_item_id | is-empty) { error make --unspanned { msg: "path parameter 'priceBookItem_id' must be non-empty" } }
-  let full_url = (build-url $base ({price_book_item_id: (encode-path-segment $price_book_item_id)} | format pattern "/application/entity/priceBookItem/{price_book_item_id}"))
+  let full_url = (build-url $base ({price_book_item_id: (encode-path-segment $price_book_item_id)} | format pattern "/application/entity/priceBookItem/{price_book_item_id}") $auth.query)
   let req_body = {"code": $code, "created_at": $created_at, "id": $id, "is_active": $is_active, "name": $name, "price": $price, "relation": $relation, "updated_at": $updated_at, "use_standard_price": $use_standard_price} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # POST for product
@@ -8310,14 +10656,25 @@ export def "application-entity-product create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/product")
+  let full_url = (build-url $base "/application/entity/product" $auth.query)
   let req_body = {"category": $category, "code": $code, "cost": $cost, "created_at": $created_at, "description": $description, "id": $id, "image": $image, "is_active": $is_active, "is_taxable": $is_taxable, "manufacturer": $manufacturer, "name": $name, "price": $price, "quantity_in_demand": $quantity_in_demand, "quantity_in_stock": $quantity_in_stock, "relation": $relation, "reorder_level": $reorder_level, "sales_ended_at": $sales_ended_at, "sales_started_at": $sales_started_at, "support_ended_at": $support_ended_at, "support_started_at": $support_started_at, "type": $type, "unit": $unit, "updated_at": $updated_at, "url": $url, "vendor": $vendor} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # AGGREGATE for product
@@ -8351,12 +10708,23 @@ export def "application-entity-product-aggregate get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "pipeline" $pipeline "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/application/entity/product/aggregate" $qp)
+  let full_url = (build-url $base "/application/entity/product/aggregate" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "pipeline": $pipeline} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"filter": $filter, "pipeline": $pipeline} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # DELETE bulk for product
@@ -8380,14 +10748,25 @@ export def "application-entity-product-bulk delete-collection" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/product/bulk")
+  let full_url = (build-url $base "/application/entity/product/bulk" $auth.query)
   let req_body = {"item": $item} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req $req_body $insecure $raw $allow_errors $full [200 204]
 }
 
 # POST bulk for product
@@ -8413,14 +10792,25 @@ export def "application-entity-product-bulk create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/product/bulk")
+  let full_url = (build-url $base "/application/entity/product/bulk" $auth.query)
   let req_body = {"item": $item} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # PUT bulk for product
@@ -8446,14 +10836,25 @@ export def "application-entity-product-bulk update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/product/bulk")
+  let full_url = (build-url $base "/application/entity/product/bulk" $auth.query)
   let req_body = {"item": $item} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # COUNT for product
@@ -8484,12 +10885,23 @@ export def "application-entity-product-count get-collection" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/application/entity/product/count" $qp)
+  let full_url = (build-url $base "/application/entity/product/count" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"filter": $filter} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # DESCRIBE for product
@@ -8519,12 +10931,23 @@ export def "application-entity-product-describe get" [
 ]: nothing -> record<entity: string, schema: record<create: record, fetch: record, fetchAll: record, update: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/product/describe")
+  let full_url = (build-url $base "/application/entity/product/describe" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET for product
@@ -8563,12 +10986,23 @@ export def "application-entity-product-list get-collection" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "unique" $unique "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/application/entity/product/list" $qp)
+  let full_url = (build-url $base "/application/entity/product/list" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page_size": $page_size, "page": $page, "filter": $filter, "expand": $expand, "fields": $fields, "sort": $qp_sort, "unique": $unique} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"page_size": $page_size, "page": $page, "filter": $filter, "expand": $expand, "fields": $fields, "sort": $qp_sort, "unique": $unique} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # DELETE for product
@@ -8592,12 +11026,23 @@ export def "application-entity-product delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($product_id | is-empty) { error make --unspanned { msg: "path parameter 'product_id' must be non-empty" } }
-  let full_url = (build-url $base ({product_id: (encode-path-segment $product_id)} | format pattern "/application/entity/product/{product_id}"))
+  let full_url = (build-url $base ({product_id: (encode-path-segment $product_id)} | format pattern "/application/entity/product/{product_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # GET for product
@@ -8633,12 +11078,23 @@ export def "application-entity-product get" [
   let base = ($base_url | default $BASE_URL)
   if ($product_id | is-empty) { error make --unspanned { msg: "path parameter 'product_id' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({product_id: (encode-path-segment $product_id)} | format pattern "/application/entity/product/{product_id}") $qp)
+  let full_url = (build-url $base ({product_id: (encode-path-segment $product_id)} | format pattern "/application/entity/product/{product_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand, "fields": $fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"expand": $expand, "fields": $fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # PUT for product
@@ -8694,14 +11150,25 @@ export def "application-entity-product update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($product_id | is-empty) { error make --unspanned { msg: "path parameter 'product_id' must be non-empty" } }
-  let full_url = (build-url $base ({product_id: (encode-path-segment $product_id)} | format pattern "/application/entity/product/{product_id}"))
+  let full_url = (build-url $base ({product_id: (encode-path-segment $product_id)} | format pattern "/application/entity/product/{product_id}") $auth.query)
   let req_body = {"category": $category, "code": $code, "cost": $cost, "created_at": $created_at, "description": $description, "id": $id, "image": $image, "is_active": $is_active, "is_taxable": $is_taxable, "manufacturer": $manufacturer, "name": $name, "price": $price, "quantity_in_demand": $quantity_in_demand, "quantity_in_stock": $quantity_in_stock, "relation": $relation, "reorder_level": $reorder_level, "sales_ended_at": $sales_ended_at, "sales_started_at": $sales_started_at, "support_ended_at": $support_ended_at, "support_started_at": $support_started_at, "type": $type, "unit": $unit, "updated_at": $updated_at, "url": $url, "vendor": $vendor} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # POST for project
@@ -8739,14 +11206,25 @@ export def "application-entity-project create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/project")
+  let full_url = (build-url $base "/application/entity/project" $auth.query)
   let req_body = {"category": $category, "created_at": $created_at, "description": $description, "ended_at": $ended_at, "id": $id, "name": $name, "pipeline_with_stage": $pipeline_with_stage, "priority": $priority, "relation": $relation, "started_at": $started_at, "status": $status, "updated_at": $updated_at} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # AGGREGATE for project
@@ -8780,12 +11258,23 @@ export def "application-entity-project-aggregate get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "pipeline" $pipeline "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/application/entity/project/aggregate" $qp)
+  let full_url = (build-url $base "/application/entity/project/aggregate" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "pipeline": $pipeline} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"filter": $filter, "pipeline": $pipeline} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # DELETE bulk for project
@@ -8809,14 +11298,25 @@ export def "application-entity-project-bulk delete-collection" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/project/bulk")
+  let full_url = (build-url $base "/application/entity/project/bulk" $auth.query)
   let req_body = {"item": $item} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req $req_body $insecure $raw $allow_errors $full [200 204]
 }
 
 # POST bulk for project
@@ -8842,14 +11342,25 @@ export def "application-entity-project-bulk create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/project/bulk")
+  let full_url = (build-url $base "/application/entity/project/bulk" $auth.query)
   let req_body = {"item": $item} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # PUT bulk for project
@@ -8875,14 +11386,25 @@ export def "application-entity-project-bulk update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/project/bulk")
+  let full_url = (build-url $base "/application/entity/project/bulk" $auth.query)
   let req_body = {"item": $item} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # COUNT for project
@@ -8913,12 +11435,23 @@ export def "application-entity-project-count get-collection" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/application/entity/project/count" $qp)
+  let full_url = (build-url $base "/application/entity/project/count" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"filter": $filter} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # DESCRIBE for project
@@ -8948,12 +11481,23 @@ export def "application-entity-project-describe get" [
 ]: nothing -> record<entity: string, schema: record<create: record, fetch: record, fetchAll: record, update: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/project/describe")
+  let full_url = (build-url $base "/application/entity/project/describe" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET for project
@@ -8992,12 +11536,23 @@ export def "application-entity-project-list get-collection" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "unique" $unique "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/application/entity/project/list" $qp)
+  let full_url = (build-url $base "/application/entity/project/list" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page_size": $page_size, "page": $page, "filter": $filter, "expand": $expand, "fields": $fields, "sort": $qp_sort, "unique": $unique} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"page_size": $page_size, "page": $page, "filter": $filter, "expand": $expand, "fields": $fields, "sort": $qp_sort, "unique": $unique} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # DELETE for project
@@ -9021,12 +11576,23 @@ export def "application-entity-project delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
-  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/application/entity/project/{project_id}"))
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/application/entity/project/{project_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # GET for project
@@ -9062,12 +11628,23 @@ export def "application-entity-project get" [
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/application/entity/project/{project_id}") $qp)
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/application/entity/project/{project_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand, "fields": $fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"expand": $expand, "fields": $fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # PUT for project
@@ -9107,14 +11684,25 @@ export def "application-entity-project update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
-  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/application/entity/project/{project_id}"))
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/application/entity/project/{project_id}") $auth.query)
   let req_body = {"category": $category, "created_at": $created_at, "description": $description, "ended_at": $ended_at, "id": $id, "name": $name, "pipeline_with_stage": $pipeline_with_stage, "priority": $priority, "relation": $relation, "started_at": $started_at, "status": $status, "updated_at": $updated_at} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # POST for quote
@@ -9165,14 +11753,25 @@ export def "application-entity-quote create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/quote")
+  let full_url = (build-url $base "/application/entity/quote" $auth.query)
   let req_body = {"address": $address, "adjustment": $adjustment, "carrier": $carrier, "created_at": $created_at, "currency": $currency, "description": $description, "discount": $discount, "expiration_date": $expiration_date, "grand_total": $grand_total, "id": $id, "number": $number, "payment_terms": $payment_terms, "relation": $relation, "shipping_and_handling": $shipping_and_handling, "status": $status, "subject": $subject, "subtotal": $subtotal, "tax": $tax, "terms_and_conditions": $terms_and_conditions, "total_price": $total_price, "updated_at": $updated_at} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # AGGREGATE for quote
@@ -9206,12 +11805,23 @@ export def "application-entity-quote-aggregate get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "pipeline" $pipeline "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/application/entity/quote/aggregate" $qp)
+  let full_url = (build-url $base "/application/entity/quote/aggregate" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "pipeline": $pipeline} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"filter": $filter, "pipeline": $pipeline} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # DELETE bulk for quote
@@ -9235,14 +11845,25 @@ export def "application-entity-quote-bulk delete-collection" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/quote/bulk")
+  let full_url = (build-url $base "/application/entity/quote/bulk" $auth.query)
   let req_body = {"item": $item} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req $req_body $insecure $raw $allow_errors $full [200 204]
 }
 
 # POST bulk for quote
@@ -9268,14 +11889,25 @@ export def "application-entity-quote-bulk create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/quote/bulk")
+  let full_url = (build-url $base "/application/entity/quote/bulk" $auth.query)
   let req_body = {"item": $item} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # PUT bulk for quote
@@ -9301,14 +11933,25 @@ export def "application-entity-quote-bulk update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/quote/bulk")
+  let full_url = (build-url $base "/application/entity/quote/bulk" $auth.query)
   let req_body = {"item": $item} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # COUNT for quote
@@ -9339,12 +11982,23 @@ export def "application-entity-quote-count get-collection" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/application/entity/quote/count" $qp)
+  let full_url = (build-url $base "/application/entity/quote/count" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"filter": $filter} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # DESCRIBE for quote
@@ -9374,12 +12028,23 @@ export def "application-entity-quote-describe get" [
 ]: nothing -> record<entity: string, schema: record<create: record, fetch: record, fetchAll: record, update: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/quote/describe")
+  let full_url = (build-url $base "/application/entity/quote/describe" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET for quote
@@ -9418,12 +12083,23 @@ export def "application-entity-quote-list get-collection" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "unique" $unique "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/application/entity/quote/list" $qp)
+  let full_url = (build-url $base "/application/entity/quote/list" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page_size": $page_size, "page": $page, "filter": $filter, "expand": $expand, "fields": $fields, "sort": $qp_sort, "unique": $unique} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"page_size": $page_size, "page": $page, "filter": $filter, "expand": $expand, "fields": $fields, "sort": $qp_sort, "unique": $unique} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # DELETE for quote
@@ -9447,12 +12123,23 @@ export def "application-entity-quote delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($quote_id | is-empty) { error make --unspanned { msg: "path parameter 'quote_id' must be non-empty" } }
-  let full_url = (build-url $base ({quote_id: (encode-path-segment $quote_id)} | format pattern "/application/entity/quote/{quote_id}"))
+  let full_url = (build-url $base ({quote_id: (encode-path-segment $quote_id)} | format pattern "/application/entity/quote/{quote_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # GET for quote
@@ -9488,12 +12175,23 @@ export def "application-entity-quote get" [
   let base = ($base_url | default $BASE_URL)
   if ($quote_id | is-empty) { error make --unspanned { msg: "path parameter 'quote_id' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({quote_id: (encode-path-segment $quote_id)} | format pattern "/application/entity/quote/{quote_id}") $qp)
+  let full_url = (build-url $base ({quote_id: (encode-path-segment $quote_id)} | format pattern "/application/entity/quote/{quote_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand, "fields": $fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"expand": $expand, "fields": $fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # PUT for quote
@@ -9546,14 +12244,25 @@ export def "application-entity-quote update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($quote_id | is-empty) { error make --unspanned { msg: "path parameter 'quote_id' must be non-empty" } }
-  let full_url = (build-url $base ({quote_id: (encode-path-segment $quote_id)} | format pattern "/application/entity/quote/{quote_id}"))
+  let full_url = (build-url $base ({quote_id: (encode-path-segment $quote_id)} | format pattern "/application/entity/quote/{quote_id}") $auth.query)
   let req_body = {"address": $address, "adjustment": $adjustment, "carrier": $carrier, "created_at": $created_at, "currency": $currency, "description": $description, "discount": $discount, "expiration_date": $expiration_date, "grand_total": $grand_total, "id": $id, "number": $number, "payment_terms": $payment_terms, "relation": $relation, "shipping_and_handling": $shipping_and_handling, "status": $status, "subject": $subject, "subtotal": $subtotal, "tax": $tax, "terms_and_conditions": $terms_and_conditions, "total_price": $total_price, "updated_at": $updated_at} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # POST for quoteItem
@@ -9595,14 +12304,25 @@ export def "application-entity-quote-item create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/quoteItem")
+  let full_url = (build-url $base "/application/entity/quoteItem" $auth.query)
   let req_body = {"created_at": $created_at, "description": $description, "discount": $discount, "id": $id, "list_price": $list_price, "number": $number, "quantity": $quantity, "relation": $relation, "sales_price": $sales_price, "subtotal": $subtotal, "tax": $tax, "total_price": $total_price, "unit": $unit, "updated_at": $updated_at} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # AGGREGATE for quoteItem
@@ -9636,12 +12356,23 @@ export def "application-entity-quote-item-aggregate get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "pipeline" $pipeline "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/application/entity/quoteItem/aggregate" $qp)
+  let full_url = (build-url $base "/application/entity/quoteItem/aggregate" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "pipeline": $pipeline} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"filter": $filter, "pipeline": $pipeline} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # DELETE bulk for quoteItem
@@ -9665,14 +12396,25 @@ export def "application-entity-quote-item-bulk delete-collection" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/quoteItem/bulk")
+  let full_url = (build-url $base "/application/entity/quoteItem/bulk" $auth.query)
   let req_body = {"item": $item} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req $req_body $insecure $raw $allow_errors $full [200 204]
 }
 
 # POST bulk for quoteItem
@@ -9698,14 +12440,25 @@ export def "application-entity-quote-item-bulk create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/quoteItem/bulk")
+  let full_url = (build-url $base "/application/entity/quoteItem/bulk" $auth.query)
   let req_body = {"item": $item} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # PUT bulk for quoteItem
@@ -9731,14 +12484,25 @@ export def "application-entity-quote-item-bulk update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/quoteItem/bulk")
+  let full_url = (build-url $base "/application/entity/quoteItem/bulk" $auth.query)
   let req_body = {"item": $item} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # COUNT for quoteItem
@@ -9769,12 +12533,23 @@ export def "application-entity-quote-item-count get-collection" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/application/entity/quoteItem/count" $qp)
+  let full_url = (build-url $base "/application/entity/quoteItem/count" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"filter": $filter} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # DESCRIBE for quoteItem
@@ -9804,12 +12579,23 @@ export def "application-entity-quote-item-describe get" [
 ]: nothing -> record<entity: string, schema: record<create: record, fetch: record, fetchAll: record, update: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/quoteItem/describe")
+  let full_url = (build-url $base "/application/entity/quoteItem/describe" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET for quoteItem
@@ -9848,12 +12634,23 @@ export def "application-entity-quote-item-list get-collection" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "unique" $unique "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/application/entity/quoteItem/list" $qp)
+  let full_url = (build-url $base "/application/entity/quoteItem/list" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page_size": $page_size, "page": $page, "filter": $filter, "expand": $expand, "fields": $fields, "sort": $qp_sort, "unique": $unique} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"page_size": $page_size, "page": $page, "filter": $filter, "expand": $expand, "fields": $fields, "sort": $qp_sort, "unique": $unique} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # DELETE for quoteItem
@@ -9877,12 +12674,23 @@ export def "application-entity-quote-item delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($quote_item_id | is-empty) { error make --unspanned { msg: "path parameter 'quoteItem_id' must be non-empty" } }
-  let full_url = (build-url $base ({quote_item_id: (encode-path-segment $quote_item_id)} | format pattern "/application/entity/quoteItem/{quote_item_id}"))
+  let full_url = (build-url $base ({quote_item_id: (encode-path-segment $quote_item_id)} | format pattern "/application/entity/quoteItem/{quote_item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # GET for quoteItem
@@ -9918,12 +12726,23 @@ export def "application-entity-quote-item get" [
   let base = ($base_url | default $BASE_URL)
   if ($quote_item_id | is-empty) { error make --unspanned { msg: "path parameter 'quoteItem_id' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({quote_item_id: (encode-path-segment $quote_item_id)} | format pattern "/application/entity/quoteItem/{quote_item_id}") $qp)
+  let full_url = (build-url $base ({quote_item_id: (encode-path-segment $quote_item_id)} | format pattern "/application/entity/quoteItem/{quote_item_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand, "fields": $fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"expand": $expand, "fields": $fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # PUT for quoteItem
@@ -9967,14 +12786,25 @@ export def "application-entity-quote-item update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($quote_item_id | is-empty) { error make --unspanned { msg: "path parameter 'quoteItem_id' must be non-empty" } }
-  let full_url = (build-url $base ({quote_item_id: (encode-path-segment $quote_item_id)} | format pattern "/application/entity/quoteItem/{quote_item_id}"))
+  let full_url = (build-url $base ({quote_item_id: (encode-path-segment $quote_item_id)} | format pattern "/application/entity/quoteItem/{quote_item_id}") $auth.query)
   let req_body = {"created_at": $created_at, "description": $description, "discount": $discount, "id": $id, "list_price": $list_price, "number": $number, "quantity": $quantity, "relation": $relation, "sales_price": $sales_price, "subtotal": $subtotal, "tax": $tax, "total_price": $total_price, "unit": $unit, "updated_at": $updated_at} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # POST for tag
@@ -10007,14 +12837,25 @@ export def "application-entity-tag create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/tag")
+  let full_url = (build-url $base "/application/entity/tag" $auth.query)
   let req_body = {"created_at": $created_at, "description": $description, "entity": $entity, "id": $id, "name": $name, "relation": $relation, "updated_at": $updated_at} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # AGGREGATE for tag
@@ -10048,12 +12889,23 @@ export def "application-entity-tag-aggregate get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "pipeline" $pipeline "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/application/entity/tag/aggregate" $qp)
+  let full_url = (build-url $base "/application/entity/tag/aggregate" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "pipeline": $pipeline} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"filter": $filter, "pipeline": $pipeline} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # DELETE bulk for tag
@@ -10077,14 +12929,25 @@ export def "application-entity-tag-bulk delete-collection" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/tag/bulk")
+  let full_url = (build-url $base "/application/entity/tag/bulk" $auth.query)
   let req_body = {"item": $item} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req $req_body $insecure $raw $allow_errors $full [200 204]
 }
 
 # POST bulk for tag
@@ -10110,14 +12973,25 @@ export def "application-entity-tag-bulk create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/tag/bulk")
+  let full_url = (build-url $base "/application/entity/tag/bulk" $auth.query)
   let req_body = {"item": $item} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # PUT bulk for tag
@@ -10143,14 +13017,25 @@ export def "application-entity-tag-bulk update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/tag/bulk")
+  let full_url = (build-url $base "/application/entity/tag/bulk" $auth.query)
   let req_body = {"item": $item} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # COUNT for tag
@@ -10181,12 +13066,23 @@ export def "application-entity-tag-count get-collection" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/application/entity/tag/count" $qp)
+  let full_url = (build-url $base "/application/entity/tag/count" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"filter": $filter} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # DESCRIBE for tag
@@ -10216,12 +13112,23 @@ export def "application-entity-tag-describe get" [
 ]: nothing -> record<entity: string, schema: record<create: record, fetch: record, fetchAll: record, update: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/tag/describe")
+  let full_url = (build-url $base "/application/entity/tag/describe" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET for tag
@@ -10260,12 +13167,23 @@ export def "application-entity-tag-list get-collection" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "unique" $unique "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/application/entity/tag/list" $qp)
+  let full_url = (build-url $base "/application/entity/tag/list" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page_size": $page_size, "page": $page, "filter": $filter, "expand": $expand, "fields": $fields, "sort": $qp_sort, "unique": $unique} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"page_size": $page_size, "page": $page, "filter": $filter, "expand": $expand, "fields": $fields, "sort": $qp_sort, "unique": $unique} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # DELETE for tag
@@ -10289,12 +13207,23 @@ export def "application-entity-tag delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tag_id | is-empty) { error make --unspanned { msg: "path parameter 'tag_id' must be non-empty" } }
-  let full_url = (build-url $base ({tag_id: (encode-path-segment $tag_id)} | format pattern "/application/entity/tag/{tag_id}"))
+  let full_url = (build-url $base ({tag_id: (encode-path-segment $tag_id)} | format pattern "/application/entity/tag/{tag_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # GET for tag
@@ -10330,12 +13259,23 @@ export def "application-entity-tag get" [
   let base = ($base_url | default $BASE_URL)
   if ($tag_id | is-empty) { error make --unspanned { msg: "path parameter 'tag_id' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({tag_id: (encode-path-segment $tag_id)} | format pattern "/application/entity/tag/{tag_id}") $qp)
+  let full_url = (build-url $base ({tag_id: (encode-path-segment $tag_id)} | format pattern "/application/entity/tag/{tag_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand, "fields": $fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"expand": $expand, "fields": $fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # PUT for tag
@@ -10370,14 +13310,25 @@ export def "application-entity-tag update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tag_id | is-empty) { error make --unspanned { msg: "path parameter 'tag_id' must be non-empty" } }
-  let full_url = (build-url $base ({tag_id: (encode-path-segment $tag_id)} | format pattern "/application/entity/tag/{tag_id}"))
+  let full_url = (build-url $base ({tag_id: (encode-path-segment $tag_id)} | format pattern "/application/entity/tag/{tag_id}") $auth.query)
   let req_body = {"created_at": $created_at, "description": $description, "entity": $entity, "id": $id, "name": $name, "relation": $relation, "updated_at": $updated_at} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # POST for task
@@ -10415,14 +13366,25 @@ export def "application-entity-task create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/task")
+  let full_url = (build-url $base "/application/entity/task" $auth.query)
   let req_body = {"created_at": $created_at, "description": $description, "due_at": $due_at, "ended_at": $ended_at, "id": $id, "priority": $priority, "relation": $relation, "reminder_at": $reminder_at, "started_at": $started_at, "status": $status, "subject": $subject, "updated_at": $updated_at} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # AGGREGATE for task
@@ -10456,12 +13418,23 @@ export def "application-entity-task-aggregate get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "pipeline" $pipeline "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/application/entity/task/aggregate" $qp)
+  let full_url = (build-url $base "/application/entity/task/aggregate" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "pipeline": $pipeline} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"filter": $filter, "pipeline": $pipeline} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # DELETE bulk for task
@@ -10485,14 +13458,25 @@ export def "application-entity-task-bulk delete-collection" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/task/bulk")
+  let full_url = (build-url $base "/application/entity/task/bulk" $auth.query)
   let req_body = {"item": $item} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req $req_body $insecure $raw $allow_errors $full [200 204]
 }
 
 # POST bulk for task
@@ -10518,14 +13502,25 @@ export def "application-entity-task-bulk create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/task/bulk")
+  let full_url = (build-url $base "/application/entity/task/bulk" $auth.query)
   let req_body = {"item": $item} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # PUT bulk for task
@@ -10551,14 +13546,25 @@ export def "application-entity-task-bulk update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/task/bulk")
+  let full_url = (build-url $base "/application/entity/task/bulk" $auth.query)
   let req_body = {"item": $item} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # COUNT for task
@@ -10589,12 +13595,23 @@ export def "application-entity-task-count get-collection" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/application/entity/task/count" $qp)
+  let full_url = (build-url $base "/application/entity/task/count" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"filter": $filter} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # DESCRIBE for task
@@ -10624,12 +13641,23 @@ export def "application-entity-task-describe get" [
 ]: nothing -> record<entity: string, schema: record<create: record, fetch: record, fetchAll: record, update: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/task/describe")
+  let full_url = (build-url $base "/application/entity/task/describe" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET for task
@@ -10668,12 +13696,23 @@ export def "application-entity-task-list get-collection" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "unique" $unique "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/application/entity/task/list" $qp)
+  let full_url = (build-url $base "/application/entity/task/list" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page_size": $page_size, "page": $page, "filter": $filter, "expand": $expand, "fields": $fields, "sort": $qp_sort, "unique": $unique} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"page_size": $page_size, "page": $page, "filter": $filter, "expand": $expand, "fields": $fields, "sort": $qp_sort, "unique": $unique} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # DELETE for task
@@ -10697,12 +13736,23 @@ export def "application-entity-task delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($task_id | is-empty) { error make --unspanned { msg: "path parameter 'task_id' must be non-empty" } }
-  let full_url = (build-url $base ({task_id: (encode-path-segment $task_id)} | format pattern "/application/entity/task/{task_id}"))
+  let full_url = (build-url $base ({task_id: (encode-path-segment $task_id)} | format pattern "/application/entity/task/{task_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # GET for task
@@ -10738,12 +13788,23 @@ export def "application-entity-task get" [
   let base = ($base_url | default $BASE_URL)
   if ($task_id | is-empty) { error make --unspanned { msg: "path parameter 'task_id' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({task_id: (encode-path-segment $task_id)} | format pattern "/application/entity/task/{task_id}") $qp)
+  let full_url = (build-url $base ({task_id: (encode-path-segment $task_id)} | format pattern "/application/entity/task/{task_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand, "fields": $fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"expand": $expand, "fields": $fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # PUT for task
@@ -10783,14 +13844,25 @@ export def "application-entity-task update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($task_id | is-empty) { error make --unspanned { msg: "path parameter 'task_id' must be non-empty" } }
-  let full_url = (build-url $base ({task_id: (encode-path-segment $task_id)} | format pattern "/application/entity/task/{task_id}"))
+  let full_url = (build-url $base ({task_id: (encode-path-segment $task_id)} | format pattern "/application/entity/task/{task_id}") $auth.query)
   let req_body = {"created_at": $created_at, "description": $description, "due_at": $due_at, "ended_at": $ended_at, "id": $id, "priority": $priority, "relation": $relation, "reminder_at": $reminder_at, "started_at": $started_at, "status": $status, "subject": $subject, "updated_at": $updated_at} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # POST for ticket
@@ -10832,14 +13904,25 @@ export def "application-entity-ticket create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/ticket")
+  let full_url = (build-url $base "/application/entity/ticket" $auth.query)
   let req_body = {"category": $category, "closed_at": $closed_at, "created_at": $created_at, "description": $description, "due_at": $due_at, "email": $email, "id": $id, "number": $number, "pipeline_with_stage": $pipeline_with_stage, "priority": $priority, "relation": $relation, "resolution": $resolution, "source": $body_source, "subject": $subject, "updated_at": $updated_at} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # AGGREGATE for ticket
@@ -10873,12 +13956,23 @@ export def "application-entity-ticket-aggregate get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "pipeline" $pipeline "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/application/entity/ticket/aggregate" $qp)
+  let full_url = (build-url $base "/application/entity/ticket/aggregate" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "pipeline": $pipeline} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"filter": $filter, "pipeline": $pipeline} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # DELETE bulk for ticket
@@ -10902,14 +13996,25 @@ export def "application-entity-ticket-bulk delete-collection" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/ticket/bulk")
+  let full_url = (build-url $base "/application/entity/ticket/bulk" $auth.query)
   let req_body = {"item": $item} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req $req_body $insecure $raw $allow_errors $full [200 204]
 }
 
 # POST bulk for ticket
@@ -10935,14 +14040,25 @@ export def "application-entity-ticket-bulk create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/ticket/bulk")
+  let full_url = (build-url $base "/application/entity/ticket/bulk" $auth.query)
   let req_body = {"item": $item} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # PUT bulk for ticket
@@ -10968,14 +14084,25 @@ export def "application-entity-ticket-bulk update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/ticket/bulk")
+  let full_url = (build-url $base "/application/entity/ticket/bulk" $auth.query)
   let req_body = {"item": $item} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # COUNT for ticket
@@ -11006,12 +14133,23 @@ export def "application-entity-ticket-count get-collection" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/application/entity/ticket/count" $qp)
+  let full_url = (build-url $base "/application/entity/ticket/count" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"filter": $filter} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # DESCRIBE for ticket
@@ -11041,12 +14179,23 @@ export def "application-entity-ticket-describe get" [
 ]: nothing -> record<entity: string, schema: record<create: record, fetch: record, fetchAll: record, update: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/ticket/describe")
+  let full_url = (build-url $base "/application/entity/ticket/describe" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET for ticket
@@ -11085,12 +14234,23 @@ export def "application-entity-ticket-list get-collection" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "unique" $unique "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/application/entity/ticket/list" $qp)
+  let full_url = (build-url $base "/application/entity/ticket/list" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page_size": $page_size, "page": $page, "filter": $filter, "expand": $expand, "fields": $fields, "sort": $qp_sort, "unique": $unique} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"page_size": $page_size, "page": $page, "filter": $filter, "expand": $expand, "fields": $fields, "sort": $qp_sort, "unique": $unique} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # DELETE for ticket
@@ -11114,12 +14274,23 @@ export def "application-entity-ticket delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($ticket_id | is-empty) { error make --unspanned { msg: "path parameter 'ticket_id' must be non-empty" } }
-  let full_url = (build-url $base ({ticket_id: (encode-path-segment $ticket_id)} | format pattern "/application/entity/ticket/{ticket_id}"))
+  let full_url = (build-url $base ({ticket_id: (encode-path-segment $ticket_id)} | format pattern "/application/entity/ticket/{ticket_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # GET for ticket
@@ -11155,12 +14326,23 @@ export def "application-entity-ticket get" [
   let base = ($base_url | default $BASE_URL)
   if ($ticket_id | is-empty) { error make --unspanned { msg: "path parameter 'ticket_id' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({ticket_id: (encode-path-segment $ticket_id)} | format pattern "/application/entity/ticket/{ticket_id}") $qp)
+  let full_url = (build-url $base ({ticket_id: (encode-path-segment $ticket_id)} | format pattern "/application/entity/ticket/{ticket_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand, "fields": $fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"expand": $expand, "fields": $fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # PUT for ticket
@@ -11204,14 +14386,25 @@ export def "application-entity-ticket update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($ticket_id | is-empty) { error make --unspanned { msg: "path parameter 'ticket_id' must be non-empty" } }
-  let full_url = (build-url $base ({ticket_id: (encode-path-segment $ticket_id)} | format pattern "/application/entity/ticket/{ticket_id}"))
+  let full_url = (build-url $base ({ticket_id: (encode-path-segment $ticket_id)} | format pattern "/application/entity/ticket/{ticket_id}") $auth.query)
   let req_body = {"category": $category, "closed_at": $closed_at, "created_at": $created_at, "description": $description, "due_at": $due_at, "email": $email, "id": $id, "number": $number, "pipeline_with_stage": $pipeline_with_stage, "priority": $priority, "relation": $relation, "resolution": $resolution, "source": $body_source, "subject": $subject, "updated_at": $updated_at} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # POST for user
@@ -11263,14 +14456,25 @@ export def "application-entity-user create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/user")
+  let full_url = (build-url $base "/application/entity/user" $auth.query)
   let req_body = {"address": $address, "created_at": $created_at, "department": $department, "description": $description, "email": $email, "first_name": $first_name, "id": $id, "is_admin": $is_admin, "is_associable": $is_associable, "last_name": $last_name, "messenger": $messenger, "middle_name": $middle_name, "name_suffix": $name_suffix, "phone": $phone, "position": $position, "relation": $relation, "salutation": $salutation, "status": $status, "updated_at": $updated_at, "username": $username, "website": $website} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # AGGREGATE for user
@@ -11304,12 +14508,23 @@ export def "application-entity-user-aggregate get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "pipeline" $pipeline "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/application/entity/user/aggregate" $qp)
+  let full_url = (build-url $base "/application/entity/user/aggregate" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "pipeline": $pipeline} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"filter": $filter, "pipeline": $pipeline} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # DELETE bulk for user
@@ -11333,14 +14548,25 @@ export def "application-entity-user-bulk delete-collection" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/user/bulk")
+  let full_url = (build-url $base "/application/entity/user/bulk" $auth.query)
   let req_body = {"item": $item} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req $req_body $insecure $raw $allow_errors $full [200 204]
 }
 
 # POST bulk for user
@@ -11366,14 +14592,25 @@ export def "application-entity-user-bulk create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/user/bulk")
+  let full_url = (build-url $base "/application/entity/user/bulk" $auth.query)
   let req_body = {"item": $item} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # PUT bulk for user
@@ -11399,14 +14636,25 @@ export def "application-entity-user-bulk update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/user/bulk")
+  let full_url = (build-url $base "/application/entity/user/bulk" $auth.query)
   let req_body = {"item": $item} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # COUNT for user
@@ -11437,12 +14685,23 @@ export def "application-entity-user-count get-collection" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/application/entity/user/count" $qp)
+  let full_url = (build-url $base "/application/entity/user/count" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"filter": $filter} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # DESCRIBE for user
@@ -11472,12 +14731,23 @@ export def "application-entity-user-describe get" [
 ]: nothing -> record<entity: string, schema: record<create: record, fetch: record, fetchAll: record, update: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/entity/user/describe")
+  let full_url = (build-url $base "/application/entity/user/describe" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET for user
@@ -11516,12 +14786,23 @@ export def "application-entity-user-list get-collection" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "unique" $unique "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/application/entity/user/list" $qp)
+  let full_url = (build-url $base "/application/entity/user/list" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page_size": $page_size, "page": $page, "filter": $filter, "expand": $expand, "fields": $fields, "sort": $qp_sort, "unique": $unique} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"page_size": $page_size, "page": $page, "filter": $filter, "expand": $expand, "fields": $fields, "sort": $qp_sort, "unique": $unique} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # DELETE for user
@@ -11545,12 +14826,23 @@ export def "application-entity-user delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/application/entity/user/{user_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/application/entity/user/{user_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # GET for user
@@ -11586,12 +14878,23 @@ export def "application-entity-user get" [
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/application/entity/user/{user_id}") $qp)
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/application/entity/user/{user_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand, "fields": $fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"expand": $expand, "fields": $fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # PUT for user
@@ -11645,14 +14948,25 @@ export def "application-entity-user update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/application/entity/user/{user_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/application/entity/user/{user_id}") $auth.query)
   let req_body = {"address": $address, "created_at": $created_at, "department": $department, "description": $description, "email": $email, "first_name": $first_name, "id": $id, "is_admin": $is_admin, "is_associable": $is_associable, "last_name": $last_name, "messenger": $messenger, "middle_name": $middle_name, "name_suffix": $name_suffix, "phone": $phone, "position": $position, "relation": $relation, "salutation": $salutation, "status": $status, "updated_at": $updated_at, "username": $username, "website": $website} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # GET for entity
@@ -11680,12 +14994,23 @@ export def "application-entity list" [
   let base = ($base_url | default $BASE_URL)
   if ($entity_id | is-empty) { error make --unspanned { msg: "path parameter 'entity_id' must be non-empty" } }
   let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({entity_id: (encode-path-segment $entity_id)} | format pattern "/application/entity/{entity_id}") $qp)
+  let full_url = (build-url $base ({entity_id: (encode-path-segment $entity_id)} | format pattern "/application/entity/{entity_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"fields": $fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"fields": $fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # POST for entityItem
@@ -11717,14 +15042,25 @@ export def "application-entity create-item" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($entity_id | is-empty) { error make --unspanned { msg: "path parameter 'entity_id' must be non-empty" } }
-  let full_url = (build-url $base ({entity_id: (encode-path-segment $entity_id)} | format pattern "/application/entity/{entity_id}"))
+  let full_url = (build-url $base ({entity_id: (encode-path-segment $entity_id)} | format pattern "/application/entity/{entity_id}") $auth.query)
   let req_body = {"created_at": $created_at, "id": $id, "relation": $relation, "updated_at": $updated_at} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # AGGREGATE for entityItem
@@ -11760,12 +15096,23 @@ export def "application-entity-aggregate get-item" [
   let base = ($base_url | default $BASE_URL)
   if ($entity_id | is-empty) { error make --unspanned { msg: "path parameter 'entity_id' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "pipeline" $pipeline "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({entity_id: (encode-path-segment $entity_id)} | format pattern "/application/entity/{entity_id}/aggregate") $qp)
+  let full_url = (build-url $base ({entity_id: (encode-path-segment $entity_id)} | format pattern "/application/entity/{entity_id}/aggregate") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "pipeline": $pipeline} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"filter": $filter, "pipeline": $pipeline} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # DELETE bulk for entityItem
@@ -11791,14 +15138,25 @@ export def "application-entity-bulk delete-item-collection" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($entity_id | is-empty) { error make --unspanned { msg: "path parameter 'entity_id' must be non-empty" } }
-  let full_url = (build-url $base ({entity_id: (encode-path-segment $entity_id)} | format pattern "/application/entity/{entity_id}/bulk"))
+  let full_url = (build-url $base ({entity_id: (encode-path-segment $entity_id)} | format pattern "/application/entity/{entity_id}/bulk") $auth.query)
   let req_body = {"item": $item} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req $req_body $insecure $raw $allow_errors $full [200 204]
 }
 
 # POST bulk for entityItem
@@ -11826,14 +15184,25 @@ export def "application-entity-bulk create-item" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($entity_id | is-empty) { error make --unspanned { msg: "path parameter 'entity_id' must be non-empty" } }
-  let full_url = (build-url $base ({entity_id: (encode-path-segment $entity_id)} | format pattern "/application/entity/{entity_id}/bulk"))
+  let full_url = (build-url $base ({entity_id: (encode-path-segment $entity_id)} | format pattern "/application/entity/{entity_id}/bulk") $auth.query)
   let req_body = {"item": $item} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # PUT bulk for entityItem
@@ -11861,14 +15230,25 @@ export def "application-entity-bulk update-item" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($entity_id | is-empty) { error make --unspanned { msg: "path parameter 'entity_id' must be non-empty" } }
-  let full_url = (build-url $base ({entity_id: (encode-path-segment $entity_id)} | format pattern "/application/entity/{entity_id}/bulk"))
+  let full_url = (build-url $base ({entity_id: (encode-path-segment $entity_id)} | format pattern "/application/entity/{entity_id}/bulk") $auth.query)
   let req_body = {"item": $item} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # COUNT for entityItem
@@ -11901,12 +15281,23 @@ export def "application-entity-count get-item-collection" [
   let base = ($base_url | default $BASE_URL)
   if ($entity_id | is-empty) { error make --unspanned { msg: "path parameter 'entity_id' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({entity_id: (encode-path-segment $entity_id)} | format pattern "/application/entity/{entity_id}/count") $qp)
+  let full_url = (build-url $base ({entity_id: (encode-path-segment $entity_id)} | format pattern "/application/entity/{entity_id}/count") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"filter": $filter} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # DESCRIBE for entityItem
@@ -11938,12 +15329,23 @@ export def "application-entity-describe get-item" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($entity_id | is-empty) { error make --unspanned { msg: "path parameter 'entity_id' must be non-empty" } }
-  let full_url = (build-url $base ({entity_id: (encode-path-segment $entity_id)} | format pattern "/application/entity/{entity_id}/describe"))
+  let full_url = (build-url $base ({entity_id: (encode-path-segment $entity_id)} | format pattern "/application/entity/{entity_id}/describe") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET for entityItem
@@ -11984,12 +15386,23 @@ export def "application-entity-list get-item-collection" [
   let base = ($base_url | default $BASE_URL)
   if ($entity_id | is-empty) { error make --unspanned { msg: "path parameter 'entity_id' must be non-empty" } }
   let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "unique" $unique "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({entity_id: (encode-path-segment $entity_id)} | format pattern "/application/entity/{entity_id}/list") $qp)
+  let full_url = (build-url $base ({entity_id: (encode-path-segment $entity_id)} | format pattern "/application/entity/{entity_id}/list") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page_size": $page_size, "page": $page, "filter": $filter, "expand": $expand, "fields": $fields, "sort": $qp_sort, "unique": $unique} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"page_size": $page_size, "page": $page, "filter": $filter, "expand": $expand, "fields": $fields, "sort": $qp_sort, "unique": $unique} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # DELETE for entityItem
@@ -12015,12 +15428,23 @@ export def "application-entity delete" [
   let base = ($base_url | default $BASE_URL)
   if ($entity_id | is-empty) { error make --unspanned { msg: "path parameter 'entity_id' must be non-empty" } }
   if ($entity_item_id | is-empty) { error make --unspanned { msg: "path parameter 'entity_item_id' must be non-empty" } }
-  let full_url = (build-url $base ({entity_id: (encode-path-segment $entity_id), entity_item_id: (encode-path-segment $entity_item_id)} | format pattern "/application/entity/{entity_id}/{entity_item_id}"))
+  let full_url = (build-url $base ({entity_id: (encode-path-segment $entity_id), entity_item_id: (encode-path-segment $entity_item_id)} | format pattern "/application/entity/{entity_id}/{entity_item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # GET for entityItem
@@ -12058,12 +15482,23 @@ export def "application-entity get" [
   if ($entity_id | is-empty) { error make --unspanned { msg: "path parameter 'entity_id' must be non-empty" } }
   if ($entity_item_id | is-empty) { error make --unspanned { msg: "path parameter 'entity_item_id' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({entity_id: (encode-path-segment $entity_id), entity_item_id: (encode-path-segment $entity_item_id)} | format pattern "/application/entity/{entity_id}/{entity_item_id}") $qp)
+  let full_url = (build-url $base ({entity_id: (encode-path-segment $entity_id), entity_item_id: (encode-path-segment $entity_item_id)} | format pattern "/application/entity/{entity_id}/{entity_item_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DATA-ENABLE": $x_api2crm_data_enable, "X-API2CRM-DATA-BUILD": $x_api2crm_data_build, "X-API2CRM-DATA-IS-FINAL": $x_api2crm_data_is_final, "X-API2CRM-DATA-STRATEGY": $x_api2crm_data_strategy, "X-API2CRM-DATA-COHERENT-ENTITIES": $x_api2crm_data_coherent_entities, "X-API2CRM-DATA-ALWAYS-ACTUAL": $x_api2crm_data_always_actual, "X-API2CRM-DATA-ACTUAL-AT": $x_api2crm_data_actual_at, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand, "fields": $fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"expand": $expand, "fields": $fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # PUT for entityItem
@@ -12097,14 +15532,25 @@ export def "application-entity update" [
   let base = ($base_url | default $BASE_URL)
   if ($entity_id | is-empty) { error make --unspanned { msg: "path parameter 'entity_id' must be non-empty" } }
   if ($entity_item_id | is-empty) { error make --unspanned { msg: "path parameter 'entity_item_id' must be non-empty" } }
-  let full_url = (build-url $base ({entity_id: (encode-path-segment $entity_id), entity_item_id: (encode-path-segment $entity_item_id)} | format pattern "/application/entity/{entity_id}/{entity_item_id}"))
+  let full_url = (build-url $base ({entity_id: (encode-path-segment $entity_id), entity_item_id: (encode-path-segment $entity_item_id)} | format pattern "/application/entity/{entity_id}/{entity_item_id}") $auth.query)
   let req_body = {"created_at": $created_at, "id": $id, "relation": $relation, "updated_at": $updated_at} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-NATIVE-ENABLE": $x_api2crm_native_enable, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # COUNT for field
@@ -12126,12 +15572,23 @@ export def "application-field-count get-collection" [
 ]: nothing -> record<total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/field/count")
+  let full_url = (build-url $base "/application/field/count" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET for field
@@ -12159,12 +15616,23 @@ export def "application-field-list get-collection" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/application/field/list" $qp)
+  let full_url = (build-url $base "/application/field/list" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page_size": $page_size, "page": $page, "filter": $filter, "fields": $fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"page_size": $page_size, "page": $page, "filter": $filter, "fields": $fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET for field
@@ -12191,12 +15659,23 @@ export def "application-field list" [
   let base = ($base_url | default $BASE_URL)
   if ($field_id | is-empty) { error make --unspanned { msg: "path parameter 'field_id' must be non-empty" } }
   let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({field_id: (encode-path-segment $field_id)} | format pattern "/application/field/{field_id}") $qp)
+  let full_url = (build-url $base ({field_id: (encode-path-segment $field_id)} | format pattern "/application/field/{field_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"fields": $fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"fields": $fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # POST for fieldItem
@@ -12231,14 +15710,25 @@ export def "application-field create-item-entity" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($field_id | is-empty) { error make --unspanned { msg: "path parameter 'field_id' must be non-empty" } }
-  let full_url = (build-url $base ({field_id: (encode-path-segment $field_id)} | format pattern "/application/field/{field_id}"))
+  let full_url = (build-url $base ({field_id: (encode-path-segment $field_id)} | format pattern "/application/field/{field_id}") $auth.query)
   let req_body = {"created_at": $created_at, "description": $description, "entity": $entity, "id": $id, "label": $label, "name": $name, "relation": $relation, "updated_at": $updated_at} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # COUNT for fieldItem
@@ -12262,12 +15752,23 @@ export def "application-field-count get-item-collection" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($field_id | is-empty) { error make --unspanned { msg: "path parameter 'field_id' must be non-empty" } }
-  let full_url = (build-url $base ({field_id: (encode-path-segment $field_id)} | format pattern "/application/field/{field_id}/count"))
+  let full_url = (build-url $base ({field_id: (encode-path-segment $field_id)} | format pattern "/application/field/{field_id}/count") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # DESCRIBE for fieldItem
@@ -12292,12 +15793,23 @@ export def "application-field-describe get-item" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($field_id | is-empty) { error make --unspanned { msg: "path parameter 'field_id' must be non-empty" } }
-  let full_url = (build-url $base ({field_id: (encode-path-segment $field_id)} | format pattern "/application/field/{field_id}/describe"))
+  let full_url = (build-url $base ({field_id: (encode-path-segment $field_id)} | format pattern "/application/field/{field_id}/describe") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET for fieldItem
@@ -12326,12 +15838,23 @@ export def "application-field-list get-item-collection" [
   let base = ($base_url | default $BASE_URL)
   if ($field_id | is-empty) { error make --unspanned { msg: "path parameter 'field_id' must be non-empty" } }
   let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({field_id: (encode-path-segment $field_id)} | format pattern "/application/field/{field_id}/list") $qp)
+  let full_url = (build-url $base ({field_id: (encode-path-segment $field_id)} | format pattern "/application/field/{field_id}/list") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page_size": $page_size, "page": $page, "fields": $fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"page_size": $page_size, "page": $page, "fields": $fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # DELETE for fieldItem
@@ -12357,12 +15880,23 @@ export def "application-field delete-entity" [
   let base = ($base_url | default $BASE_URL)
   if ($field_id | is-empty) { error make --unspanned { msg: "path parameter 'field_id' must be non-empty" } }
   if ($field_item_id | is-empty) { error make --unspanned { msg: "path parameter 'field_item_id' must be non-empty" } }
-  let full_url = (build-url $base ({field_id: (encode-path-segment $field_id), field_item_id: (encode-path-segment $field_item_id)} | format pattern "/application/field/{field_id}/{field_item_id}"))
+  let full_url = (build-url $base ({field_id: (encode-path-segment $field_id), field_item_id: (encode-path-segment $field_item_id)} | format pattern "/application/field/{field_id}/{field_item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # GET for fieldItem
@@ -12391,12 +15925,23 @@ export def "application-field get-entity" [
   if ($field_id | is-empty) { error make --unspanned { msg: "path parameter 'field_id' must be non-empty" } }
   if ($field_item_id | is-empty) { error make --unspanned { msg: "path parameter 'field_item_id' must be non-empty" } }
   let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({field_id: (encode-path-segment $field_id), field_item_id: (encode-path-segment $field_item_id)} | format pattern "/application/field/{field_id}/{field_item_id}") $qp)
+  let full_url = (build-url $base ({field_id: (encode-path-segment $field_id), field_item_id: (encode-path-segment $field_item_id)} | format pattern "/application/field/{field_id}/{field_item_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"fields": $fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"fields": $fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # PUT for fieldItem
@@ -12433,14 +15978,25 @@ export def "application-field update-entity" [
   let base = ($base_url | default $BASE_URL)
   if ($field_id | is-empty) { error make --unspanned { msg: "path parameter 'field_id' must be non-empty" } }
   if ($field_item_id | is-empty) { error make --unspanned { msg: "path parameter 'field_item_id' must be non-empty" } }
-  let full_url = (build-url $base ({field_id: (encode-path-segment $field_id), field_item_id: (encode-path-segment $field_item_id)} | format pattern "/application/field/{field_id}/{field_item_id}"))
+  let full_url = (build-url $base ({field_id: (encode-path-segment $field_id), field_item_id: (encode-path-segment $field_item_id)} | format pattern "/application/field/{field_id}/{field_item_id}") $auth.query)
   let req_body = {"created_at": $created_at, "description": $description, "entity": $entity, "id": $id, "label": $label, "name": $name, "relation": $relation, "updated_at": $updated_at} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key, "X-API2CRM-DESCRIBE-LIFETIME": $x_api2crm_describe_lifetime} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # GET for application
@@ -12467,12 +16023,23 @@ export def "application-list get-collection" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/application/list" $qp)
+  let full_url = (build-url $base "/application/list" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page_size": $page_size, "page": $page, "filter": $filter, "fields": $fields, "sort": $qp_sort} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"page_size": $page_size, "page": $page, "filter": $filter, "fields": $fields, "sort": $qp_sort} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # POST for request
@@ -12500,14 +16067,25 @@ export def "application-request create-entity" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/application/request")
+  let full_url = (build-url $base "/application/request" $auth.query)
   let req_body = {"content": $content, "header": $header, "method": $method, "path": $path} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key, "X-API2CRM-APPLICATION-KEY": $x_api2crm_application_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # DELETE for application
@@ -12530,12 +16108,23 @@ export def "application delete-entity" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($key | is-empty) { error make --unspanned { msg: "path parameter 'key' must be non-empty" } }
-  let full_url = (build-url $base ({key: (encode-path-segment $key)} | format pattern "/application/{key}"))
+  let full_url = (build-url $base ({key: (encode-path-segment $key)} | format pattern "/application/{key}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # GET for application
@@ -12560,12 +16149,23 @@ export def "application get-entity" [
   let base = ($base_url | default $BASE_URL)
   if ($key | is-empty) { error make --unspanned { msg: "path parameter 'key' must be non-empty" } }
   let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({key: (encode-path-segment $key)} | format pattern "/application/{key}") $qp)
+  let full_url = (build-url $base ({key: (encode-path-segment $key)} | format pattern "/application/{key}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"fields": $fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"fields": $fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # PUT for application
@@ -12593,14 +16193,25 @@ export def "application update-entity" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($key | is-empty) { error make --unspanned { msg: "path parameter 'key' must be non-empty" } }
-  let full_url = (build-url $base ({key: (encode-path-segment $key)} | format pattern "/application/{key}"))
+  let full_url = (build-url $base ({key: (encode-path-segment $key)} | format pattern "/application/{key}") $auth.query)
   let req_body = {"authorization": $authorization, "credential": $credential, "description": $description, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # GET for platform
@@ -12626,12 +16237,23 @@ export def "platform-list get-collection" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/platform/list" $qp)
+  let full_url = (build-url $base "/platform/list" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page_size": $page_size, "page": $page, "fields": $fields, "sort": $qp_sort} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"page_size": $page_size, "page": $page, "fields": $fields, "sort": $qp_sort} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET for platform
@@ -12656,12 +16278,23 @@ export def "platform get-entity" [
   let base = ($base_url | default $BASE_URL)
   if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
   let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({type: (encode-path-segment $type)} | format pattern "/platform/{type}") $qp)
+  let full_url = (build-url $base ({type: (encode-path-segment $type)} | format pattern "/platform/{type}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"fields": $fields} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"fields": $fields} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # POST for internalUser
@@ -12695,14 +16328,25 @@ export def "user create-internal-entity" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/user")
+  let full_url = (build-url $base "/user" $auth.query)
   let req_body = {"created_at": $created_at, "email": $email, "internal_request_count": $internal_request_count, "key": $key, "last_used_at": $last_used_at, "name": $name, "organization": $organization, "phone": $phone, "request_count": $request_count, "roles": $roles, "status": $status, "updated_at": $updated_at} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # COUNT for internalUser
@@ -12725,12 +16369,23 @@ export def "user-count get-internal-collection" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/user/count" $qp)
+  let full_url = (build-url $base "/user/count" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"filter": $filter} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET for internalUser
@@ -12759,12 +16414,23 @@ export def "user-list get-internal-collection" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "application_request_start" $application_request_start "scalar") (serialize-qp "application_request_end" $application_request_end "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/user/list" $qp)
+  let full_url = (build-url $base "/user/list" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page_size": $page_size, "page": $page, "filter": $filter, "fields": $fields, "sort": $qp_sort, "application_request_start": $application_request_start, "application_request_end": $application_request_end} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"page_size": $page_size, "page": $page, "filter": $filter, "fields": $fields, "sort": $qp_sort, "application_request_start": $application_request_start, "application_request_end": $application_request_end} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # DELETE for internalUser
@@ -12787,12 +16453,23 @@ export def "user delete-entity" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($internal_user_id | is-empty) { error make --unspanned { msg: "path parameter 'internal_user_id' must be non-empty" } }
-  let full_url = (build-url $base ({internal_user_id: (encode-path-segment $internal_user_id)} | format pattern "/user/{internal_user_id}"))
+  let full_url = (build-url $base ({internal_user_id: (encode-path-segment $internal_user_id)} | format pattern "/user/{internal_user_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # GET for internalUser
@@ -12819,12 +16496,23 @@ export def "user get-entity" [
   let base = ($base_url | default $BASE_URL)
   if ($internal_user_id | is-empty) { error make --unspanned { msg: "path parameter 'internal_user_id' must be non-empty" } }
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "application_request_start" $application_request_start "scalar") (serialize-qp "application_request_end" $application_request_end "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({internal_user_id: (encode-path-segment $internal_user_id)} | format pattern "/user/{internal_user_id}") $qp)
+  let full_url = (build-url $base ({internal_user_id: (encode-path-segment $internal_user_id)} | format pattern "/user/{internal_user_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"fields": $fields, "application_request_start": $application_request_start, "application_request_end": $application_request_end} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"fields": $fields, "application_request_start": $application_request_start, "application_request_end": $application_request_end} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # PUT for internalUser
@@ -12860,12 +16548,23 @@ export def "user update-entity" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($internal_user_id | is-empty) { error make --unspanned { msg: "path parameter 'internal_user_id' must be non-empty" } }
-  let full_url = (build-url $base ({internal_user_id: (encode-path-segment $internal_user_id)} | format pattern "/user/{internal_user_id}"))
+  let full_url = (build-url $base ({internal_user_id: (encode-path-segment $internal_user_id)} | format pattern "/user/{internal_user_id}") $auth.query)
   let req_body = {"created_at": $created_at, "email": $email, "internal_request_count": $internal_request_count, "key": $key, "last_used_at": $last_used_at, "name": $name, "organization": $organization, "phone": $phone, "request_count": $request_count, "roles": $roles, "status": $status, "updated_at": $updated_at} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-API2CRM-USER-KEY": $x_api2crm_user_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }

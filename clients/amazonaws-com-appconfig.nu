@@ -8,7 +8,7 @@ const BASE_URL = "http://appconfig.us-east-1.amazonaws.com"
 # `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
 # where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o AMAZON_APPCONFIG_TOKEN | default "" }
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o AMAZON_APPCONFIG_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
@@ -41,14 +41,11 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
-# Trick: `url encode --all` over-encodes, then we decode the four unreserved
-# punctuation chars back. Pre-existing %XX sequences in the input survive
-# because `url encode --all` first turns their % into %25.
 def encode-path-segment [v: any]: nothing -> string {
   $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
-# Serialize an array-typed path parameter (issue 49.A). OpenAPI 3 `style: simple`
+# Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
 # (the default for path params) and Swagger 2 `collectionFormat: csv` both join
 # the elements with a literal comma WITHIN the single path segment, each element
 # RFC-3986-encoded individually (so a comma inside an element stays %2C). Without
@@ -59,51 +56,57 @@ def encode-path-array [v: any]: nothing -> string {
   if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
 }
 
-# Build URL from base, path, and optional query string
-def build-url [base: string, path: string, query?: string]: nothing -> string {
+# Build the request URL from base, path, and any number of pre-encoded query
+# fragments (param serializer output and/or the auth query). Each fragment is an
+# `&`-joinable `key=value` string already percent-encoded by its producer; empty
+# fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
+# delimiters are hand-spliced — and any query already on the base URL is merged in.
+def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
   let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
-  let result = ($parsed | upsert path $full_path)
-  if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
+  let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
+  $parsed | upsert path $full_path | upsert query $query | url join
 }
 
-# Build the dry-run record returned by --dry-run. Shape:
-#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
-#    auth: {scheme, location}}
-# `meta` carries logical-form data (the query record by spec name, the pre-serialization
-# body) that do-request itself cannot reconstruct from its wire-format args.
-def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
-  let m = ($meta | default {})
-  {
-    dry_run: true
-    method: $method
-    url: $url
-    query: ($m | get -o query | default {})
-    headers: $auth.headers
-    body: ($m | get -o body)
-    content_type: $content_type
-    timeout: $timeout
-    auth: {scheme: $auth.scheme, location: $auth.location}
-  }
+# Success policy: did this response succeed? Single source of truth, consulted by
+# handle-response and the HEAD header-unwrap. Empty ok_codes means the spec listed
+# none, so fall back to < 400. Otherwise: any 2xx, plus documented success codes.
+def status-ok [status: int, ok_codes: list<int>]: nothing -> bool {
+  if ($ok_codes | is-empty) { $status < 400 } else { ($status >= 200 and $status < 300) or ($status in $ok_codes) }
 }
 
-# Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
-  let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
-  let timeout = ($max_time | default 30min)
-  let ct = ($content_type | default "application/json")
-  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
-  let resp = match $method {
-    "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
-  }
-  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
-  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
+# Unwrap a `--full` HTTP response into the user-facing value. Response arrives
+# via pipeline; ok_codes gates the error throw (see status-ok).
+def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: record -> any {
+  let resp = $in
+  if $allow_errors { return $resp }
+  if not (status-ok $resp.status $ok_codes) { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } }
+  if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
+  if $resp.status == 204 { return null }
+  $resp.body
+}
+
+# GET — bodyless, honours --raw
+def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+}
+
+# POST — body + content-type
+def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# PATCH — body + content-type
+def send-patch [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http patch --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http patch --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# DELETE — body via --data
+def send-delete [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http delete --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url } else { http delete --headers $req.headers --content-type $req.content_type --data $body --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url }
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 def base-url-completer [] { ["http://appconfig.us-east-1.amazonaws.com" "http://appconfig.us-east-2.amazonaws.com" "http://appconfig.us-west-1.amazonaws.com" "http://appconfig.us-west-2.amazonaws.com" "http://appconfig.us-gov-west-1.amazonaws.com" "http://appconfig.us-gov-east-1.amazonaws.com" "http://appconfig.ca-central-1.amazonaws.com" "http://appconfig.eu-north-1.amazonaws.com" "http://appconfig.eu-west-1.amazonaws.com" "http://appconfig.eu-west-2.amazonaws.com" "http://appconfig.eu-west-3.amazonaws.com" "http://appconfig.eu-central-1.amazonaws.com" "http://appconfig.eu-south-1.amazonaws.com" "http://appconfig.af-south-1.amazonaws.com" "http://appconfig.ap-northeast-1.amazonaws.com" "http://appconfig.ap-northeast-2.amazonaws.com" "http://appconfig.ap-northeast-3.amazonaws.com" "http://appconfig.ap-southeast-1.amazonaws.com" "http://appconfig.ap-southeast-2.amazonaws.com" "http://appconfig.ap-east-1.amazonaws.com" "http://appconfig.ap-south-1.amazonaws.com" "http://appconfig.sa-east-1.amazonaws.com" "http://appconfig.me-south-1.amazonaws.com" "https://appconfig.us-east-1.amazonaws.com" "https://appconfig.us-east-2.amazonaws.com" "https://appconfig.us-west-1.amazonaws.com" "https://appconfig.us-west-2.amazonaws.com" "https://appconfig.us-gov-west-1.amazonaws.com" "https://appconfig.us-gov-east-1.amazonaws.com" "https://appconfig.ca-central-1.amazonaws.com" "https://appconfig.eu-north-1.amazonaws.com" "https://appconfig.eu-west-1.amazonaws.com" "https://appconfig.eu-west-2.amazonaws.com" "https://appconfig.eu-west-3.amazonaws.com" "https://appconfig.eu-central-1.amazonaws.com" "https://appconfig.eu-south-1.amazonaws.com" "https://appconfig.af-south-1.amazonaws.com" "https://appconfig.ap-northeast-1.amazonaws.com" "https://appconfig.ap-northeast-2.amazonaws.com" "https://appconfig.ap-northeast-3.amazonaws.com" "https://appconfig.ap-southeast-1.amazonaws.com" "https://appconfig.ap-southeast-2.amazonaws.com" "https://appconfig.ap-east-1.amazonaws.com" "https://appconfig.ap-south-1.amazonaws.com" "https://appconfig.sa-east-1.amazonaws.com" "https://appconfig.me-south-1.amazonaws.com" "http://appconfig.cn-north-1.amazonaws.com.cn" "http://appconfig.cn-northwest-1.amazonaws.com.cn" "https://appconfig.cn-north-1.amazonaws.com.cn" "https://appconfig.cn-northwest-1.amazonaws.com.cn"] }
@@ -164,14 +167,25 @@ export def "applications create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/applications")
+  let full_url = (build-url $base "/applications" $auth.query)
   let req_body = {"Name": $name, "Description": $description, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Lists all applications in your Amazon Web Services account.
@@ -203,12 +217,23 @@ export def "applications list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "max_results" $max_results "scalar") (serialize-qp "next_token" $next_token "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/applications" $qp)
+  let full_url = (build-url $base "/applications" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"max_results": $max_results, "next_token": $next_token, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"max_results": $max_results, "next_token": $next_token, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Creates a configuration profile, which is information that enables AppConfig to access the configuration source. Valid configuration sources include the following: Configuration data in YAML, JSON, and other formats stored in the AppConfig hosted configuration store Configuration data stored as objects in an Amazon Simple Storage Service (Amazon S3) bucket Pipelines stored in CodePipeline Secrets stored in Secrets Manager Standard and secure string parameters stored in Amazon Web Services Systems Manager Parameter Store Configuration data in SSM documents stored in the Systems Manager document store A configuration profile includes the following information: The URI location of the configuration data. The Identity and Access Management (IAM) role that provides access to the configuration data. A validator for the configuration data. Available validators include either a JSON Schema or an Amazon Web Services Lambda function. For more information, see Create a Configuration and a Configuration Profile (http://docs.aws.amazon.com/appconfig/latest/userguide/appconfig-creating-configuration-and-profile.html) in the AppConfig User Guide.
@@ -246,14 +271,25 @@ export def "applications-configurationprofiles create-configuration-profile" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'ApplicationId' must be non-empty" } }
-  let full_url = (build-url $base ({application_id: (encode-path-segment $application_id)} | format pattern "/applications/{application_id}/configurationprofiles"))
+  let full_url = (build-url $base ({application_id: (encode-path-segment $application_id)} | format pattern "/applications/{application_id}/configurationprofiles") $auth.query)
   let req_body = {"Name": $name, "Description": $description, "LocationUri": $location_uri, "RetrievalRoleArn": $retrieval_role_arn, "Validators": $validators, "Tags": $tags, "Type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Lists the configuration profiles for an application.
@@ -288,12 +324,23 @@ export def "applications-configurationprofiles list-configuration-profiles" [
   let base = ($base_url | default $BASE_URL)
   if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'ApplicationId' must be non-empty" } }
   let qp = [(serialize-qp "max_results" $max_results "scalar") (serialize-qp "next_token" $next_token "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({application_id: (encode-path-segment $application_id)} | format pattern "/applications/{application_id}/configurationprofiles") $qp)
+  let full_url = (build-url $base ({application_id: (encode-path-segment $application_id)} | format pattern "/applications/{application_id}/configurationprofiles") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"max_results": $max_results, "next_token": $next_token, "type": $type, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"max_results": $max_results, "next_token": $next_token, "type": $type, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Creates a deployment strategy that defines important criteria for rolling out your configuration to the designated targets. A deployment strategy includes the overall duration required, a percentage of targets to receive the deployment during each interval, an algorithm that defines how percentage grows, and bake time.
@@ -329,14 +376,25 @@ export def "deploymentstrategies create-deployment-strategy" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/deploymentstrategies")
+  let full_url = (build-url $base "/deploymentstrategies" $auth.query)
   let req_body = {"Name": $name, "Description": $description, "DeploymentDurationInMinutes": $deployment_duration_in_minutes, "FinalBakeTimeInMinutes": $final_bake_time_in_minutes, "GrowthFactor": $growth_factor, "GrowthType": $growth_type, "ReplicateTo": $replicate_to, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Lists deployment strategies.
@@ -368,12 +426,23 @@ export def "deploymentstrategies list-deployment-strategies" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "max_results" $max_results "scalar") (serialize-qp "next_token" $next_token "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/deploymentstrategies" $qp)
+  let full_url = (build-url $base "/deploymentstrategies" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"max_results": $max_results, "next_token": $next_token, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"max_results": $max_results, "next_token": $next_token, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Creates an environment. For each application, you define one or more environments. An environment is a deployment group of AppConfig targets, such as applications in a Beta or Production environment. You can also define environments for application subcomponents such as the Web, Mobile and Back-end components for your application. You can configure Amazon CloudWatch alarms for each environment. The system monitors alarms during a configuration deployment. If an alarm is triggered, the system rolls back the configuration.
@@ -408,14 +477,25 @@ export def "applications-environments create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'ApplicationId' must be non-empty" } }
-  let full_url = (build-url $base ({application_id: (encode-path-segment $application_id)} | format pattern "/applications/{application_id}/environments"))
+  let full_url = (build-url $base ({application_id: (encode-path-segment $application_id)} | format pattern "/applications/{application_id}/environments") $auth.query)
   let req_body = {"Name": $name, "Description": $description, "Monitors": $monitors, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Lists the environments for an application.
@@ -449,12 +529,23 @@ export def "applications-environments list" [
   let base = ($base_url | default $BASE_URL)
   if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'ApplicationId' must be non-empty" } }
   let qp = [(serialize-qp "max_results" $max_results "scalar") (serialize-qp "next_token" $next_token "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({application_id: (encode-path-segment $application_id)} | format pattern "/applications/{application_id}/environments") $qp)
+  let full_url = (build-url $base ({application_id: (encode-path-segment $application_id)} | format pattern "/applications/{application_id}/environments") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"max_results": $max_results, "next_token": $next_token, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"max_results": $max_results, "next_token": $next_token, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Creates an AppConfig extension. An extension augments your ability to inject logic or behavior at different points during the AppConfig workflow of creating or deploying a configuration. You can create your own extensions or use the Amazon Web Services authored extensions provided by AppConfig. For most use cases, to create your own extension, you must create an Lambda function to perform any computation and processing defined in the extension. For more information about extensions, see Working with AppConfig extensions (https://docs.aws.amazon.com/appconfig/latest/userguide/working-with-appconfig-extensions.html) in the AppConfig User Guide.
@@ -488,14 +579,25 @@ export def "extensions create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/extensions")
+  let full_url = (build-url $base "/extensions" $auth.query)
   let req_body = {"Name": $name, "Description": $description, "Actions": $actions, "Parameters": $parameters, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "Latest-Version-Number": $latest_version_number} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Lists all custom and Amazon Web Services authored AppConfig extensions in the account. For more information about extensions, see Working with AppConfig extensions (https://docs.aws.amazon.com/appconfig/latest/userguide/working-with-appconfig-extensions.html) in the AppConfig User Guide.
@@ -528,12 +630,23 @@ export def "extensions list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "max_results" $max_results "scalar") (serialize-qp "next_token" $next_token "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/extensions" $qp)
+  let full_url = (build-url $base "/extensions" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"max_results": $max_results, "next_token": $next_token, "name": $name, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"max_results": $max_results, "next_token": $next_token, "name": $name, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # When you create an extension or configure an Amazon Web Services authored extension, you associate the extension with an AppConfig application, environment, or configuration profile. For example, you can choose to run the AppConfig deployment events to Amazon SNS Amazon Web Services authored extension and receive notifications on an Amazon SNS topic anytime a configuration deployment is started for a specific application. Defining which extension to associate with an AppConfig resource is called an extension association. An extension association is a specified relationship between an extension and an AppConfig resource, such as an application or a configuration profile. For more information about extensions and associations, see Working with AppConfig extensions (https://docs.aws.amazon.com/appconfig/latest/userguide/working-with-appconfig-extensions.html) in the AppConfig User Guide.
@@ -566,14 +679,25 @@ export def "extensionassociations create-extension-association" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/extensionassociations")
+  let full_url = (build-url $base "/extensionassociations" $auth.query)
   let req_body = {"ExtensionIdentifier": $extension_identifier, "ExtensionVersionNumber": $extension_version_number, "ResourceIdentifier": $resource_identifier, "Parameters": $parameters, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Lists all AppConfig extension associations in the account. For more information about extensions and associations, see Working with AppConfig extensions (https://docs.aws.amazon.com/appconfig/latest/userguide/working-with-appconfig-extensions.html) in the AppConfig User Guide.
@@ -608,12 +732,23 @@ export def "extensionassociations list-extension-associations" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "resource_identifier" $resource_identifier "scalar") (serialize-qp "extension_identifier" $extension_identifier "scalar") (serialize-qp "extension_version_number" $extension_version_number "scalar") (serialize-qp "max_results" $max_results "scalar") (serialize-qp "next_token" $next_token "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/extensionassociations" $qp)
+  let full_url = (build-url $base "/extensionassociations" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"resource_identifier": $resource_identifier, "extension_identifier": $extension_identifier, "extension_version_number": $extension_version_number, "max_results": $max_results, "next_token": $next_token, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"resource_identifier": $resource_identifier, "extension_identifier": $extension_identifier, "extension_version_number": $extension_version_number, "max_results": $max_results, "next_token": $next_token, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Creates a new configuration in the AppConfig hosted configuration store.
@@ -650,7 +785,7 @@ export def "applications-configurationprofiles-hostedconfigurationversions creat
   let base = ($base_url | default $BASE_URL)
   if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'ApplicationId' must be non-empty" } }
   if ($configuration_profile_id | is-empty) { error make --unspanned { msg: "path parameter 'ConfigurationProfileId' must be non-empty" } }
-  let full_url = (build-url $base ({application_id: (encode-path-segment $application_id), configuration_profile_id: (encode-path-segment $configuration_profile_id)} | format pattern "/applications/{application_id}/configurationprofiles/{configuration_profile_id}/hostedconfigurationversions"))
+  let full_url = (build-url $base ({application_id: (encode-path-segment $application_id), configuration_profile_id: (encode-path-segment $configuration_profile_id)} | format pattern "/applications/{application_id}/configurationprofiles/{configuration_profile_id}/hostedconfigurationversions") $auth.query)
   let req_body = {"Content": $content} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
@@ -659,7 +794,18 @@ export def "applications-configurationprofiles-hostedconfigurationversions creat
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let effective_ct = ($content_type | default "application/json")
   let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $effective_ct $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: $effective_ct
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [201]
 }
 
 # Deletes an application. Deleting an application does not delete a configuration from a host.
@@ -688,12 +834,23 @@ export def "applications delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'ApplicationId' must be non-empty" } }
-  let full_url = (build-url $base ({application_id: (encode-path-segment $application_id)} | format pattern "/applications/{application_id}"))
+  let full_url = (build-url $base ({application_id: (encode-path-segment $application_id)} | format pattern "/applications/{application_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Retrieves information about an application.
@@ -722,12 +879,23 @@ export def "applications get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'ApplicationId' must be non-empty" } }
-  let full_url = (build-url $base ({application_id: (encode-path-segment $application_id)} | format pattern "/applications/{application_id}"))
+  let full_url = (build-url $base ({application_id: (encode-path-segment $application_id)} | format pattern "/applications/{application_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates an application.
@@ -759,14 +927,25 @@ export def "applications update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'ApplicationId' must be non-empty" } }
-  let full_url = (build-url $base ({application_id: (encode-path-segment $application_id)} | format pattern "/applications/{application_id}"))
+  let full_url = (build-url $base ({application_id: (encode-path-segment $application_id)} | format pattern "/applications/{application_id}") $auth.query)
   let req_body = {"Name": $name, "Description": $description} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes a configuration profile. Deleting a configuration profile does not delete a configuration from a host.
@@ -797,12 +976,23 @@ export def "applications-configurationprofiles delete-configuration-profile" [
   let base = ($base_url | default $BASE_URL)
   if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'ApplicationId' must be non-empty" } }
   if ($configuration_profile_id | is-empty) { error make --unspanned { msg: "path parameter 'ConfigurationProfileId' must be non-empty" } }
-  let full_url = (build-url $base ({application_id: (encode-path-segment $application_id), configuration_profile_id: (encode-path-segment $configuration_profile_id)} | format pattern "/applications/{application_id}/configurationprofiles/{configuration_profile_id}"))
+  let full_url = (build-url $base ({application_id: (encode-path-segment $application_id), configuration_profile_id: (encode-path-segment $configuration_profile_id)} | format pattern "/applications/{application_id}/configurationprofiles/{configuration_profile_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Retrieves information about a configuration profile.
@@ -833,12 +1023,23 @@ export def "applications-configurationprofiles get-configuration-profile" [
   let base = ($base_url | default $BASE_URL)
   if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'ApplicationId' must be non-empty" } }
   if ($configuration_profile_id | is-empty) { error make --unspanned { msg: "path parameter 'ConfigurationProfileId' must be non-empty" } }
-  let full_url = (build-url $base ({application_id: (encode-path-segment $application_id), configuration_profile_id: (encode-path-segment $configuration_profile_id)} | format pattern "/applications/{application_id}/configurationprofiles/{configuration_profile_id}"))
+  let full_url = (build-url $base ({application_id: (encode-path-segment $application_id), configuration_profile_id: (encode-path-segment $configuration_profile_id)} | format pattern "/applications/{application_id}/configurationprofiles/{configuration_profile_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates a configuration profile.
@@ -875,14 +1076,25 @@ export def "applications-configurationprofiles update-configuration-profile" [
   let base = ($base_url | default $BASE_URL)
   if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'ApplicationId' must be non-empty" } }
   if ($configuration_profile_id | is-empty) { error make --unspanned { msg: "path parameter 'ConfigurationProfileId' must be non-empty" } }
-  let full_url = (build-url $base ({application_id: (encode-path-segment $application_id), configuration_profile_id: (encode-path-segment $configuration_profile_id)} | format pattern "/applications/{application_id}/configurationprofiles/{configuration_profile_id}"))
+  let full_url = (build-url $base ({application_id: (encode-path-segment $application_id), configuration_profile_id: (encode-path-segment $configuration_profile_id)} | format pattern "/applications/{application_id}/configurationprofiles/{configuration_profile_id}") $auth.query)
   let req_body = {"Name": $name, "Description": $description, "RetrievalRoleArn": $retrieval_role_arn, "Validators": $validators} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes a deployment strategy. Deleting a deployment strategy does not delete a configuration from a host.
@@ -911,12 +1123,23 @@ export def "deployementstrategies delete-deployment-strategy" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($deployment_strategy_id | is-empty) { error make --unspanned { msg: "path parameter 'DeploymentStrategyId' must be non-empty" } }
-  let full_url = (build-url $base ({deployment_strategy_id: (encode-path-segment $deployment_strategy_id)} | format pattern "/deployementstrategies/{deployment_strategy_id}"))
+  let full_url = (build-url $base ({deployment_strategy_id: (encode-path-segment $deployment_strategy_id)} | format pattern "/deployementstrategies/{deployment_strategy_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Deletes an environment. Deleting an environment does not delete a configuration from a host.
@@ -947,12 +1170,23 @@ export def "applications-environments delete" [
   let base = ($base_url | default $BASE_URL)
   if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'ApplicationId' must be non-empty" } }
   if ($environment_id | is-empty) { error make --unspanned { msg: "path parameter 'EnvironmentId' must be non-empty" } }
-  let full_url = (build-url $base ({application_id: (encode-path-segment $application_id), environment_id: (encode-path-segment $environment_id)} | format pattern "/applications/{application_id}/environments/{environment_id}"))
+  let full_url = (build-url $base ({application_id: (encode-path-segment $application_id), environment_id: (encode-path-segment $environment_id)} | format pattern "/applications/{application_id}/environments/{environment_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Retrieves information about an environment. An environment is a deployment group of AppConfig applications, such as applications in a Production environment or in an EU_Region environment. Each configuration deployment targets an environment. You can enable one or more Amazon CloudWatch alarms for an environment. If an alarm is triggered during a deployment, AppConfig roles back the configuration.
@@ -983,12 +1217,23 @@ export def "applications-environments get" [
   let base = ($base_url | default $BASE_URL)
   if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'ApplicationId' must be non-empty" } }
   if ($environment_id | is-empty) { error make --unspanned { msg: "path parameter 'EnvironmentId' must be non-empty" } }
-  let full_url = (build-url $base ({application_id: (encode-path-segment $application_id), environment_id: (encode-path-segment $environment_id)} | format pattern "/applications/{application_id}/environments/{environment_id}"))
+  let full_url = (build-url $base ({application_id: (encode-path-segment $application_id), environment_id: (encode-path-segment $environment_id)} | format pattern "/applications/{application_id}/environments/{environment_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates an environment.
@@ -1024,14 +1269,25 @@ export def "applications-environments update" [
   let base = ($base_url | default $BASE_URL)
   if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'ApplicationId' must be non-empty" } }
   if ($environment_id | is-empty) { error make --unspanned { msg: "path parameter 'EnvironmentId' must be non-empty" } }
-  let full_url = (build-url $base ({application_id: (encode-path-segment $application_id), environment_id: (encode-path-segment $environment_id)} | format pattern "/applications/{application_id}/environments/{environment_id}"))
+  let full_url = (build-url $base ({application_id: (encode-path-segment $application_id), environment_id: (encode-path-segment $environment_id)} | format pattern "/applications/{application_id}/environments/{environment_id}") $auth.query)
   let req_body = {"Name": $name, "Description": $description, "Monitors": $monitors} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes an AppConfig extension. You must delete all associations to an extension before you delete the extension.
@@ -1062,12 +1318,23 @@ export def "extensions delete" [
   let base = ($base_url | default $BASE_URL)
   if ($extension_identifier | is-empty) { error make --unspanned { msg: "path parameter 'ExtensionIdentifier' must be non-empty" } }
   let qp = [(serialize-qp "version" $version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({extension_identifier: (encode-path-segment $extension_identifier)} | format pattern "/extensions/{extension_identifier}") $qp)
+  let full_url = (build-url $base ({extension_identifier: (encode-path-segment $extension_identifier)} | format pattern "/extensions/{extension_identifier}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"version": $version} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"version": $version} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Returns information about an AppConfig extension.
@@ -1098,12 +1365,23 @@ export def "extensions get" [
   let base = ($base_url | default $BASE_URL)
   if ($extension_identifier | is-empty) { error make --unspanned { msg: "path parameter 'ExtensionIdentifier' must be non-empty" } }
   let qp = [(serialize-qp "version_number" $version_number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({extension_identifier: (encode-path-segment $extension_identifier)} | format pattern "/extensions/{extension_identifier}") $qp)
+  let full_url = (build-url $base ({extension_identifier: (encode-path-segment $extension_identifier)} | format pattern "/extensions/{extension_identifier}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"version_number": $version_number} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"version_number": $version_number} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates an AppConfig extension. For more information about extensions, see Working with AppConfig extensions (https://docs.aws.amazon.com/appconfig/latest/userguide/working-with-appconfig-extensions.html) in the AppConfig User Guide.
@@ -1137,14 +1415,25 @@ export def "extensions update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($extension_identifier | is-empty) { error make --unspanned { msg: "path parameter 'ExtensionIdentifier' must be non-empty" } }
-  let full_url = (build-url $base ({extension_identifier: (encode-path-segment $extension_identifier)} | format pattern "/extensions/{extension_identifier}"))
+  let full_url = (build-url $base ({extension_identifier: (encode-path-segment $extension_identifier)} | format pattern "/extensions/{extension_identifier}") $auth.query)
   let req_body = {"Description": $description, "Actions": $actions, "Parameters": $parameters, "VersionNumber": $version_number} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes an extension association. This action doesn't delete extensions defined in the association.
@@ -1173,12 +1462,23 @@ export def "extensionassociations delete-extension-association" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($extension_association_id | is-empty) { error make --unspanned { msg: "path parameter 'ExtensionAssociationId' must be non-empty" } }
-  let full_url = (build-url $base ({extension_association_id: (encode-path-segment $extension_association_id)} | format pattern "/extensionassociations/{extension_association_id}"))
+  let full_url = (build-url $base ({extension_association_id: (encode-path-segment $extension_association_id)} | format pattern "/extensionassociations/{extension_association_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Returns information about an AppConfig extension association. For more information about extensions and associations, see Working with AppConfig extensions (https://docs.aws.amazon.com/appconfig/latest/userguide/working-with-appconfig-extensions.html) in the AppConfig User Guide.
@@ -1207,12 +1507,23 @@ export def "extensionassociations get-extension-association" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($extension_association_id | is-empty) { error make --unspanned { msg: "path parameter 'ExtensionAssociationId' must be non-empty" } }
-  let full_url = (build-url $base ({extension_association_id: (encode-path-segment $extension_association_id)} | format pattern "/extensionassociations/{extension_association_id}"))
+  let full_url = (build-url $base ({extension_association_id: (encode-path-segment $extension_association_id)} | format pattern "/extensionassociations/{extension_association_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates an association. For more information about extensions and associations, see Working with AppConfig extensions (https://docs.aws.amazon.com/appconfig/latest/userguide/working-with-appconfig-extensions.html) in the AppConfig User Guide.
@@ -1243,14 +1554,25 @@ export def "extensionassociations update-extension-association" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($extension_association_id | is-empty) { error make --unspanned { msg: "path parameter 'ExtensionAssociationId' must be non-empty" } }
-  let full_url = (build-url $base ({extension_association_id: (encode-path-segment $extension_association_id)} | format pattern "/extensionassociations/{extension_association_id}"))
+  let full_url = (build-url $base ({extension_association_id: (encode-path-segment $extension_association_id)} | format pattern "/extensionassociations/{extension_association_id}") $auth.query)
   let req_body = {"Parameters": $parameters} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes a version of a configuration from the AppConfig hosted configuration store.
@@ -1283,12 +1605,23 @@ export def "applications-configurationprofiles-hostedconfigurationversions delet
   if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'ApplicationId' must be non-empty" } }
   if ($configuration_profile_id | is-empty) { error make --unspanned { msg: "path parameter 'ConfigurationProfileId' must be non-empty" } }
   if ($version_number | is-empty) { error make --unspanned { msg: "path parameter 'VersionNumber' must be non-empty" } }
-  let full_url = (build-url $base ({application_id: (encode-path-segment $application_id), configuration_profile_id: (encode-path-segment $configuration_profile_id), version_number: (encode-path-segment $version_number)} | format pattern "/applications/{application_id}/configurationprofiles/{configuration_profile_id}/hostedconfigurationversions/{version_number}"))
+  let full_url = (build-url $base ({application_id: (encode-path-segment $application_id), configuration_profile_id: (encode-path-segment $configuration_profile_id), version_number: (encode-path-segment $version_number)} | format pattern "/applications/{application_id}/configurationprofiles/{configuration_profile_id}/hostedconfigurationversions/{version_number}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Retrieves information about a specific configuration version.
@@ -1321,12 +1654,23 @@ export def "applications-configurationprofiles-hostedconfigurationversions get-h
   if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'ApplicationId' must be non-empty" } }
   if ($configuration_profile_id | is-empty) { error make --unspanned { msg: "path parameter 'ConfigurationProfileId' must be non-empty" } }
   if ($version_number | is-empty) { error make --unspanned { msg: "path parameter 'VersionNumber' must be non-empty" } }
-  let full_url = (build-url $base ({application_id: (encode-path-segment $application_id), configuration_profile_id: (encode-path-segment $configuration_profile_id), version_number: (encode-path-segment $version_number)} | format pattern "/applications/{application_id}/configurationprofiles/{configuration_profile_id}/hostedconfigurationversions/{version_number}"))
+  let full_url = (build-url $base ({application_id: (encode-path-segment $application_id), configuration_profile_id: (encode-path-segment $configuration_profile_id), version_number: (encode-path-segment $version_number)} | format pattern "/applications/{application_id}/configurationprofiles/{configuration_profile_id}/hostedconfigurationversions/{version_number}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # (Deprecated) Retrieves the latest deployed configuration. Note the following important information. This API action is deprecated. Calls to receive configuration data should use the StartConfigurationSession (https://docs.aws.amazon.com/appconfig/2019-10-09/APIReference/API_appconfigdata_StartConfigurationSession.html) and GetLatestConfiguration (https://docs.aws.amazon.com/appconfig/2019-10-09/APIReference/API_appconfigdata_GetLatestConfiguration.html) APIs instead. GetConfiguration is a priced call. For more information, see Pricing (https://aws.amazon.com/systems-manager/pricing/).
@@ -1364,12 +1708,23 @@ export def "applications-environments-configurations get" [
   if ($environment | is-empty) { error make --unspanned { msg: "path parameter 'Environment' must be non-empty" } }
   if ($configuration | is-empty) { error make --unspanned { msg: "path parameter 'Configuration' must be non-empty" } }
   let qp = [(serialize-qp "client_id" $client_id "scalar") (serialize-qp "client_configuration_version" $client_configuration_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({application: (encode-path-segment $application), environment: (encode-path-segment $environment), configuration: (encode-path-segment $configuration)} | format pattern "/applications/{application}/environments/{environment}/configurations/{configuration}") $qp)
+  let full_url = (build-url $base ({application: (encode-path-segment $application), environment: (encode-path-segment $environment), configuration: (encode-path-segment $configuration)} | format pattern "/applications/{application}/environments/{environment}/configurations/{configuration}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"client_id": $client_id, "client_configuration_version": $client_configuration_version} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"client_id": $client_id, "client_configuration_version": $client_configuration_version} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieves information about a configuration deployment.
@@ -1402,12 +1757,23 @@ export def "applications-environments-deployments get" [
   if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'ApplicationId' must be non-empty" } }
   if ($environment_id | is-empty) { error make --unspanned { msg: "path parameter 'EnvironmentId' must be non-empty" } }
   if ($deployment_number | is-empty) { error make --unspanned { msg: "path parameter 'DeploymentNumber' must be non-empty" } }
-  let full_url = (build-url $base ({application_id: (encode-path-segment $application_id), environment_id: (encode-path-segment $environment_id), deployment_number: (encode-path-segment $deployment_number)} | format pattern "/applications/{application_id}/environments/{environment_id}/deployments/{deployment_number}"))
+  let full_url = (build-url $base ({application_id: (encode-path-segment $application_id), environment_id: (encode-path-segment $environment_id), deployment_number: (encode-path-segment $deployment_number)} | format pattern "/applications/{application_id}/environments/{environment_id}/deployments/{deployment_number}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Stops a deployment. This API action works only on deployments that have a status of DEPLOYING. This action moves the deployment to a status of ROLLED_BACK.
@@ -1440,12 +1806,23 @@ export def "applications-environments-deployments stop" [
   if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'ApplicationId' must be non-empty" } }
   if ($environment_id | is-empty) { error make --unspanned { msg: "path parameter 'EnvironmentId' must be non-empty" } }
   if ($deployment_number | is-empty) { error make --unspanned { msg: "path parameter 'DeploymentNumber' must be non-empty" } }
-  let full_url = (build-url $base ({application_id: (encode-path-segment $application_id), environment_id: (encode-path-segment $environment_id), deployment_number: (encode-path-segment $deployment_number)} | format pattern "/applications/{application_id}/environments/{environment_id}/deployments/{deployment_number}"))
+  let full_url = (build-url $base ({application_id: (encode-path-segment $application_id), environment_id: (encode-path-segment $environment_id), deployment_number: (encode-path-segment $deployment_number)} | format pattern "/applications/{application_id}/environments/{environment_id}/deployments/{deployment_number}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [202]
 }
 
 # Retrieves information about a deployment strategy. A deployment strategy defines important criteria for rolling out your configuration to the designated targets. A deployment strategy includes the overall duration required, a percentage of targets to receive the deployment during each interval, an algorithm that defines how percentage grows, and bake time.
@@ -1474,12 +1851,23 @@ export def "deploymentstrategies get-deployment-strategy" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($deployment_strategy_id | is-empty) { error make --unspanned { msg: "path parameter 'DeploymentStrategyId' must be non-empty" } }
-  let full_url = (build-url $base ({deployment_strategy_id: (encode-path-segment $deployment_strategy_id)} | format pattern "/deploymentstrategies/{deployment_strategy_id}"))
+  let full_url = (build-url $base ({deployment_strategy_id: (encode-path-segment $deployment_strategy_id)} | format pattern "/deploymentstrategies/{deployment_strategy_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates a deployment strategy.
@@ -1514,14 +1902,25 @@ export def "deploymentstrategies update-deployment-strategy" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($deployment_strategy_id | is-empty) { error make --unspanned { msg: "path parameter 'DeploymentStrategyId' must be non-empty" } }
-  let full_url = (build-url $base ({deployment_strategy_id: (encode-path-segment $deployment_strategy_id)} | format pattern "/deploymentstrategies/{deployment_strategy_id}"))
+  let full_url = (build-url $base ({deployment_strategy_id: (encode-path-segment $deployment_strategy_id)} | format pattern "/deploymentstrategies/{deployment_strategy_id}") $auth.query)
   let req_body = {"Description": $description, "DeploymentDurationInMinutes": $deployment_duration_in_minutes, "FinalBakeTimeInMinutes": $final_bake_time_in_minutes, "GrowthFactor": $growth_factor, "GrowthType": $growth_type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Lists the deployments for an environment in descending deployment number order.
@@ -1557,12 +1956,23 @@ export def "applications-environments-deployments list" [
   if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'ApplicationId' must be non-empty" } }
   if ($environment_id | is-empty) { error make --unspanned { msg: "path parameter 'EnvironmentId' must be non-empty" } }
   let qp = [(serialize-qp "max_results" $max_results "scalar") (serialize-qp "next_token" $next_token "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({application_id: (encode-path-segment $application_id), environment_id: (encode-path-segment $environment_id)} | format pattern "/applications/{application_id}/environments/{environment_id}/deployments") $qp)
+  let full_url = (build-url $base ({application_id: (encode-path-segment $application_id), environment_id: (encode-path-segment $environment_id)} | format pattern "/applications/{application_id}/environments/{environment_id}/deployments") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"max_results": $max_results, "next_token": $next_token, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"max_results": $max_results, "next_token": $next_token, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Starts a deployment.
@@ -1600,14 +2010,25 @@ export def "applications-environments-deployments start" [
   let base = ($base_url | default $BASE_URL)
   if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'ApplicationId' must be non-empty" } }
   if ($environment_id | is-empty) { error make --unspanned { msg: "path parameter 'EnvironmentId' must be non-empty" } }
-  let full_url = (build-url $base ({application_id: (encode-path-segment $application_id), environment_id: (encode-path-segment $environment_id)} | format pattern "/applications/{application_id}/environments/{environment_id}/deployments"))
+  let full_url = (build-url $base ({application_id: (encode-path-segment $application_id), environment_id: (encode-path-segment $environment_id)} | format pattern "/applications/{application_id}/environments/{environment_id}/deployments") $auth.query)
   let req_body = {"DeploymentStrategyId": $deployment_strategy_id, "ConfigurationProfileId": $configuration_profile_id, "ConfigurationVersion": $configuration_version, "Description": $description, "Tags": $tags, "KmsKeyIdentifier": $kms_key_identifier} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Lists configurations stored in the AppConfig hosted configuration store by version.
@@ -1644,12 +2065,23 @@ export def "applications-configurationprofiles-hostedconfigurationversions list-
   if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'ApplicationId' must be non-empty" } }
   if ($configuration_profile_id | is-empty) { error make --unspanned { msg: "path parameter 'ConfigurationProfileId' must be non-empty" } }
   let qp = [(serialize-qp "max_results" $max_results "scalar") (serialize-qp "next_token" $next_token "scalar") (serialize-qp "version_label" $version_label "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({application_id: (encode-path-segment $application_id), configuration_profile_id: (encode-path-segment $configuration_profile_id)} | format pattern "/applications/{application_id}/configurationprofiles/{configuration_profile_id}/hostedconfigurationversions") $qp)
+  let full_url = (build-url $base ({application_id: (encode-path-segment $application_id), configuration_profile_id: (encode-path-segment $configuration_profile_id)} | format pattern "/applications/{application_id}/configurationprofiles/{configuration_profile_id}/hostedconfigurationversions") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"max_results": $max_results, "next_token": $next_token, "version_label": $version_label, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"max_results": $max_results, "next_token": $next_token, "version_label": $version_label, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieves the list of key-value tags assigned to the resource.
@@ -1678,12 +2110,23 @@ export def "tags list-for-resource" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn | is-empty) { error make --unspanned { msg: "path parameter 'ResourceArn' must be non-empty" } }
-  let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn)} | format pattern "/tags/{resource_arn}"))
+  let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn)} | format pattern "/tags/{resource_arn}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Assigns metadata to an AppConfig resource. Tags help organize and categorize your AppConfig resources. Each tag consists of a key and an optional value, both of which you define. You can specify a maximum of 50 tags for a resource.
@@ -1714,14 +2157,25 @@ export def "tags tag-resource" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn | is-empty) { error make --unspanned { msg: "path parameter 'ResourceArn' must be non-empty" } }
-  let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn)} | format pattern "/tags/{resource_arn}"))
+  let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn)} | format pattern "/tags/{resource_arn}") $auth.query)
   let req_body = {"Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Deletes a tag key and value from an AppConfig resource.
@@ -1752,12 +2206,23 @@ export def "tags untag-resource" [
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn | is-empty) { error make --unspanned { msg: "path parameter 'ResourceArn' must be non-empty" } }
   let qp = [(serialize-qp "tagKeys" $tag_keys "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn)} | format pattern "/tags/{resource_arn}") $qp)
+  let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn)} | format pattern "/tags/{resource_arn}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"tagKeys": $tag_keys} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"tagKeys": $tag_keys} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Uses the validators in a configuration profile to validate a configuration.
@@ -1790,10 +2255,21 @@ export def "applications-configurationprofiles-validators validate-configuration
   if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'ApplicationId' must be non-empty" } }
   if ($configuration_profile_id | is-empty) { error make --unspanned { msg: "path parameter 'ConfigurationProfileId' must be non-empty" } }
   let qp = [(serialize-qp "configuration_version" $configuration_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({application_id: (encode-path-segment $application_id), configuration_profile_id: (encode-path-segment $configuration_profile_id)} | format pattern "/applications/{application_id}/configurationprofiles/{configuration_profile_id}/validators") $qp)
+  let full_url = (build-url $base ({application_id: (encode-path-segment $application_id), configuration_profile_id: (encode-path-segment $configuration_profile_id)} | format pattern "/applications/{application_id}/configurationprofiles/{configuration_profile_id}/validators") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"configuration_version": $configuration_version} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"configuration_version": $configuration_version} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [204]
 }

@@ -8,7 +8,7 @@ const BASE_URL = "https://quotes.rest"
 # `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
 # where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o THEY_SAID_SO_QUOTES_API_TOKEN | default "" }
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o THEY_SAID_SO_QUOTES_API_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
@@ -41,14 +41,11 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
-# Trick: `url encode --all` over-encodes, then we decode the four unreserved
-# punctuation chars back. Pre-existing %XX sequences in the input survive
-# because `url encode --all` first turns their % into %25.
 def encode-path-segment [v: any]: nothing -> string {
   $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
-# Serialize an array-typed path parameter (issue 49.A). OpenAPI 3 `style: simple`
+# Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
 # (the default for path params) and Swagger 2 `collectionFormat: csv` both join
 # the elements with a literal comma WITHIN the single path segment, each element
 # RFC-3986-encoded individually (so a comma inside an element stays %2C). Without
@@ -59,60 +56,72 @@ def encode-path-array [v: any]: nothing -> string {
   if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
 }
 
-# Build URL from base, path, and optional query string
-def build-url [base: string, path: string, query?: string]: nothing -> string {
+# Build the request URL from base, path, and any number of pre-encoded query
+# fragments (param serializer output and/or the auth query). Each fragment is an
+# `&`-joinable `key=value` string already percent-encoded by its producer; empty
+# fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
+# delimiters are hand-spliced — and any query already on the base URL is merged in.
+def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
   let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
-  let result = ($parsed | upsert path $full_path)
-  if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
+  let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
+  $parsed | upsert path $full_path | upsert query $query | url join
 }
 
-# Build the dry-run record returned by --dry-run. Shape:
-#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
-#    auth: {scheme, location}}
-# `meta` carries logical-form data (the query record by spec name, the pre-serialization
-# body) that do-request itself cannot reconstruct from its wire-format args.
-def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
-  let m = ($meta | default {})
-  {
-    dry_run: true
-    method: $method
-    url: $url
-    query: ($m | get -o query | default {})
-    headers: $auth.headers
-    body: ($m | get -o body)
-    content_type: $content_type
-    timeout: $timeout
-    auth: {scheme: $auth.scheme, location: $auth.location}
-  }
+# Success policy: did this response succeed? Single source of truth, consulted by
+# handle-response and the HEAD header-unwrap. Empty ok_codes means the spec listed
+# none, so fall back to < 400. Otherwise: any 2xx, plus documented success codes.
+def status-ok [status: int, ok_codes: list<int>]: nothing -> bool {
+  if ($ok_codes | is-empty) { $status < 400 } else { ($status >= 200 and $status < 300) or ($status in $ok_codes) }
 }
 
-# Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
-  let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
-  let timeout = ($max_time | default 30min)
-  let ct = ($content_type | default "application/json")
-  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
-  let resp = match $method {
-    "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
-  }
-  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
-  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
+# Unwrap a `--full` HTTP response into the user-facing value. Response arrives
+# via pipeline; ok_codes gates the error throw (see status-ok).
+def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: record -> any {
+  let resp = $in
+  if $allow_errors { return $resp }
+  if not (status-ok $resp.status $ok_codes) { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } }
+  if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
+  if $resp.status == 204 { return null }
+  $resp.body
+}
+
+# GET — bodyless, honours --raw
+def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+}
+
+# POST — body + content-type
+def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# PUT — body + content-type
+def send-put [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http put --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http put --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# PATCH — body + content-type
+def send-patch [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http patch --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http patch --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# DELETE — body via --data
+def send-delete [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http delete --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url } else { http delete --headers $req.headers --content-type $req.content_type --data $body --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url }
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # Build a `multipart/form-data` envelope per RFC 7578. `file_fields` lists
 # the field names whose value should be read from disk as bytes; every
 # other field is sent as a text part (records/lists JSON-stringified).
-# Returns {content_type, body} ready to pass to `do-request`.
+# Returns {content_type, body}.
 # When `$dry_run` is true, file fields are NOT read from disk — they emit
 # an empty-bytes placeholder so callers can inspect the request shape
-# without the file existing on disk (issue 11.B).
+# without the file existing on disk.
 def build-multipart-body [parts: record, file_fields: list<string>, dry_run: bool = false]: nothing -> record {
   let boundary = $"----nu-(random chars --length 24)"
   let crlf = "\r\n"
@@ -183,10 +192,21 @@ export def "qod get" [
   let auth = (build-auth $token ($auth_scheme | default "x-theysaidso-api-secret"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "category" $category "scalar") (serialize-qp "language" $language "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/qod" $qp)
+  let full_url = (build-url $base "/qod" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"category": $category, "language": $language} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"category": $category, "language": $language} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets a list of `Quote of the Day` Categories.
@@ -208,10 +228,21 @@ export def "qod-categories get" [
   let auth = (build-auth $token ($auth_scheme | default "x-theysaidso-api-secret"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "language" $language "scalar") (serialize-qp "detailed" $detailed "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/qod/categories" $qp)
+  let full_url = (build-url $base "/qod/categories" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"language": $language, "detailed": $detailed} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"language": $language, "detailed": $detailed} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets a list of supported languages for `Quote of the Day`.
@@ -230,10 +261,21 @@ export def "qod-languages get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-theysaidso-api-secret"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/qod/languages")
+  let full_url = (build-url $base "/qod/languages" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Delete a qshow.
@@ -254,10 +296,21 @@ export def "qshow delete" [
   let auth = (build-auth $token ($auth_scheme | default "x-theysaidso-api-secret"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/qshow" $qp)
+  let full_url = (build-url $base "/qshow" $qp $auth.query)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"id": $id} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"id": $id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Gets a details about a qshow.
@@ -279,10 +332,21 @@ export def "qshow get" [
   let auth = (build-auth $token ($auth_scheme | default "x-theysaidso-api-secret"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/qshow" $qp)
+  let full_url = (build-url $base "/qshow" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"id": $id} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"id": $id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update an existing qshow.
@@ -306,10 +370,21 @@ export def "qshow update" [
   let auth = (build-auth $token ($auth_scheme | default "x-theysaidso-api-secret"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "title" $title "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "tags" $tags "multi")] | flatten | str join "&"
-  let full_url = (build-url $base "/qshow" $qp)
+  let full_url = (build-url $base "/qshow" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"id": $id, "title": $title, "description": $description, "tags": $tags} | compact), body: null}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: ({"id": $id, "title": $title, "description": $description, "tags": $tags} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Create and add a new qshow to your private collection.
@@ -332,10 +407,21 @@ export def "qshow update-1" [
   let auth = (build-auth $token ($auth_scheme | default "x-theysaidso-api-secret"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "title" $title "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "tags" $tags "multi")] | flatten | str join "&"
-  let full_url = (build-url $base "/qshow" $qp)
+  let full_url = (build-url $base "/qshow" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"title": $title, "description": $description, "tags": $tags} | compact), body: null}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"title": $title, "description": $description, "tags": $tags} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Get the list of Qshows in They Said So platform.
@@ -357,10 +443,21 @@ export def "qshow-list get" [
   let auth = (build-auth $token ($auth_scheme | default "x-theysaidso-api-secret"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "public" $public "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/qshow/list" $qp)
+  let full_url = (build-url $base "/qshow/list" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"start": $start, "public": $public} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"start": $start, "public": $public} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get the quotes in a given Qshow.
@@ -381,10 +478,21 @@ export def "qshow-quotes get" [
   let auth = (build-auth $token ($auth_scheme | default "x-theysaidso-api-secret"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/qshow/quotes" $qp)
+  let full_url = (build-url $base "/qshow/quotes" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"id": $id} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"id": $id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Add a quote to a given Qshow.
@@ -406,10 +514,21 @@ export def "qshow-quotes-add create" [
   let auth = (build-auth $token ($auth_scheme | default "x-theysaidso-api-secret"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "quoteid" $quoteid "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/qshow/quotes/add" $qp)
+  let full_url = (build-url $base "/qshow/quotes/add" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"id": $id, "quoteid": $quoteid} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"id": $id, "quoteid": $quoteid} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Remove a quote to a given Qshow.
@@ -431,10 +550,21 @@ export def "qshow-quotes-remove create" [
   let auth = (build-auth $token ($auth_scheme | default "x-theysaidso-api-secret"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "quoteid" $quoteid "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/qshow/quotes/remove" $qp)
+  let full_url = (build-url $base "/qshow/quotes/remove" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"id": $id, "quoteid": $quoteid} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"id": $id, "quoteid": $quoteid} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Delete a quote. The user needs to be the owner of the quote to be able to delete it.
@@ -455,10 +585,21 @@ export def "quote delete" [
   let auth = (build-auth $token ($auth_scheme | default "x-theysaidso-api-secret"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/quote" $qp)
+  let full_url = (build-url $base "/quote" $qp $auth.query)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"id": $id} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"id": $id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Gets a `Quote` with a given `id`.
@@ -480,10 +621,21 @@ export def "quote get" [
   let auth = (build-auth $token ($auth_scheme | default "x-theysaidso-api-secret"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/quote" $qp)
+  let full_url = (build-url $base "/quote" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"id": $id} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"id": $id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update a quote
@@ -508,10 +660,21 @@ export def "quote update" [
   let auth = (build-auth $token ($auth_scheme | default "x-theysaidso-api-secret"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "quote" $quote "scalar") (serialize-qp "author" $author "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "tags" $tags "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/quote" $qp)
+  let full_url = (build-url $base "/quote" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"id": $id, "quote": $quote, "author": $author, "language": $language, "tags": $tags} | compact), body: null}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: ({"id": $id, "quote": $quote, "author": $author, "language": $language, "tags": $tags} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Add a new quote to your private collection. Same as 'PUT' but added since some clients don't handle PUT well.
@@ -535,10 +698,21 @@ export def "quote create" [
   let auth = (build-auth $token ($auth_scheme | default "x-theysaidso-api-secret"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "quote" $quote "scalar") (serialize-qp "author" $author "scalar") (serialize-qp "tags" $tags "scalar") (serialize-qp "language" $language "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/quote" $qp)
+  let full_url = (build-url $base "/quote" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"quote": $quote, "author": $author, "tags": $tags, "language": $language} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"quote": $quote, "author": $author, "tags": $tags, "language": $language} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Add a new quote to your private collection.
@@ -562,10 +736,21 @@ export def "quote update-1" [
   let auth = (build-auth $token ($auth_scheme | default "x-theysaidso-api-secret"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "quote" $quote "scalar") (serialize-qp "author" $author "scalar") (serialize-qp "tags" $tags "scalar") (serialize-qp "language" $language "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/quote" $qp)
+  let full_url = (build-url $base "/quote" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"quote": $quote, "author": $author, "tags": $tags, "language": $language} | compact), body: null}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"quote": $quote, "author": $author, "tags": $tags, "language": $language} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Gets a list of popular author names in the system.
@@ -589,10 +774,21 @@ export def "quote-authors-popular get" [
   let auth = (build-auth $token ($auth_scheme | default "x-theysaidso-api-secret"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "language" $language "scalar") (serialize-qp "detailed" $detailed "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/quote/authors/popular" $qp)
+  let full_url = (build-url $base "/quote/authors/popular" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"language": $language, "detailed": $detailed, "start": $start, "limit": $limit} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"language": $language, "detailed": $detailed, "start": $start, "limit": $limit} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets a list of author names in the system.
@@ -617,10 +813,21 @@ export def "quote-authors-search get" [
   let auth = (build-auth $token ($auth_scheme | default "x-theysaidso-api-secret"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "detailed" $detailed "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/quote/authors/search" $qp)
+  let full_url = (build-url $base "/quote/authors/search" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"query": $query, "language": $language, "detailed": $detailed, "start": $start, "limit": $limit} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"query": $query, "language": $language, "detailed": $detailed, "start": $start, "limit": $limit} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets a list of popular `Quote` Categories.
@@ -642,10 +849,21 @@ export def "quote-categories-popular get" [
   let auth = (build-auth $token ($auth_scheme | default "x-theysaidso-api-secret"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/quote/categories/popular" $qp)
+  let full_url = (build-url $base "/quote/categories/popular" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"start": $start, "limit": $limit} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"start": $start, "limit": $limit} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets a list of `Quote` Categories matching the query string.
@@ -668,10 +886,21 @@ export def "quote-categories-search get" [
   let auth = (build-auth $token ($auth_scheme | default "x-theysaidso-api-secret"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/quote/categories/search" $qp)
+  let full_url = (build-url $base "/quote/categories/search" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"query": $query, "start": $start, "limit": $limit} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"query": $query, "start": $start, "limit": $limit} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Remove the disLike for the given Quote as a user of the API Key.
@@ -692,10 +921,21 @@ export def "quote-dislike delete" [
   let auth = (build-auth $token ($auth_scheme | default "x-theysaidso-api-secret"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "quote_id" $quote_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/quote/dislike" $qp)
+  let full_url = (build-url $base "/quote/dislike" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"quote_id": $quote_id} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"quote_id": $quote_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Dislike the given Quote as a user of the API Key. Same as `put` but a convenient alias for those clients that don't support `put` cleanly.
@@ -716,10 +956,21 @@ export def "quote-dislike create" [
   let auth = (build-auth $token ($auth_scheme | default "x-theysaidso-api-secret"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "quote_id" $quote_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/quote/dislike" $qp)
+  let full_url = (build-url $base "/quote/dislike" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"quote_id": $quote_id} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"quote_id": $quote_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Dislike the given Quote as a user of the API Key. Some clients don't cleanly support `PUT`, in such scenarios use the `POST` version of this.
@@ -740,10 +991,21 @@ export def "quote-dislike update" [
   let auth = (build-auth $token ($auth_scheme | default "x-theysaidso-api-secret"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "quote_id" $quote_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/quote/dislike" $qp)
+  let full_url = (build-url $base "/quote/dislike" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"quote_id": $quote_id} | compact), body: null}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"quote_id": $quote_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Delete a quote image. The user needs to be the owner of the quote image to be able to delete it.
@@ -764,10 +1026,21 @@ export def "quote-image delete" [
   let auth = (build-auth $token ($auth_scheme | default "x-theysaidso-api-secret"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/quote/image" $qp)
+  let full_url = (build-url $base "/quote/image" $qp $auth.query)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"id": $id} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"id": $id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Gets a Quote image for a given id. Response can be an image file as a binary or a base64 encoded contents wrapped in json. `TODO`
@@ -789,10 +1062,21 @@ export def "quote-image get" [
   let auth = (build-auth $token ($auth_scheme | default "x-theysaidso-api-secret"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "binary" $binary "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/quote/image" $qp)
+  let full_url = (build-url $base "/quote/image" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"id": $id, "binary": $binary} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"id": $id, "binary": $binary} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a new quote image for a given quote. Choose background colors/images , choose different font styles and generate a beautiful quote image. Did you just had a feeling of being a god or what?!
@@ -824,10 +1108,21 @@ export def "quote-image update" [
   let auth = (build-auth $token ($auth_scheme | default "x-theysaidso-api-secret"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "quote_id" $quote_id "scalar") (serialize-qp "bgimage_id" $bgimage_id "scalar") (serialize-qp "bg_color" $bg_color "scalar") (serialize-qp "font_id" $font_id "scalar") (serialize-qp "text_color" $text_color "scalar") (serialize-qp "text_size" $text_size "scalar") (serialize-qp "halign" $halign "scalar") (serialize-qp "valign" $valign "scalar") (serialize-qp "width" $width "scalar") (serialize-qp "height" $height "scalar") (serialize-qp "branding" $branding "scalar") (serialize-qp "include_transparent_layer" $include_transparent_layer "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/quote/image" $qp)
+  let full_url = (build-url $base "/quote/image" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"quote_id": $quote_id, "bgimage_id": $bgimage_id, "bg_color": $bg_color, "font_id": $font_id, "text_color": $text_color, "text_size": $text_size, "halign": $halign, "valign": $valign, "width": $width, "height": $height, "branding": $branding, "include_transparent_layer": $include_transparent_layer} | compact), body: null}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"quote_id": $quote_id, "bgimage_id": $bgimage_id, "bg_color": $bg_color, "font_id": $font_id, "text_color": $text_color, "text_size": $text_size, "halign": $halign, "valign": $valign, "width": $width, "height": $height, "branding": $branding, "include_transparent_layer": $include_transparent_layer} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Delete a background image file. The user needs to be the owner of the background image to be able to delete it.
@@ -848,10 +1143,21 @@ export def "quote-image-background delete" [
   let auth = (build-auth $token ($auth_scheme | default "x-theysaidso-api-secret"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/quote/image/background" $qp)
+  let full_url = (build-url $base "/quote/image/background" $qp $auth.query)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"id": $id} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"id": $id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Add an image for use later as a quote background image.
@@ -873,14 +1179,25 @@ export def "quote-image-background create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-theysaidso-api-secret"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/quote/image/background")
+  let full_url = (build-url $base "/quote/image/background" $auth.query)
   let req_body = {"image": $image, "tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body ["image"] $dry_run)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: $mp.content_type
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $mp.body $insecure $raw $allow_errors $full [200]
 }
 
 # Lists background images in your private collection.
@@ -901,10 +1218,21 @@ export def "quote-image-background-list get" [
   let auth = (build-auth $token ($auth_scheme | default "x-theysaidso-api-secret"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start" $start "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/quote/image/background/list" $qp)
+  let full_url = (build-url $base "/quote/image/background/list" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"start": $start} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"start": $start} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Searches for a background image with a given tag.
@@ -925,10 +1253,21 @@ export def "quote-image-background-search get" [
   let auth = (build-auth $token ($auth_scheme | default "x-theysaidso-api-secret"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/quote/image/background/search" $qp)
+  let full_url = (build-url $base "/quote/image/background/search" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"query": $query} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"query": $query} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Add a tag to a given Image.
@@ -950,10 +1289,21 @@ export def "quote-image-background-tags-add create" [
   let auth = (build-auth $token ($auth_scheme | default "x-theysaidso-api-secret"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "tags" $tags "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/quote/image/background/tags/add" $qp)
+  let full_url = (build-url $base "/quote/image/background/tags/add" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"id": $id, "tags": $tags} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"id": $id, "tags": $tags} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Remove a tag from a given Image.
@@ -975,10 +1325,21 @@ export def "quote-image-background-tags-remove create" [
   let auth = (build-auth $token ($auth_scheme | default "x-theysaidso-api-secret"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "tags" $tags "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/quote/image/background/tags/remove" $qp)
+  let full_url = (build-url $base "/quote/image/background/tags/remove" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"id": $id, "tags": $tags} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"id": $id, "tags": $tags} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Delete a font file. The user needs to be the owner of the font to be able to delete it.
@@ -999,10 +1360,21 @@ export def "quote-image-font delete" [
   let auth = (build-auth $token ($auth_scheme | default "x-theysaidso-api-secret"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/quote/image/font" $qp)
+  let full_url = (build-url $base "/quote/image/font" $qp $auth.query)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"id": $id} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"id": $id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Add a font file for use later in creating a quote image. This is essentially a `PUT` but not many clients handle PUT with binary stream i.e. a file, gracefully.
@@ -1024,14 +1396,25 @@ export def "quote-image-font create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-theysaidso-api-secret"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/quote/image/font")
+  let full_url = (build-url $base "/quote/image/font" $auth.query)
   let req_body = {"font": $font, "tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body ["font"] $dry_run)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: $mp.content_type
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $mp.body $insecure $raw $allow_errors $full [200]
 }
 
 # Lists background images in your private collection.
@@ -1052,10 +1435,21 @@ export def "quote-image-font-list get" [
   let auth = (build-auth $token ($auth_scheme | default "x-theysaidso-api-secret"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start" $start "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/quote/image/font/list" $qp)
+  let full_url = (build-url $base "/quote/image/font/list" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"start": $start} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"start": $start} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Searches for a font with a given tag.
@@ -1076,10 +1470,21 @@ export def "quote-image-font-search get" [
   let auth = (build-auth $token ($auth_scheme | default "x-theysaidso-api-secret"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/quote/image/font/search" $qp)
+  let full_url = (build-url $base "/quote/image/font/search" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"query": $query} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"query": $query} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Add a tag to a given font.
@@ -1101,10 +1506,21 @@ export def "quote-image-font-tags-add create" [
   let auth = (build-auth $token ($auth_scheme | default "x-theysaidso-api-secret"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "tags" $tags "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/quote/image/font/tags/add" $qp)
+  let full_url = (build-url $base "/quote/image/font/tags/add" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"id": $id, "tags": $tags} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"id": $id, "tags": $tags} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Remove a tag from a given Font.
@@ -1126,10 +1542,21 @@ export def "quote-image-font-tags-remove create" [
   let auth = (build-auth $token ($auth_scheme | default "x-theysaidso-api-secret"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "tags" $tags "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/quote/image/font/tags/remove" $qp)
+  let full_url = (build-url $base "/quote/image/font/tags/remove" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"id": $id, "tags": $tags} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"id": $id, "tags": $tags} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Gets a Random Quote image. Optional `category` param determines the category of quote used in the image. Optional `author` param gets the quote image of a given author.
@@ -1152,10 +1579,21 @@ export def "quote-image-search get" [
   let auth = (build-auth $token ($auth_scheme | default "x-theysaidso-api-secret"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "category" $category "scalar") (serialize-qp "author" $author "scalar") (serialize-qp "private" $private "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/quote/image/search" $qp)
+  let full_url = (build-url $base "/quote/image/search" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"category": $category, "author": $author, "private": $private} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"category": $category, "author": $author, "private": $private} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Remove the Like for the given Quote as a user of the API Key.
@@ -1176,10 +1614,21 @@ export def "quote-like delete" [
   let auth = (build-auth $token ($auth_scheme | default "x-theysaidso-api-secret"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "quote_id" $quote_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/quote/like" $qp)
+  let full_url = (build-url $base "/quote/like" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"quote_id": $quote_id} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"quote_id": $quote_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Like the given Quote as a user of the API Key. Same as `PUT` but a convenient alias for those clients that don't support `PUT` cleanly.
@@ -1200,10 +1649,21 @@ export def "quote-like create" [
   let auth = (build-auth $token ($auth_scheme | default "x-theysaidso-api-secret"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "quote_id" $quote_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/quote/like" $qp)
+  let full_url = (build-url $base "/quote/like" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"quote_id": $quote_id} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"quote_id": $quote_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Like the given Quote as a user of the API Key. Some clients don't cleanly support `PUT`, in such scenarios use the `POST` version of this.
@@ -1224,10 +1684,21 @@ export def "quote-like update" [
   let auth = (build-auth $token ($auth_scheme | default "x-theysaidso-api-secret"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "quote_id" $quote_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/quote/like" $qp)
+  let full_url = (build-url $base "/quote/like" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"quote_id": $quote_id} | compact), body: null}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"quote_id": $quote_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Get the list of quotes in your private collection.
@@ -1249,10 +1720,21 @@ export def "quote-list get" [
   let auth = (build-auth $token ($auth_scheme | default "x-theysaidso-api-secret"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/quote/list" $qp)
+  let full_url = (build-url $base "/quote/list" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"start": $start, "limit": $limit} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"start": $start, "limit": $limit} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets a `Random Quote`. When you are in a hurry this is what you call to get a random famous quote.
@@ -1275,10 +1757,21 @@ export def "quote-random get" [
   let auth = (build-auth $token ($auth_scheme | default "x-theysaidso-api-secret"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "language" $language "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/quote/random" $qp)
+  let full_url = (build-url $base "/quote/random" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"language": $language, "limit": $limit} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"language": $language, "limit": $limit} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Search for a `Quote` in They Said So platform. Optional `category` , `author`, `minlength`, `maxlength` params determines the filters applied while searching for the quote.
@@ -1308,10 +1801,21 @@ export def "quote-search get" [
   let auth = (build-auth $token ($auth_scheme | default "x-theysaidso-api-secret"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "category" $category "scalar") (serialize-qp "author" $author "scalar") (serialize-qp "minlength" $minlength "scalar") (serialize-qp "maxlength" $maxlength "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "private" $private "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "sfw" $sfw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/quote/search" $qp)
+  let full_url = (build-url $base "/quote/search" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"category": $category, "author": $author, "minlength": $minlength, "maxlength": $maxlength, "query": $query, "private": $private, "language": $language, "limit": $limit, "sfw": $sfw} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"category": $category, "author": $author, "minlength": $minlength, "maxlength": $maxlength, "query": $query, "private": $private, "language": $language, "limit": $limit, "sfw": $sfw} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Add a tag to a given Quote.
@@ -1333,10 +1837,21 @@ export def "quote-tags-add create" [
   let auth = (build-auth $token ($auth_scheme | default "x-theysaidso-api-secret"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "tags" $tags "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/quote/tags/add" $qp)
+  let full_url = (build-url $base "/quote/tags/add" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"id": $id, "tags": $tags} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"id": $id, "tags": $tags} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Remove a tag from a given quote.
@@ -1358,8 +1873,19 @@ export def "quote-tags-remove create" [
   let auth = (build-auth $token ($auth_scheme | default "x-theysaidso-api-secret"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "tags" $tags "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/quote/tags/remove" $qp)
+  let full_url = (build-url $base "/quote/tags/remove" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"id": $id, "tags": $tags} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"id": $id, "tags": $tags} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }

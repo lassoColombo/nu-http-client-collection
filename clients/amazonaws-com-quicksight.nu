@@ -8,7 +8,7 @@ const BASE_URL = "http://quicksight.us-east-1.amazonaws.com"
 # `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
 # where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o AMAZON_QUICKSIGHT_TOKEN | default "" }
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o AMAZON_QUICKSIGHT_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
@@ -41,14 +41,11 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
-# Trick: `url encode --all` over-encodes, then we decode the four unreserved
-# punctuation chars back. Pre-existing %XX sequences in the input survive
-# because `url encode --all` first turns their % into %25.
 def encode-path-segment [v: any]: nothing -> string {
   $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
-# Serialize an array-typed path parameter (issue 49.A). OpenAPI 3 `style: simple`
+# Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
 # (the default for path params) and Swagger 2 `collectionFormat: csv` both join
 # the elements with a literal comma WITHIN the single path segment, each element
 # RFC-3986-encoded individually (so a comma inside an element stays %2C). Without
@@ -59,51 +56,57 @@ def encode-path-array [v: any]: nothing -> string {
   if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
 }
 
-# Build URL from base, path, and optional query string
-def build-url [base: string, path: string, query?: string]: nothing -> string {
+# Build the request URL from base, path, and any number of pre-encoded query
+# fragments (param serializer output and/or the auth query). Each fragment is an
+# `&`-joinable `key=value` string already percent-encoded by its producer; empty
+# fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
+# delimiters are hand-spliced — and any query already on the base URL is merged in.
+def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
   let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
-  let result = ($parsed | upsert path $full_path)
-  if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
+  let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
+  $parsed | upsert path $full_path | upsert query $query | url join
 }
 
-# Build the dry-run record returned by --dry-run. Shape:
-#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
-#    auth: {scheme, location}}
-# `meta` carries logical-form data (the query record by spec name, the pre-serialization
-# body) that do-request itself cannot reconstruct from its wire-format args.
-def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
-  let m = ($meta | default {})
-  {
-    dry_run: true
-    method: $method
-    url: $url
-    query: ($m | get -o query | default {})
-    headers: $auth.headers
-    body: ($m | get -o body)
-    content_type: $content_type
-    timeout: $timeout
-    auth: {scheme: $auth.scheme, location: $auth.location}
-  }
+# Success policy: did this response succeed? Single source of truth, consulted by
+# handle-response and the HEAD header-unwrap. Empty ok_codes means the spec listed
+# none, so fall back to < 400. Otherwise: any 2xx, plus documented success codes.
+def status-ok [status: int, ok_codes: list<int>]: nothing -> bool {
+  if ($ok_codes | is-empty) { $status < 400 } else { ($status >= 200 and $status < 300) or ($status in $ok_codes) }
 }
 
-# Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
-  let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
-  let timeout = ($max_time | default 30min)
-  let ct = ($content_type | default "application/json")
-  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
-  let resp = match $method {
-    "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
-  }
-  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
-  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
+# Unwrap a `--full` HTTP response into the user-facing value. Response arrives
+# via pipeline; ok_codes gates the error throw (see status-ok).
+def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: record -> any {
+  let resp = $in
+  if $allow_errors { return $resp }
+  if not (status-ok $resp.status $ok_codes) { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } }
+  if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
+  if $resp.status == 204 { return null }
+  $resp.body
+}
+
+# GET — bodyless, honours --raw
+def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+}
+
+# POST — body + content-type
+def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# PUT — body + content-type
+def send-put [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http put --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http put --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# DELETE — body via --data
+def send-delete [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http delete --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url } else { http delete --headers $req.headers --content-type $req.content_type --data $body --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url }
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 def base-url-completer [] { ["http://quicksight.us-east-1.amazonaws.com" "http://quicksight.us-east-2.amazonaws.com" "http://quicksight.us-west-1.amazonaws.com" "http://quicksight.us-west-2.amazonaws.com" "http://quicksight.us-gov-west-1.amazonaws.com" "http://quicksight.us-gov-east-1.amazonaws.com" "http://quicksight.ca-central-1.amazonaws.com" "http://quicksight.eu-north-1.amazonaws.com" "http://quicksight.eu-west-1.amazonaws.com" "http://quicksight.eu-west-2.amazonaws.com" "http://quicksight.eu-west-3.amazonaws.com" "http://quicksight.eu-central-1.amazonaws.com" "http://quicksight.eu-south-1.amazonaws.com" "http://quicksight.af-south-1.amazonaws.com" "http://quicksight.ap-northeast-1.amazonaws.com" "http://quicksight.ap-northeast-2.amazonaws.com" "http://quicksight.ap-northeast-3.amazonaws.com" "http://quicksight.ap-southeast-1.amazonaws.com" "http://quicksight.ap-southeast-2.amazonaws.com" "http://quicksight.ap-east-1.amazonaws.com" "http://quicksight.ap-south-1.amazonaws.com" "http://quicksight.sa-east-1.amazonaws.com" "http://quicksight.me-south-1.amazonaws.com" "https://quicksight.us-east-1.amazonaws.com" "https://quicksight.us-east-2.amazonaws.com" "https://quicksight.us-west-1.amazonaws.com" "https://quicksight.us-west-2.amazonaws.com" "https://quicksight.us-gov-west-1.amazonaws.com" "https://quicksight.us-gov-east-1.amazonaws.com" "https://quicksight.ca-central-1.amazonaws.com" "https://quicksight.eu-north-1.amazonaws.com" "https://quicksight.eu-west-1.amazonaws.com" "https://quicksight.eu-west-2.amazonaws.com" "https://quicksight.eu-west-3.amazonaws.com" "https://quicksight.eu-central-1.amazonaws.com" "https://quicksight.eu-south-1.amazonaws.com" "https://quicksight.af-south-1.amazonaws.com" "https://quicksight.ap-northeast-1.amazonaws.com" "https://quicksight.ap-northeast-2.amazonaws.com" "https://quicksight.ap-northeast-3.amazonaws.com" "https://quicksight.ap-southeast-1.amazonaws.com" "https://quicksight.ap-southeast-2.amazonaws.com" "https://quicksight.ap-east-1.amazonaws.com" "https://quicksight.ap-south-1.amazonaws.com" "https://quicksight.sa-east-1.amazonaws.com" "https://quicksight.me-south-1.amazonaws.com" "http://quicksight.cn-north-1.amazonaws.com.cn" "http://quicksight.cn-northwest-1.amazonaws.com.cn" "https://quicksight.cn-north-1.amazonaws.com.cn" "https://quicksight.cn-northwest-1.amazonaws.com.cn"] }
@@ -177,12 +180,23 @@ export def "accounts-data-sets-ingestions cancel" [
   if ($aws_account_id | is-empty) { error make --unspanned { msg: "path parameter 'AwsAccountId' must be non-empty" } }
   if ($data_set_id | is-empty) { error make --unspanned { msg: "path parameter 'DataSetId' must be non-empty" } }
   if ($ingestion_id | is-empty) { error make --unspanned { msg: "path parameter 'IngestionId' must be non-empty" } }
-  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), data_set_id: (encode-path-segment $data_set_id), ingestion_id: (encode-path-segment $ingestion_id)} | format pattern "/accounts/{aws_account_id}/data-sets/{data_set_id}/ingestions/{ingestion_id}"))
+  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), data_set_id: (encode-path-segment $data_set_id), ingestion_id: (encode-path-segment $ingestion_id)} | format pattern "/accounts/{aws_account_id}/data-sets/{data_set_id}/ingestions/{ingestion_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Creates and starts a new SPICE ingestion for a dataset. You can manually refresh datasets in an Enterprise edition account 32 times in a 24-hour period. You can manually refresh datasets in a Standard edition account 8 times in a 24-hour period. Each 24-hour period is measured starting 24 hours before the current date and time. Any ingestions operating on tagged datasets inherit the same tags automatically for use in access control. For an example, see How do I create an IAM policy to control access to Amazon EC2 resources using tags? (http://aws.amazon.com/premiumsupport/knowledge-center/iam-ec2-resource-tags/) in the Amazon Web Services Knowledge Center. Tags are visible on the tagged dataset, but not on the ingestion resource.
@@ -217,14 +231,25 @@ export def "accounts-data-sets-ingestions create" [
   if ($aws_account_id | is-empty) { error make --unspanned { msg: "path parameter 'AwsAccountId' must be non-empty" } }
   if ($data_set_id | is-empty) { error make --unspanned { msg: "path parameter 'DataSetId' must be non-empty" } }
   if ($ingestion_id | is-empty) { error make --unspanned { msg: "path parameter 'IngestionId' must be non-empty" } }
-  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), data_set_id: (encode-path-segment $data_set_id), ingestion_id: (encode-path-segment $ingestion_id)} | format pattern "/accounts/{aws_account_id}/data-sets/{data_set_id}/ingestions/{ingestion_id}"))
+  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), data_set_id: (encode-path-segment $data_set_id), ingestion_id: (encode-path-segment $ingestion_id)} | format pattern "/accounts/{aws_account_id}/data-sets/{data_set_id}/ingestions/{ingestion_id}") $auth.query)
   let req_body = {"IngestionType": $ingestion_type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Describes a SPICE ingestion.
@@ -257,12 +282,23 @@ export def "accounts-data-sets-ingestions get" [
   if ($aws_account_id | is-empty) { error make --unspanned { msg: "path parameter 'AwsAccountId' must be non-empty" } }
   if ($data_set_id | is-empty) { error make --unspanned { msg: "path parameter 'DataSetId' must be non-empty" } }
   if ($ingestion_id | is-empty) { error make --unspanned { msg: "path parameter 'IngestionId' must be non-empty" } }
-  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), data_set_id: (encode-path-segment $data_set_id), ingestion_id: (encode-path-segment $ingestion_id)} | format pattern "/accounts/{aws_account_id}/data-sets/{data_set_id}/ingestions/{ingestion_id}"))
+  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), data_set_id: (encode-path-segment $data_set_id), ingestion_id: (encode-path-segment $ingestion_id)} | format pattern "/accounts/{aws_account_id}/data-sets/{data_set_id}/ingestions/{ingestion_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Creates Amazon QuickSight customizations for the current Amazon Web Services Region. Currently, you can add a custom default theme by using the CreateAccountCustomization or UpdateAccountCustomization API operation. To further customize Amazon QuickSight by removing Amazon QuickSight sample assets and videos for all new users, see Customizing Amazon QuickSight (https://docs.aws.amazon.com/quicksight/latest/user/customizing-quicksight.html) in the Amazon QuickSight User Guide. You can create customizations for your Amazon Web Services account or, if you specify a namespace, for a QuickSight namespace instead. Customizations that apply to a namespace always override customizations that apply to an Amazon Web Services account. To find out which customizations apply, use the DescribeAccountCustomization API operation. Before you use the CreateAccountCustomization API operation to add a theme as the namespace default, make sure that you first share the theme with the namespace. If you don't share it with the namespace, the theme isn't visible to your users even if you make it the default theme. To check if the theme is shared, view the current permissions by using the DescribeThemePermissions (https://docs.aws.amazon.com/quicksight/latest/APIReference/API_DescribeThemePermissions.html) API operation. To share the theme, grant permissions by using the UpdateThemePermissions (https://docs.aws.amazon.com/quicksight/latest/APIReference/API_UpdateThemePermissions.html) API operation.
@@ -298,14 +334,25 @@ export def "accounts-customizations create" [
   let base = ($base_url | default $BASE_URL)
   if ($aws_account_id | is-empty) { error make --unspanned { msg: "path parameter 'AwsAccountId' must be non-empty" } }
   let qp = [(serialize-qp "namespace" $namespace "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id)} | format pattern "/accounts/{aws_account_id}/customizations") $qp)
+  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id)} | format pattern "/accounts/{aws_account_id}/customizations") $qp $auth.query)
   let req_body = {"AccountCustomization": $account_customization, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"namespace": $namespace} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"namespace": $namespace} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes all Amazon QuickSight customizations in this Amazon Web Services Region for the specified Amazon Web Services account and Amazon QuickSight namespace.
@@ -336,12 +383,23 @@ export def "accounts-customizations delete" [
   let base = ($base_url | default $BASE_URL)
   if ($aws_account_id | is-empty) { error make --unspanned { msg: "path parameter 'AwsAccountId' must be non-empty" } }
   let qp = [(serialize-qp "namespace" $namespace "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id)} | format pattern "/accounts/{aws_account_id}/customizations") $qp)
+  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id)} | format pattern "/accounts/{aws_account_id}/customizations") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"namespace": $namespace} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"namespace": $namespace} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Describes the customizations associated with the provided Amazon Web Services account and Amazon Amazon QuickSight namespace in an Amazon Web Services Region. The Amazon QuickSight console evaluates which customizations to apply by running this API operation with the Resolved flag included. To determine what customizations display when you run this command, it can help to visualize the relationship of the entities involved. Amazon Web Services account - The Amazon Web Services account exists at the top of the hierarchy. It has the potential to use all of the Amazon Web Services Regions and Amazon Web Services Services. When you subscribe to Amazon QuickSight, you choose one Amazon Web Services Region to use as your home Region. That's where your free SPICE capacity is located. You can use Amazon QuickSight in any supported Amazon Web Services Region. Amazon Web Services Region - In each Amazon Web Services Region where you sign in to Amazon QuickSight at least once, Amazon QuickSight acts as a separate instance of the same service. If you have a user directory, it resides in us-east-1, which is the US East (N. Virginia). Generally speaking, these users have access to Amazon QuickSight in any Amazon Web Services Region, unless they are constrained to a namespace. To run the command in a different Amazon Web Services Region, you change your Region settings. If you're using the CLI, you can use one of the following options: Use command line options (https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-options.html). Use named profiles (https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-profiles.html). Run aws configure to change your default Amazon Web Services Region. Use Enter to key the same settings for your keys. For more information, see Configuring the CLI (https://docs.aws.amazon.com/cli/latest/userguide/cli-chap-configure.html). Namespace - A QuickSight namespace is a partition that contains users and assets (data sources, datasets, dashboards, and so on). To access assets that are in a specific namespace, users and groups must also be part of the same namespace. People who share a namespace are completely isolated from users and assets in other namespaces, even if they are in the same Amazon Web Services account and Amazon Web Services Region. Applied customizations - Within an Amazon Web Services Region, a set of Amazon QuickSight customizations can apply to an Amazon Web Services account or to a namespace. Settings that you apply to a namespace override settings that you apply to an Amazon Web Services account. All settings are isolated to a single Amazon Web Services Region. To apply them in other Amazon Web Services Regions, run the CreateAccountCustomization command in each Amazon Web Services Region where you want to apply the same customizations.
@@ -373,12 +431,23 @@ export def "accounts-customizations get" [
   let base = ($base_url | default $BASE_URL)
   if ($aws_account_id | is-empty) { error make --unspanned { msg: "path parameter 'AwsAccountId' must be non-empty" } }
   let qp = [(serialize-qp "namespace" $namespace "scalar") (serialize-qp "resolved" $resolved "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id)} | format pattern "/accounts/{aws_account_id}/customizations") $qp)
+  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id)} | format pattern "/accounts/{aws_account_id}/customizations") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"namespace": $namespace, "resolved": $resolved} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"namespace": $namespace, "resolved": $resolved} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates Amazon QuickSight customizations for the current Amazon Web Services Region. Currently, the only customization that you can use is a theme. You can use customizations for your Amazon Web Services account or, if you specify a namespace, for a Amazon QuickSight namespace instead. Customizations that apply to a namespace override customizations that apply to an Amazon Web Services account. To find out which customizations apply, use the DescribeAccountCustomization API operation.
@@ -412,14 +481,25 @@ export def "accounts-customizations update" [
   let base = ($base_url | default $BASE_URL)
   if ($aws_account_id | is-empty) { error make --unspanned { msg: "path parameter 'AwsAccountId' must be non-empty" } }
   let qp = [(serialize-qp "namespace" $namespace "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id)} | format pattern "/accounts/{aws_account_id}/customizations") $qp)
+  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id)} | format pattern "/accounts/{aws_account_id}/customizations") $qp $auth.query)
   let req_body = {"AccountCustomization": $account_customization} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"namespace": $namespace} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"namespace": $namespace} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Creates an Amazon QuickSight account, or subscribes to Amazon QuickSight Q. The Amazon Web Services Region for the account is derived from what is configured in the CLI or SDK. This operation isn't supported in the US East (Ohio) Region, South America (Sao Paulo) Region, or Asia Pacific (Singapore) Region. Before you use this operation, make sure that you can connect to an existing Amazon Web Services account. If you don't have an Amazon Web Services account, see Sign up for Amazon Web Services (https://docs.aws.amazon.com/quicksight/latest/user/setting-up-aws-sign-up.html) in the Amazon QuickSight User Guide. The person who signs up for Amazon QuickSight needs to have the correct Identity and Access Management (IAM) permissions. For more information, see IAM Policy Examples for Amazon QuickSight (https://docs.aws.amazon.com/quicksight/latest/user/iam-policy-examples.html) in the Amazon QuickSight User Guide. If your IAM policy includes both the Subscribe and CreateAccountSubscription actions, make sure that both actions are set to Allow. If either action is set to Deny, the Deny action prevails and your API call fails. You can't pass an existing IAM role to access other Amazon Web Services services using this API operation. To pass your existing IAM role to Amazon QuickSight, see Passing IAM roles to Amazon QuickSight (https://docs.aws.amazon.com/quicksight/latest/user/security_iam_service-with-iam.html#security-create-iam-role) in the Amazon QuickSight User Guide. You can't set default resource access on the new account from the Amazon QuickSight API. Instead, add default resource access from the Amazon QuickSight console. For more information about setting default resource access to Amazon Web Services services, see Setting default resource access to Amazon Web Services services (https://docs.aws.amazon.com/quicksight/latest/user/scoping-policies-defaults.html) in the Amazon QuickSight User Guide.
@@ -463,14 +543,25 @@ export def "account create-subscription" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($aws_account_id | is-empty) { error make --unspanned { msg: "path parameter 'AwsAccountId' must be non-empty" } }
-  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id)} | format pattern "/account/{aws_account_id}"))
+  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id)} | format pattern "/account/{aws_account_id}") $auth.query)
   let req_body = {"Edition": $edition, "AuthenticationMethod": $authentication_method, "AccountName": $account_name, "NotificationEmail": $notification_email, "ActiveDirectoryName": $active_directory_name, "Realm": $realm, "DirectoryId": $directory_id, "AdminGroup": $admin_group, "AuthorGroup": $author_group, "ReaderGroup": $reader_group, "FirstName": $first_name, "LastName": $last_name, "EmailAddress": $email_address, "ContactNumber": $contact_number} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Use the DeleteAccountSubscription operation to delete an Amazon QuickSight account. This operation will result in an error message if you have configured your account termination protection settings to True. To change this setting and delete your account, call the UpdateAccountSettings API and set the value of the TerminationProtectionEnabled parameter to False, then make another call to the DeleteAccountSubscription API.
@@ -499,12 +590,23 @@ export def "account delete-subscription" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($aws_account_id | is-empty) { error make --unspanned { msg: "path parameter 'AwsAccountId' must be non-empty" } }
-  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id)} | format pattern "/account/{aws_account_id}"))
+  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id)} | format pattern "/account/{aws_account_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Use the DescribeAccountSubscription operation to receive a description of an Amazon QuickSight account's subscription. A successful API call returns an AccountInfo object that includes an account's name, subscription status, authentication type, edition, and notification email address.
@@ -533,12 +635,23 @@ export def "account get-subscription" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($aws_account_id | is-empty) { error make --unspanned { msg: "path parameter 'AwsAccountId' must be non-empty" } }
-  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id)} | format pattern "/account/{aws_account_id}"))
+  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id)} | format pattern "/account/{aws_account_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Creates an analysis in Amazon QuickSight. Analyses can be created either from a template or from an AnalysisDefinition.
@@ -582,14 +695,25 @@ export def "accounts-analyses create-analysis" [
   let base = ($base_url | default $BASE_URL)
   if ($aws_account_id | is-empty) { error make --unspanned { msg: "path parameter 'AwsAccountId' must be non-empty" } }
   if ($analysis_id | is-empty) { error make --unspanned { msg: "path parameter 'AnalysisId' must be non-empty" } }
-  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), analysis_id: (encode-path-segment $analysis_id)} | format pattern "/accounts/{aws_account_id}/analyses/{analysis_id}"))
+  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), analysis_id: (encode-path-segment $analysis_id)} | format pattern "/accounts/{aws_account_id}/analyses/{analysis_id}") $auth.query)
   let req_body = {"Name": $name, "Parameters": $parameters, "Permissions": $permissions, "SourceEntity": $source_entity, "ThemeArn": $theme_arn, "Tags": $tags, "Definition": $definition} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes an analysis from Amazon QuickSight. You can optionally include a recovery window during which you can restore the analysis. If you don't specify a recovery window value, the operation defaults to 30 days. Amazon QuickSight attaches a DeletionTime stamp to the response that specifies the end of the recovery window. At the end of the recovery window, Amazon QuickSight deletes the analysis permanently. At any time before recovery window ends, you can use the RestoreAnalysis API operation to remove the DeletionTime stamp and cancel the deletion of the analysis. The analysis remains visible in the API until it's deleted, so you can describe it but you can't make a template from it. An analysis that's scheduled for deletion isn't accessible in the Amazon QuickSight console. To access it in the console, restore it. Deleting an analysis doesn't delete the dashboards that you publish from it.
@@ -623,12 +747,23 @@ export def "accounts-analyses delete-analysis" [
   if ($aws_account_id | is-empty) { error make --unspanned { msg: "path parameter 'AwsAccountId' must be non-empty" } }
   if ($analysis_id | is-empty) { error make --unspanned { msg: "path parameter 'AnalysisId' must be non-empty" } }
   let qp = [(serialize-qp "recovery-window-in-days" $recovery_window_in_days "scalar") (serialize-qp "force-delete-without-recovery" $force_delete_without_recovery "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), analysis_id: (encode-path-segment $analysis_id)} | format pattern "/accounts/{aws_account_id}/analyses/{analysis_id}") $qp)
+  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), analysis_id: (encode-path-segment $analysis_id)} | format pattern "/accounts/{aws_account_id}/analyses/{analysis_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"recovery-window-in-days": $recovery_window_in_days, "force-delete-without-recovery": $force_delete_without_recovery} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"recovery-window-in-days": $recovery_window_in_days, "force-delete-without-recovery": $force_delete_without_recovery} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Provides a summary of the metadata for an analysis.
@@ -659,12 +794,23 @@ export def "accounts-analyses get-analysis" [
   let base = ($base_url | default $BASE_URL)
   if ($aws_account_id | is-empty) { error make --unspanned { msg: "path parameter 'AwsAccountId' must be non-empty" } }
   if ($analysis_id | is-empty) { error make --unspanned { msg: "path parameter 'AnalysisId' must be non-empty" } }
-  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), analysis_id: (encode-path-segment $analysis_id)} | format pattern "/accounts/{aws_account_id}/analyses/{analysis_id}"))
+  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), analysis_id: (encode-path-segment $analysis_id)} | format pattern "/accounts/{aws_account_id}/analyses/{analysis_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates an analysis in Amazon QuickSight
@@ -704,14 +850,25 @@ export def "accounts-analyses update-analysis" [
   let base = ($base_url | default $BASE_URL)
   if ($aws_account_id | is-empty) { error make --unspanned { msg: "path parameter 'AwsAccountId' must be non-empty" } }
   if ($analysis_id | is-empty) { error make --unspanned { msg: "path parameter 'AnalysisId' must be non-empty" } }
-  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), analysis_id: (encode-path-segment $analysis_id)} | format pattern "/accounts/{aws_account_id}/analyses/{analysis_id}"))
+  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), analysis_id: (encode-path-segment $analysis_id)} | format pattern "/accounts/{aws_account_id}/analyses/{analysis_id}") $auth.query)
   let req_body = {"Name": $name, "Parameters": $parameters, "SourceEntity": $source_entity, "ThemeArn": $theme_arn, "Definition": $definition} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Creates a dashboard from either a template or directly with a DashboardDefinition. To first create a template, see the CreateTemplate (https://docs.aws.amazon.com/quicksight/latest/APIReference/API_CreateTemplate.html) API operation. A dashboard is an entity in Amazon QuickSight that identifies Amazon QuickSight reports, created from analyses. You can share Amazon QuickSight dashboards. With the right permissions, you can create scheduled email reports from them. If you have the correct permissions, you can create a dashboard from a template that exists in a different Amazon Web Services account.
@@ -758,14 +915,25 @@ export def "accounts-dashboards create" [
   let base = ($base_url | default $BASE_URL)
   if ($aws_account_id | is-empty) { error make --unspanned { msg: "path parameter 'AwsAccountId' must be non-empty" } }
   if ($dashboard_id | is-empty) { error make --unspanned { msg: "path parameter 'DashboardId' must be non-empty" } }
-  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), dashboard_id: (encode-path-segment $dashboard_id)} | format pattern "/accounts/{aws_account_id}/dashboards/{dashboard_id}"))
+  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), dashboard_id: (encode-path-segment $dashboard_id)} | format pattern "/accounts/{aws_account_id}/dashboards/{dashboard_id}") $auth.query)
   let req_body = {"Name": $name, "Parameters": $parameters, "Permissions": $permissions, "SourceEntity": $source_entity, "Tags": $tags, "VersionDescription": $version_description, "DashboardPublishOptions": $dashboard_publish_options, "ThemeArn": $theme_arn, "Definition": $definition} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes a dashboard.
@@ -798,12 +966,23 @@ export def "accounts-dashboards delete" [
   if ($aws_account_id | is-empty) { error make --unspanned { msg: "path parameter 'AwsAccountId' must be non-empty" } }
   if ($dashboard_id | is-empty) { error make --unspanned { msg: "path parameter 'DashboardId' must be non-empty" } }
   let qp = [(serialize-qp "version-number" $version_number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), dashboard_id: (encode-path-segment $dashboard_id)} | format pattern "/accounts/{aws_account_id}/dashboards/{dashboard_id}") $qp)
+  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), dashboard_id: (encode-path-segment $dashboard_id)} | format pattern "/accounts/{aws_account_id}/dashboards/{dashboard_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"version-number": $version_number} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"version-number": $version_number} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Provides a summary for a dashboard.
@@ -837,12 +1016,23 @@ export def "accounts-dashboards get" [
   if ($aws_account_id | is-empty) { error make --unspanned { msg: "path parameter 'AwsAccountId' must be non-empty" } }
   if ($dashboard_id | is-empty) { error make --unspanned { msg: "path parameter 'DashboardId' must be non-empty" } }
   let qp = [(serialize-qp "version-number" $version_number "scalar") (serialize-qp "alias-name" $alias_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), dashboard_id: (encode-path-segment $dashboard_id)} | format pattern "/accounts/{aws_account_id}/dashboards/{dashboard_id}") $qp)
+  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), dashboard_id: (encode-path-segment $dashboard_id)} | format pattern "/accounts/{aws_account_id}/dashboards/{dashboard_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"version-number": $version_number, "alias-name": $alias_name} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"version-number": $version_number, "alias-name": $alias_name} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates a dashboard in an Amazon Web Services account. Updating a Dashboard creates a new dashboard version but does not immediately publish the new version. You can update the published version of a dashboard by using the UpdateDashboardPublishedVersion (https://docs.aws.amazon.com/quicksight/latest/APIReference/API_UpdateDashboardPublishedVersion.html) API operation.
@@ -885,14 +1075,25 @@ export def "accounts-dashboards update" [
   let base = ($base_url | default $BASE_URL)
   if ($aws_account_id | is-empty) { error make --unspanned { msg: "path parameter 'AwsAccountId' must be non-empty" } }
   if ($dashboard_id | is-empty) { error make --unspanned { msg: "path parameter 'DashboardId' must be non-empty" } }
-  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), dashboard_id: (encode-path-segment $dashboard_id)} | format pattern "/accounts/{aws_account_id}/dashboards/{dashboard_id}"))
+  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), dashboard_id: (encode-path-segment $dashboard_id)} | format pattern "/accounts/{aws_account_id}/dashboards/{dashboard_id}") $auth.query)
   let req_body = {"Name": $name, "SourceEntity": $source_entity, "Parameters": $parameters, "VersionDescription": $version_description, "DashboardPublishOptions": $dashboard_publish_options, "ThemeArn": $theme_arn, "Definition": $definition} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Creates a dataset. This operation doesn't support datasets that include uploaded files as a source.
@@ -942,14 +1143,25 @@ export def "accounts-data-sets create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($aws_account_id | is-empty) { error make --unspanned { msg: "path parameter 'AwsAccountId' must be non-empty" } }
-  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id)} | format pattern "/accounts/{aws_account_id}/data-sets"))
+  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id)} | format pattern "/accounts/{aws_account_id}/data-sets") $auth.query)
   let req_body = {"DataSetId": $data_set_id, "Name": $name, "PhysicalTableMap": $physical_table_map, "LogicalTableMap": $logical_table_map, "ImportMode": $import_mode, "ColumnGroups": $column_groups, "FieldFolders": $field_folders, "Permissions": $permissions, "RowLevelPermissionDataSet": $row_level_permission_data_set, "RowLevelPermissionTagConfiguration": $row_level_permission_tag_configuration, "ColumnLevelPermissionRules": $column_level_permission_rules, "Tags": $tags, "DataSetUsageConfiguration": $data_set_usage_configuration} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Lists all of the datasets belonging to the current Amazon Web Services account in an Amazon Web Services Region. The permissions resource is arn:aws:quicksight:region:aws-account-id:dataset/*.
@@ -983,12 +1195,23 @@ export def "accounts-data-sets list" [
   let base = ($base_url | default $BASE_URL)
   if ($aws_account_id | is-empty) { error make --unspanned { msg: "path parameter 'AwsAccountId' must be non-empty" } }
   let qp = [(serialize-qp "next-token" $next_token "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id)} | format pattern "/accounts/{aws_account_id}/data-sets") $qp)
+  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id)} | format pattern "/accounts/{aws_account_id}/data-sets") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"next-token": $next_token, "max-results": $max_results, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"next-token": $next_token, "max-results": $max_results, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Creates a data source.
@@ -1033,14 +1256,25 @@ export def "accounts-data-sources create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($aws_account_id | is-empty) { error make --unspanned { msg: "path parameter 'AwsAccountId' must be non-empty" } }
-  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id)} | format pattern "/accounts/{aws_account_id}/data-sources"))
+  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id)} | format pattern "/accounts/{aws_account_id}/data-sources") $auth.query)
   let req_body = {"DataSourceId": $data_source_id, "Name": $name, "Type": $type, "DataSourceParameters": $data_source_parameters, "Credentials": $credentials, "Permissions": $permissions, "VpcConnectionProperties": $vpc_connection_properties, "SslProperties": $ssl_properties, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Lists data sources in current Amazon Web Services Region that belong to this Amazon Web Services account.
@@ -1074,12 +1308,23 @@ export def "accounts-data-sources list" [
   let base = ($base_url | default $BASE_URL)
   if ($aws_account_id | is-empty) { error make --unspanned { msg: "path parameter 'AwsAccountId' must be non-empty" } }
   let qp = [(serialize-qp "next-token" $next_token "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id)} | format pattern "/accounts/{aws_account_id}/data-sources") $qp)
+  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id)} | format pattern "/accounts/{aws_account_id}/data-sources") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"next-token": $next_token, "max-results": $max_results, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"next-token": $next_token, "max-results": $max_results, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Creates an empty shared folder.
@@ -1118,14 +1363,25 @@ export def "accounts-folders create" [
   let base = ($base_url | default $BASE_URL)
   if ($aws_account_id | is-empty) { error make --unspanned { msg: "path parameter 'AwsAccountId' must be non-empty" } }
   if ($folder_id | is-empty) { error make --unspanned { msg: "path parameter 'FolderId' must be non-empty" } }
-  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), folder_id: (encode-path-segment $folder_id)} | format pattern "/accounts/{aws_account_id}/folders/{folder_id}"))
+  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), folder_id: (encode-path-segment $folder_id)} | format pattern "/accounts/{aws_account_id}/folders/{folder_id}") $auth.query)
   let req_body = {"Name": $name, "FolderType": $folder_type, "ParentFolderArn": $parent_folder_arn, "Permissions": $permissions, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes an empty folder.
@@ -1156,12 +1412,23 @@ export def "accounts-folders delete" [
   let base = ($base_url | default $BASE_URL)
   if ($aws_account_id | is-empty) { error make --unspanned { msg: "path parameter 'AwsAccountId' must be non-empty" } }
   if ($folder_id | is-empty) { error make --unspanned { msg: "path parameter 'FolderId' must be non-empty" } }
-  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), folder_id: (encode-path-segment $folder_id)} | format pattern "/accounts/{aws_account_id}/folders/{folder_id}"))
+  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), folder_id: (encode-path-segment $folder_id)} | format pattern "/accounts/{aws_account_id}/folders/{folder_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Describes a folder.
@@ -1192,12 +1459,23 @@ export def "accounts-folders get" [
   let base = ($base_url | default $BASE_URL)
   if ($aws_account_id | is-empty) { error make --unspanned { msg: "path parameter 'AwsAccountId' must be non-empty" } }
   if ($folder_id | is-empty) { error make --unspanned { msg: "path parameter 'FolderId' must be non-empty" } }
-  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), folder_id: (encode-path-segment $folder_id)} | format pattern "/accounts/{aws_account_id}/folders/{folder_id}"))
+  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), folder_id: (encode-path-segment $folder_id)} | format pattern "/accounts/{aws_account_id}/folders/{folder_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates the name of a folder.
@@ -1230,14 +1508,25 @@ export def "accounts-folders update" [
   let base = ($base_url | default $BASE_URL)
   if ($aws_account_id | is-empty) { error make --unspanned { msg: "path parameter 'AwsAccountId' must be non-empty" } }
   if ($folder_id | is-empty) { error make --unspanned { msg: "path parameter 'FolderId' must be non-empty" } }
-  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), folder_id: (encode-path-segment $folder_id)} | format pattern "/accounts/{aws_account_id}/folders/{folder_id}"))
+  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), folder_id: (encode-path-segment $folder_id)} | format pattern "/accounts/{aws_account_id}/folders/{folder_id}") $auth.query)
   let req_body = {"Name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Adds an asset, such as a dashboard, analysis, or dataset into a folder.
@@ -1272,12 +1561,23 @@ export def "accounts-folders-members create-membership" [
   if ($folder_id | is-empty) { error make --unspanned { msg: "path parameter 'FolderId' must be non-empty" } }
   if ($member_type | is-empty) { error make --unspanned { msg: "path parameter 'MemberType' must be non-empty" } }
   if ($member_id | is-empty) { error make --unspanned { msg: "path parameter 'MemberId' must be non-empty" } }
-  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), folder_id: (encode-path-segment $folder_id), member_type: (encode-path-segment $member_type), member_id: (encode-path-segment $member_id)} | format pattern "/accounts/{aws_account_id}/folders/{folder_id}/members/{member_type}/{member_id}"))
+  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), folder_id: (encode-path-segment $folder_id), member_type: (encode-path-segment $member_type), member_id: (encode-path-segment $member_id)} | format pattern "/accounts/{aws_account_id}/folders/{folder_id}/members/{member_type}/{member_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Removes an asset, such as a dashboard, analysis, or dataset, from a folder.
@@ -1312,12 +1612,23 @@ export def "accounts-folders-members delete-membership" [
   if ($folder_id | is-empty) { error make --unspanned { msg: "path parameter 'FolderId' must be non-empty" } }
   if ($member_type | is-empty) { error make --unspanned { msg: "path parameter 'MemberType' must be non-empty" } }
   if ($member_id | is-empty) { error make --unspanned { msg: "path parameter 'MemberId' must be non-empty" } }
-  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), folder_id: (encode-path-segment $folder_id), member_type: (encode-path-segment $member_type), member_id: (encode-path-segment $member_id)} | format pattern "/accounts/{aws_account_id}/folders/{folder_id}/members/{member_type}/{member_id}"))
+  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), folder_id: (encode-path-segment $folder_id), member_type: (encode-path-segment $member_type), member_id: (encode-path-segment $member_id)} | format pattern "/accounts/{aws_account_id}/folders/{folder_id}/members/{member_type}/{member_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Use the CreateGroup operation to create a group in Amazon QuickSight. You can create up to 10,000 groups in a namespace. If you want to create more than 10,000 groups in a namespace, contact AWS Support. The permissions resource is arn:aws:quicksight:<your-region>:<relevant-aws-account-id>:group/default/<group-name> . The response is a group object.
@@ -1351,14 +1662,25 @@ export def "accounts-namespaces-groups create" [
   let base = ($base_url | default $BASE_URL)
   if ($aws_account_id | is-empty) { error make --unspanned { msg: "path parameter 'AwsAccountId' must be non-empty" } }
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'Namespace' must be non-empty" } }
-  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), namespace: (encode-path-segment $namespace)} | format pattern "/accounts/{aws_account_id}/namespaces/{namespace}/groups"))
+  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), namespace: (encode-path-segment $namespace)} | format pattern "/accounts/{aws_account_id}/namespaces/{namespace}/groups") $auth.query)
   let req_body = {"GroupName": $group_name, "Description": $description} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Lists all user groups in Amazon QuickSight.
@@ -1392,12 +1714,23 @@ export def "accounts-namespaces-groups list" [
   if ($aws_account_id | is-empty) { error make --unspanned { msg: "path parameter 'AwsAccountId' must be non-empty" } }
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'Namespace' must be non-empty" } }
   let qp = [(serialize-qp "next-token" $next_token "scalar") (serialize-qp "max-results" $max_results "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), namespace: (encode-path-segment $namespace)} | format pattern "/accounts/{aws_account_id}/namespaces/{namespace}/groups") $qp)
+  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), namespace: (encode-path-segment $namespace)} | format pattern "/accounts/{aws_account_id}/namespaces/{namespace}/groups") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"next-token": $next_token, "max-results": $max_results} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"next-token": $next_token, "max-results": $max_results} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Adds an Amazon QuickSight user to an Amazon QuickSight group.
@@ -1432,12 +1765,23 @@ export def "accounts-namespaces-groups-members create-membership" [
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'Namespace' must be non-empty" } }
   if ($group_name | is-empty) { error make --unspanned { msg: "path parameter 'GroupName' must be non-empty" } }
   if ($member_name | is-empty) { error make --unspanned { msg: "path parameter 'MemberName' must be non-empty" } }
-  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), namespace: (encode-path-segment $namespace), group_name: (encode-path-segment $group_name), member_name: (encode-path-segment $member_name)} | format pattern "/accounts/{aws_account_id}/namespaces/{namespace}/groups/{group_name}/members/{member_name}"))
+  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), namespace: (encode-path-segment $namespace), group_name: (encode-path-segment $group_name), member_name: (encode-path-segment $member_name)} | format pattern "/accounts/{aws_account_id}/namespaces/{namespace}/groups/{group_name}/members/{member_name}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Removes a user from a group so that the user is no longer a member of the group.
@@ -1472,12 +1816,23 @@ export def "accounts-namespaces-groups-members delete-membership" [
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'Namespace' must be non-empty" } }
   if ($group_name | is-empty) { error make --unspanned { msg: "path parameter 'GroupName' must be non-empty" } }
   if ($member_name | is-empty) { error make --unspanned { msg: "path parameter 'MemberName' must be non-empty" } }
-  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), namespace: (encode-path-segment $namespace), group_name: (encode-path-segment $group_name), member_name: (encode-path-segment $member_name)} | format pattern "/accounts/{aws_account_id}/namespaces/{namespace}/groups/{group_name}/members/{member_name}"))
+  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), namespace: (encode-path-segment $namespace), group_name: (encode-path-segment $group_name), member_name: (encode-path-segment $member_name)} | format pattern "/accounts/{aws_account_id}/namespaces/{namespace}/groups/{group_name}/members/{member_name}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Use the DescribeGroupMembership operation to determine if a user is a member of the specified group. If the user exists and is a member of the specified group, an associated GroupMember object is returned.
@@ -1512,12 +1867,23 @@ export def "accounts-namespaces-groups-members get-membership" [
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'Namespace' must be non-empty" } }
   if ($group_name | is-empty) { error make --unspanned { msg: "path parameter 'GroupName' must be non-empty" } }
   if ($member_name | is-empty) { error make --unspanned { msg: "path parameter 'MemberName' must be non-empty" } }
-  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), namespace: (encode-path-segment $namespace), group_name: (encode-path-segment $group_name), member_name: (encode-path-segment $member_name)} | format pattern "/accounts/{aws_account_id}/namespaces/{namespace}/groups/{group_name}/members/{member_name}"))
+  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), namespace: (encode-path-segment $namespace), group_name: (encode-path-segment $group_name), member_name: (encode-path-segment $member_name)} | format pattern "/accounts/{aws_account_id}/namespaces/{namespace}/groups/{group_name}/members/{member_name}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Creates an assignment with one specified IAM policy, identified by its Amazon Resource Name (ARN). This policy assignment is attached to the specified groups or users of Amazon QuickSight. Assignment names are unique per Amazon Web Services account. To avoid overwriting rules in other namespaces, use assignment names that are unique.
@@ -1553,14 +1919,25 @@ export def "accounts-namespaces-iam-policy-assignments create" [
   let base = ($base_url | default $BASE_URL)
   if ($aws_account_id | is-empty) { error make --unspanned { msg: "path parameter 'AwsAccountId' must be non-empty" } }
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'Namespace' must be non-empty" } }
-  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), namespace: (encode-path-segment $namespace)} | format pattern "/accounts/{aws_account_id}/namespaces/{namespace}/iam-policy-assignments/"))
+  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), namespace: (encode-path-segment $namespace)} | format pattern "/accounts/{aws_account_id}/namespaces/{namespace}/iam-policy-assignments/") $auth.query)
   let req_body = {"AssignmentName": $assignment_name, "AssignmentStatus": $assignment_status, "PolicyArn": $policy_arn, "Identities": $identities} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # (Enterprise edition only) Creates a new namespace for you to use with Amazon QuickSight. A namespace allows you to isolate the Amazon QuickSight users and groups that are registered for that namespace. Users that access the namespace can share assets only with other users or groups in the same namespace. They can't see users and groups in other namespaces. You can create a namespace after your Amazon Web Services account is subscribed to Amazon QuickSight. The namespace must be unique within the Amazon Web Services account. By default, there is a limit of 100 namespaces per Amazon Web Services account. To increase your limit, create a ticket with Amazon Web Services Support.
@@ -1594,14 +1971,25 @@ export def "accounts create-namespace" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($aws_account_id | is-empty) { error make --unspanned { msg: "path parameter 'AwsAccountId' must be non-empty" } }
-  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id)} | format pattern "/accounts/{aws_account_id}"))
+  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id)} | format pattern "/accounts/{aws_account_id}") $auth.query)
   let req_body = {"Namespace": $namespace, "IdentityStore": $identity_store, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Creates a refresh schedule for a dataset. You can create up to 5 different schedules for a single dataset.
@@ -1635,14 +2023,25 @@ export def "accounts-data-sets-refresh-schedules create" [
   let base = ($base_url | default $BASE_URL)
   if ($aws_account_id | is-empty) { error make --unspanned { msg: "path parameter 'AwsAccountId' must be non-empty" } }
   if ($data_set_id | is-empty) { error make --unspanned { msg: "path parameter 'DataSetId' must be non-empty" } }
-  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), data_set_id: (encode-path-segment $data_set_id)} | format pattern "/accounts/{aws_account_id}/data-sets/{data_set_id}/refresh-schedules"))
+  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), data_set_id: (encode-path-segment $data_set_id)} | format pattern "/accounts/{aws_account_id}/data-sets/{data_set_id}/refresh-schedules") $auth.query)
   let req_body = {"Schedule": $schedule} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Lists the refresh schedules of a dataset. Each dataset can have up to 5 schedules.
@@ -1673,12 +2072,23 @@ export def "accounts-data-sets-refresh-schedules list" [
   let base = ($base_url | default $BASE_URL)
   if ($aws_account_id | is-empty) { error make --unspanned { msg: "path parameter 'AwsAccountId' must be non-empty" } }
   if ($data_set_id | is-empty) { error make --unspanned { msg: "path parameter 'DataSetId' must be non-empty" } }
-  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), data_set_id: (encode-path-segment $data_set_id)} | format pattern "/accounts/{aws_account_id}/data-sets/{data_set_id}/refresh-schedules"))
+  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), data_set_id: (encode-path-segment $data_set_id)} | format pattern "/accounts/{aws_account_id}/data-sets/{data_set_id}/refresh-schedules") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates a refresh schedule for a dataset.
@@ -1712,14 +2122,25 @@ export def "accounts-data-sets-refresh-schedules update" [
   let base = ($base_url | default $BASE_URL)
   if ($aws_account_id | is-empty) { error make --unspanned { msg: "path parameter 'AwsAccountId' must be non-empty" } }
   if ($data_set_id | is-empty) { error make --unspanned { msg: "path parameter 'DataSetId' must be non-empty" } }
-  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), data_set_id: (encode-path-segment $data_set_id)} | format pattern "/accounts/{aws_account_id}/data-sets/{data_set_id}/refresh-schedules"))
+  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), data_set_id: (encode-path-segment $data_set_id)} | format pattern "/accounts/{aws_account_id}/data-sets/{data_set_id}/refresh-schedules") $auth.query)
   let req_body = {"Schedule": $schedule} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Creates a template either from a TemplateDefinition or from an existing Amazon QuickSight analysis or template. You can use the resulting template to create additional dashboards, templates, or analyses. A template is an entity in Amazon QuickSight that encapsulates the metadata required to create an analysis and that you can use to create s dashboard. A template adds a layer of abstraction by using placeholders to replace the dataset associated with the analysis. You can use templates to create dashboards by replacing dataset placeholders with datasets that follow the same schema that was used to create the source analysis and template.
@@ -1761,14 +2182,25 @@ export def "accounts-templates create" [
   let base = ($base_url | default $BASE_URL)
   if ($aws_account_id | is-empty) { error make --unspanned { msg: "path parameter 'AwsAccountId' must be non-empty" } }
   if ($template_id | is-empty) { error make --unspanned { msg: "path parameter 'TemplateId' must be non-empty" } }
-  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), template_id: (encode-path-segment $template_id)} | format pattern "/accounts/{aws_account_id}/templates/{template_id}"))
+  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), template_id: (encode-path-segment $template_id)} | format pattern "/accounts/{aws_account_id}/templates/{template_id}") $auth.query)
   let req_body = {"Name": $name, "Permissions": $permissions, "SourceEntity": $source_entity, "Tags": $tags, "VersionDescription": $version_description, "Definition": $definition} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes a template.
@@ -1801,12 +2233,23 @@ export def "accounts-templates delete" [
   if ($aws_account_id | is-empty) { error make --unspanned { msg: "path parameter 'AwsAccountId' must be non-empty" } }
   if ($template_id | is-empty) { error make --unspanned { msg: "path parameter 'TemplateId' must be non-empty" } }
   let qp = [(serialize-qp "version-number" $version_number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), template_id: (encode-path-segment $template_id)} | format pattern "/accounts/{aws_account_id}/templates/{template_id}") $qp)
+  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), template_id: (encode-path-segment $template_id)} | format pattern "/accounts/{aws_account_id}/templates/{template_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"version-number": $version_number} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"version-number": $version_number} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Describes a template's metadata.
@@ -1840,12 +2283,23 @@ export def "accounts-templates get" [
   if ($aws_account_id | is-empty) { error make --unspanned { msg: "path parameter 'AwsAccountId' must be non-empty" } }
   if ($template_id | is-empty) { error make --unspanned { msg: "path parameter 'TemplateId' must be non-empty" } }
   let qp = [(serialize-qp "version-number" $version_number "scalar") (serialize-qp "alias-name" $alias_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), template_id: (encode-path-segment $template_id)} | format pattern "/accounts/{aws_account_id}/templates/{template_id}") $qp)
+  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), template_id: (encode-path-segment $template_id)} | format pattern "/accounts/{aws_account_id}/templates/{template_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"version-number": $version_number, "alias-name": $alias_name} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"version-number": $version_number, "alias-name": $alias_name} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates a template from an existing Amazon QuickSight analysis or another template.
@@ -1883,14 +2337,25 @@ export def "accounts-templates update" [
   let base = ($base_url | default $BASE_URL)
   if ($aws_account_id | is-empty) { error make --unspanned { msg: "path parameter 'AwsAccountId' must be non-empty" } }
   if ($template_id | is-empty) { error make --unspanned { msg: "path parameter 'TemplateId' must be non-empty" } }
-  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), template_id: (encode-path-segment $template_id)} | format pattern "/accounts/{aws_account_id}/templates/{template_id}"))
+  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), template_id: (encode-path-segment $template_id)} | format pattern "/accounts/{aws_account_id}/templates/{template_id}") $auth.query)
   let req_body = {"SourceEntity": $source_entity, "VersionDescription": $version_description, "Name": $name, "Definition": $definition} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Creates a template alias for a template.
@@ -1925,14 +2390,25 @@ export def "accounts-templates-aliases create-alias" [
   if ($aws_account_id | is-empty) { error make --unspanned { msg: "path parameter 'AwsAccountId' must be non-empty" } }
   if ($template_id | is-empty) { error make --unspanned { msg: "path parameter 'TemplateId' must be non-empty" } }
   if ($alias_name | is-empty) { error make --unspanned { msg: "path parameter 'AliasName' must be non-empty" } }
-  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), template_id: (encode-path-segment $template_id), alias_name: (encode-path-segment $alias_name)} | format pattern "/accounts/{aws_account_id}/templates/{template_id}/aliases/{alias_name}"))
+  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), template_id: (encode-path-segment $template_id), alias_name: (encode-path-segment $alias_name)} | format pattern "/accounts/{aws_account_id}/templates/{template_id}/aliases/{alias_name}") $auth.query)
   let req_body = {"TemplateVersionNumber": $template_version_number} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes the item that the specified template alias points to. If you provide a specific alias, you delete the version of the template that the alias points to.
@@ -1965,12 +2441,23 @@ export def "accounts-templates-aliases delete-alias" [
   if ($aws_account_id | is-empty) { error make --unspanned { msg: "path parameter 'AwsAccountId' must be non-empty" } }
   if ($template_id | is-empty) { error make --unspanned { msg: "path parameter 'TemplateId' must be non-empty" } }
   if ($alias_name | is-empty) { error make --unspanned { msg: "path parameter 'AliasName' must be non-empty" } }
-  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), template_id: (encode-path-segment $template_id), alias_name: (encode-path-segment $alias_name)} | format pattern "/accounts/{aws_account_id}/templates/{template_id}/aliases/{alias_name}"))
+  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), template_id: (encode-path-segment $template_id), alias_name: (encode-path-segment $alias_name)} | format pattern "/accounts/{aws_account_id}/templates/{template_id}/aliases/{alias_name}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Describes the template alias for a template.
@@ -2003,12 +2490,23 @@ export def "accounts-templates-aliases get-alias" [
   if ($aws_account_id | is-empty) { error make --unspanned { msg: "path parameter 'AwsAccountId' must be non-empty" } }
   if ($template_id | is-empty) { error make --unspanned { msg: "path parameter 'TemplateId' must be non-empty" } }
   if ($alias_name | is-empty) { error make --unspanned { msg: "path parameter 'AliasName' must be non-empty" } }
-  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), template_id: (encode-path-segment $template_id), alias_name: (encode-path-segment $alias_name)} | format pattern "/accounts/{aws_account_id}/templates/{template_id}/aliases/{alias_name}"))
+  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), template_id: (encode-path-segment $template_id), alias_name: (encode-path-segment $alias_name)} | format pattern "/accounts/{aws_account_id}/templates/{template_id}/aliases/{alias_name}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates the template alias of a template.
@@ -2043,14 +2541,25 @@ export def "accounts-templates-aliases update-alias" [
   if ($aws_account_id | is-empty) { error make --unspanned { msg: "path parameter 'AwsAccountId' must be non-empty" } }
   if ($template_id | is-empty) { error make --unspanned { msg: "path parameter 'TemplateId' must be non-empty" } }
   if ($alias_name | is-empty) { error make --unspanned { msg: "path parameter 'AliasName' must be non-empty" } }
-  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), template_id: (encode-path-segment $template_id), alias_name: (encode-path-segment $alias_name)} | format pattern "/accounts/{aws_account_id}/templates/{template_id}/aliases/{alias_name}"))
+  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), template_id: (encode-path-segment $template_id), alias_name: (encode-path-segment $alias_name)} | format pattern "/accounts/{aws_account_id}/templates/{template_id}/aliases/{alias_name}") $auth.query)
   let req_body = {"TemplateVersionNumber": $template_version_number} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Creates a theme. A theme is set of configuration options for color and layout. Themes apply to analyses and dashboards. For more information, see Using Themes in Amazon QuickSight (https://docs.aws.amazon.com/quicksight/latest/user/themes-in-quicksight.html) in the Amazon QuickSight User Guide.
@@ -2091,14 +2600,25 @@ export def "accounts-themes create" [
   let base = ($base_url | default $BASE_URL)
   if ($aws_account_id | is-empty) { error make --unspanned { msg: "path parameter 'AwsAccountId' must be non-empty" } }
   if ($theme_id | is-empty) { error make --unspanned { msg: "path parameter 'ThemeId' must be non-empty" } }
-  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), theme_id: (encode-path-segment $theme_id)} | format pattern "/accounts/{aws_account_id}/themes/{theme_id}"))
+  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), theme_id: (encode-path-segment $theme_id)} | format pattern "/accounts/{aws_account_id}/themes/{theme_id}") $auth.query)
   let req_body = {"Name": $name, "BaseThemeId": $base_theme_id, "VersionDescription": $version_description, "Configuration": $configuration, "Permissions": $permissions, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes a theme.
@@ -2131,12 +2651,23 @@ export def "accounts-themes delete" [
   if ($aws_account_id | is-empty) { error make --unspanned { msg: "path parameter 'AwsAccountId' must be non-empty" } }
   if ($theme_id | is-empty) { error make --unspanned { msg: "path parameter 'ThemeId' must be non-empty" } }
   let qp = [(serialize-qp "version-number" $version_number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), theme_id: (encode-path-segment $theme_id)} | format pattern "/accounts/{aws_account_id}/themes/{theme_id}") $qp)
+  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), theme_id: (encode-path-segment $theme_id)} | format pattern "/accounts/{aws_account_id}/themes/{theme_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"version-number": $version_number} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"version-number": $version_number} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Describes a theme.
@@ -2170,12 +2701,23 @@ export def "accounts-themes get" [
   if ($aws_account_id | is-empty) { error make --unspanned { msg: "path parameter 'AwsAccountId' must be non-empty" } }
   if ($theme_id | is-empty) { error make --unspanned { msg: "path parameter 'ThemeId' must be non-empty" } }
   let qp = [(serialize-qp "version-number" $version_number "scalar") (serialize-qp "alias-name" $alias_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), theme_id: (encode-path-segment $theme_id)} | format pattern "/accounts/{aws_account_id}/themes/{theme_id}") $qp)
+  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), theme_id: (encode-path-segment $theme_id)} | format pattern "/accounts/{aws_account_id}/themes/{theme_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"version-number": $version_number, "alias-name": $alias_name} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"version-number": $version_number, "alias-name": $alias_name} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates a theme.
@@ -2212,14 +2754,25 @@ export def "accounts-themes update" [
   let base = ($base_url | default $BASE_URL)
   if ($aws_account_id | is-empty) { error make --unspanned { msg: "path parameter 'AwsAccountId' must be non-empty" } }
   if ($theme_id | is-empty) { error make --unspanned { msg: "path parameter 'ThemeId' must be non-empty" } }
-  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), theme_id: (encode-path-segment $theme_id)} | format pattern "/accounts/{aws_account_id}/themes/{theme_id}"))
+  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), theme_id: (encode-path-segment $theme_id)} | format pattern "/accounts/{aws_account_id}/themes/{theme_id}") $auth.query)
   let req_body = {"Name": $name, "BaseThemeId": $base_theme_id, "VersionDescription": $version_description, "Configuration": $configuration} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Creates a theme alias for a theme.
@@ -2254,14 +2807,25 @@ export def "accounts-themes-aliases create-alias" [
   if ($aws_account_id | is-empty) { error make --unspanned { msg: "path parameter 'AwsAccountId' must be non-empty" } }
   if ($theme_id | is-empty) { error make --unspanned { msg: "path parameter 'ThemeId' must be non-empty" } }
   if ($alias_name | is-empty) { error make --unspanned { msg: "path parameter 'AliasName' must be non-empty" } }
-  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), theme_id: (encode-path-segment $theme_id), alias_name: (encode-path-segment $alias_name)} | format pattern "/accounts/{aws_account_id}/themes/{theme_id}/aliases/{alias_name}"))
+  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), theme_id: (encode-path-segment $theme_id), alias_name: (encode-path-segment $alias_name)} | format pattern "/accounts/{aws_account_id}/themes/{theme_id}/aliases/{alias_name}") $auth.query)
   let req_body = {"ThemeVersionNumber": $theme_version_number} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes the version of the theme that the specified theme alias points to. If you provide a specific alias, you delete the version of the theme that the alias points to.
@@ -2294,12 +2858,23 @@ export def "accounts-themes-aliases delete-alias" [
   if ($aws_account_id | is-empty) { error make --unspanned { msg: "path parameter 'AwsAccountId' must be non-empty" } }
   if ($theme_id | is-empty) { error make --unspanned { msg: "path parameter 'ThemeId' must be non-empty" } }
   if ($alias_name | is-empty) { error make --unspanned { msg: "path parameter 'AliasName' must be non-empty" } }
-  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), theme_id: (encode-path-segment $theme_id), alias_name: (encode-path-segment $alias_name)} | format pattern "/accounts/{aws_account_id}/themes/{theme_id}/aliases/{alias_name}"))
+  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), theme_id: (encode-path-segment $theme_id), alias_name: (encode-path-segment $alias_name)} | format pattern "/accounts/{aws_account_id}/themes/{theme_id}/aliases/{alias_name}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Describes the alias for a theme.
@@ -2332,12 +2907,23 @@ export def "accounts-themes-aliases get-alias" [
   if ($aws_account_id | is-empty) { error make --unspanned { msg: "path parameter 'AwsAccountId' must be non-empty" } }
   if ($theme_id | is-empty) { error make --unspanned { msg: "path parameter 'ThemeId' must be non-empty" } }
   if ($alias_name | is-empty) { error make --unspanned { msg: "path parameter 'AliasName' must be non-empty" } }
-  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), theme_id: (encode-path-segment $theme_id), alias_name: (encode-path-segment $alias_name)} | format pattern "/accounts/{aws_account_id}/themes/{theme_id}/aliases/{alias_name}"))
+  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), theme_id: (encode-path-segment $theme_id), alias_name: (encode-path-segment $alias_name)} | format pattern "/accounts/{aws_account_id}/themes/{theme_id}/aliases/{alias_name}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates an alias of a theme.
@@ -2372,14 +2958,25 @@ export def "accounts-themes-aliases update-alias" [
   if ($aws_account_id | is-empty) { error make --unspanned { msg: "path parameter 'AwsAccountId' must be non-empty" } }
   if ($theme_id | is-empty) { error make --unspanned { msg: "path parameter 'ThemeId' must be non-empty" } }
   if ($alias_name | is-empty) { error make --unspanned { msg: "path parameter 'AliasName' must be non-empty" } }
-  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), theme_id: (encode-path-segment $theme_id), alias_name: (encode-path-segment $alias_name)} | format pattern "/accounts/{aws_account_id}/themes/{theme_id}/aliases/{alias_name}"))
+  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), theme_id: (encode-path-segment $theme_id), alias_name: (encode-path-segment $alias_name)} | format pattern "/accounts/{aws_account_id}/themes/{theme_id}/aliases/{alias_name}") $auth.query)
   let req_body = {"ThemeVersionNumber": $theme_version_number} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes a dataset.
@@ -2410,12 +3007,23 @@ export def "accounts-data-sets delete" [
   let base = ($base_url | default $BASE_URL)
   if ($aws_account_id | is-empty) { error make --unspanned { msg: "path parameter 'AwsAccountId' must be non-empty" } }
   if ($data_set_id | is-empty) { error make --unspanned { msg: "path parameter 'DataSetId' must be non-empty" } }
-  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), data_set_id: (encode-path-segment $data_set_id)} | format pattern "/accounts/{aws_account_id}/data-sets/{data_set_id}"))
+  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), data_set_id: (encode-path-segment $data_set_id)} | format pattern "/accounts/{aws_account_id}/data-sets/{data_set_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Describes a dataset. This operation doesn't support datasets that include uploaded files as a source.
@@ -2446,12 +3054,23 @@ export def "accounts-data-sets get" [
   let base = ($base_url | default $BASE_URL)
   if ($aws_account_id | is-empty) { error make --unspanned { msg: "path parameter 'AwsAccountId' must be non-empty" } }
   if ($data_set_id | is-empty) { error make --unspanned { msg: "path parameter 'DataSetId' must be non-empty" } }
-  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), data_set_id: (encode-path-segment $data_set_id)} | format pattern "/accounts/{aws_account_id}/data-sets/{data_set_id}"))
+  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), data_set_id: (encode-path-segment $data_set_id)} | format pattern "/accounts/{aws_account_id}/data-sets/{data_set_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates a dataset. This operation doesn't support datasets that include uploaded files as a source. Partial updates are not supported by this operation.
@@ -2498,14 +3117,25 @@ export def "accounts-data-sets update" [
   let base = ($base_url | default $BASE_URL)
   if ($aws_account_id | is-empty) { error make --unspanned { msg: "path parameter 'AwsAccountId' must be non-empty" } }
   if ($data_set_id | is-empty) { error make --unspanned { msg: "path parameter 'DataSetId' must be non-empty" } }
-  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), data_set_id: (encode-path-segment $data_set_id)} | format pattern "/accounts/{aws_account_id}/data-sets/{data_set_id}"))
+  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), data_set_id: (encode-path-segment $data_set_id)} | format pattern "/accounts/{aws_account_id}/data-sets/{data_set_id}") $auth.query)
   let req_body = {"Name": $name, "PhysicalTableMap": $physical_table_map, "LogicalTableMap": $logical_table_map, "ImportMode": $import_mode, "ColumnGroups": $column_groups, "FieldFolders": $field_folders, "RowLevelPermissionDataSet": $row_level_permission_data_set, "RowLevelPermissionTagConfiguration": $row_level_permission_tag_configuration, "ColumnLevelPermissionRules": $column_level_permission_rules, "DataSetUsageConfiguration": $data_set_usage_configuration} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes the dataset refresh properties of the dataset.
@@ -2536,12 +3166,23 @@ export def "accounts-data-sets-refresh-properties delete" [
   let base = ($base_url | default $BASE_URL)
   if ($aws_account_id | is-empty) { error make --unspanned { msg: "path parameter 'AwsAccountId' must be non-empty" } }
   if ($data_set_id | is-empty) { error make --unspanned { msg: "path parameter 'DataSetId' must be non-empty" } }
-  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), data_set_id: (encode-path-segment $data_set_id)} | format pattern "/accounts/{aws_account_id}/data-sets/{data_set_id}/refresh-properties"))
+  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), data_set_id: (encode-path-segment $data_set_id)} | format pattern "/accounts/{aws_account_id}/data-sets/{data_set_id}/refresh-properties") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Describes the refresh properties of a dataset.
@@ -2572,12 +3213,23 @@ export def "accounts-data-sets-refresh-properties get" [
   let base = ($base_url | default $BASE_URL)
   if ($aws_account_id | is-empty) { error make --unspanned { msg: "path parameter 'AwsAccountId' must be non-empty" } }
   if ($data_set_id | is-empty) { error make --unspanned { msg: "path parameter 'DataSetId' must be non-empty" } }
-  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), data_set_id: (encode-path-segment $data_set_id)} | format pattern "/accounts/{aws_account_id}/data-sets/{data_set_id}/refresh-properties"))
+  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), data_set_id: (encode-path-segment $data_set_id)} | format pattern "/accounts/{aws_account_id}/data-sets/{data_set_id}/refresh-properties") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Creates or updates the dataset refresh properties for the dataset.
@@ -2611,14 +3263,25 @@ export def "accounts-data-sets-refresh-properties update" [
   let base = ($base_url | default $BASE_URL)
   if ($aws_account_id | is-empty) { error make --unspanned { msg: "path parameter 'AwsAccountId' must be non-empty" } }
   if ($data_set_id | is-empty) { error make --unspanned { msg: "path parameter 'DataSetId' must be non-empty" } }
-  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), data_set_id: (encode-path-segment $data_set_id)} | format pattern "/accounts/{aws_account_id}/data-sets/{data_set_id}/refresh-properties"))
+  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), data_set_id: (encode-path-segment $data_set_id)} | format pattern "/accounts/{aws_account_id}/data-sets/{data_set_id}/refresh-properties") $auth.query)
   let req_body = {"DataSetRefreshProperties": $data_set_refresh_properties} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes the data source permanently. This operation breaks all the datasets that reference the deleted data source.
@@ -2649,12 +3312,23 @@ export def "accounts-data-sources delete" [
   let base = ($base_url | default $BASE_URL)
   if ($aws_account_id | is-empty) { error make --unspanned { msg: "path parameter 'AwsAccountId' must be non-empty" } }
   if ($data_source_id | is-empty) { error make --unspanned { msg: "path parameter 'DataSourceId' must be non-empty" } }
-  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), data_source_id: (encode-path-segment $data_source_id)} | format pattern "/accounts/{aws_account_id}/data-sources/{data_source_id}"))
+  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), data_source_id: (encode-path-segment $data_source_id)} | format pattern "/accounts/{aws_account_id}/data-sources/{data_source_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Describes a data source.
@@ -2685,12 +3359,23 @@ export def "accounts-data-sources get" [
   let base = ($base_url | default $BASE_URL)
   if ($aws_account_id | is-empty) { error make --unspanned { msg: "path parameter 'AwsAccountId' must be non-empty" } }
   if ($data_source_id | is-empty) { error make --unspanned { msg: "path parameter 'DataSourceId' must be non-empty" } }
-  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), data_source_id: (encode-path-segment $data_source_id)} | format pattern "/accounts/{aws_account_id}/data-sources/{data_source_id}"))
+  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), data_source_id: (encode-path-segment $data_source_id)} | format pattern "/accounts/{aws_account_id}/data-sources/{data_source_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates a data source.
@@ -2731,14 +3416,25 @@ export def "accounts-data-sources update" [
   let base = ($base_url | default $BASE_URL)
   if ($aws_account_id | is-empty) { error make --unspanned { msg: "path parameter 'AwsAccountId' must be non-empty" } }
   if ($data_source_id | is-empty) { error make --unspanned { msg: "path parameter 'DataSourceId' must be non-empty" } }
-  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), data_source_id: (encode-path-segment $data_source_id)} | format pattern "/accounts/{aws_account_id}/data-sources/{data_source_id}"))
+  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), data_source_id: (encode-path-segment $data_source_id)} | format pattern "/accounts/{aws_account_id}/data-sources/{data_source_id}") $auth.query)
   let req_body = {"Name": $name, "DataSourceParameters": $data_source_parameters, "Credentials": $credentials, "VpcConnectionProperties": $vpc_connection_properties, "SslProperties": $ssl_properties} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Removes a user group from Amazon QuickSight.
@@ -2771,12 +3467,23 @@ export def "accounts-namespaces-groups delete" [
   if ($aws_account_id | is-empty) { error make --unspanned { msg: "path parameter 'AwsAccountId' must be non-empty" } }
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'Namespace' must be non-empty" } }
   if ($group_name | is-empty) { error make --unspanned { msg: "path parameter 'GroupName' must be non-empty" } }
-  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), namespace: (encode-path-segment $namespace), group_name: (encode-path-segment $group_name)} | format pattern "/accounts/{aws_account_id}/namespaces/{namespace}/groups/{group_name}"))
+  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), namespace: (encode-path-segment $namespace), group_name: (encode-path-segment $group_name)} | format pattern "/accounts/{aws_account_id}/namespaces/{namespace}/groups/{group_name}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Returns an Amazon QuickSight group's description and Amazon Resource Name (ARN).
@@ -2809,12 +3516,23 @@ export def "accounts-namespaces-groups get" [
   if ($aws_account_id | is-empty) { error make --unspanned { msg: "path parameter 'AwsAccountId' must be non-empty" } }
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'Namespace' must be non-empty" } }
   if ($group_name | is-empty) { error make --unspanned { msg: "path parameter 'GroupName' must be non-empty" } }
-  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), namespace: (encode-path-segment $namespace), group_name: (encode-path-segment $group_name)} | format pattern "/accounts/{aws_account_id}/namespaces/{namespace}/groups/{group_name}"))
+  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), namespace: (encode-path-segment $namespace), group_name: (encode-path-segment $group_name)} | format pattern "/accounts/{aws_account_id}/namespaces/{namespace}/groups/{group_name}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Changes a group description.
@@ -2849,14 +3567,25 @@ export def "accounts-namespaces-groups update" [
   if ($aws_account_id | is-empty) { error make --unspanned { msg: "path parameter 'AwsAccountId' must be non-empty" } }
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'Namespace' must be non-empty" } }
   if ($group_name | is-empty) { error make --unspanned { msg: "path parameter 'GroupName' must be non-empty" } }
-  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), namespace: (encode-path-segment $namespace), group_name: (encode-path-segment $group_name)} | format pattern "/accounts/{aws_account_id}/namespaces/{namespace}/groups/{group_name}"))
+  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), namespace: (encode-path-segment $namespace), group_name: (encode-path-segment $group_name)} | format pattern "/accounts/{aws_account_id}/namespaces/{namespace}/groups/{group_name}") $auth.query)
   let req_body = {"Description": $description} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes an existing IAM policy assignment.
@@ -2889,12 +3618,23 @@ export def "accounts-namespace-iam-policy-assignments delete" [
   if ($aws_account_id | is-empty) { error make --unspanned { msg: "path parameter 'AwsAccountId' must be non-empty" } }
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'Namespace' must be non-empty" } }
   if ($assignment_name | is-empty) { error make --unspanned { msg: "path parameter 'AssignmentName' must be non-empty" } }
-  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), namespace: (encode-path-segment $namespace), assignment_name: (encode-path-segment $assignment_name)} | format pattern "/accounts/{aws_account_id}/namespace/{namespace}/iam-policy-assignments/{assignment_name}"))
+  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), namespace: (encode-path-segment $namespace), assignment_name: (encode-path-segment $assignment_name)} | format pattern "/accounts/{aws_account_id}/namespace/{namespace}/iam-policy-assignments/{assignment_name}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes a namespace and the users and groups that are associated with the namespace. This is an asynchronous process. Assets including dashboards, analyses, datasets and data sources are not deleted. To delete these assets, you use the API operations for the relevant asset.
@@ -2925,12 +3665,23 @@ export def "accounts-namespaces delete" [
   let base = ($base_url | default $BASE_URL)
   if ($aws_account_id | is-empty) { error make --unspanned { msg: "path parameter 'AwsAccountId' must be non-empty" } }
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'Namespace' must be non-empty" } }
-  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), namespace: (encode-path-segment $namespace)} | format pattern "/accounts/{aws_account_id}/namespaces/{namespace}"))
+  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), namespace: (encode-path-segment $namespace)} | format pattern "/accounts/{aws_account_id}/namespaces/{namespace}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Describes the current namespace.
@@ -2961,12 +3712,23 @@ export def "accounts-namespaces get" [
   let base = ($base_url | default $BASE_URL)
   if ($aws_account_id | is-empty) { error make --unspanned { msg: "path parameter 'AwsAccountId' must be non-empty" } }
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'Namespace' must be non-empty" } }
-  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), namespace: (encode-path-segment $namespace)} | format pattern "/accounts/{aws_account_id}/namespaces/{namespace}"))
+  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), namespace: (encode-path-segment $namespace)} | format pattern "/accounts/{aws_account_id}/namespaces/{namespace}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes a refresh schedule from a dataset.
@@ -2999,12 +3761,23 @@ export def "accounts-data-sets-refresh-schedules delete" [
   if ($aws_account_id | is-empty) { error make --unspanned { msg: "path parameter 'AwsAccountId' must be non-empty" } }
   if ($data_set_id | is-empty) { error make --unspanned { msg: "path parameter 'DataSetId' must be non-empty" } }
   if ($schedule_id | is-empty) { error make --unspanned { msg: "path parameter 'ScheduleId' must be non-empty" } }
-  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), data_set_id: (encode-path-segment $data_set_id), schedule_id: (encode-path-segment $schedule_id)} | format pattern "/accounts/{aws_account_id}/data-sets/{data_set_id}/refresh-schedules/{schedule_id}"))
+  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), data_set_id: (encode-path-segment $data_set_id), schedule_id: (encode-path-segment $schedule_id)} | format pattern "/accounts/{aws_account_id}/data-sets/{data_set_id}/refresh-schedules/{schedule_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Provides a summary of a refresh schedule.
@@ -3037,12 +3810,23 @@ export def "accounts-data-sets-refresh-schedules get" [
   if ($aws_account_id | is-empty) { error make --unspanned { msg: "path parameter 'AwsAccountId' must be non-empty" } }
   if ($data_set_id | is-empty) { error make --unspanned { msg: "path parameter 'DataSetId' must be non-empty" } }
   if ($schedule_id | is-empty) { error make --unspanned { msg: "path parameter 'ScheduleId' must be non-empty" } }
-  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), data_set_id: (encode-path-segment $data_set_id), schedule_id: (encode-path-segment $schedule_id)} | format pattern "/accounts/{aws_account_id}/data-sets/{data_set_id}/refresh-schedules/{schedule_id}"))
+  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), data_set_id: (encode-path-segment $data_set_id), schedule_id: (encode-path-segment $schedule_id)} | format pattern "/accounts/{aws_account_id}/data-sets/{data_set_id}/refresh-schedules/{schedule_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes the Amazon QuickSight user that is associated with the identity of the IAM user or role that's making the call. The IAM user isn't deleted as a result of this call.
@@ -3075,12 +3859,23 @@ export def "accounts-namespaces-users delete" [
   if ($aws_account_id | is-empty) { error make --unspanned { msg: "path parameter 'AwsAccountId' must be non-empty" } }
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'Namespace' must be non-empty" } }
   if ($user_name | is-empty) { error make --unspanned { msg: "path parameter 'UserName' must be non-empty" } }
-  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), namespace: (encode-path-segment $namespace), user_name: (encode-path-segment $user_name)} | format pattern "/accounts/{aws_account_id}/namespaces/{namespace}/users/{user_name}"))
+  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), namespace: (encode-path-segment $namespace), user_name: (encode-path-segment $user_name)} | format pattern "/accounts/{aws_account_id}/namespaces/{namespace}/users/{user_name}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Returns information about a user, given the user name.
@@ -3113,12 +3908,23 @@ export def "accounts-namespaces-users get" [
   if ($aws_account_id | is-empty) { error make --unspanned { msg: "path parameter 'AwsAccountId' must be non-empty" } }
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'Namespace' must be non-empty" } }
   if ($user_name | is-empty) { error make --unspanned { msg: "path parameter 'UserName' must be non-empty" } }
-  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), namespace: (encode-path-segment $namespace), user_name: (encode-path-segment $user_name)} | format pattern "/accounts/{aws_account_id}/namespaces/{namespace}/users/{user_name}"))
+  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), namespace: (encode-path-segment $namespace), user_name: (encode-path-segment $user_name)} | format pattern "/accounts/{aws_account_id}/namespaces/{namespace}/users/{user_name}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates an Amazon QuickSight user.
@@ -3159,14 +3965,25 @@ export def "accounts-namespaces-users update" [
   if ($aws_account_id | is-empty) { error make --unspanned { msg: "path parameter 'AwsAccountId' must be non-empty" } }
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'Namespace' must be non-empty" } }
   if ($user_name | is-empty) { error make --unspanned { msg: "path parameter 'UserName' must be non-empty" } }
-  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), namespace: (encode-path-segment $namespace), user_name: (encode-path-segment $user_name)} | format pattern "/accounts/{aws_account_id}/namespaces/{namespace}/users/{user_name}"))
+  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), namespace: (encode-path-segment $namespace), user_name: (encode-path-segment $user_name)} | format pattern "/accounts/{aws_account_id}/namespaces/{namespace}/users/{user_name}") $auth.query)
   let req_body = {"Email": $email, "Role": $role, "CustomPermissionsName": $custom_permissions_name, "UnapplyCustomPermissions": $unapply_custom_permissions, "ExternalLoginFederationProviderType": $external_login_federation_provider_type, "CustomFederationProviderUrl": $custom_federation_provider_url, "ExternalLoginId": $external_login_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes a user identified by its principal ID.
@@ -3199,12 +4016,23 @@ export def "accounts-namespaces-user-principals delete" [
   if ($aws_account_id | is-empty) { error make --unspanned { msg: "path parameter 'AwsAccountId' must be non-empty" } }
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'Namespace' must be non-empty" } }
   if ($principal_id | is-empty) { error make --unspanned { msg: "path parameter 'PrincipalId' must be non-empty" } }
-  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), namespace: (encode-path-segment $namespace), principal_id: (encode-path-segment $principal_id)} | format pattern "/accounts/{aws_account_id}/namespaces/{namespace}/user-principals/{principal_id}"))
+  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), namespace: (encode-path-segment $namespace), principal_id: (encode-path-segment $principal_id)} | format pattern "/accounts/{aws_account_id}/namespaces/{namespace}/user-principals/{principal_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Describes the settings that were used when your Amazon QuickSight subscription was first created in this Amazon Web Services account.
@@ -3233,12 +4061,23 @@ export def "accounts-settings get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($aws_account_id | is-empty) { error make --unspanned { msg: "path parameter 'AwsAccountId' must be non-empty" } }
-  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id)} | format pattern "/accounts/{aws_account_id}/settings"))
+  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id)} | format pattern "/accounts/{aws_account_id}/settings") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates the Amazon QuickSight settings in your Amazon Web Services account.
@@ -3271,14 +4110,25 @@ export def "accounts-settings update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($aws_account_id | is-empty) { error make --unspanned { msg: "path parameter 'AwsAccountId' must be non-empty" } }
-  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id)} | format pattern "/accounts/{aws_account_id}/settings"))
+  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id)} | format pattern "/accounts/{aws_account_id}/settings") $auth.query)
   let req_body = {"DefaultNamespace": $default_namespace, "NotificationEmail": $notification_email, "TerminationProtectionEnabled": $termination_protection_enabled} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Provides a detailed description of the definition of an analysis. If you do not need to know details about the content of an Analysis, for instance if you are trying to check the status of a recently created or updated Analysis, use the DescribeAnalysis (https://docs.aws.amazon.com/quicksight/latest/APIReference/API_DescribeAnalysis.html) instead.
@@ -3309,12 +4159,23 @@ export def "accounts-analyses-definition get-analysis" [
   let base = ($base_url | default $BASE_URL)
   if ($aws_account_id | is-empty) { error make --unspanned { msg: "path parameter 'AwsAccountId' must be non-empty" } }
   if ($analysis_id | is-empty) { error make --unspanned { msg: "path parameter 'AnalysisId' must be non-empty" } }
-  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), analysis_id: (encode-path-segment $analysis_id)} | format pattern "/accounts/{aws_account_id}/analyses/{analysis_id}/definition"))
+  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), analysis_id: (encode-path-segment $analysis_id)} | format pattern "/accounts/{aws_account_id}/analyses/{analysis_id}/definition") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Provides the read and write permissions for an analysis.
@@ -3345,12 +4206,23 @@ export def "accounts-analyses-permissions get-analysis" [
   let base = ($base_url | default $BASE_URL)
   if ($aws_account_id | is-empty) { error make --unspanned { msg: "path parameter 'AwsAccountId' must be non-empty" } }
   if ($analysis_id | is-empty) { error make --unspanned { msg: "path parameter 'AnalysisId' must be non-empty" } }
-  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), analysis_id: (encode-path-segment $analysis_id)} | format pattern "/accounts/{aws_account_id}/analyses/{analysis_id}/permissions"))
+  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), analysis_id: (encode-path-segment $analysis_id)} | format pattern "/accounts/{aws_account_id}/analyses/{analysis_id}/permissions") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates the read and write permissions for an analysis.
@@ -3386,14 +4258,25 @@ export def "accounts-analyses-permissions update-analysis" [
   let base = ($base_url | default $BASE_URL)
   if ($aws_account_id | is-empty) { error make --unspanned { msg: "path parameter 'AwsAccountId' must be non-empty" } }
   if ($analysis_id | is-empty) { error make --unspanned { msg: "path parameter 'AnalysisId' must be non-empty" } }
-  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), analysis_id: (encode-path-segment $analysis_id)} | format pattern "/accounts/{aws_account_id}/analyses/{analysis_id}/permissions"))
+  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), analysis_id: (encode-path-segment $analysis_id)} | format pattern "/accounts/{aws_account_id}/analyses/{analysis_id}/permissions") $auth.query)
   let req_body = {"GrantPermissions": $grant_permissions, "RevokePermissions": $revoke_permissions} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Provides a detailed description of the definition of a dashboard. If you do not need to know details about the content of a dashboard, for instance if you are trying to check the status of a recently created or updated dashboard, use the DescribeDashboard (https://docs.aws.amazon.com/quicksight/latest/APIReference/API_DescribeDashboard.html) instead.
@@ -3427,12 +4310,23 @@ export def "accounts-dashboards-definition get" [
   if ($aws_account_id | is-empty) { error make --unspanned { msg: "path parameter 'AwsAccountId' must be non-empty" } }
   if ($dashboard_id | is-empty) { error make --unspanned { msg: "path parameter 'DashboardId' must be non-empty" } }
   let qp = [(serialize-qp "version-number" $version_number "scalar") (serialize-qp "alias-name" $alias_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), dashboard_id: (encode-path-segment $dashboard_id)} | format pattern "/accounts/{aws_account_id}/dashboards/{dashboard_id}/definition") $qp)
+  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), dashboard_id: (encode-path-segment $dashboard_id)} | format pattern "/accounts/{aws_account_id}/dashboards/{dashboard_id}/definition") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"version-number": $version_number, "alias-name": $alias_name} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"version-number": $version_number, "alias-name": $alias_name} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Describes read and write permissions for a dashboard.
@@ -3463,12 +4357,23 @@ export def "accounts-dashboards-permissions get" [
   let base = ($base_url | default $BASE_URL)
   if ($aws_account_id | is-empty) { error make --unspanned { msg: "path parameter 'AwsAccountId' must be non-empty" } }
   if ($dashboard_id | is-empty) { error make --unspanned { msg: "path parameter 'DashboardId' must be non-empty" } }
-  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), dashboard_id: (encode-path-segment $dashboard_id)} | format pattern "/accounts/{aws_account_id}/dashboards/{dashboard_id}/permissions"))
+  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), dashboard_id: (encode-path-segment $dashboard_id)} | format pattern "/accounts/{aws_account_id}/dashboards/{dashboard_id}/permissions") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates read and write permissions on a dashboard.
@@ -3508,14 +4413,25 @@ export def "accounts-dashboards-permissions update" [
   let base = ($base_url | default $BASE_URL)
   if ($aws_account_id | is-empty) { error make --unspanned { msg: "path parameter 'AwsAccountId' must be non-empty" } }
   if ($dashboard_id | is-empty) { error make --unspanned { msg: "path parameter 'DashboardId' must be non-empty" } }
-  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), dashboard_id: (encode-path-segment $dashboard_id)} | format pattern "/accounts/{aws_account_id}/dashboards/{dashboard_id}/permissions"))
+  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), dashboard_id: (encode-path-segment $dashboard_id)} | format pattern "/accounts/{aws_account_id}/dashboards/{dashboard_id}/permissions") $auth.query)
   let req_body = {"GrantPermissions": $grant_permissions, "RevokePermissions": $revoke_permissions, "GrantLinkPermissions": $grant_link_permissions, "RevokeLinkPermissions": $revoke_link_permissions} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Describes the permissions on a dataset. The permissions resource is arn:aws:quicksight:region:aws-account-id:dataset/data-set-id.
@@ -3546,12 +4462,23 @@ export def "accounts-data-sets-permissions get" [
   let base = ($base_url | default $BASE_URL)
   if ($aws_account_id | is-empty) { error make --unspanned { msg: "path parameter 'AwsAccountId' must be non-empty" } }
   if ($data_set_id | is-empty) { error make --unspanned { msg: "path parameter 'DataSetId' must be non-empty" } }
-  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), data_set_id: (encode-path-segment $data_set_id)} | format pattern "/accounts/{aws_account_id}/data-sets/{data_set_id}/permissions"))
+  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), data_set_id: (encode-path-segment $data_set_id)} | format pattern "/accounts/{aws_account_id}/data-sets/{data_set_id}/permissions") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates the permissions on a dataset. The permissions resource is arn:aws:quicksight:region:aws-account-id:dataset/data-set-id.
@@ -3587,14 +4514,25 @@ export def "accounts-data-sets-permissions update" [
   let base = ($base_url | default $BASE_URL)
   if ($aws_account_id | is-empty) { error make --unspanned { msg: "path parameter 'AwsAccountId' must be non-empty" } }
   if ($data_set_id | is-empty) { error make --unspanned { msg: "path parameter 'DataSetId' must be non-empty" } }
-  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), data_set_id: (encode-path-segment $data_set_id)} | format pattern "/accounts/{aws_account_id}/data-sets/{data_set_id}/permissions"))
+  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), data_set_id: (encode-path-segment $data_set_id)} | format pattern "/accounts/{aws_account_id}/data-sets/{data_set_id}/permissions") $auth.query)
   let req_body = {"GrantPermissions": $grant_permissions, "RevokePermissions": $revoke_permissions} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Describes the resource permissions for a data source.
@@ -3625,12 +4563,23 @@ export def "accounts-data-sources-permissions get" [
   let base = ($base_url | default $BASE_URL)
   if ($aws_account_id | is-empty) { error make --unspanned { msg: "path parameter 'AwsAccountId' must be non-empty" } }
   if ($data_source_id | is-empty) { error make --unspanned { msg: "path parameter 'DataSourceId' must be non-empty" } }
-  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), data_source_id: (encode-path-segment $data_source_id)} | format pattern "/accounts/{aws_account_id}/data-sources/{data_source_id}/permissions"))
+  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), data_source_id: (encode-path-segment $data_source_id)} | format pattern "/accounts/{aws_account_id}/data-sources/{data_source_id}/permissions") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates the permissions to a data source.
@@ -3666,14 +4615,25 @@ export def "accounts-data-sources-permissions update" [
   let base = ($base_url | default $BASE_URL)
   if ($aws_account_id | is-empty) { error make --unspanned { msg: "path parameter 'AwsAccountId' must be non-empty" } }
   if ($data_source_id | is-empty) { error make --unspanned { msg: "path parameter 'DataSourceId' must be non-empty" } }
-  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), data_source_id: (encode-path-segment $data_source_id)} | format pattern "/accounts/{aws_account_id}/data-sources/{data_source_id}/permissions"))
+  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), data_source_id: (encode-path-segment $data_source_id)} | format pattern "/accounts/{aws_account_id}/data-sources/{data_source_id}/permissions") $auth.query)
   let req_body = {"GrantPermissions": $grant_permissions, "RevokePermissions": $revoke_permissions} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Describes permissions for a folder.
@@ -3704,12 +4664,23 @@ export def "accounts-folders-permissions get" [
   let base = ($base_url | default $BASE_URL)
   if ($aws_account_id | is-empty) { error make --unspanned { msg: "path parameter 'AwsAccountId' must be non-empty" } }
   if ($folder_id | is-empty) { error make --unspanned { msg: "path parameter 'FolderId' must be non-empty" } }
-  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), folder_id: (encode-path-segment $folder_id)} | format pattern "/accounts/{aws_account_id}/folders/{folder_id}/permissions"))
+  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), folder_id: (encode-path-segment $folder_id)} | format pattern "/accounts/{aws_account_id}/folders/{folder_id}/permissions") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates permissions of a folder.
@@ -3745,14 +4716,25 @@ export def "accounts-folders-permissions update" [
   let base = ($base_url | default $BASE_URL)
   if ($aws_account_id | is-empty) { error make --unspanned { msg: "path parameter 'AwsAccountId' must be non-empty" } }
   if ($folder_id | is-empty) { error make --unspanned { msg: "path parameter 'FolderId' must be non-empty" } }
-  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), folder_id: (encode-path-segment $folder_id)} | format pattern "/accounts/{aws_account_id}/folders/{folder_id}/permissions"))
+  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), folder_id: (encode-path-segment $folder_id)} | format pattern "/accounts/{aws_account_id}/folders/{folder_id}/permissions") $auth.query)
   let req_body = {"GrantPermissions": $grant_permissions, "RevokePermissions": $revoke_permissions} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Describes the folder resolved permissions. Permissions consists of both folder direct permissions and the inherited permissions from the ancestor folders.
@@ -3783,12 +4765,23 @@ export def "accounts-folders-resolved-permissions get" [
   let base = ($base_url | default $BASE_URL)
   if ($aws_account_id | is-empty) { error make --unspanned { msg: "path parameter 'AwsAccountId' must be non-empty" } }
   if ($folder_id | is-empty) { error make --unspanned { msg: "path parameter 'FolderId' must be non-empty" } }
-  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), folder_id: (encode-path-segment $folder_id)} | format pattern "/accounts/{aws_account_id}/folders/{folder_id}/resolved-permissions"))
+  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), folder_id: (encode-path-segment $folder_id)} | format pattern "/accounts/{aws_account_id}/folders/{folder_id}/resolved-permissions") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Describes an existing IAM policy assignment, as specified by the assignment name.
@@ -3821,12 +4814,23 @@ export def "accounts-namespaces-iam-policy-assignments get" [
   if ($aws_account_id | is-empty) { error make --unspanned { msg: "path parameter 'AwsAccountId' must be non-empty" } }
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'Namespace' must be non-empty" } }
   if ($assignment_name | is-empty) { error make --unspanned { msg: "path parameter 'AssignmentName' must be non-empty" } }
-  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), namespace: (encode-path-segment $namespace), assignment_name: (encode-path-segment $assignment_name)} | format pattern "/accounts/{aws_account_id}/namespaces/{namespace}/iam-policy-assignments/{assignment_name}"))
+  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), namespace: (encode-path-segment $namespace), assignment_name: (encode-path-segment $assignment_name)} | format pattern "/accounts/{aws_account_id}/namespaces/{namespace}/iam-policy-assignments/{assignment_name}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates an existing IAM policy assignment. This operation updates only the optional parameter or parameters that are specified in the request. This overwrites all of the users included in Identities.
@@ -3863,14 +4867,25 @@ export def "accounts-namespaces-iam-policy-assignments update" [
   if ($aws_account_id | is-empty) { error make --unspanned { msg: "path parameter 'AwsAccountId' must be non-empty" } }
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'Namespace' must be non-empty" } }
   if ($assignment_name | is-empty) { error make --unspanned { msg: "path parameter 'AssignmentName' must be non-empty" } }
-  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), namespace: (encode-path-segment $namespace), assignment_name: (encode-path-segment $assignment_name)} | format pattern "/accounts/{aws_account_id}/namespaces/{namespace}/iam-policy-assignments/{assignment_name}"))
+  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), namespace: (encode-path-segment $namespace), assignment_name: (encode-path-segment $assignment_name)} | format pattern "/accounts/{aws_account_id}/namespaces/{namespace}/iam-policy-assignments/{assignment_name}") $auth.query)
   let req_body = {"AssignmentStatus": $assignment_status, "PolicyArn": $policy_arn, "Identities": $identities} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Provides a summary and status of IP rules.
@@ -3899,12 +4914,23 @@ export def "accounts-ip-restriction get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($aws_account_id | is-empty) { error make --unspanned { msg: "path parameter 'AwsAccountId' must be non-empty" } }
-  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id)} | format pattern "/accounts/{aws_account_id}/ip-restriction"))
+  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id)} | format pattern "/accounts/{aws_account_id}/ip-restriction") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates the content and status of IP rules. To use this operation, you need to provide the entire map of rules. You can use the DescribeIpRestriction operation to get the current rule map.
@@ -3936,14 +4962,25 @@ export def "accounts-ip-restriction update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($aws_account_id | is-empty) { error make --unspanned { msg: "path parameter 'AwsAccountId' must be non-empty" } }
-  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id)} | format pattern "/accounts/{aws_account_id}/ip-restriction"))
+  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id)} | format pattern "/accounts/{aws_account_id}/ip-restriction") $auth.query)
   let req_body = {"IpRestrictionRuleMap": $ip_restriction_rule_map, "Enabled": $enabled} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Provides a detailed description of the definition of a template. If you do not need to know details about the content of a template, for instance if you are trying to check the status of a recently created or updated template, use the DescribeTemplate (https://docs.aws.amazon.com/quicksight/latest/APIReference/API_DescribeTemplate.html) instead.
@@ -3977,12 +5014,23 @@ export def "accounts-templates-definition get" [
   if ($aws_account_id | is-empty) { error make --unspanned { msg: "path parameter 'AwsAccountId' must be non-empty" } }
   if ($template_id | is-empty) { error make --unspanned { msg: "path parameter 'TemplateId' must be non-empty" } }
   let qp = [(serialize-qp "version-number" $version_number "scalar") (serialize-qp "alias-name" $alias_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), template_id: (encode-path-segment $template_id)} | format pattern "/accounts/{aws_account_id}/templates/{template_id}/definition") $qp)
+  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), template_id: (encode-path-segment $template_id)} | format pattern "/accounts/{aws_account_id}/templates/{template_id}/definition") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"version-number": $version_number, "alias-name": $alias_name} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"version-number": $version_number, "alias-name": $alias_name} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Describes read and write permissions on a template.
@@ -4013,12 +5061,23 @@ export def "accounts-templates-permissions get" [
   let base = ($base_url | default $BASE_URL)
   if ($aws_account_id | is-empty) { error make --unspanned { msg: "path parameter 'AwsAccountId' must be non-empty" } }
   if ($template_id | is-empty) { error make --unspanned { msg: "path parameter 'TemplateId' must be non-empty" } }
-  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), template_id: (encode-path-segment $template_id)} | format pattern "/accounts/{aws_account_id}/templates/{template_id}/permissions"))
+  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), template_id: (encode-path-segment $template_id)} | format pattern "/accounts/{aws_account_id}/templates/{template_id}/permissions") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates the resource permissions for a template.
@@ -4054,14 +5113,25 @@ export def "accounts-templates-permissions update" [
   let base = ($base_url | default $BASE_URL)
   if ($aws_account_id | is-empty) { error make --unspanned { msg: "path parameter 'AwsAccountId' must be non-empty" } }
   if ($template_id | is-empty) { error make --unspanned { msg: "path parameter 'TemplateId' must be non-empty" } }
-  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), template_id: (encode-path-segment $template_id)} | format pattern "/accounts/{aws_account_id}/templates/{template_id}/permissions"))
+  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), template_id: (encode-path-segment $template_id)} | format pattern "/accounts/{aws_account_id}/templates/{template_id}/permissions") $auth.query)
   let req_body = {"GrantPermissions": $grant_permissions, "RevokePermissions": $revoke_permissions} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Describes the read and write permissions for a theme.
@@ -4092,12 +5162,23 @@ export def "accounts-themes-permissions get" [
   let base = ($base_url | default $BASE_URL)
   if ($aws_account_id | is-empty) { error make --unspanned { msg: "path parameter 'AwsAccountId' must be non-empty" } }
   if ($theme_id | is-empty) { error make --unspanned { msg: "path parameter 'ThemeId' must be non-empty" } }
-  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), theme_id: (encode-path-segment $theme_id)} | format pattern "/accounts/{aws_account_id}/themes/{theme_id}/permissions"))
+  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), theme_id: (encode-path-segment $theme_id)} | format pattern "/accounts/{aws_account_id}/themes/{theme_id}/permissions") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates the resource permissions for a theme. Permissions apply to the action to grant or revoke permissions on, for example "quicksight:DescribeTheme". Theme permissions apply in groupings. Valid groupings include the following for the three levels of permissions, which are user, owner, or no permissions: User "quicksight:DescribeTheme" "quicksight:DescribeThemeAlias" "quicksight:ListThemeAliases" "quicksight:ListThemeVersions" Owner "quicksight:DescribeTheme" "quicksight:DescribeThemeAlias" "quicksight:ListThemeAliases" "quicksight:ListThemeVersions" "quicksight:DeleteTheme" "quicksight:UpdateTheme" "quicksight:CreateThemeAlias" "quicksight:DeleteThemeAlias" "quicksight:UpdateThemeAlias" "quicksight:UpdateThemePermissions" "quicksight:DescribeThemePermissions" To specify no permissions, omit the permissions list.
@@ -4133,14 +5214,25 @@ export def "accounts-themes-permissions update" [
   let base = ($base_url | default $BASE_URL)
   if ($aws_account_id | is-empty) { error make --unspanned { msg: "path parameter 'AwsAccountId' must be non-empty" } }
   if ($theme_id | is-empty) { error make --unspanned { msg: "path parameter 'ThemeId' must be non-empty" } }
-  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), theme_id: (encode-path-segment $theme_id)} | format pattern "/accounts/{aws_account_id}/themes/{theme_id}/permissions"))
+  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), theme_id: (encode-path-segment $theme_id)} | format pattern "/accounts/{aws_account_id}/themes/{theme_id}/permissions") $auth.query)
   let req_body = {"GrantPermissions": $grant_permissions, "RevokePermissions": $revoke_permissions} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Generates an embed URL that you can use to embed an Amazon QuickSight dashboard or visual in your website, without having to register any reader users. Before you use this action, make sure that you have configured the dashboards and permissions. The following rules apply to the generated URL: It contains a temporary bearer token. It is valid for 5 minutes after it is generated. Once redeemed within this period, it cannot be re-used again. The URL validity period should not be confused with the actual session lifetime that can be customized using the SessionLifetimeInMinutes (https://docs.aws.amazon.com/quicksight/latest/APIReference/API_GenerateEmbedUrlForAnonymousUser.html#QS-GenerateEmbedUrlForAnonymousUser-request-SessionLifetimeInMinutes) parameter. The resulting user session is valid for 15 minutes (minimum) to 10 hours (maximum). The default session duration is 10 hours. You are charged only when the URL is used or there is interaction with Amazon QuickSight. For more information, see Embedded Analytics (https://docs.aws.amazon.com/quicksight/latest/user/embedded-analytics.html) in the Amazon QuickSight User Guide. For more information about the high-level steps for embedding and for an interactive demo of the ways you can customize embedding, visit the Amazon QuickSight Developer Portal (https://docs.aws.amazon.com/quicksight/latest/user/quicksight-dev-portal.html).
@@ -4178,14 +5270,25 @@ export def "accounts-embed-url-anonymous-user generate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($aws_account_id | is-empty) { error make --unspanned { msg: "path parameter 'AwsAccountId' must be non-empty" } }
-  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id)} | format pattern "/accounts/{aws_account_id}/embed-url/anonymous-user"))
+  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id)} | format pattern "/accounts/{aws_account_id}/embed-url/anonymous-user") $auth.query)
   let req_body = {"SessionLifetimeInMinutes": $session_lifetime_in_minutes, "Namespace": $namespace, "SessionTags": $session_tags, "AuthorizedResourceArns": $authorized_resource_arns, "ExperienceConfiguration": $experience_configuration, "AllowedDomains": $allowed_domains} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Generates an embed URL that you can use to embed an Amazon QuickSight experience in your website. This action can be used for any type of user registered in an Amazon QuickSight account. Before you use this action, make sure that you have configured the relevant Amazon QuickSight resource and permissions. The following rules apply to the generated URL: It contains a temporary bearer token. It is valid for 5 minutes after it is generated. Once redeemed within this period, it cannot be re-used again. The URL validity period should not be confused with the actual session lifetime that can be customized using the SessionLifetimeInMinutes (https://docs.aws.amazon.com/quicksight/latest/APIReference/API_GenerateEmbedUrlForRegisteredUser.html#QS-GenerateEmbedUrlForRegisteredUser-request-SessionLifetimeInMinutes) parameter. The resulting user session is valid for 15 minutes (minimum) to 10 hours (maximum). The default session duration is 10 hours. You are charged only when the URL is used or there is interaction with Amazon QuickSight. For more information, see Embedded Analytics (https://docs.aws.amazon.com/quicksight/latest/user/embedded-analytics.html) in the Amazon QuickSight User Guide. For more information about the high-level steps for embedding and for an interactive demo of the ways you can customize embedding, visit the Amazon QuickSight Developer Portal (https://docs.aws.amazon.com/quicksight/latest/user/quicksight-dev-portal.html).
@@ -4220,14 +5323,25 @@ export def "accounts-embed-url-registered-user generate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($aws_account_id | is-empty) { error make --unspanned { msg: "path parameter 'AwsAccountId' must be non-empty" } }
-  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id)} | format pattern "/accounts/{aws_account_id}/embed-url/registered-user"))
+  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id)} | format pattern "/accounts/{aws_account_id}/embed-url/registered-user") $auth.query)
   let req_body = {"SessionLifetimeInMinutes": $session_lifetime_in_minutes, "UserArn": $user_arn, "ExperienceConfiguration": $experience_configuration, "AllowedDomains": $allowed_domains} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Generates a temporary session URL and authorization code(bearer token) that you can use to embed an Amazon QuickSight read-only dashboard in your website or application. Before you use this command, make sure that you have configured the dashboards and permissions. Currently, you can use GetDashboardEmbedURL only from the server, not from the user's browser. The following rules apply to the generated URL: They must be used together. They can be used one time only. They are valid for 5 minutes after you run this command. You are charged only when the URL is used or there is interaction with Amazon QuickSight. The resulting user session is valid for 15 minutes (default) up to 10 hours (maximum). You can use the optional SessionLifetimeInMinutes parameter to customize session duration. For more information, see Embedding Analytics Using GetDashboardEmbedUrl (https://docs.aws.amazon.com/quicksight/latest/user/embedded-analytics-deprecated.html) in the Amazon QuickSight User Guide. For more information about the high-level steps for embedding and for an interactive demo of the ways you can customize embedding, visit the Amazon QuickSight Developer Portal (https://docs.aws.amazon.com/quicksight/latest/user/quicksight-dev-portal.html).
@@ -4267,12 +5381,23 @@ export def "accounts-dashboards-embed-url get" [
   if ($aws_account_id | is-empty) { error make --unspanned { msg: "path parameter 'AwsAccountId' must be non-empty" } }
   if ($dashboard_id | is-empty) { error make --unspanned { msg: "path parameter 'DashboardId' must be non-empty" } }
   let qp = [(serialize-qp "creds-type" $creds_type "scalar") (serialize-qp "session-lifetime" $session_lifetime "scalar") (serialize-qp "undo-redo-disabled" $undo_redo_disabled "scalar") (serialize-qp "reset-disabled" $reset_disabled "scalar") (serialize-qp "state-persistence-enabled" $state_persistence_enabled "scalar") (serialize-qp "user-arn" $user_arn "scalar") (serialize-qp "namespace" $namespace "scalar") (serialize-qp "additional-dashboard-ids" $additional_dashboard_ids "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), dashboard_id: (encode-path-segment $dashboard_id)} | format pattern "/accounts/{aws_account_id}/dashboards/{dashboard_id}/embed-url") $qp)
+  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), dashboard_id: (encode-path-segment $dashboard_id)} | format pattern "/accounts/{aws_account_id}/dashboards/{dashboard_id}/embed-url") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"creds-type": $creds_type, "session-lifetime": $session_lifetime, "undo-redo-disabled": $undo_redo_disabled, "reset-disabled": $reset_disabled, "state-persistence-enabled": $state_persistence_enabled, "user-arn": $user_arn, "namespace": $namespace, "additional-dashboard-ids": $additional_dashboard_ids} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"creds-type": $creds_type, "session-lifetime": $session_lifetime, "undo-redo-disabled": $undo_redo_disabled, "reset-disabled": $reset_disabled, "state-persistence-enabled": $state_persistence_enabled, "user-arn": $user_arn, "namespace": $namespace, "additional-dashboard-ids": $additional_dashboard_ids} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Generates a session URL and authorization code that you can use to embed the Amazon Amazon QuickSight console in your web server code. Use GetSessionEmbedUrl where you want to provide an authoring portal that allows users to create data sources, datasets, analyses, and dashboards. The users who access an embedded Amazon QuickSight console need belong to the author or admin security cohort. If you want to restrict permissions to some of these features, add a custom permissions profile to the user with the UpdateUser (https://docs.aws.amazon.com/quicksight/latest/APIReference/API_UpdateUser.html) API operation. Use RegisterUser (https://docs.aws.amazon.com/quicksight/latest/APIReference/API_RegisterUser.html) API operation to add a new user with a custom permission profile attached. For more information, see the following sections in the Amazon QuickSight User Guide: Embedding Analytics (https://docs.aws.amazon.com/quicksight/latest/user/embedded-analytics.html) Customizing Access to the Amazon QuickSight Console (https://docs.aws.amazon.com/quicksight/latest/user/customizing-permissions-to-the-quicksight-console.html)
@@ -4305,12 +5430,23 @@ export def "accounts-session-embed-url get" [
   let base = ($base_url | default $BASE_URL)
   if ($aws_account_id | is-empty) { error make --unspanned { msg: "path parameter 'AwsAccountId' must be non-empty" } }
   let qp = [(serialize-qp "entry-point" $entry_point "scalar") (serialize-qp "session-lifetime" $session_lifetime "scalar") (serialize-qp "user-arn" $user_arn "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id)} | format pattern "/accounts/{aws_account_id}/session-embed-url") $qp)
+  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id)} | format pattern "/accounts/{aws_account_id}/session-embed-url") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"entry-point": $entry_point, "session-lifetime": $session_lifetime, "user-arn": $user_arn} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"entry-point": $entry_point, "session-lifetime": $session_lifetime, "user-arn": $user_arn} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Lists Amazon QuickSight analyses that exist in the specified Amazon Web Services account.
@@ -4344,12 +5480,23 @@ export def "accounts-analyses list" [
   let base = ($base_url | default $BASE_URL)
   if ($aws_account_id | is-empty) { error make --unspanned { msg: "path parameter 'AwsAccountId' must be non-empty" } }
   let qp = [(serialize-qp "next-token" $next_token "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id)} | format pattern "/accounts/{aws_account_id}/analyses") $qp)
+  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id)} | format pattern "/accounts/{aws_account_id}/analyses") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"next-token": $next_token, "max-results": $max_results, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"next-token": $next_token, "max-results": $max_results, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Lists all the versions of the dashboards in the Amazon QuickSight subscription.
@@ -4385,12 +5532,23 @@ export def "accounts-dashboards-versions list" [
   if ($aws_account_id | is-empty) { error make --unspanned { msg: "path parameter 'AwsAccountId' must be non-empty" } }
   if ($dashboard_id | is-empty) { error make --unspanned { msg: "path parameter 'DashboardId' must be non-empty" } }
   let qp = [(serialize-qp "next-token" $next_token "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), dashboard_id: (encode-path-segment $dashboard_id)} | format pattern "/accounts/{aws_account_id}/dashboards/{dashboard_id}/versions") $qp)
+  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), dashboard_id: (encode-path-segment $dashboard_id)} | format pattern "/accounts/{aws_account_id}/dashboards/{dashboard_id}/versions") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"next-token": $next_token, "max-results": $max_results, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"next-token": $next_token, "max-results": $max_results, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Lists dashboards in an Amazon Web Services account.
@@ -4424,12 +5582,23 @@ export def "accounts-dashboards list" [
   let base = ($base_url | default $BASE_URL)
   if ($aws_account_id | is-empty) { error make --unspanned { msg: "path parameter 'AwsAccountId' must be non-empty" } }
   let qp = [(serialize-qp "next-token" $next_token "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id)} | format pattern "/accounts/{aws_account_id}/dashboards") $qp)
+  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id)} | format pattern "/accounts/{aws_account_id}/dashboards") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"next-token": $next_token, "max-results": $max_results, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"next-token": $next_token, "max-results": $max_results, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List all assets (DASHBOARD, ANALYSIS, and DATASET) in a folder.
@@ -4463,12 +5632,23 @@ export def "accounts-folders-members list" [
   if ($aws_account_id | is-empty) { error make --unspanned { msg: "path parameter 'AwsAccountId' must be non-empty" } }
   if ($folder_id | is-empty) { error make --unspanned { msg: "path parameter 'FolderId' must be non-empty" } }
   let qp = [(serialize-qp "next-token" $next_token "scalar") (serialize-qp "max-results" $max_results "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), folder_id: (encode-path-segment $folder_id)} | format pattern "/accounts/{aws_account_id}/folders/{folder_id}/members") $qp)
+  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), folder_id: (encode-path-segment $folder_id)} | format pattern "/accounts/{aws_account_id}/folders/{folder_id}/members") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"next-token": $next_token, "max-results": $max_results} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"next-token": $next_token, "max-results": $max_results} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Lists all folders in an account.
@@ -4500,12 +5680,23 @@ export def "accounts-folders list" [
   let base = ($base_url | default $BASE_URL)
   if ($aws_account_id | is-empty) { error make --unspanned { msg: "path parameter 'AwsAccountId' must be non-empty" } }
   let qp = [(serialize-qp "next-token" $next_token "scalar") (serialize-qp "max-results" $max_results "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id)} | format pattern "/accounts/{aws_account_id}/folders") $qp)
+  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id)} | format pattern "/accounts/{aws_account_id}/folders") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"next-token": $next_token, "max-results": $max_results} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"next-token": $next_token, "max-results": $max_results} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Lists member users in a group.
@@ -4541,12 +5732,23 @@ export def "accounts-namespaces-groups-members list-memberships" [
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'Namespace' must be non-empty" } }
   if ($group_name | is-empty) { error make --unspanned { msg: "path parameter 'GroupName' must be non-empty" } }
   let qp = [(serialize-qp "next-token" $next_token "scalar") (serialize-qp "max-results" $max_results "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), namespace: (encode-path-segment $namespace), group_name: (encode-path-segment $group_name)} | format pattern "/accounts/{aws_account_id}/namespaces/{namespace}/groups/{group_name}/members") $qp)
+  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), namespace: (encode-path-segment $namespace), group_name: (encode-path-segment $group_name)} | format pattern "/accounts/{aws_account_id}/namespaces/{namespace}/groups/{group_name}/members") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"next-token": $next_token, "max-results": $max_results} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"next-token": $next_token, "max-results": $max_results} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Lists IAM policy assignments in the current Amazon QuickSight account.
@@ -4574,22 +5776,29 @@ export def "accounts-namespaces-iam-policy-assignments list" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --assignment-status: string@assignment-status-completer # The status of the assignments.
-]: any -> record<IAMPolicyAssignments: record, NextToken: record, RequestId: record, Status: record> {
-  let input = $in
+]: nothing -> record<IAMPolicyAssignments: record, NextToken: record, RequestId: record, Status: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($aws_account_id | is-empty) { error make --unspanned { msg: "path parameter 'AwsAccountId' must be non-empty" } }
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'Namespace' must be non-empty" } }
   let qp = [(serialize-qp "next-token" $next_token "scalar") (serialize-qp "max-results" $max_results "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), namespace: (encode-path-segment $namespace)} | format pattern "/accounts/{aws_account_id}/namespaces/{namespace}/iam-policy-assignments") $qp)
-  let req_body = {"AssignmentStatus": $assignment_status} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), namespace: (encode-path-segment $namespace)} | format pattern "/accounts/{aws_account_id}/namespaces/{namespace}/iam-policy-assignments") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"next-token": $next_token, "max-results": $max_results} | compact), body: $req_body}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"next-token": $next_token, "max-results": $max_results} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Lists all the IAM policy assignments, including the Amazon Resource Names (ARNs) for the IAM policies assigned to the specified user and group or groups that the user belongs to.
@@ -4625,12 +5834,23 @@ export def "accounts-namespaces-users-iam-policy-assignments list" [
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'Namespace' must be non-empty" } }
   if ($user_name | is-empty) { error make --unspanned { msg: "path parameter 'UserName' must be non-empty" } }
   let qp = [(serialize-qp "next-token" $next_token "scalar") (serialize-qp "max-results" $max_results "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), namespace: (encode-path-segment $namespace), user_name: (encode-path-segment $user_name)} | format pattern "/accounts/{aws_account_id}/namespaces/{namespace}/users/{user_name}/iam-policy-assignments") $qp)
+  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), namespace: (encode-path-segment $namespace), user_name: (encode-path-segment $user_name)} | format pattern "/accounts/{aws_account_id}/namespaces/{namespace}/users/{user_name}/iam-policy-assignments") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"next-token": $next_token, "max-results": $max_results} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"next-token": $next_token, "max-results": $max_results} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Lists the history of SPICE ingestions for a dataset.
@@ -4666,12 +5886,23 @@ export def "accounts-data-sets-ingestions list" [
   if ($aws_account_id | is-empty) { error make --unspanned { msg: "path parameter 'AwsAccountId' must be non-empty" } }
   if ($data_set_id | is-empty) { error make --unspanned { msg: "path parameter 'DataSetId' must be non-empty" } }
   let qp = [(serialize-qp "next-token" $next_token "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), data_set_id: (encode-path-segment $data_set_id)} | format pattern "/accounts/{aws_account_id}/data-sets/{data_set_id}/ingestions") $qp)
+  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), data_set_id: (encode-path-segment $data_set_id)} | format pattern "/accounts/{aws_account_id}/data-sets/{data_set_id}/ingestions") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"next-token": $next_token, "max-results": $max_results, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"next-token": $next_token, "max-results": $max_results, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Lists the namespaces for the specified Amazon Web Services account. This operation doesn't list deleted namespaces.
@@ -4705,12 +5936,23 @@ export def "accounts-namespaces list" [
   let base = ($base_url | default $BASE_URL)
   if ($aws_account_id | is-empty) { error make --unspanned { msg: "path parameter 'AwsAccountId' must be non-empty" } }
   let qp = [(serialize-qp "next-token" $next_token "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id)} | format pattern "/accounts/{aws_account_id}/namespaces") $qp)
+  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id)} | format pattern "/accounts/{aws_account_id}/namespaces") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"next-token": $next_token, "max-results": $max_results, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"next-token": $next_token, "max-results": $max_results, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Lists the tags assigned to a resource.
@@ -4739,12 +5981,23 @@ export def "resources-tags list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn | is-empty) { error make --unspanned { msg: "path parameter 'ResourceArn' must be non-empty" } }
-  let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn)} | format pattern "/resources/{resource_arn}/tags"))
+  let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn)} | format pattern "/resources/{resource_arn}/tags") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Assigns one or more tags (key-value pairs) to the specified Amazon QuickSight resource. Tags can help you organize and categorize your resources. You can also use them to scope user permissions, by granting a user permission to access or change only resources with certain tag values. You can use the TagResource operation with a resource that already has tags. If you specify a new tag key for the resource, this tag is appended to the list of tags associated with the resource. If you specify a tag key that is already associated with the resource, the new tag value that you specify replaces the previous value for that tag. You can associate as many as 50 tags with a resource. Amazon QuickSight supports tagging on data set, data source, dashboard, and template. Tagging for Amazon QuickSight works in a similar way to tagging for other Amazon Web Services services, except for the following: You can't use tags to track costs for Amazon QuickSight. This isn't possible because you can't tag the resources that Amazon QuickSight costs are based on, for example Amazon QuickSight storage capacity (SPICE), number of users, type of users, and usage metrics. Amazon QuickSight doesn't currently support the tag editor for Resource Groups.
@@ -4776,14 +6029,25 @@ export def "resources-tags tag" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn | is-empty) { error make --unspanned { msg: "path parameter 'ResourceArn' must be non-empty" } }
-  let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn)} | format pattern "/resources/{resource_arn}/tags"))
+  let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn)} | format pattern "/resources/{resource_arn}/tags") $auth.query)
   let req_body = {"Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Lists all the aliases of a template.
@@ -4819,12 +6083,23 @@ export def "accounts-templates-aliases list" [
   if ($aws_account_id | is-empty) { error make --unspanned { msg: "path parameter 'AwsAccountId' must be non-empty" } }
   if ($template_id | is-empty) { error make --unspanned { msg: "path parameter 'TemplateId' must be non-empty" } }
   let qp = [(serialize-qp "next-token" $next_token "scalar") (serialize-qp "max-result" $max_result "scalar") (serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), template_id: (encode-path-segment $template_id)} | format pattern "/accounts/{aws_account_id}/templates/{template_id}/aliases") $qp)
+  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), template_id: (encode-path-segment $template_id)} | format pattern "/accounts/{aws_account_id}/templates/{template_id}/aliases") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"next-token": $next_token, "max-result": $max_result, "MaxResults": $max_results, "NextToken": $next_token_2} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"next-token": $next_token, "max-result": $max_result, "MaxResults": $max_results, "NextToken": $next_token_2} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Lists all the versions of the templates in the current Amazon QuickSight account.
@@ -4860,12 +6135,23 @@ export def "accounts-templates-versions list" [
   if ($aws_account_id | is-empty) { error make --unspanned { msg: "path parameter 'AwsAccountId' must be non-empty" } }
   if ($template_id | is-empty) { error make --unspanned { msg: "path parameter 'TemplateId' must be non-empty" } }
   let qp = [(serialize-qp "next-token" $next_token "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), template_id: (encode-path-segment $template_id)} | format pattern "/accounts/{aws_account_id}/templates/{template_id}/versions") $qp)
+  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), template_id: (encode-path-segment $template_id)} | format pattern "/accounts/{aws_account_id}/templates/{template_id}/versions") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"next-token": $next_token, "max-results": $max_results, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"next-token": $next_token, "max-results": $max_results, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Lists all the templates in the current Amazon QuickSight account.
@@ -4899,12 +6185,23 @@ export def "accounts-templates list" [
   let base = ($base_url | default $BASE_URL)
   if ($aws_account_id | is-empty) { error make --unspanned { msg: "path parameter 'AwsAccountId' must be non-empty" } }
   let qp = [(serialize-qp "next-token" $next_token "scalar") (serialize-qp "max-result" $max_result "scalar") (serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id)} | format pattern "/accounts/{aws_account_id}/templates") $qp)
+  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id)} | format pattern "/accounts/{aws_account_id}/templates") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"next-token": $next_token, "max-result": $max_result, "MaxResults": $max_results, "NextToken": $next_token_2} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"next-token": $next_token, "max-result": $max_result, "MaxResults": $max_results, "NextToken": $next_token_2} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Lists all the aliases of a theme.
@@ -4938,12 +6235,23 @@ export def "accounts-themes-aliases list" [
   if ($aws_account_id | is-empty) { error make --unspanned { msg: "path parameter 'AwsAccountId' must be non-empty" } }
   if ($theme_id | is-empty) { error make --unspanned { msg: "path parameter 'ThemeId' must be non-empty" } }
   let qp = [(serialize-qp "next-token" $next_token "scalar") (serialize-qp "max-result" $max_result "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), theme_id: (encode-path-segment $theme_id)} | format pattern "/accounts/{aws_account_id}/themes/{theme_id}/aliases") $qp)
+  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), theme_id: (encode-path-segment $theme_id)} | format pattern "/accounts/{aws_account_id}/themes/{theme_id}/aliases") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"next-token": $next_token, "max-result": $max_result} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"next-token": $next_token, "max-result": $max_result} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Lists all the versions of the themes in the current Amazon Web Services account.
@@ -4979,12 +6287,23 @@ export def "accounts-themes-versions list" [
   if ($aws_account_id | is-empty) { error make --unspanned { msg: "path parameter 'AwsAccountId' must be non-empty" } }
   if ($theme_id | is-empty) { error make --unspanned { msg: "path parameter 'ThemeId' must be non-empty" } }
   let qp = [(serialize-qp "next-token" $next_token "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), theme_id: (encode-path-segment $theme_id)} | format pattern "/accounts/{aws_account_id}/themes/{theme_id}/versions") $qp)
+  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), theme_id: (encode-path-segment $theme_id)} | format pattern "/accounts/{aws_account_id}/themes/{theme_id}/versions") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"next-token": $next_token, "max-results": $max_results, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"next-token": $next_token, "max-results": $max_results, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Lists all the themes in the current Amazon Web Services account.
@@ -5019,12 +6338,23 @@ export def "accounts-themes list" [
   let base = ($base_url | default $BASE_URL)
   if ($aws_account_id | is-empty) { error make --unspanned { msg: "path parameter 'AwsAccountId' must be non-empty" } }
   let qp = [(serialize-qp "next-token" $next_token "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id)} | format pattern "/accounts/{aws_account_id}/themes") $qp)
+  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id)} | format pattern "/accounts/{aws_account_id}/themes") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"next-token": $next_token, "max-results": $max_results, "type": $type, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"next-token": $next_token, "max-results": $max_results, "type": $type, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Lists the Amazon QuickSight groups that an Amazon QuickSight user is a member of.
@@ -5060,12 +6390,23 @@ export def "accounts-namespaces-users-groups list" [
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'Namespace' must be non-empty" } }
   if ($user_name | is-empty) { error make --unspanned { msg: "path parameter 'UserName' must be non-empty" } }
   let qp = [(serialize-qp "next-token" $next_token "scalar") (serialize-qp "max-results" $max_results "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), namespace: (encode-path-segment $namespace), user_name: (encode-path-segment $user_name)} | format pattern "/accounts/{aws_account_id}/namespaces/{namespace}/users/{user_name}/groups") $qp)
+  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), namespace: (encode-path-segment $namespace), user_name: (encode-path-segment $user_name)} | format pattern "/accounts/{aws_account_id}/namespaces/{namespace}/users/{user_name}/groups") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"next-token": $next_token, "max-results": $max_results} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"next-token": $next_token, "max-results": $max_results} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns a list of all of the Amazon QuickSight users belonging to this account.
@@ -5099,12 +6440,23 @@ export def "accounts-namespaces-users list" [
   if ($aws_account_id | is-empty) { error make --unspanned { msg: "path parameter 'AwsAccountId' must be non-empty" } }
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'Namespace' must be non-empty" } }
   let qp = [(serialize-qp "next-token" $next_token "scalar") (serialize-qp "max-results" $max_results "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), namespace: (encode-path-segment $namespace)} | format pattern "/accounts/{aws_account_id}/namespaces/{namespace}/users") $qp)
+  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), namespace: (encode-path-segment $namespace)} | format pattern "/accounts/{aws_account_id}/namespaces/{namespace}/users") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"next-token": $next_token, "max-results": $max_results} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"next-token": $next_token, "max-results": $max_results} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Creates an Amazon QuickSight user whose identity is associated with the Identity and Access Management (IAM) identity or role specified in the request. When you register a new user from the Amazon QuickSight API, Amazon QuickSight generates a registration URL. The user accesses this registration URL to create their account. Amazon QuickSight doesn't send a registration email to users who are registered from the Amazon QuickSight API. If you want new users to receive a registration email, then add those users in the Amazon QuickSight console. For more information on registering a new user in the Amazon QuickSight console, see Inviting users to access Amazon QuickSight (https://docs.aws.amazon.com/quicksight/latest/user/managing-users.html#inviting-users).
@@ -5146,14 +6498,25 @@ export def "accounts-namespaces-users create" [
   let base = ($base_url | default $BASE_URL)
   if ($aws_account_id | is-empty) { error make --unspanned { msg: "path parameter 'AwsAccountId' must be non-empty" } }
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'Namespace' must be non-empty" } }
-  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), namespace: (encode-path-segment $namespace)} | format pattern "/accounts/{aws_account_id}/namespaces/{namespace}/users"))
+  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), namespace: (encode-path-segment $namespace)} | format pattern "/accounts/{aws_account_id}/namespaces/{namespace}/users") $auth.query)
   let req_body = {"IdentityType": $identity_type, "Email": $email, "UserRole": $user_role, "IamArn": $iam_arn, "SessionName": $session_name, "UserName": $user_name, "CustomPermissionsName": $custom_permissions_name, "ExternalLoginFederationProviderType": $external_login_federation_provider_type, "CustomFederationProviderUrl": $custom_federation_provider_url, "ExternalLoginId": $external_login_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Restores an analysis.
@@ -5184,12 +6547,23 @@ export def "accounts-restore-analyses create-analysis" [
   let base = ($base_url | default $BASE_URL)
   if ($aws_account_id | is-empty) { error make --unspanned { msg: "path parameter 'AwsAccountId' must be non-empty" } }
   if ($analysis_id | is-empty) { error make --unspanned { msg: "path parameter 'AnalysisId' must be non-empty" } }
-  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), analysis_id: (encode-path-segment $analysis_id)} | format pattern "/accounts/{aws_account_id}/restore/analyses/{analysis_id}"))
+  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), analysis_id: (encode-path-segment $analysis_id)} | format pattern "/accounts/{aws_account_id}/restore/analyses/{analysis_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Searches for analyses that belong to the user specified in the filter. This operation is eventually consistent. The results are best effort and may not reflect very recent updates and changes.
@@ -5226,14 +6600,25 @@ export def "accounts-search-analyses list" [
   let base = ($base_url | default $BASE_URL)
   if ($aws_account_id | is-empty) { error make --unspanned { msg: "path parameter 'AwsAccountId' must be non-empty" } }
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id)} | format pattern "/accounts/{aws_account_id}/search/analyses") $qp)
+  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id)} | format pattern "/accounts/{aws_account_id}/search/analyses") $qp $auth.query)
   let req_body = {"Filters": $filters, "NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"MaxResults": $max_results, "NextToken": $next_token} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"MaxResults": $max_results, "NextToken": $next_token} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Searches for dashboards that belong to a user. This operation is eventually consistent. The results are best effort and may not reflect very recent updates and changes.
@@ -5270,14 +6655,25 @@ export def "accounts-search-dashboards list" [
   let base = ($base_url | default $BASE_URL)
   if ($aws_account_id | is-empty) { error make --unspanned { msg: "path parameter 'AwsAccountId' must be non-empty" } }
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id)} | format pattern "/accounts/{aws_account_id}/search/dashboards") $qp)
+  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id)} | format pattern "/accounts/{aws_account_id}/search/dashboards") $qp $auth.query)
   let req_body = {"Filters": $filters, "NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"MaxResults": $max_results, "NextToken": $next_token} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"MaxResults": $max_results, "NextToken": $next_token} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Use the SearchDataSets operation to search for datasets that belong to an account.
@@ -5314,14 +6710,25 @@ export def "accounts-search-data-sets list" [
   let base = ($base_url | default $BASE_URL)
   if ($aws_account_id | is-empty) { error make --unspanned { msg: "path parameter 'AwsAccountId' must be non-empty" } }
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id)} | format pattern "/accounts/{aws_account_id}/search/data-sets") $qp)
+  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id)} | format pattern "/accounts/{aws_account_id}/search/data-sets") $qp $auth.query)
   let req_body = {"Filters": $filters, "NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"MaxResults": $max_results, "NextToken": $next_token} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"MaxResults": $max_results, "NextToken": $next_token} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Use the SearchDataSources operation to search for data sources that belong to an account.
@@ -5358,14 +6765,25 @@ export def "accounts-search-data-sources list" [
   let base = ($base_url | default $BASE_URL)
   if ($aws_account_id | is-empty) { error make --unspanned { msg: "path parameter 'AwsAccountId' must be non-empty" } }
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id)} | format pattern "/accounts/{aws_account_id}/search/data-sources") $qp)
+  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id)} | format pattern "/accounts/{aws_account_id}/search/data-sources") $qp $auth.query)
   let req_body = {"Filters": $filters, "NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"MaxResults": $max_results, "NextToken": $next_token} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"MaxResults": $max_results, "NextToken": $next_token} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Searches the subfolders in a folder.
@@ -5399,14 +6817,25 @@ export def "accounts-search-folders list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($aws_account_id | is-empty) { error make --unspanned { msg: "path parameter 'AwsAccountId' must be non-empty" } }
-  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id)} | format pattern "/accounts/{aws_account_id}/search/folders"))
+  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id)} | format pattern "/accounts/{aws_account_id}/search/folders") $auth.query)
   let req_body = {"Filters": $filters, "NextToken": $next_token, "MaxResults": $max_results} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Use the SearchGroups operation to search groups in a specified Amazon QuickSight namespace using the supplied filters.
@@ -5443,14 +6872,25 @@ export def "accounts-namespaces-groups-search list" [
   if ($aws_account_id | is-empty) { error make --unspanned { msg: "path parameter 'AwsAccountId' must be non-empty" } }
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'Namespace' must be non-empty" } }
   let qp = [(serialize-qp "next-token" $next_token "scalar") (serialize-qp "max-results" $max_results "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), namespace: (encode-path-segment $namespace)} | format pattern "/accounts/{aws_account_id}/namespaces/{namespace}/groups-search") $qp)
+  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), namespace: (encode-path-segment $namespace)} | format pattern "/accounts/{aws_account_id}/namespaces/{namespace}/groups-search") $qp $auth.query)
   let req_body = {"Filters": $filters} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"next-token": $next_token, "max-results": $max_results} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"next-token": $next_token, "max-results": $max_results} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Removes a tag or tags from a resource.
@@ -5481,12 +6921,23 @@ export def "resources-tags untag" [
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn | is-empty) { error make --unspanned { msg: "path parameter 'ResourceArn' must be non-empty" } }
   let qp = [(serialize-qp "keys" $keys "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn)} | format pattern "/resources/{resource_arn}/tags") $qp)
+  let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn)} | format pattern "/resources/{resource_arn}/tags") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"keys": $keys} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"keys": $keys} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Updates the published version of a dashboard.
@@ -5519,12 +6970,23 @@ export def "accounts-dashboards-versions update-published" [
   if ($aws_account_id | is-empty) { error make --unspanned { msg: "path parameter 'AwsAccountId' must be non-empty" } }
   if ($dashboard_id | is-empty) { error make --unspanned { msg: "path parameter 'DashboardId' must be non-empty" } }
   if ($version_number | is-empty) { error make --unspanned { msg: "path parameter 'VersionNumber' must be non-empty" } }
-  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), dashboard_id: (encode-path-segment $dashboard_id), version_number: (encode-path-segment $version_number)} | format pattern "/accounts/{aws_account_id}/dashboards/{dashboard_id}/versions/{version_number}"))
+  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id), dashboard_id: (encode-path-segment $dashboard_id), version_number: (encode-path-segment $version_number)} | format pattern "/accounts/{aws_account_id}/dashboards/{dashboard_id}/versions/{version_number}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Use the UpdatePublicSharingSettings operation to turn on or turn off the public sharing settings of an Amazon QuickSight dashboard. To use this operation, turn on session capacity pricing for your Amazon QuickSight account. Before you can turn on public sharing on your account, make sure to give public sharing permissions to an administrative user in the Identity and Access Management (IAM) console. For more information on using IAM with Amazon QuickSight, see Using Amazon QuickSight with IAM (https://docs.aws.amazon.com/quicksight/latest/user/security_iam_service-with-iam.html) in the Amazon QuickSight User Guide.
@@ -5555,12 +7017,23 @@ export def "accounts-public-sharing-settings update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($aws_account_id | is-empty) { error make --unspanned { msg: "path parameter 'AwsAccountId' must be non-empty" } }
-  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id)} | format pattern "/accounts/{aws_account_id}/public-sharing-settings"))
+  let full_url = (build-url $base ({aws_account_id: (encode-path-segment $aws_account_id)} | format pattern "/accounts/{aws_account_id}/public-sharing-settings") $auth.query)
   let req_body = {"PublicSharingEnabled": $public_sharing_enabled} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }

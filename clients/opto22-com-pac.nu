@@ -8,7 +8,7 @@ const BASE_URL = "https://localhost/api/v1"
 # `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
 # where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o PAC_CONTROL_REST_API_TOKEN | default "" }
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o PAC_CONTROL_REST_API_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
@@ -42,14 +42,11 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
-# Trick: `url encode --all` over-encodes, then we decode the four unreserved
-# punctuation chars back. Pre-existing %XX sequences in the input survive
-# because `url encode --all` first turns their % into %25.
 def encode-path-segment [v: any]: nothing -> string {
   $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
-# Serialize an array-typed path parameter (issue 49.A). OpenAPI 3 `style: simple`
+# Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
 # (the default for path params) and Swagger 2 `collectionFormat: csv` both join
 # the elements with a literal comma WITHIN the single path segment, each element
 # RFC-3986-encoded individually (so a comma inside an element stays %2C). Without
@@ -60,51 +57,45 @@ def encode-path-array [v: any]: nothing -> string {
   if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
 }
 
-# Build URL from base, path, and optional query string
-def build-url [base: string, path: string, query?: string]: nothing -> string {
+# Build the request URL from base, path, and any number of pre-encoded query
+# fragments (param serializer output and/or the auth query). Each fragment is an
+# `&`-joinable `key=value` string already percent-encoded by its producer; empty
+# fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
+# delimiters are hand-spliced — and any query already on the base URL is merged in.
+def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
   let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
-  let result = ($parsed | upsert path $full_path)
-  if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
+  let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
+  $parsed | upsert path $full_path | upsert query $query | url join
 }
 
-# Build the dry-run record returned by --dry-run. Shape:
-#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
-#    auth: {scheme, location}}
-# `meta` carries logical-form data (the query record by spec name, the pre-serialization
-# body) that do-request itself cannot reconstruct from its wire-format args.
-def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
-  let m = ($meta | default {})
-  {
-    dry_run: true
-    method: $method
-    url: $url
-    query: ($m | get -o query | default {})
-    headers: $auth.headers
-    body: ($m | get -o body)
-    content_type: $content_type
-    timeout: $timeout
-    auth: {scheme: $auth.scheme, location: $auth.location}
-  }
+# Success policy: did this response succeed? Single source of truth, consulted by
+# handle-response and the HEAD header-unwrap. Empty ok_codes means the spec listed
+# none, so fall back to < 400. Otherwise: any 2xx, plus documented success codes.
+def status-ok [status: int, ok_codes: list<int>]: nothing -> bool {
+  if ($ok_codes | is-empty) { $status < 400 } else { ($status >= 200 and $status < 300) or ($status in $ok_codes) }
 }
 
-# Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
-  let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
-  let timeout = ($max_time | default 30min)
-  let ct = ($content_type | default "application/json")
-  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
-  let resp = match $method {
-    "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
-  }
-  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
-  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
+# Unwrap a `--full` HTTP response into the user-facing value. Response arrives
+# via pipeline; ok_codes gates the error throw (see status-ok).
+def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: record -> any {
+  let resp = $in
+  if $allow_errors { return $resp }
+  if not (status-ok $resp.status $ok_codes) { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } }
+  if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
+  if $resp.status == 204 { return null }
+  $resp.body
+}
+
+# GET — bodyless, honours --raw
+def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+}
+
+# POST — body + content-type
+def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 def base-url-completer [] { ["https://localhost/api/v1"] }
@@ -151,10 +142,21 @@ export def "device get-details" [
 ]: nothing -> record<controllerType: string, firmwareDate: string, firmwareTime: string, firmwareVersion: string, mac1: string, mac2: string, upTimeSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/device")
+  let full_url = (build-url $base "/device" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the name, date, time, and CRC of the strategy currently in the controller, and the number of charts currently running. Empty strings and a 0 will be returned when there is no strategy.
@@ -174,10 +176,21 @@ export def "device-strategy get-details" [
 ]: nothing -> record<crc: string, date: string, runningCharts: int, strategyName: string, time: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/device/strategy")
+  let full_url = (build-url $base "/device/strategy" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the name and engineering units (EU) for all analog input points in the strategy
@@ -197,10 +210,21 @@ export def "device-strategy-ios-analog-inputs get" [
 ]: nothing -> table<name: string, value: float> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/device/strategy/ios/analogInputs")
+  let full_url = (build-url $base "/device/strategy/ios/analogInputs" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Reads the value in engineering units (EU) of the specified analog input
@@ -222,10 +246,21 @@ export def "device-strategy-ios-analog-inputs-eu get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($io_name | is-empty) { error make --unspanned { msg: "path parameter 'ioName' must be non-empty" } }
-  let full_url = (build-url $base ({io_name: (encode-path-segment $io_name)} | format pattern "/device/strategy/ios/analogInputs/{io_name}/eu"))
+  let full_url = (build-url $base ({io_name: (encode-path-segment $io_name)} | format pattern "/device/strategy/ios/analogInputs/{io_name}/eu") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the name and engineering units (EU) for all analog output points in the strategy
@@ -245,10 +280,21 @@ export def "device-strategy-ios-analog-outputs get" [
 ]: nothing -> table<name: string, value: float> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/device/strategy/ios/analogOutputs")
+  let full_url = (build-url $base "/device/strategy/ios/analogOutputs" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Reads the value in engineering units (EU) of the specified analog output
@@ -270,10 +316,21 @@ export def "device-strategy-ios-analog-outputs-eu get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($io_name | is-empty) { error make --unspanned { msg: "path parameter 'ioName' must be non-empty" } }
-  let full_url = (build-url $base ({io_name: (encode-path-segment $io_name)} | format pattern "/device/strategy/ios/analogOutputs/{io_name}/eu"))
+  let full_url = (build-url $base ({io_name: (encode-path-segment $io_name)} | format pattern "/device/strategy/ios/analogOutputs/{io_name}/eu") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Sets the value of the specified analog output point
@@ -297,12 +354,23 @@ export def "device-strategy-ios-analog-outputs-eu create-write" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($io_name | is-empty) { error make --unspanned { msg: "path parameter 'ioName' must be non-empty" } }
-  let full_url = (build-url $base ({io_name: (encode-path-segment $io_name)} | format pattern "/device/strategy/ios/analogOutputs/{io_name}/eu"))
+  let full_url = (build-url $base ({io_name: (encode-path-segment $io_name)} | format pattern "/device/strategy/ios/analogOutputs/{io_name}/eu") $auth.query)
   let req_body = {"value": $value} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the name and state (true = on, false = off) of all digital input points in the strategy. If there is no strategy in the controller, or the strategy includes no digital inputs, the returned array will be empty.
@@ -322,10 +390,21 @@ export def "device-strategy-ios-digital-inputs get" [
 ]: nothing -> table<name: string, value: bool> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/device/strategy/ios/digitalInputs")
+  let full_url = (build-url $base "/device/strategy/ios/digitalInputs" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the specified digital input point's state (true = on, false = off)
@@ -347,10 +426,21 @@ export def "device-strategy-ios-digital-inputs-state get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($io_name | is-empty) { error make --unspanned { msg: "path parameter 'ioName' must be non-empty" } }
-  let full_url = (build-url $base ({io_name: (encode-path-segment $io_name)} | format pattern "/device/strategy/ios/digitalInputs/{io_name}/state"))
+  let full_url = (build-url $base ({io_name: (encode-path-segment $io_name)} | format pattern "/device/strategy/ios/digitalInputs/{io_name}/state") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the name and state (true = on, false = off) of all digital output points in the strategy
@@ -370,10 +460,21 @@ export def "device-strategy-ios-digital-outputs get" [
 ]: nothing -> table<name: string, value: bool> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/device/strategy/ios/digitalOutputs")
+  let full_url = (build-url $base "/device/strategy/ios/digitalOutputs" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the specified digital output point's state (true = on, false = off)
@@ -395,10 +496,21 @@ export def "device-strategy-ios-digital-outputs-state get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($io_name | is-empty) { error make --unspanned { msg: "path parameter 'ioName' must be non-empty" } }
-  let full_url = (build-url $base ({io_name: (encode-path-segment $io_name)} | format pattern "/device/strategy/ios/digitalOutputs/{io_name}/state"))
+  let full_url = (build-url $base ({io_name: (encode-path-segment $io_name)} | format pattern "/device/strategy/ios/digitalOutputs/{io_name}/state") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Sets the value of the specified digital output point
@@ -422,12 +534,23 @@ export def "device-strategy-ios-digital-outputs-state create-write" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($io_name | is-empty) { error make --unspanned { msg: "path parameter 'ioName' must be non-empty" } }
-  let full_url = (build-url $base ({io_name: (encode-path-segment $io_name)} | format pattern "/device/strategy/ios/digitalOutputs/{io_name}/state"))
+  let full_url = (build-url $base ({io_name: (encode-path-segment $io_name)} | format pattern "/device/strategy/ios/digitalOutputs/{io_name}/state") $auth.query)
   let req_body = {"value": $value} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Returns an array of the name and length of all the float tables in the strategy
@@ -447,10 +570,21 @@ export def "device-strategy-tables-floats list" [
 ]: nothing -> table<length: int, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/device/strategy/tables/floats")
+  let full_url = (build-url $base "/device/strategy/tables/floats" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Read table elements #### Examples #### * Read all elements in a table named ftable: https://1.2.3.4/api/v1/device/strategy/tables/floats/ftable * Read elements 5 and up in a table named ftable starting with index 5: https://1.2.3.4/api/v1/device/strategy/tables/floats/ftable?startIndex=5 * Read 3 consecutive elements in a table named ftable starting with the element at index 10: https://1.2.3.4/api/v1/device/strategy/tables/floats/ftable?startIndex=10&numElements=3
@@ -475,10 +609,21 @@ export def "device-strategy-tables-floats get" [
   let base = ($base_url | default $BASE_URL)
   if ($table_name | is-empty) { error make --unspanned { msg: "path parameter 'tableName' must be non-empty" } }
   let qp = [(serialize-qp "startIndex" $start_index "scalar") (serialize-qp "numElements" $num_elements "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({table_name: (encode-path-segment $table_name)} | format pattern "/device/strategy/tables/floats/{table_name}") $qp)
+  let full_url = (build-url $base ({table_name: (encode-path-segment $table_name)} | format pattern "/device/strategy/tables/floats/{table_name}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"startIndex": $start_index, "numElements": $num_elements} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"startIndex": $start_index, "numElements": $num_elements} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Write table elements #### Examples #### * Write the values (1.5, 2.4, 3.5) to 3 consecutive elements in a table named ftable starting with the element at index 10:POST to https://1.2.3.4/api/v1/device/strategy/tables/floats/ftable?startIndex=10 with body of the POST request set to [ 1.5, 2.4, 3.5 ]
@@ -504,12 +649,23 @@ export def "device-strategy-tables-floats create-write" [
   let base = ($base_url | default $BASE_URL)
   if ($table_name | is-empty) { error make --unspanned { msg: "path parameter 'tableName' must be non-empty" } }
   let qp = [(serialize-qp "startIndex" $start_index "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({table_name: (encode-path-segment $table_name)} | format pattern "/device/strategy/tables/floats/{table_name}") $qp)
+  let full_url = (build-url $base ({table_name: (encode-path-segment $table_name)} | format pattern "/device/strategy/tables/floats/{table_name}") $qp $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"startIndex": $start_index} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"startIndex": $start_index} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Read specified table element
@@ -533,10 +689,21 @@ export def "device-strategy-tables-floats get-element" [
   let base = ($base_url | default $BASE_URL)
   if ($table_name | is-empty) { error make --unspanned { msg: "path parameter 'tableName' must be non-empty" } }
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
-  let full_url = (build-url $base ({table_name: (encode-path-segment $table_name), index: (encode-path-segment $index)} | format pattern "/device/strategy/tables/floats/{table_name}/{index}"))
+  let full_url = (build-url $base ({table_name: (encode-path-segment $table_name), index: (encode-path-segment $index)} | format pattern "/device/strategy/tables/floats/{table_name}/{index}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Write specified table element
@@ -562,12 +729,23 @@ export def "device-strategy-tables-floats create-write-element" [
   let base = ($base_url | default $BASE_URL)
   if ($table_name | is-empty) { error make --unspanned { msg: "path parameter 'tableName' must be non-empty" } }
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
-  let full_url = (build-url $base ({table_name: (encode-path-segment $table_name), index: (encode-path-segment $index)} | format pattern "/device/strategy/tables/floats/{table_name}/{index}"))
+  let full_url = (build-url $base ({table_name: (encode-path-segment $table_name), index: (encode-path-segment $index)} | format pattern "/device/strategy/tables/floats/{table_name}/{index}") $auth.query)
   let req_body = {"value": $value} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Returns an array of the name and length of all the integer32 tables in the strategy
@@ -587,10 +765,21 @@ export def "device-strategy-tables-int32s list" [
 ]: nothing -> table<length: int, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/device/strategy/tables/int32s")
+  let full_url = (build-url $base "/device/strategy/tables/int32s" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # "Read a range of table elements from the specified integer32 table" #### Examples #### * Read all elements in a table named itable: https://1.2.3.4/api/v1/device/strategy/tables/int32s/itable * Read elements 5 and up in a table named itable starting with index 5: https://1.2.3.4/api/v1/device/strategy/tables/int32s/itable?startIndex=5 * Read 3 consecutive elements in a table named itable starting with the element at index 10: https://1.2.3.4/api/v1/device/strategy/tables/int32s/itable?startIndex=10&numElements=3
@@ -615,10 +804,21 @@ export def "device-strategy-tables-int32s get" [
   let base = ($base_url | default $BASE_URL)
   if ($table_name | is-empty) { error make --unspanned { msg: "path parameter 'tableName' must be non-empty" } }
   let qp = [(serialize-qp "startIndex" $start_index "scalar") (serialize-qp "numElements" $num_elements "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({table_name: (encode-path-segment $table_name)} | format pattern "/device/strategy/tables/int32s/{table_name}") $qp)
+  let full_url = (build-url $base ({table_name: (encode-path-segment $table_name)} | format pattern "/device/strategy/tables/int32s/{table_name}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"startIndex": $start_index, "numElements": $num_elements} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"startIndex": $start_index, "numElements": $num_elements} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # "Write a range of table elements" #### Examples #### * Write the values (1, 2, 3) to 3 consecutive elements in a table named itable starting with the element at index 10:POST to https://1.2.3.4/api/v1/device/strategy/tables/int32s/itable?startIndex=10 with body of the POST request set to [ 1, 2, 3 ]
@@ -644,12 +844,23 @@ export def "device-strategy-tables-int32s create-write" [
   let base = ($base_url | default $BASE_URL)
   if ($table_name | is-empty) { error make --unspanned { msg: "path parameter 'tableName' must be non-empty" } }
   let qp = [(serialize-qp "startIndex" $start_index "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({table_name: (encode-path-segment $table_name)} | format pattern "/device/strategy/tables/int32s/{table_name}") $qp)
+  let full_url = (build-url $base ({table_name: (encode-path-segment $table_name)} | format pattern "/device/strategy/tables/int32s/{table_name}") $qp $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"startIndex": $start_index} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"startIndex": $start_index} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Read specified integer32 table element
@@ -673,10 +884,21 @@ export def "device-strategy-tables-int32s get-element" [
   let base = ($base_url | default $BASE_URL)
   if ($table_name | is-empty) { error make --unspanned { msg: "path parameter 'tableName' must be non-empty" } }
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
-  let full_url = (build-url $base ({table_name: (encode-path-segment $table_name), index: (encode-path-segment $index)} | format pattern "/device/strategy/tables/int32s/{table_name}/{index}"))
+  let full_url = (build-url $base ({table_name: (encode-path-segment $table_name), index: (encode-path-segment $index)} | format pattern "/device/strategy/tables/int32s/{table_name}/{index}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Write specified integer32 table element
@@ -702,12 +924,23 @@ export def "device-strategy-tables-int32s create-write-element" [
   let base = ($base_url | default $BASE_URL)
   if ($table_name | is-empty) { error make --unspanned { msg: "path parameter 'tableName' must be non-empty" } }
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
-  let full_url = (build-url $base ({table_name: (encode-path-segment $table_name), index: (encode-path-segment $index)} | format pattern "/device/strategy/tables/int32s/{table_name}/{index}"))
+  let full_url = (build-url $base ({table_name: (encode-path-segment $table_name), index: (encode-path-segment $index)} | format pattern "/device/strategy/tables/int32s/{table_name}/{index}") $auth.query)
   let req_body = {"value": $value} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Returns an array of the name and length of all the integer64 tables in the strategy
@@ -727,10 +960,21 @@ export def "device-strategy-tables-int64s list" [
 ]: nothing -> table<length: int, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/device/strategy/tables/int64s")
+  let full_url = (build-url $base "/device/strategy/tables/int64s" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # "Read a range of table elements from the specified integer64 table" #### Examples #### * Read all elements in a table named i64table: https://1.2.3.4/api/v1/device/strategy/tables/int64s/i64table * Read elements 5 and up in a table named i64table starting with index 5: https://1.2.3.4/api/v1/device/strategy/tables/int64s/i64table?startIndex=5 * Read 3 consecutive elements in a table named i64table starting with the element at index 10: https://1.2.3.4/api/v1/device/strategy/tables/int64s/i64table?startIndex=10&numElements=3
@@ -755,10 +999,21 @@ export def "device-strategy-tables-int64s get" [
   let base = ($base_url | default $BASE_URL)
   if ($table_name | is-empty) { error make --unspanned { msg: "path parameter 'tableName' must be non-empty" } }
   let qp = [(serialize-qp "startIndex" $start_index "scalar") (serialize-qp "numElements" $num_elements "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({table_name: (encode-path-segment $table_name)} | format pattern "/device/strategy/tables/int64s/{table_name}") $qp)
+  let full_url = (build-url $base ({table_name: (encode-path-segment $table_name)} | format pattern "/device/strategy/tables/int64s/{table_name}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"startIndex": $start_index, "numElements": $num_elements} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"startIndex": $start_index, "numElements": $num_elements} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # "Write a range of table elements" #### Examples #### * Write the values (1, 2, 3) to 3 consecutive elements in a table named i64table starting with the element at index 10:POST to https://1.2.3.4/api/v1/device/strategy/tables/int64s/i64table?startIndex=10 with body of the POST request set to [ 1, 2, 3 ]
@@ -784,12 +1039,23 @@ export def "device-strategy-tables-int64s create-write" [
   let base = ($base_url | default $BASE_URL)
   if ($table_name | is-empty) { error make --unspanned { msg: "path parameter 'tableName' must be non-empty" } }
   let qp = [(serialize-qp "startIndex" $start_index "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({table_name: (encode-path-segment $table_name)} | format pattern "/device/strategy/tables/int64s/{table_name}") $qp)
+  let full_url = (build-url $base ({table_name: (encode-path-segment $table_name)} | format pattern "/device/strategy/tables/int64s/{table_name}") $qp $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"startIndex": $start_index} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"startIndex": $start_index} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # "Read a range of table elements from the specified integer64 table" #### Examples #### * Read all elements in a table named i64table: https://1.2.3.4/api/v1/device/strategy/tables/int64s/i64table/_string * Read elements 5 and up in a table named i64table starting with index 5: https://1.2.3.4/api/v1/device/strategy/tables/int64s/i64table/_string?startIndex=5 * Read 3 consecutive elements in a table named i64table starting with the element at index 10: https://1.2.3.4/api/v1/device/strategy/tables/int64s/i64table/_string?startIndex=10&numElements=3
@@ -814,10 +1080,21 @@ export def "device-strategy-tables-int64s-string get" [
   let base = ($base_url | default $BASE_URL)
   if ($table_name | is-empty) { error make --unspanned { msg: "path parameter 'tableName' must be non-empty" } }
   let qp = [(serialize-qp "startIndex" $start_index "scalar") (serialize-qp "numElements" $num_elements "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({table_name: (encode-path-segment $table_name)} | format pattern "/device/strategy/tables/int64s/{table_name}/_string") $qp)
+  let full_url = (build-url $base ({table_name: (encode-path-segment $table_name)} | format pattern "/device/strategy/tables/int64s/{table_name}/_string") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"startIndex": $start_index, "numElements": $num_elements} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"startIndex": $start_index, "numElements": $num_elements} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # "Write a range of table elements" #### Examples #### * Write the values (1, 2, 3) to 3 consecutive elements in a table named i64table starting with the element at index 10:POST to https://1.2.3.4/api/v1/device/strategy/tables/int64s/i64table/_string?startIndex=10 with body of the POST request set to [ "1", "2", "3" ]
@@ -843,12 +1120,23 @@ export def "device-strategy-tables-int64s-string create-write" [
   let base = ($base_url | default $BASE_URL)
   if ($table_name | is-empty) { error make --unspanned { msg: "path parameter 'tableName' must be non-empty" } }
   let qp = [(serialize-qp "startIndex" $start_index "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({table_name: (encode-path-segment $table_name)} | format pattern "/device/strategy/tables/int64s/{table_name}/_string") $qp)
+  let full_url = (build-url $base ({table_name: (encode-path-segment $table_name)} | format pattern "/device/strategy/tables/int64s/{table_name}/_string") $qp $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"startIndex": $start_index} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"startIndex": $start_index} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Read specified integer64 table element
@@ -872,10 +1160,21 @@ export def "device-strategy-tables-int64s get-element" [
   let base = ($base_url | default $BASE_URL)
   if ($table_name | is-empty) { error make --unspanned { msg: "path parameter 'tableName' must be non-empty" } }
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
-  let full_url = (build-url $base ({table_name: (encode-path-segment $table_name), index: (encode-path-segment $index)} | format pattern "/device/strategy/tables/int64s/{table_name}/{index}"))
+  let full_url = (build-url $base ({table_name: (encode-path-segment $table_name), index: (encode-path-segment $index)} | format pattern "/device/strategy/tables/int64s/{table_name}/{index}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Write specified integer64 table element
@@ -901,12 +1200,23 @@ export def "device-strategy-tables-int64s create-write-element" [
   let base = ($base_url | default $BASE_URL)
   if ($table_name | is-empty) { error make --unspanned { msg: "path parameter 'tableName' must be non-empty" } }
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
-  let full_url = (build-url $base ({table_name: (encode-path-segment $table_name), index: (encode-path-segment $index)} | format pattern "/device/strategy/tables/int64s/{table_name}/{index}"))
+  let full_url = (build-url $base ({table_name: (encode-path-segment $table_name), index: (encode-path-segment $index)} | format pattern "/device/strategy/tables/int64s/{table_name}/{index}") $auth.query)
   let req_body = {"value": $value} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Read specified integer64 table element as string
@@ -930,10 +1240,21 @@ export def "device-strategy-tables-int64s-string get-element" [
   let base = ($base_url | default $BASE_URL)
   if ($table_name | is-empty) { error make --unspanned { msg: "path parameter 'tableName' must be non-empty" } }
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
-  let full_url = (build-url $base ({table_name: (encode-path-segment $table_name), index: (encode-path-segment $index)} | format pattern "/device/strategy/tables/int64s/{table_name}/{index}/_string"))
+  let full_url = (build-url $base ({table_name: (encode-path-segment $table_name), index: (encode-path-segment $index)} | format pattern "/device/strategy/tables/int64s/{table_name}/{index}/_string") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Write specified integer64 table element as string
@@ -959,12 +1280,23 @@ export def "device-strategy-tables-int64s-string create-write-element" [
   let base = ($base_url | default $BASE_URL)
   if ($table_name | is-empty) { error make --unspanned { msg: "path parameter 'tableName' must be non-empty" } }
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
-  let full_url = (build-url $base ({table_name: (encode-path-segment $table_name), index: (encode-path-segment $index)} | format pattern "/device/strategy/tables/int64s/{table_name}/{index}/_string"))
+  let full_url = (build-url $base ({table_name: (encode-path-segment $table_name), index: (encode-path-segment $index)} | format pattern "/device/strategy/tables/int64s/{table_name}/{index}/_string") $auth.query)
   let req_body = {"value": $value} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Returns an array of the name and length of all the string tables in the strategy
@@ -984,10 +1316,21 @@ export def "device-strategy-tables-strings list" [
 ]: nothing -> table<length: int, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/device/strategy/tables/strings")
+  let full_url = (build-url $base "/device/strategy/tables/strings" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # "Read a range of table elements from the specified string table" #### Examples #### * Read all elements in a table named strTable: https://1.2.3.4/api/v1/device/strategy/tables/strings/strTable * Read elements 5 and up in a table named i64table starting with index 5: https://1.2.3.4/api/v1/device/strategy/tables/strings/strTable?startIndex=5 * Read 3 consecutive elements in a table named i64table starting with the element at index 10: https://1.2.3.4/api/v1/device/strategy/tables/strings/strTable?startIndex=10&numElements=3
@@ -1012,10 +1355,21 @@ export def "device-strategy-tables-strings get" [
   let base = ($base_url | default $BASE_URL)
   if ($table_name | is-empty) { error make --unspanned { msg: "path parameter 'tableName' must be non-empty" } }
   let qp = [(serialize-qp "startIndex" $start_index "scalar") (serialize-qp "numElements" $num_elements "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({table_name: (encode-path-segment $table_name)} | format pattern "/device/strategy/tables/strings/{table_name}") $qp)
+  let full_url = (build-url $base ({table_name: (encode-path-segment $table_name)} | format pattern "/device/strategy/tables/strings/{table_name}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"startIndex": $start_index, "numElements": $num_elements} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"startIndex": $start_index, "numElements": $num_elements} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # "Write a range of table elements" #### Examples #### * Write the values ("first", "second", "third") to 3 consecutive elements in a table named strTable starting with the element at index 10:POST to https://1.2.3.4/api/v1/device/strategy/tables/strings/strtable?startIndex=10 with body of the POST request set to [ "first", "second", "third" ]
@@ -1041,12 +1395,23 @@ export def "device-strategy-tables-strings create-write" [
   let base = ($base_url | default $BASE_URL)
   if ($table_name | is-empty) { error make --unspanned { msg: "path parameter 'tableName' must be non-empty" } }
   let qp = [(serialize-qp "startIndex" $start_index "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({table_name: (encode-path-segment $table_name)} | format pattern "/device/strategy/tables/strings/{table_name}") $qp)
+  let full_url = (build-url $base ({table_name: (encode-path-segment $table_name)} | format pattern "/device/strategy/tables/strings/{table_name}") $qp $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"startIndex": $start_index} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"startIndex": $start_index} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Read specified table element
@@ -1070,10 +1435,21 @@ export def "device-strategy-tables-strings get-element" [
   let base = ($base_url | default $BASE_URL)
   if ($table_name | is-empty) { error make --unspanned { msg: "path parameter 'tableName' must be non-empty" } }
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
-  let full_url = (build-url $base ({table_name: (encode-path-segment $table_name), index: (encode-path-segment $index)} | format pattern "/device/strategy/tables/strings/{table_name}/{index}"))
+  let full_url = (build-url $base ({table_name: (encode-path-segment $table_name), index: (encode-path-segment $index)} | format pattern "/device/strategy/tables/strings/{table_name}/{index}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Write specified table element
@@ -1099,12 +1475,23 @@ export def "device-strategy-tables-strings create-write-element" [
   let base = ($base_url | default $BASE_URL)
   if ($table_name | is-empty) { error make --unspanned { msg: "path parameter 'tableName' must be non-empty" } }
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
-  let full_url = (build-url $base ({table_name: (encode-path-segment $table_name), index: (encode-path-segment $index)} | format pattern "/device/strategy/tables/strings/{table_name}/{index}"))
+  let full_url = (build-url $base ({table_name: (encode-path-segment $table_name), index: (encode-path-segment $index)} | format pattern "/device/strategy/tables/strings/{table_name}/{index}") $auth.query)
   let req_body = {"value": $value} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the name and current value of all down timers in the strategy
@@ -1124,10 +1511,21 @@ export def "device-strategy-vars-down-timers get" [
 ]: nothing -> table<name: string, value: float> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/device/strategy/vars/downTimers")
+  let full_url = (build-url $base "/device/strategy/vars/downTimers" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns current value of the specified down timer
@@ -1149,10 +1547,21 @@ export def "device-strategy-vars-down-timers-value get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($down_timer_name | is-empty) { error make --unspanned { msg: "path parameter 'downTimerName' must be non-empty" } }
-  let full_url = (build-url $base ({down_timer_name: (encode-path-segment $down_timer_name)} | format pattern "/device/strategy/vars/downTimers/{down_timer_name}/value"))
+  let full_url = (build-url $base ({down_timer_name: (encode-path-segment $down_timer_name)} | format pattern "/device/strategy/vars/downTimers/{down_timer_name}/value") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the name and value of all (single-precision) float variables in the strategy
@@ -1172,10 +1581,21 @@ export def "device-strategy-vars-floats list" [
 ]: nothing -> table<name: string, value: float> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/device/strategy/vars/floats")
+  let full_url = (build-url $base "/device/strategy/vars/floats" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns value of the specified float variable
@@ -1197,10 +1617,21 @@ export def "device-strategy-vars-floats get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($float_name | is-empty) { error make --unspanned { msg: "path parameter 'floatName' must be non-empty" } }
-  let full_url = (build-url $base ({float_name: (encode-path-segment $float_name)} | format pattern "/device/strategy/vars/floats/{float_name}"))
+  let full_url = (build-url $base ({float_name: (encode-path-segment $float_name)} | format pattern "/device/strategy/vars/floats/{float_name}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Sets the value of a float variable
@@ -1224,12 +1655,23 @@ export def "device-strategy-vars-floats create-write" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($float_name | is-empty) { error make --unspanned { msg: "path parameter 'floatName' must be non-empty" } }
-  let full_url = (build-url $base ({float_name: (encode-path-segment $float_name)} | format pattern "/device/strategy/vars/floats/{float_name}"))
+  let full_url = (build-url $base ({float_name: (encode-path-segment $float_name)} | format pattern "/device/strategy/vars/floats/{float_name}") $auth.query)
   let req_body = {"value": $value} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the name and value of all integer32 variables in the strategy
@@ -1249,10 +1691,21 @@ export def "device-strategy-vars-int32s list" [
 ]: nothing -> table<name: string, value: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/device/strategy/vars/int32s")
+  let full_url = (build-url $base "/device/strategy/vars/int32s" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns value of the specified integer32 variable
@@ -1274,10 +1727,21 @@ export def "device-strategy-vars-int32s get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($int32_name | is-empty) { error make --unspanned { msg: "path parameter 'int32Name' must be non-empty" } }
-  let full_url = (build-url $base ({int32_name: (encode-path-segment $int32_name)} | format pattern "/device/strategy/vars/int32s/{int32_name}"))
+  let full_url = (build-url $base ({int32_name: (encode-path-segment $int32_name)} | format pattern "/device/strategy/vars/int32s/{int32_name}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Sets the value of an integer32 variable
@@ -1301,12 +1765,23 @@ export def "device-strategy-vars-int32s create-write" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($int32_name | is-empty) { error make --unspanned { msg: "path parameter 'int32Name' must be non-empty" } }
-  let full_url = (build-url $base ({int32_name: (encode-path-segment $int32_name)} | format pattern "/device/strategy/vars/int32s/{int32_name}"))
+  let full_url = (build-url $base ({int32_name: (encode-path-segment $int32_name)} | format pattern "/device/strategy/vars/int32s/{int32_name}") $auth.query)
   let req_body = {"value": $value} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the name and value of all integer64 variables in the strategy
@@ -1326,10 +1801,21 @@ export def "device-strategy-vars-int64s list" [
 ]: nothing -> table<name: string, value: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/device/strategy/vars/int64s")
+  let full_url = (build-url $base "/device/strategy/vars/int64s" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the name and value as a string of all integer64 variables in the strategy
@@ -1349,10 +1835,21 @@ export def "device-strategy-vars-int64s-string list" [
 ]: nothing -> table<name: string, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/device/strategy/vars/int64s/_string")
+  let full_url = (build-url $base "/device/strategy/vars/int64s/_string" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns value of the specified integer64 variable
@@ -1374,10 +1871,21 @@ export def "device-strategy-vars-int64s get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($int64_name | is-empty) { error make --unspanned { msg: "path parameter 'int64Name' must be non-empty" } }
-  let full_url = (build-url $base ({int64_name: (encode-path-segment $int64_name)} | format pattern "/device/strategy/vars/int64s/{int64_name}"))
+  let full_url = (build-url $base ({int64_name: (encode-path-segment $int64_name)} | format pattern "/device/strategy/vars/int64s/{int64_name}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Sets the value of an integer64 variable
@@ -1401,12 +1909,23 @@ export def "device-strategy-vars-int64s create-write" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($int64_name | is-empty) { error make --unspanned { msg: "path parameter 'int64Name' must be non-empty" } }
-  let full_url = (build-url $base ({int64_name: (encode-path-segment $int64_name)} | format pattern "/device/strategy/vars/int64s/{int64_name}"))
+  let full_url = (build-url $base ({int64_name: (encode-path-segment $int64_name)} | format pattern "/device/strategy/vars/int64s/{int64_name}") $auth.query)
   let req_body = {"value": $value} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Returns value of the specified integer64 variable as a string
@@ -1428,10 +1947,21 @@ export def "device-strategy-vars-int64s-string get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($int64_name | is-empty) { error make --unspanned { msg: "path parameter 'int64Name' must be non-empty" } }
-  let full_url = (build-url $base ({int64_name: (encode-path-segment $int64_name)} | format pattern "/device/strategy/vars/int64s/{int64_name}/_string"))
+  let full_url = (build-url $base ({int64_name: (encode-path-segment $int64_name)} | format pattern "/device/strategy/vars/int64s/{int64_name}/_string") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Sets the value of an integer64 variable as a string
@@ -1455,12 +1985,23 @@ export def "device-strategy-vars-int64s-string create-write" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($int64_name | is-empty) { error make --unspanned { msg: "path parameter 'int64Name' must be non-empty" } }
-  let full_url = (build-url $base ({int64_name: (encode-path-segment $int64_name)} | format pattern "/device/strategy/vars/int64s/{int64_name}/_string"))
+  let full_url = (build-url $base ({int64_name: (encode-path-segment $int64_name)} | format pattern "/device/strategy/vars/int64s/{int64_name}/_string") $auth.query)
   let req_body = {"value": $value} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the name and value of all string variables in the strategy
@@ -1480,10 +2021,21 @@ export def "device-strategy-vars-strings list" [
 ]: nothing -> table<name: string, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/device/strategy/vars/strings")
+  let full_url = (build-url $base "/device/strategy/vars/strings" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns value of the specified string
@@ -1505,10 +2057,21 @@ export def "device-strategy-vars-strings get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($string_name | is-empty) { error make --unspanned { msg: "path parameter 'stringName' must be non-empty" } }
-  let full_url = (build-url $base ({string_name: (encode-path-segment $string_name)} | format pattern "/device/strategy/vars/strings/{string_name}"))
+  let full_url = (build-url $base ({string_name: (encode-path-segment $string_name)} | format pattern "/device/strategy/vars/strings/{string_name}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Sets the value of a string variable
@@ -1532,12 +2095,23 @@ export def "device-strategy-vars-strings create-write" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($string_name | is-empty) { error make --unspanned { msg: "path parameter 'stringName' must be non-empty" } }
-  let full_url = (build-url $base ({string_name: (encode-path-segment $string_name)} | format pattern "/device/strategy/vars/strings/{string_name}"))
+  let full_url = (build-url $base ({string_name: (encode-path-segment $string_name)} | format pattern "/device/strategy/vars/strings/{string_name}") $auth.query)
   let req_body = {"value": $value} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the name and current value of all up timers in the strategy
@@ -1557,10 +2131,21 @@ export def "device-strategy-vars-up-timers get" [
 ]: nothing -> table<name: string, value: float> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/device/strategy/vars/upTimers")
+  let full_url = (build-url $base "/device/strategy/vars/upTimers" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns current value of the specified up timer
@@ -1582,8 +2167,19 @@ export def "device-strategy-vars-up-timers-value get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($up_timer_name | is-empty) { error make --unspanned { msg: "path parameter 'upTimerName' must be non-empty" } }
-  let full_url = (build-url $base ({up_timer_name: (encode-path-segment $up_timer_name)} | format pattern "/device/strategy/vars/upTimers/{up_timer_name}/value"))
+  let full_url = (build-url $base ({up_timer_name: (encode-path-segment $up_timer_name)} | format pattern "/device/strategy/vars/upTimers/{up_timer_name}/value") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }

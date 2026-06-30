@@ -8,7 +8,7 @@ const BASE_URL = "https://api.figshare.com/v2"
 # `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
 # where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o FIGSHARE_API_TOKEN | default "" }
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o FIGSHARE_API_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
@@ -41,14 +41,11 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
-# Trick: `url encode --all` over-encodes, then we decode the four unreserved
-# punctuation chars back. Pre-existing %XX sequences in the input survive
-# because `url encode --all` first turns their % into %25.
 def encode-path-segment [v: any]: nothing -> string {
   $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
-# Serialize an array-typed path parameter (issue 49.A). OpenAPI 3 `style: simple`
+# Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
 # (the default for path params) and Swagger 2 `collectionFormat: csv` both join
 # the elements with a literal comma WITHIN the single path segment, each element
 # RFC-3986-encoded individually (so a comma inside an element stays %2C). Without
@@ -59,60 +56,66 @@ def encode-path-array [v: any]: nothing -> string {
   if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
 }
 
-# Build URL from base, path, and optional query string
-def build-url [base: string, path: string, query?: string]: nothing -> string {
+# Build the request URL from base, path, and any number of pre-encoded query
+# fragments (param serializer output and/or the auth query). Each fragment is an
+# `&`-joinable `key=value` string already percent-encoded by its producer; empty
+# fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
+# delimiters are hand-spliced — and any query already on the base URL is merged in.
+def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
   let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
-  let result = ($parsed | upsert path $full_path)
-  if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
+  let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
+  $parsed | upsert path $full_path | upsert query $query | url join
 }
 
-# Build the dry-run record returned by --dry-run. Shape:
-#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
-#    auth: {scheme, location}}
-# `meta` carries logical-form data (the query record by spec name, the pre-serialization
-# body) that do-request itself cannot reconstruct from its wire-format args.
-def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
-  let m = ($meta | default {})
-  {
-    dry_run: true
-    method: $method
-    url: $url
-    query: ($m | get -o query | default {})
-    headers: $auth.headers
-    body: ($m | get -o body)
-    content_type: $content_type
-    timeout: $timeout
-    auth: {scheme: $auth.scheme, location: $auth.location}
-  }
+# Success policy: did this response succeed? Single source of truth, consulted by
+# handle-response and the HEAD header-unwrap. Empty ok_codes means the spec listed
+# none, so fall back to < 400. Otherwise: any 2xx, plus documented success codes.
+def status-ok [status: int, ok_codes: list<int>]: nothing -> bool {
+  if ($ok_codes | is-empty) { $status < 400 } else { ($status >= 200 and $status < 300) or ($status in $ok_codes) }
 }
 
-# Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
-  let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
-  let timeout = ($max_time | default 30min)
-  let ct = ($content_type | default "application/json")
-  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
-  let resp = match $method {
-    "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
-  }
-  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
-  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
+# Unwrap a `--full` HTTP response into the user-facing value. Response arrives
+# via pipeline; ok_codes gates the error throw (see status-ok).
+def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: record -> any {
+  let resp = $in
+  if $allow_errors { return $resp }
+  if not (status-ok $resp.status $ok_codes) { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } }
+  if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
+  if $resp.status == 204 { return null }
+  $resp.body
+}
+
+# GET — bodyless, honours --raw
+def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+}
+
+# POST — body + content-type
+def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# PUT — body + content-type
+def send-put [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http put --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http put --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# DELETE — body via --data
+def send-delete [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http delete --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url } else { http delete --headers $req.headers --content-type $req.content_type --data $body --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url }
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # Build a `multipart/form-data` envelope per RFC 7578. `file_fields` lists
 # the field names whose value should be read from disk as bytes; every
 # other field is sent as a text part (records/lists JSON-stringified).
-# Returns {content_type, body} ready to pass to `do-request`.
+# Returns {content_type, body}.
 # When `$dry_run` is true, file fields are NOT read from disk — they emit
 # an empty-bytes placeholder so callers can inspect the request shape
-# without the file existing on disk (issue 11.B).
+# without the file existing on disk.
 def build-multipart-body [parts: record, file_fields: list<string>, dry_run: bool = false]: nothing -> record {
   let boundary = $"----nu-(random chars --length 24)"
   let crlf = "\r\n"
@@ -187,10 +190,21 @@ export def "account get-private" [
 ]: nothing -> record<active: int, created_date: string, email: string, first_name: string, group_id: int, id: int, institution_id: int, institution_user_id: string, last_name: string, maximum_file_size: int, modified_date: string, pending_quota_request: bool, quota: int, used_quota: int, used_quota_private: int, used_quota_public: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/account")
+  let full_url = (build-url $base "/account" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Private Articles
@@ -215,10 +229,21 @@ export def "account-articles list-private" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/account/articles" $qp)
+  let full_url = (build-url $base "/account/articles" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "page_size": $page_size, "limit": $limit, "offset": $offset} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"page": $page, "page_size": $page_size, "limit": $limit, "offset": $offset} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create new Article
@@ -264,12 +289,23 @@ export def "account-articles create-private" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/account/articles")
+  let full_url = (build-url $base "/account/articles" $auth.query)
   let req_body = {"authors": $authors, "categories": $categories, "categories_by_source_id": $categories_by_source_id, "custom_fields": $custom_fields, "custom_fields_list": $custom_fields_list, "defined_type": $defined_type, "description": $description, "doi": $doi, "funding": $funding, "funding_list": $funding_list, "group_id": $group_id, "handle": $handle, "is_metadata_record": $is_metadata_record, "keywords": $keywords, "license": $license, "metadata_reason": $metadata_reason, "references": $references, "resource_doi": $resource_doi, "resource_title": $resource_title, "tags": $tags, "timeline": $timeline, "title": $title} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Account Article Report
@@ -291,10 +327,21 @@ export def "account-articles-export get-report" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "group_id" $group_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/account/articles/export" $qp)
+  let full_url = (build-url $base "/account/articles/export" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"group_id": $group_id} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"group_id": $group_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Initiate a new Report
@@ -314,10 +361,21 @@ export def "account-articles-export generate-report" [
 ]: nothing -> record<account_id: int, created_date: string, download_url: string, group_id: int, id: int, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/account/articles/export")
+  let full_url = (build-url $base "/account/articles/export" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Private Articles search
@@ -345,12 +403,23 @@ export def "account-articles-search list-private" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/account/articles/search")
+  let full_url = (build-url $base "/account/articles/search" $auth.query)
   let req_body = {"resource_id": $resource_id, "doi": $doi, "handle": $handle, "item_type": $item_type, "order": $order, "project_id": $project_id, "resource_doi": $resource_doi} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Delete article
@@ -372,10 +441,21 @@ export def "account-articles delete-private" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($article_id | is-empty) { error make --unspanned { msg: "path parameter 'article_id' must be non-empty" } }
-  let full_url = (build-url $base ({article_id: (encode-path-segment $article_id)} | format pattern "/account/articles/{article_id}"))
+  let full_url = (build-url $base ({article_id: (encode-path-segment $article_id)} | format pattern "/account/articles/{article_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Article details
@@ -397,10 +477,21 @@ export def "account-articles get-private-details" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($article_id | is-empty) { error make --unspanned { msg: "path parameter 'article_id' must be non-empty" } }
-  let full_url = (build-url $base ({article_id: (encode-path-segment $article_id)} | format pattern "/account/articles/{article_id}"))
+  let full_url = (build-url $base ({article_id: (encode-path-segment $article_id)} | format pattern "/account/articles/{article_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update article
@@ -448,12 +539,23 @@ export def "account-articles update-private" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($article_id | is-empty) { error make --unspanned { msg: "path parameter 'article_id' must be non-empty" } }
-  let full_url = (build-url $base ({article_id: (encode-path-segment $article_id)} | format pattern "/account/articles/{article_id}"))
+  let full_url = (build-url $base ({article_id: (encode-path-segment $article_id)} | format pattern "/account/articles/{article_id}") $auth.query)
   let req_body = {"authors": $authors, "categories": $categories, "categories_by_source_id": $categories_by_source_id, "custom_fields": $custom_fields, "custom_fields_list": $custom_fields_list, "defined_type": $defined_type, "description": $description, "doi": $doi, "funding": $funding, "funding_list": $funding_list, "group_id": $group_id, "handle": $handle, "is_metadata_record": $is_metadata_record, "keywords": $keywords, "license": $license, "metadata_reason": $metadata_reason, "references": $references, "resource_doi": $resource_doi, "resource_title": $resource_title, "tags": $tags, "timeline": $timeline, "title": $title} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [205]
 }
 
 # List article authors
@@ -475,10 +577,21 @@ export def "account-articles-authors list-private" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($article_id | is-empty) { error make --unspanned { msg: "path parameter 'article_id' must be non-empty" } }
-  let full_url = (build-url $base ({article_id: (encode-path-segment $article_id)} | format pattern "/account/articles/{article_id}/authors"))
+  let full_url = (build-url $base ({article_id: (encode-path-segment $article_id)} | format pattern "/account/articles/{article_id}/authors") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Add article authors
@@ -502,12 +615,23 @@ export def "account-articles-authors create-private" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($article_id | is-empty) { error make --unspanned { msg: "path parameter 'article_id' must be non-empty" } }
-  let full_url = (build-url $base ({article_id: (encode-path-segment $article_id)} | format pattern "/account/articles/{article_id}/authors"))
+  let full_url = (build-url $base ({article_id: (encode-path-segment $article_id)} | format pattern "/account/articles/{article_id}/authors") $auth.query)
   let req_body = {"authors": $authors} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [205]
 }
 
 # Replace article authors
@@ -531,12 +655,23 @@ export def "account-articles-authors update-private" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($article_id | is-empty) { error make --unspanned { msg: "path parameter 'article_id' must be non-empty" } }
-  let full_url = (build-url $base ({article_id: (encode-path-segment $article_id)} | format pattern "/account/articles/{article_id}/authors"))
+  let full_url = (build-url $base ({article_id: (encode-path-segment $article_id)} | format pattern "/account/articles/{article_id}/authors") $auth.query)
   let req_body = {"authors": $authors} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [205]
 }
 
 # Delete article author
@@ -560,10 +695,21 @@ export def "account-articles-authors delete-private" [
   let base = ($base_url | default $BASE_URL)
   if ($article_id | is-empty) { error make --unspanned { msg: "path parameter 'article_id' must be non-empty" } }
   if ($author_id | is-empty) { error make --unspanned { msg: "path parameter 'author_id' must be non-empty" } }
-  let full_url = (build-url $base ({article_id: (encode-path-segment $article_id), author_id: (encode-path-segment $author_id)} | format pattern "/account/articles/{article_id}/authors/{author_id}"))
+  let full_url = (build-url $base ({article_id: (encode-path-segment $article_id), author_id: (encode-path-segment $author_id)} | format pattern "/account/articles/{article_id}/authors/{author_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # List article categories
@@ -585,10 +731,21 @@ export def "account-articles-categories list-private" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($article_id | is-empty) { error make --unspanned { msg: "path parameter 'article_id' must be non-empty" } }
-  let full_url = (build-url $base ({article_id: (encode-path-segment $article_id)} | format pattern "/account/articles/{article_id}/categories"))
+  let full_url = (build-url $base ({article_id: (encode-path-segment $article_id)} | format pattern "/account/articles/{article_id}/categories") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Add article categories
@@ -612,12 +769,23 @@ export def "account-articles-categories create-private" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($article_id | is-empty) { error make --unspanned { msg: "path parameter 'article_id' must be non-empty" } }
-  let full_url = (build-url $base ({article_id: (encode-path-segment $article_id)} | format pattern "/account/articles/{article_id}/categories"))
+  let full_url = (build-url $base ({article_id: (encode-path-segment $article_id)} | format pattern "/account/articles/{article_id}/categories") $auth.query)
   let req_body = {"categories": $categories} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [205]
 }
 
 # Replace article categories
@@ -641,12 +809,23 @@ export def "account-articles-categories update-private" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($article_id | is-empty) { error make --unspanned { msg: "path parameter 'article_id' must be non-empty" } }
-  let full_url = (build-url $base ({article_id: (encode-path-segment $article_id)} | format pattern "/account/articles/{article_id}/categories"))
+  let full_url = (build-url $base ({article_id: (encode-path-segment $article_id)} | format pattern "/account/articles/{article_id}/categories") $auth.query)
   let req_body = {"categories": $categories} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [205]
 }
 
 # Delete article category
@@ -670,10 +849,21 @@ export def "account-articles-categories delete-private" [
   let base = ($base_url | default $BASE_URL)
   if ($article_id | is-empty) { error make --unspanned { msg: "path parameter 'article_id' must be non-empty" } }
   if ($category_id | is-empty) { error make --unspanned { msg: "path parameter 'category_id' must be non-empty" } }
-  let full_url = (build-url $base ({article_id: (encode-path-segment $article_id), category_id: (encode-path-segment $category_id)} | format pattern "/account/articles/{article_id}/categories/{category_id}"))
+  let full_url = (build-url $base ({article_id: (encode-path-segment $article_id), category_id: (encode-path-segment $category_id)} | format pattern "/account/articles/{article_id}/categories/{category_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Delete article confidentiality
@@ -695,10 +885,21 @@ export def "account-articles-confidentiality delete-private" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($article_id | is-empty) { error make --unspanned { msg: "path parameter 'article_id' must be non-empty" } }
-  let full_url = (build-url $base ({article_id: (encode-path-segment $article_id)} | format pattern "/account/articles/{article_id}/confidentiality"))
+  let full_url = (build-url $base ({article_id: (encode-path-segment $article_id)} | format pattern "/account/articles/{article_id}/confidentiality") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Article confidentiality details
@@ -720,10 +921,21 @@ export def "account-articles-confidentiality get-private-details" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($article_id | is-empty) { error make --unspanned { msg: "path parameter 'article_id' must be non-empty" } }
-  let full_url = (build-url $base ({article_id: (encode-path-segment $article_id)} | format pattern "/account/articles/{article_id}/confidentiality"))
+  let full_url = (build-url $base ({article_id: (encode-path-segment $article_id)} | format pattern "/account/articles/{article_id}/confidentiality") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update article confidentiality
@@ -747,12 +959,23 @@ export def "account-articles-confidentiality update-private" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($article_id | is-empty) { error make --unspanned { msg: "path parameter 'article_id' must be non-empty" } }
-  let full_url = (build-url $base ({article_id: (encode-path-segment $article_id)} | format pattern "/account/articles/{article_id}/confidentiality"))
+  let full_url = (build-url $base ({article_id: (encode-path-segment $article_id)} | format pattern "/account/articles/{article_id}/confidentiality") $auth.query)
   let req_body = {"reason": $reason} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [205]
 }
 
 # Delete Article Embargo
@@ -774,10 +997,21 @@ export def "account-articles-embargo delete-private" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($article_id | is-empty) { error make --unspanned { msg: "path parameter 'article_id' must be non-empty" } }
-  let full_url = (build-url $base ({article_id: (encode-path-segment $article_id)} | format pattern "/account/articles/{article_id}/embargo"))
+  let full_url = (build-url $base ({article_id: (encode-path-segment $article_id)} | format pattern "/account/articles/{article_id}/embargo") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Article Embargo Details
@@ -799,10 +1033,21 @@ export def "account-articles-embargo get-private-details" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($article_id | is-empty) { error make --unspanned { msg: "path parameter 'article_id' must be non-empty" } }
-  let full_url = (build-url $base ({article_id: (encode-path-segment $article_id)} | format pattern "/account/articles/{article_id}/embargo"))
+  let full_url = (build-url $base ({article_id: (encode-path-segment $article_id)} | format pattern "/account/articles/{article_id}/embargo") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update Article Embargo
@@ -831,12 +1076,23 @@ export def "account-articles-embargo update-private" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($article_id | is-empty) { error make --unspanned { msg: "path parameter 'article_id' must be non-empty" } }
-  let full_url = (build-url $base ({article_id: (encode-path-segment $article_id)} | format pattern "/account/articles/{article_id}/embargo"))
+  let full_url = (build-url $base ({article_id: (encode-path-segment $article_id)} | format pattern "/account/articles/{article_id}/embargo") $auth.query)
   let req_body = {"embargo_date": $embargo_date, "embargo_options": $embargo_options, "embargo_reason": $embargo_reason, "embargo_title": $embargo_title, "embargo_type": $embargo_type, "is_embargoed": $is_embargoed} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [205]
 }
 
 # List article files
@@ -858,10 +1114,21 @@ export def "account-articles-files list-private" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($article_id | is-empty) { error make --unspanned { msg: "path parameter 'article_id' must be non-empty" } }
-  let full_url = (build-url $base ({article_id: (encode-path-segment $article_id)} | format pattern "/account/articles/{article_id}/files"))
+  let full_url = (build-url $base ({article_id: (encode-path-segment $article_id)} | format pattern "/account/articles/{article_id}/files") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Initiate Upload
@@ -888,12 +1155,23 @@ export def "account-articles-files upload-private-initiate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($article_id | is-empty) { error make --unspanned { msg: "path parameter 'article_id' must be non-empty" } }
-  let full_url = (build-url $base ({article_id: (encode-path-segment $article_id)} | format pattern "/account/articles/{article_id}/files"))
+  let full_url = (build-url $base ({article_id: (encode-path-segment $article_id)} | format pattern "/account/articles/{article_id}/files") $auth.query)
   let req_body = {"link": $link, "md5": $md5, "name": $name, "size": $size} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # File Delete
@@ -917,10 +1195,21 @@ export def "account-articles-files delete-private" [
   let base = ($base_url | default $BASE_URL)
   if ($article_id | is-empty) { error make --unspanned { msg: "path parameter 'article_id' must be non-empty" } }
   if ($file_id | is-empty) { error make --unspanned { msg: "path parameter 'file_id' must be non-empty" } }
-  let full_url = (build-url $base ({article_id: (encode-path-segment $article_id), file_id: (encode-path-segment $file_id)} | format pattern "/account/articles/{article_id}/files/{file_id}"))
+  let full_url = (build-url $base ({article_id: (encode-path-segment $article_id), file_id: (encode-path-segment $file_id)} | format pattern "/account/articles/{article_id}/files/{file_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Single File
@@ -944,10 +1233,21 @@ export def "account-articles-files get-private" [
   let base = ($base_url | default $BASE_URL)
   if ($article_id | is-empty) { error make --unspanned { msg: "path parameter 'article_id' must be non-empty" } }
   if ($file_id | is-empty) { error make --unspanned { msg: "path parameter 'file_id' must be non-empty" } }
-  let full_url = (build-url $base ({article_id: (encode-path-segment $article_id), file_id: (encode-path-segment $file_id)} | format pattern "/account/articles/{article_id}/files/{file_id}"))
+  let full_url = (build-url $base ({article_id: (encode-path-segment $article_id), file_id: (encode-path-segment $file_id)} | format pattern "/account/articles/{article_id}/files/{file_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Complete Upload
@@ -971,10 +1271,21 @@ export def "account-articles-files upload-private-complete" [
   let base = ($base_url | default $BASE_URL)
   if ($article_id | is-empty) { error make --unspanned { msg: "path parameter 'article_id' must be non-empty" } }
   if ($file_id | is-empty) { error make --unspanned { msg: "path parameter 'file_id' must be non-empty" } }
-  let full_url = (build-url $base ({article_id: (encode-path-segment $article_id), file_id: (encode-path-segment $file_id)} | format pattern "/account/articles/{article_id}/files/{file_id}"))
+  let full_url = (build-url $base ({article_id: (encode-path-segment $article_id), file_id: (encode-path-segment $file_id)} | format pattern "/account/articles/{article_id}/files/{file_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [202]
 }
 
 # List private links
@@ -996,10 +1307,21 @@ export def "account-articles-private-links get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($article_id | is-empty) { error make --unspanned { msg: "path parameter 'article_id' must be non-empty" } }
-  let full_url = (build-url $base ({article_id: (encode-path-segment $article_id)} | format pattern "/account/articles/{article_id}/private_links"))
+  let full_url = (build-url $base ({article_id: (encode-path-segment $article_id)} | format pattern "/account/articles/{article_id}/private_links") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create private link
@@ -1024,12 +1346,23 @@ export def "account-articles-private-links create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($article_id | is-empty) { error make --unspanned { msg: "path parameter 'article_id' must be non-empty" } }
-  let full_url = (build-url $base ({article_id: (encode-path-segment $article_id)} | format pattern "/account/articles/{article_id}/private_links"))
+  let full_url = (build-url $base ({article_id: (encode-path-segment $article_id)} | format pattern "/account/articles/{article_id}/private_links") $auth.query)
   let req_body = {"expires_date": $expires_date, "read_only": $read_only} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Disable private link
@@ -1053,10 +1386,21 @@ export def "account-articles-private-links delete" [
   let base = ($base_url | default $BASE_URL)
   if ($article_id | is-empty) { error make --unspanned { msg: "path parameter 'article_id' must be non-empty" } }
   if ($link_id | is-empty) { error make --unspanned { msg: "path parameter 'link_id' must be non-empty" } }
-  let full_url = (build-url $base ({article_id: (encode-path-segment $article_id), link_id: (encode-path-segment $link_id)} | format pattern "/account/articles/{article_id}/private_links/{link_id}"))
+  let full_url = (build-url $base ({article_id: (encode-path-segment $article_id), link_id: (encode-path-segment $link_id)} | format pattern "/account/articles/{article_id}/private_links/{link_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Update private link
@@ -1083,12 +1427,23 @@ export def "account-articles-private-links update" [
   let base = ($base_url | default $BASE_URL)
   if ($article_id | is-empty) { error make --unspanned { msg: "path parameter 'article_id' must be non-empty" } }
   if ($link_id | is-empty) { error make --unspanned { msg: "path parameter 'link_id' must be non-empty" } }
-  let full_url = (build-url $base ({article_id: (encode-path-segment $article_id), link_id: (encode-path-segment $link_id)} | format pattern "/account/articles/{article_id}/private_links/{link_id}"))
+  let full_url = (build-url $base ({article_id: (encode-path-segment $article_id), link_id: (encode-path-segment $link_id)} | format pattern "/account/articles/{article_id}/private_links/{link_id}") $auth.query)
   let req_body = {"expires_date": $expires_date, "read_only": $read_only} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [205]
 }
 
 # Private Article Publish
@@ -1110,10 +1465,21 @@ export def "account-articles-publish publish-private" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($article_id | is-empty) { error make --unspanned { msg: "path parameter 'article_id' must be non-empty" } }
-  let full_url = (build-url $base ({article_id: (encode-path-segment $article_id)} | format pattern "/account/articles/{article_id}/publish"))
+  let full_url = (build-url $base ({article_id: (encode-path-segment $article_id)} | format pattern "/account/articles/{article_id}/publish") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [201]
 }
 
 # Private Article Reserve DOI
@@ -1135,10 +1501,21 @@ export def "account-articles-reserve-doi create-private" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($article_id | is-empty) { error make --unspanned { msg: "path parameter 'article_id' must be non-empty" } }
-  let full_url = (build-url $base ({article_id: (encode-path-segment $article_id)} | format pattern "/account/articles/{article_id}/reserve_doi"))
+  let full_url = (build-url $base ({article_id: (encode-path-segment $article_id)} | format pattern "/account/articles/{article_id}/reserve_doi") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Private Article Reserve Handle
@@ -1160,10 +1537,21 @@ export def "account-articles-reserve-handle create-private" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($article_id | is-empty) { error make --unspanned { msg: "path parameter 'article_id' must be non-empty" } }
-  let full_url = (build-url $base ({article_id: (encode-path-segment $article_id)} | format pattern "/account/articles/{article_id}/reserve_handle"))
+  let full_url = (build-url $base ({article_id: (encode-path-segment $article_id)} | format pattern "/account/articles/{article_id}/reserve_handle") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Private Article Resource
@@ -1192,12 +1580,23 @@ export def "account-articles-resource create-private" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($article_id | is-empty) { error make --unspanned { msg: "path parameter 'article_id' must be non-empty" } }
-  let full_url = (build-url $base ({article_id: (encode-path-segment $article_id)} | format pattern "/account/articles/{article_id}/resource"))
+  let full_url = (build-url $base ({article_id: (encode-path-segment $article_id)} | format pattern "/account/articles/{article_id}/resource") $auth.query)
   let req_body = {"doi": $doi, "id": $id, "link": $link, "status": $status, "title": $title, "version": $version} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [205]
 }
 
 # Update article version
@@ -1247,12 +1646,23 @@ export def "account-articles-versions update" [
   let base = ($base_url | default $BASE_URL)
   if ($article_id | is-empty) { error make --unspanned { msg: "path parameter 'article_id' must be non-empty" } }
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'version_id' must be non-empty" } }
-  let full_url = (build-url $base ({article_id: (encode-path-segment $article_id), version_id: (encode-path-segment $version_id)} | format pattern "/account/articles/{article_id}/versions/{version_id}/"))
+  let full_url = (build-url $base ({article_id: (encode-path-segment $article_id), version_id: (encode-path-segment $version_id)} | format pattern "/account/articles/{article_id}/versions/{version_id}/") $auth.query)
   let req_body = {"authors": $authors, "categories": $categories, "categories_by_source_id": $categories_by_source_id, "custom_fields": $custom_fields, "custom_fields_list": $custom_fields_list, "defined_type": $defined_type, "description": $description, "doi": $doi, "funding": $funding, "funding_list": $funding_list, "group_id": $group_id, "handle": $handle, "is_metadata_record": $is_metadata_record, "keywords": $keywords, "license": $license, "metadata_reason": $metadata_reason, "references": $references, "resource_doi": $resource_doi, "resource_title": $resource_title, "tags": $tags, "timeline": $timeline, "title": $title} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [205]
 }
 
 # Update article version thumbnail
@@ -1278,12 +1688,23 @@ export def "account-articles-versions-update-thumb version" [
   let base = ($base_url | default $BASE_URL)
   if ($article_id | is-empty) { error make --unspanned { msg: "path parameter 'article_id' must be non-empty" } }
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'version_id' must be non-empty" } }
-  let full_url = (build-url $base ({article_id: (encode-path-segment $article_id), version_id: (encode-path-segment $version_id)} | format pattern "/account/articles/{article_id}/versions/{version_id}/update_thumb"))
+  let full_url = (build-url $base ({article_id: (encode-path-segment $article_id), version_id: (encode-path-segment $version_id)} | format pattern "/account/articles/{article_id}/versions/{version_id}/update_thumb") $auth.query)
   let req_body = {"file_id": $file_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [205]
 }
 
 # Search Authors
@@ -1316,12 +1737,23 @@ export def "account-authors-search list-private" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/account/authors/search")
+  let full_url = (build-url $base "/account/authors/search" $auth.query)
   let req_body = {"group_id": $group_id, "institution_id": $institution_id, "is_active": $is_active, "is_public": $is_public, "limit": $limit, "offset": $offset, "orcid": $orcid, "order": $order, "order_direction": $order_direction, "page": $page, "page_size": $page_size, "search_for": $search_for} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Author details
@@ -1343,10 +1775,21 @@ export def "account-authors get-private-details" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($author_id | is-empty) { error make --unspanned { msg: "path parameter 'author_id' must be non-empty" } }
-  let full_url = (build-url $base ({author_id: (encode-path-segment $author_id)} | format pattern "/account/authors/{author_id}"))
+  let full_url = (build-url $base ({author_id: (encode-path-segment $author_id)} | format pattern "/account/authors/{author_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Private Account Categories
@@ -1366,10 +1809,21 @@ export def "account-categories list-private" [
 ]: nothing -> table<id: int, parent_id: int, path: string, source_id: string, taxonomy_id: int, title: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/account/categories")
+  let full_url = (build-url $base "/account/categories" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Private Collections List
@@ -1396,10 +1850,21 @@ export def "account-collections list-private" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "order_direction" $order_direction "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/account/collections" $qp)
+  let full_url = (build-url $base "/account/collections" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "page_size": $page_size, "limit": $limit, "offset": $offset, "order": $order, "order_direction": $order_direction} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"page": $page, "page_size": $page_size, "limit": $limit, "offset": $offset, "order": $order, "order_direction": $order_direction} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create collection
@@ -1445,12 +1910,23 @@ export def "account-collections create-private" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/account/collections")
+  let full_url = (build-url $base "/account/collections" $auth.query)
   let req_body = {"articles": $articles, "authors": $authors, "categories": $categories, "categories_by_source_id": $categories_by_source_id, "custom_fields": $custom_fields, "custom_fields_list": $custom_fields_list, "description": $description, "doi": $doi, "funding": $funding, "funding_list": $funding_list, "group_id": $group_id, "handle": $handle, "keywords": $keywords, "references": $references, "resource_doi": $resource_doi, "resource_id": $resource_id, "resource_link": $resource_link, "resource_title": $resource_title, "resource_version": $resource_version, "tags": $tags, "timeline": $timeline, "title": $title} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Private Collections Search
@@ -1476,12 +1952,23 @@ export def "account-collections-search list-private" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/account/collections/search")
+  let full_url = (build-url $base "/account/collections/search" $auth.query)
   let req_body = {"resource_id": $resource_id, "doi": $doi, "handle": $handle, "order": $order, "resource_doi": $resource_doi} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Delete collection
@@ -1503,10 +1990,21 @@ export def "account-collections delete-private" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($collection_id | is-empty) { error make --unspanned { msg: "path parameter 'collection_id' must be non-empty" } }
-  let full_url = (build-url $base ({collection_id: (encode-path-segment $collection_id)} | format pattern "/account/collections/{collection_id}"))
+  let full_url = (build-url $base ({collection_id: (encode-path-segment $collection_id)} | format pattern "/account/collections/{collection_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Collection details
@@ -1528,10 +2026,21 @@ export def "account-collections get-private-details" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($collection_id | is-empty) { error make --unspanned { msg: "path parameter 'collection_id' must be non-empty" } }
-  let full_url = (build-url $base ({collection_id: (encode-path-segment $collection_id)} | format pattern "/account/collections/{collection_id}"))
+  let full_url = (build-url $base ({collection_id: (encode-path-segment $collection_id)} | format pattern "/account/collections/{collection_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update collection
@@ -1579,12 +2088,23 @@ export def "account-collections update-private" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($collection_id | is-empty) { error make --unspanned { msg: "path parameter 'collection_id' must be non-empty" } }
-  let full_url = (build-url $base ({collection_id: (encode-path-segment $collection_id)} | format pattern "/account/collections/{collection_id}"))
+  let full_url = (build-url $base ({collection_id: (encode-path-segment $collection_id)} | format pattern "/account/collections/{collection_id}") $auth.query)
   let req_body = {"articles": $articles, "authors": $authors, "categories": $categories, "categories_by_source_id": $categories_by_source_id, "custom_fields": $custom_fields, "custom_fields_list": $custom_fields_list, "description": $description, "doi": $doi, "funding": $funding, "funding_list": $funding_list, "group_id": $group_id, "handle": $handle, "keywords": $keywords, "references": $references, "resource_doi": $resource_doi, "resource_id": $resource_id, "resource_link": $resource_link, "resource_title": $resource_title, "resource_version": $resource_version, "tags": $tags, "timeline": $timeline, "title": $title} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [205]
 }
 
 # List collection articles
@@ -1611,10 +2131,21 @@ export def "account-collections-articles list-private" [
   let base = ($base_url | default $BASE_URL)
   if ($collection_id | is-empty) { error make --unspanned { msg: "path parameter 'collection_id' must be non-empty" } }
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({collection_id: (encode-path-segment $collection_id)} | format pattern "/account/collections/{collection_id}/articles") $qp)
+  let full_url = (build-url $base ({collection_id: (encode-path-segment $collection_id)} | format pattern "/account/collections/{collection_id}/articles") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "page_size": $page_size, "limit": $limit, "offset": $offset} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"page": $page, "page_size": $page_size, "limit": $limit, "offset": $offset} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Add collection articles
@@ -1638,12 +2169,23 @@ export def "account-collections-articles create-private" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($collection_id | is-empty) { error make --unspanned { msg: "path parameter 'collection_id' must be non-empty" } }
-  let full_url = (build-url $base ({collection_id: (encode-path-segment $collection_id)} | format pattern "/account/collections/{collection_id}/articles"))
+  let full_url = (build-url $base ({collection_id: (encode-path-segment $collection_id)} | format pattern "/account/collections/{collection_id}/articles") $auth.query)
   let req_body = {"articles": $articles} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Replace collection articles
@@ -1667,12 +2209,23 @@ export def "account-collections-articles update-private" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($collection_id | is-empty) { error make --unspanned { msg: "path parameter 'collection_id' must be non-empty" } }
-  let full_url = (build-url $base ({collection_id: (encode-path-segment $collection_id)} | format pattern "/account/collections/{collection_id}/articles"))
+  let full_url = (build-url $base ({collection_id: (encode-path-segment $collection_id)} | format pattern "/account/collections/{collection_id}/articles") $auth.query)
   let req_body = {"articles": $articles} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [205]
 }
 
 # Delete collection article
@@ -1696,10 +2249,21 @@ export def "account-collections-articles delete-private" [
   let base = ($base_url | default $BASE_URL)
   if ($collection_id | is-empty) { error make --unspanned { msg: "path parameter 'collection_id' must be non-empty" } }
   if ($article_id | is-empty) { error make --unspanned { msg: "path parameter 'article_id' must be non-empty" } }
-  let full_url = (build-url $base ({collection_id: (encode-path-segment $collection_id), article_id: (encode-path-segment $article_id)} | format pattern "/account/collections/{collection_id}/articles/{article_id}"))
+  let full_url = (build-url $base ({collection_id: (encode-path-segment $collection_id), article_id: (encode-path-segment $article_id)} | format pattern "/account/collections/{collection_id}/articles/{article_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # List collection authors
@@ -1721,10 +2285,21 @@ export def "account-collections-authors list-private" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($collection_id | is-empty) { error make --unspanned { msg: "path parameter 'collection_id' must be non-empty" } }
-  let full_url = (build-url $base ({collection_id: (encode-path-segment $collection_id)} | format pattern "/account/collections/{collection_id}/authors"))
+  let full_url = (build-url $base ({collection_id: (encode-path-segment $collection_id)} | format pattern "/account/collections/{collection_id}/authors") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Add collection authors
@@ -1748,12 +2323,23 @@ export def "account-collections-authors create-private" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($collection_id | is-empty) { error make --unspanned { msg: "path parameter 'collection_id' must be non-empty" } }
-  let full_url = (build-url $base ({collection_id: (encode-path-segment $collection_id)} | format pattern "/account/collections/{collection_id}/authors"))
+  let full_url = (build-url $base ({collection_id: (encode-path-segment $collection_id)} | format pattern "/account/collections/{collection_id}/authors") $auth.query)
   let req_body = {"authors": $authors} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Replace collection authors
@@ -1777,12 +2363,23 @@ export def "account-collections-authors update-private" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($collection_id | is-empty) { error make --unspanned { msg: "path parameter 'collection_id' must be non-empty" } }
-  let full_url = (build-url $base ({collection_id: (encode-path-segment $collection_id)} | format pattern "/account/collections/{collection_id}/authors"))
+  let full_url = (build-url $base ({collection_id: (encode-path-segment $collection_id)} | format pattern "/account/collections/{collection_id}/authors") $auth.query)
   let req_body = {"authors": $authors} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [205]
 }
 
 # Delete collection author
@@ -1806,10 +2403,21 @@ export def "account-collections-authors delete-private" [
   let base = ($base_url | default $BASE_URL)
   if ($collection_id | is-empty) { error make --unspanned { msg: "path parameter 'collection_id' must be non-empty" } }
   if ($author_id | is-empty) { error make --unspanned { msg: "path parameter 'author_id' must be non-empty" } }
-  let full_url = (build-url $base ({collection_id: (encode-path-segment $collection_id), author_id: (encode-path-segment $author_id)} | format pattern "/account/collections/{collection_id}/authors/{author_id}"))
+  let full_url = (build-url $base ({collection_id: (encode-path-segment $collection_id), author_id: (encode-path-segment $author_id)} | format pattern "/account/collections/{collection_id}/authors/{author_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # List collection categories
@@ -1831,10 +2439,21 @@ export def "account-collections-categories list-private" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($collection_id | is-empty) { error make --unspanned { msg: "path parameter 'collection_id' must be non-empty" } }
-  let full_url = (build-url $base ({collection_id: (encode-path-segment $collection_id)} | format pattern "/account/collections/{collection_id}/categories"))
+  let full_url = (build-url $base ({collection_id: (encode-path-segment $collection_id)} | format pattern "/account/collections/{collection_id}/categories") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Add collection categories
@@ -1858,12 +2477,23 @@ export def "account-collections-categories create-private" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($collection_id | is-empty) { error make --unspanned { msg: "path parameter 'collection_id' must be non-empty" } }
-  let full_url = (build-url $base ({collection_id: (encode-path-segment $collection_id)} | format pattern "/account/collections/{collection_id}/categories"))
+  let full_url = (build-url $base ({collection_id: (encode-path-segment $collection_id)} | format pattern "/account/collections/{collection_id}/categories") $auth.query)
   let req_body = {"categories": $categories} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Replace collection categories
@@ -1887,12 +2517,23 @@ export def "account-collections-categories update-private" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($collection_id | is-empty) { error make --unspanned { msg: "path parameter 'collection_id' must be non-empty" } }
-  let full_url = (build-url $base ({collection_id: (encode-path-segment $collection_id)} | format pattern "/account/collections/{collection_id}/categories"))
+  let full_url = (build-url $base ({collection_id: (encode-path-segment $collection_id)} | format pattern "/account/collections/{collection_id}/categories") $auth.query)
   let req_body = {"categories": $categories} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [205]
 }
 
 # Delete collection category
@@ -1916,10 +2557,21 @@ export def "account-collections-categories delete-private" [
   let base = ($base_url | default $BASE_URL)
   if ($collection_id | is-empty) { error make --unspanned { msg: "path parameter 'collection_id' must be non-empty" } }
   if ($category_id | is-empty) { error make --unspanned { msg: "path parameter 'category_id' must be non-empty" } }
-  let full_url = (build-url $base ({collection_id: (encode-path-segment $collection_id), category_id: (encode-path-segment $category_id)} | format pattern "/account/collections/{collection_id}/categories/{category_id}"))
+  let full_url = (build-url $base ({collection_id: (encode-path-segment $collection_id), category_id: (encode-path-segment $category_id)} | format pattern "/account/collections/{collection_id}/categories/{category_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # List collection private links
@@ -1941,10 +2593,21 @@ export def "account-collections-private-links list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($collection_id | is-empty) { error make --unspanned { msg: "path parameter 'collection_id' must be non-empty" } }
-  let full_url = (build-url $base ({collection_id: (encode-path-segment $collection_id)} | format pattern "/account/collections/{collection_id}/private_links"))
+  let full_url = (build-url $base ({collection_id: (encode-path-segment $collection_id)} | format pattern "/account/collections/{collection_id}/private_links") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create collection private link
@@ -1969,12 +2632,23 @@ export def "account-collections-private-links create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($collection_id | is-empty) { error make --unspanned { msg: "path parameter 'collection_id' must be non-empty" } }
-  let full_url = (build-url $base ({collection_id: (encode-path-segment $collection_id)} | format pattern "/account/collections/{collection_id}/private_links"))
+  let full_url = (build-url $base ({collection_id: (encode-path-segment $collection_id)} | format pattern "/account/collections/{collection_id}/private_links") $auth.query)
   let req_body = {"expires_date": $expires_date, "read_only": $read_only} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Disable private link
@@ -1998,10 +2672,21 @@ export def "account-collections-private-links delete" [
   let base = ($base_url | default $BASE_URL)
   if ($collection_id | is-empty) { error make --unspanned { msg: "path parameter 'collection_id' must be non-empty" } }
   if ($link_id | is-empty) { error make --unspanned { msg: "path parameter 'link_id' must be non-empty" } }
-  let full_url = (build-url $base ({collection_id: (encode-path-segment $collection_id), link_id: (encode-path-segment $link_id)} | format pattern "/account/collections/{collection_id}/private_links/{link_id}"))
+  let full_url = (build-url $base ({collection_id: (encode-path-segment $collection_id), link_id: (encode-path-segment $link_id)} | format pattern "/account/collections/{collection_id}/private_links/{link_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Update collection private link
@@ -2028,12 +2713,23 @@ export def "account-collections-private-links update" [
   let base = ($base_url | default $BASE_URL)
   if ($collection_id | is-empty) { error make --unspanned { msg: "path parameter 'collection_id' must be non-empty" } }
   if ($link_id | is-empty) { error make --unspanned { msg: "path parameter 'link_id' must be non-empty" } }
-  let full_url = (build-url $base ({collection_id: (encode-path-segment $collection_id), link_id: (encode-path-segment $link_id)} | format pattern "/account/collections/{collection_id}/private_links/{link_id}"))
+  let full_url = (build-url $base ({collection_id: (encode-path-segment $collection_id), link_id: (encode-path-segment $link_id)} | format pattern "/account/collections/{collection_id}/private_links/{link_id}") $auth.query)
   let req_body = {"expires_date": $expires_date, "read_only": $read_only} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [205]
 }
 
 # Private Collection Publish
@@ -2055,10 +2751,21 @@ export def "account-collections-publish publish-private" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($collection_id | is-empty) { error make --unspanned { msg: "path parameter 'collection_id' must be non-empty" } }
-  let full_url = (build-url $base ({collection_id: (encode-path-segment $collection_id)} | format pattern "/account/collections/{collection_id}/publish"))
+  let full_url = (build-url $base ({collection_id: (encode-path-segment $collection_id)} | format pattern "/account/collections/{collection_id}/publish") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [201]
 }
 
 # Private Collection Reserve DOI
@@ -2080,10 +2787,21 @@ export def "account-collections-reserve-doi create-private" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($collection_id | is-empty) { error make --unspanned { msg: "path parameter 'collection_id' must be non-empty" } }
-  let full_url = (build-url $base ({collection_id: (encode-path-segment $collection_id)} | format pattern "/account/collections/{collection_id}/reserve_doi"))
+  let full_url = (build-url $base ({collection_id: (encode-path-segment $collection_id)} | format pattern "/account/collections/{collection_id}/reserve_doi") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Private Collection Reserve Handle
@@ -2105,10 +2823,21 @@ export def "account-collections-reserve-handle create-private" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($collection_id | is-empty) { error make --unspanned { msg: "path parameter 'collection_id' must be non-empty" } }
-  let full_url = (build-url $base ({collection_id: (encode-path-segment $collection_id)} | format pattern "/account/collections/{collection_id}/reserve_handle"))
+  let full_url = (build-url $base ({collection_id: (encode-path-segment $collection_id)} | format pattern "/account/collections/{collection_id}/reserve_handle") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Private Collection Resource
@@ -2137,12 +2866,23 @@ export def "account-collections-resource create-private" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($collection_id | is-empty) { error make --unspanned { msg: "path parameter 'collection_id' must be non-empty" } }
-  let full_url = (build-url $base ({collection_id: (encode-path-segment $collection_id)} | format pattern "/account/collections/{collection_id}/resource"))
+  let full_url = (build-url $base ({collection_id: (encode-path-segment $collection_id)} | format pattern "/account/collections/{collection_id}/resource") $auth.query)
   let req_body = {"doi": $doi, "id": $id, "link": $link, "status": $status, "title": $title, "version": $version} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [205]
 }
 
 # Search Funding
@@ -2164,12 +2904,23 @@ export def "account-funding-search list-private" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/account/funding/search")
+  let full_url = (build-url $base "/account/funding/search" $auth.query)
   let req_body = {"search_for": $search_for} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Private Account Institutions
@@ -2189,10 +2940,21 @@ export def "account-institution get-private-details" [
 ]: nothing -> record<domain: string, id: int, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/account/institution")
+  let full_url = (build-url $base "/account/institution" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Private Account Institution Accounts
@@ -2222,10 +2984,21 @@ export def "account-institution-accounts list-private" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "is_active" $is_active "scalar") (serialize-qp "institution_user_id" $institution_user_id "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "id_lte" $id_lte "scalar") (serialize-qp "id_gte" $id_gte "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/account/institution/accounts" $qp)
+  let full_url = (build-url $base "/account/institution/accounts" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "page_size": $page_size, "limit": $limit, "offset": $offset, "is_active": $is_active, "institution_user_id": $institution_user_id, "email": $email, "id_lte": $id_lte, "id_gte": $id_gte} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"page": $page, "page_size": $page_size, "limit": $limit, "offset": $offset, "is_active": $is_active, "institution_user_id": $institution_user_id, "email": $email, "id_lte": $id_lte, "id_gte": $id_gte} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create new Institution Account
@@ -2254,12 +3027,23 @@ export def "account-institution-accounts create-private" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/account/institution/accounts")
+  let full_url = (build-url $base "/account/institution/accounts" $auth.query)
   let req_body = {"email": $email, "first_name": $first_name, "group_id": $group_id, "institution_user_id": $institution_user_id, "is_active": $is_active, "last_name": $last_name, "quota": $quota, "symplectic_user_id": $symplectic_user_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Private Account Institution Accounts Search
@@ -2288,12 +3072,23 @@ export def "account-institution-accounts-search list-private" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/account/institution/accounts/search")
+  let full_url = (build-url $base "/account/institution/accounts/search" $auth.query)
   let req_body = {"email": $email, "institution_user_id": $institution_user_id, "is_active": $is_active, "limit": $limit, "offset": $offset, "page": $page, "page_size": $page_size, "search_for": $search_for} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Update Institution Account
@@ -2318,12 +3113,23 @@ export def "account-institution-accounts update-private" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'account_id' must be non-empty" } }
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/account/institution/accounts/{account_id}"))
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/account/institution/accounts/{account_id}") $auth.query)
   let req_body = {"group_id": $group_id, "is_active": $is_active} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [205]
 }
 
 # Private Institution Articles
@@ -2355,10 +3161,21 @@ export def "account-institution-articles get-private" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "order_direction" $order_direction "scalar") (serialize-qp "published_since" $published_since "scalar") (serialize-qp "modified_since" $modified_since "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "resource_doi" $resource_doi "scalar") (serialize-qp "item_type" $item_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/account/institution/articles" $qp)
+  let full_url = (build-url $base "/account/institution/articles" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "page_size": $page_size, "limit": $limit, "offset": $offset, "order": $order, "order_direction": $order_direction, "published_since": $published_since, "modified_since": $modified_since, "status": $status, "resource_doi": $resource_doi, "item_type": $item_type} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"page": $page, "page_size": $page_size, "limit": $limit, "offset": $offset, "order": $order, "order_direction": $order_direction, "published_since": $published_since, "modified_since": $modified_since, "status": $status, "resource_doi": $resource_doi, "item_type": $item_type} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Private account institution group custom fields
@@ -2380,10 +3197,21 @@ export def "account-institution-custom-fields list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "group_id" $group_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/account/institution/custom_fields" $qp)
+  let full_url = (build-url $base "/account/institution/custom_fields" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"group_id": $group_id} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"group_id": $group_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Custom fields values files upload
@@ -2407,14 +3235,25 @@ export def "account-institution-custom-fields-items-upload upload" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($custom_field_id | is-empty) { error make --unspanned { msg: "path parameter 'custom_field_id' must be non-empty" } }
-  let full_url = (build-url $base ({custom_field_id: (encode-path-segment $custom_field_id)} | format pattern "/account/institution/custom_fields/{custom_field_id}/items/upload"))
+  let full_url = (build-url $base ({custom_field_id: (encode-path-segment $custom_field_id)} | format pattern "/account/institution/custom_fields/{custom_field_id}/items/upload") $auth.query)
   let req_body = {"external_file": $external_file} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body ["external_file"] $dry_run)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: $mp.content_type
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $mp.body $insecure $raw $allow_errors $full [200]
 }
 
 # Private Account Institution embargo options
@@ -2434,10 +3273,21 @@ export def "account-institution-embargo-options get-private-details" [
 ]: nothing -> table<id: int, ip_name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/account/institution/embargo_options")
+  let full_url = (build-url $base "/account/institution/embargo_options" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Private Account Institution Groups
@@ -2457,10 +3307,21 @@ export def "account-institution-groups list-private" [
 ]: nothing -> table<association_criteria: string, id: int, name: string, parent_id: int, resource_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/account/institution/groups")
+  let full_url = (build-url $base "/account/institution/groups" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Private Account Institution Group Embargo Options
@@ -2482,10 +3343,21 @@ export def "account-institution-groups-embargo-options get-private-details" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'group_id' must be non-empty" } }
-  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/account/institution/groups/{group_id}/embargo_options"))
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/account/institution/groups/{group_id}/embargo_options") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Institution Curation Review
@@ -2507,10 +3379,21 @@ export def "account-institution-review get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($curation_id | is-empty) { error make --unspanned { msg: "path parameter 'curation_id' must be non-empty" } }
-  let full_url = (build-url $base ({curation_id: (encode-path-segment $curation_id)} | format pattern "/account/institution/review/{curation_id}"))
+  let full_url = (build-url $base ({curation_id: (encode-path-segment $curation_id)} | format pattern "/account/institution/review/{curation_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Institution Curation Review Comments
@@ -2535,10 +3418,21 @@ export def "account-institution-review-comments get" [
   let base = ($base_url | default $BASE_URL)
   if ($curation_id | is-empty) { error make --unspanned { msg: "path parameter 'curation_id' must be non-empty" } }
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({curation_id: (encode-path-segment $curation_id)} | format pattern "/account/institution/review/{curation_id}/comments") $qp)
+  let full_url = (build-url $base ({curation_id: (encode-path-segment $curation_id)} | format pattern "/account/institution/review/{curation_id}/comments") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"limit": $limit, "offset": $offset} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"limit": $limit, "offset": $offset} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # POST Institution Curation Review Comment
@@ -2561,12 +3455,23 @@ export def "account-institution-review-comments create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($curation_id | is-empty) { error make --unspanned { msg: "path parameter 'curation_id' must be non-empty" } }
-  let full_url = (build-url $base ({curation_id: (encode-path-segment $curation_id)} | format pattern "/account/institution/review/{curation_id}/comments"))
+  let full_url = (build-url $base ({curation_id: (encode-path-segment $curation_id)} | format pattern "/account/institution/review/{curation_id}/comments") $auth.query)
   let req_body = {"text": $text} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Institution Curation Reviews
@@ -2592,10 +3497,21 @@ export def "account-institution-reviews get-curations" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "group_id" $group_id "scalar") (serialize-qp "article_id" $article_id "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/account/institution/reviews" $qp)
+  let full_url = (build-url $base "/account/institution/reviews" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"group_id": $group_id, "article_id": $article_id, "status": $status, "limit": $limit, "offset": $offset} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"group_id": $group_id, "article_id": $article_id, "status": $status, "limit": $limit, "offset": $offset} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Private Account Institution Roles
@@ -2615,10 +3531,21 @@ export def "account-institution-roles list-private" [
 ]: nothing -> table<category: string, description: string, id: int, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/account/institution/roles")
+  let full_url = (build-url $base "/account/institution/roles" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List Institution Account Group Roles
@@ -2640,10 +3567,21 @@ export def "account-institution-roles get-private-group" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'account_id' must be non-empty" } }
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/account/institution/roles/{account_id}"))
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/account/institution/roles/{account_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Add Institution Account Group Roles
@@ -2667,12 +3605,23 @@ export def "account-institution-roles create-private-group" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'account_id' must be non-empty" } }
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/account/institution/roles/{account_id}"))
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/account/institution/roles/{account_id}") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Delete Institution Account Group Role
@@ -2698,10 +3647,21 @@ export def "account-institution-roles delete-private" [
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'account_id' must be non-empty" } }
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'group_id' must be non-empty" } }
   if ($role_id | is-empty) { error make --unspanned { msg: "path parameter 'role_id' must be non-empty" } }
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), group_id: (encode-path-segment $group_id), role_id: (encode-path-segment $role_id)} | format pattern "/account/institution/roles/{account_id}/{group_id}/{role_id}"))
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), group_id: (encode-path-segment $group_id), role_id: (encode-path-segment $role_id)} | format pattern "/account/institution/roles/{account_id}/{group_id}/{role_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Private Account Institution User
@@ -2723,10 +3683,21 @@ export def "account-institution-users get-private" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'account_id' must be non-empty" } }
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/account/institution/users/{account_id}"))
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/account/institution/users/{account_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Private Account Licenses
@@ -2746,10 +3717,21 @@ export def "account-licenses list-private" [
 ]: nothing -> table<name: string, url: string, value: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/account/licenses")
+  let full_url = (build-url $base "/account/licenses" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Private Projects
@@ -2778,10 +3760,21 @@ export def "account-projects list-private" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "order_direction" $order_direction "scalar") (serialize-qp "storage" $storage "scalar") (serialize-qp "roles" $roles "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/account/projects" $qp)
+  let full_url = (build-url $base "/account/projects" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "page_size": $page_size, "limit": $limit, "offset": $offset, "order": $order, "order_direction": $order_direction, "storage": $storage, "roles": $roles} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"page": $page, "page_size": $page_size, "limit": $limit, "offset": $offset, "order": $order, "order_direction": $order_direction, "storage": $storage, "roles": $roles} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create project
@@ -2811,12 +3804,23 @@ export def "account-projects create-private" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/account/projects")
+  let full_url = (build-url $base "/account/projects" $auth.query)
   let req_body = {"custom_fields": $custom_fields, "custom_fields_list": $custom_fields_list, "description": $description, "funding": $funding, "funding_list": $funding_list, "group_id": $group_id, "title": $title} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Private Projects search
@@ -2848,12 +3852,23 @@ export def "account-projects-search list-private" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/account/projects/search")
+  let full_url = (build-url $base "/account/projects/search" $auth.query)
   let req_body = {"order": $order, "group": $group, "institution": $institution, "limit": $limit, "modified_since": $modified_since, "offset": $offset, "order_direction": $order_direction, "page": $page, "page_size": $page_size, "published_since": $published_since, "search_for": $search_for} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Delete project
@@ -2875,10 +3890,21 @@ export def "account-projects delete-private" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
-  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/account/projects/{project_id}"))
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/account/projects/{project_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # View project details
@@ -2900,10 +3926,21 @@ export def "account-projects get-private-details" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
-  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/account/projects/{project_id}"))
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/account/projects/{project_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update project
@@ -2934,12 +3971,23 @@ export def "account-projects update-private" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
-  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/account/projects/{project_id}"))
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/account/projects/{project_id}") $auth.query)
   let req_body = {"custom_fields": $custom_fields, "custom_fields_list": $custom_fields_list, "description": $description, "funding": $funding, "funding_list": $funding_list, "title": $title} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [205]
 }
 
 # List project articles
@@ -2966,10 +4014,21 @@ export def "account-projects-articles list-private" [
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/account/projects/{project_id}/articles") $qp)
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/account/projects/{project_id}/articles") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "page_size": $page_size, "limit": $limit, "offset": $offset} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"page": $page, "page_size": $page_size, "limit": $limit, "offset": $offset} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create project article
@@ -3019,12 +4078,23 @@ export def "account-projects-articles create-private" [
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/account/projects/{project_id}/articles") $qp)
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/account/projects/{project_id}/articles") $qp $auth.query)
   let req_body = {"authors": $authors, "categories": $categories, "categories_by_source_id": $categories_by_source_id, "custom_fields": $custom_fields, "custom_fields_list": $custom_fields_list, "defined_type": $defined_type, "description": $description, "doi": $doi, "funding": $funding, "funding_list": $funding_list, "handle": $handle, "keywords": $keywords, "license": $license, "references": $references, "resource_doi": $resource_doi, "resource_title": $resource_title, "tags": $tags, "timeline": $timeline, "title": $title} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"page": $page, "page_size": $page_size, "limit": $limit, "offset": $offset} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"page": $page, "page_size": $page_size, "limit": $limit, "offset": $offset} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Delete project article
@@ -3048,10 +4118,21 @@ export def "account-projects-articles delete-private" [
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
   if ($article_id | is-empty) { error make --unspanned { msg: "path parameter 'article_id' must be non-empty" } }
-  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), article_id: (encode-path-segment $article_id)} | format pattern "/account/projects/{project_id}/articles/{article_id}"))
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), article_id: (encode-path-segment $article_id)} | format pattern "/account/projects/{project_id}/articles/{article_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Project article details
@@ -3075,10 +4156,21 @@ export def "account-projects-articles get-private-details" [
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
   if ($article_id | is-empty) { error make --unspanned { msg: "path parameter 'article_id' must be non-empty" } }
-  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), article_id: (encode-path-segment $article_id)} | format pattern "/account/projects/{project_id}/articles/{article_id}"))
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), article_id: (encode-path-segment $article_id)} | format pattern "/account/projects/{project_id}/articles/{article_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Project article list files
@@ -3102,10 +4194,21 @@ export def "account-projects-articles-files list" [
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
   if ($article_id | is-empty) { error make --unspanned { msg: "path parameter 'article_id' must be non-empty" } }
-  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), article_id: (encode-path-segment $article_id)} | format pattern "/account/projects/{project_id}/articles/{article_id}/files"))
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), article_id: (encode-path-segment $article_id)} | format pattern "/account/projects/{project_id}/articles/{article_id}/files") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Project article file details
@@ -3131,10 +4234,21 @@ export def "account-projects-articles-files get-private" [
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
   if ($article_id | is-empty) { error make --unspanned { msg: "path parameter 'article_id' must be non-empty" } }
   if ($file_id | is-empty) { error make --unspanned { msg: "path parameter 'file_id' must be non-empty" } }
-  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), article_id: (encode-path-segment $article_id), file_id: (encode-path-segment $file_id)} | format pattern "/account/projects/{project_id}/articles/{article_id}/files/{file_id}"))
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), article_id: (encode-path-segment $article_id), file_id: (encode-path-segment $file_id)} | format pattern "/account/projects/{project_id}/articles/{article_id}/files/{file_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List project collaborators
@@ -3156,10 +4270,21 @@ export def "account-projects-collaborators list-private" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
-  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/account/projects/{project_id}/collaborators"))
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/account/projects/{project_id}/collaborators") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Invite project collaborators
@@ -3186,12 +4311,23 @@ export def "account-projects-collaborators create-private-invite" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
-  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/account/projects/{project_id}/collaborators"))
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/account/projects/{project_id}/collaborators") $auth.query)
   let req_body = {"comment": $comment, "email": $email, "role_name": $role_name, "user_id": $user_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Remove project collaborator
@@ -3215,10 +4351,21 @@ export def "account-projects-collaborators delete-private" [
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
-  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), user_id: (encode-path-segment $user_id)} | format pattern "/account/projects/{project_id}/collaborators/{user_id}"))
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), user_id: (encode-path-segment $user_id)} | format pattern "/account/projects/{project_id}/collaborators/{user_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Private Project Leave
@@ -3240,10 +4387,21 @@ export def "account-projects-leave create-private" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
-  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/account/projects/{project_id}/leave"))
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/account/projects/{project_id}/leave") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [204]
 }
 
 # List project notes
@@ -3270,10 +4428,21 @@ export def "account-projects-notes list-private" [
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/account/projects/{project_id}/notes") $qp)
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/account/projects/{project_id}/notes") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "page_size": $page_size, "limit": $limit, "offset": $offset} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"page": $page, "page_size": $page_size, "limit": $limit, "offset": $offset} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create project note
@@ -3297,12 +4466,23 @@ export def "account-projects-notes create-private" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
-  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/account/projects/{project_id}/notes"))
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/account/projects/{project_id}/notes") $auth.query)
   let req_body = {"text": $text} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Delete project note
@@ -3326,10 +4506,21 @@ export def "account-projects-notes delete-private" [
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
   if ($note_id | is-empty) { error make --unspanned { msg: "path parameter 'note_id' must be non-empty" } }
-  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), note_id: (encode-path-segment $note_id)} | format pattern "/account/projects/{project_id}/notes/{note_id}"))
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), note_id: (encode-path-segment $note_id)} | format pattern "/account/projects/{project_id}/notes/{note_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Project note details
@@ -3353,10 +4544,21 @@ export def "account-projects-notes get-private" [
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
   if ($note_id | is-empty) { error make --unspanned { msg: "path parameter 'note_id' must be non-empty" } }
-  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), note_id: (encode-path-segment $note_id)} | format pattern "/account/projects/{project_id}/notes/{note_id}"))
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), note_id: (encode-path-segment $note_id)} | format pattern "/account/projects/{project_id}/notes/{note_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update project note
@@ -3382,12 +4584,23 @@ export def "account-projects-notes update-private" [
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
   if ($note_id | is-empty) { error make --unspanned { msg: "path parameter 'note_id' must be non-empty" } }
-  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), note_id: (encode-path-segment $note_id)} | format pattern "/account/projects/{project_id}/notes/{note_id}"))
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), note_id: (encode-path-segment $note_id)} | format pattern "/account/projects/{project_id}/notes/{note_id}") $auth.query)
   let req_body = {"text": $text} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [205]
 }
 
 # Private Project Publish
@@ -3409,10 +4622,21 @@ export def "account-projects-publish publish-private" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
-  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/account/projects/{project_id}/publish"))
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/account/projects/{project_id}/publish") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Public Articles
@@ -3448,12 +4672,23 @@ export def "articles list" [
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "order_direction" $order_direction "scalar") (serialize-qp "institution" $institution "scalar") (serialize-qp "published_since" $published_since "scalar") (serialize-qp "modified_since" $modified_since "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "resource_doi" $resource_doi "scalar") (serialize-qp "item_type" $item_type "scalar") (serialize-qp "doi" $doi "scalar") (serialize-qp "handle" $handle "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/articles" $qp)
+  let full_url = (build-url $base "/articles" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Cursor": $x_cursor} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "page_size": $page_size, "limit": $limit, "offset": $offset, "order": $order, "order_direction": $order_direction, "institution": $institution, "published_since": $published_since, "modified_since": $modified_since, "group": $group, "resource_doi": $resource_doi, "item_type": $item_type, "doi": $doi, "handle": $handle} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"page": $page, "page_size": $page_size, "limit": $limit, "offset": $offset, "order": $order, "order_direction": $order_direction, "institution": $institution, "published_since": $published_since, "modified_since": $modified_since, "group": $group, "resource_doi": $resource_doi, "item_type": $item_type, "doi": $doi, "handle": $handle} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Public Articles Search
@@ -3491,14 +4726,25 @@ export def "articles-search list" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/articles/search")
+  let full_url = (build-url $base "/articles/search" $auth.query)
   let req_body = {"doi": $doi, "handle": $handle, "item_type": $item_type, "order": $order, "project_id": $project_id, "resource_doi": $resource_doi, "group": $group, "institution": $institution, "limit": $limit, "modified_since": $modified_since, "offset": $offset, "order_direction": $order_direction, "page": $page, "page_size": $page_size, "published_since": $published_since, "search_for": $search_for} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Cursor": $x_cursor} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # View article details
@@ -3520,10 +4766,21 @@ export def "articles get-details" [
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($article_id | is-empty) { error make --unspanned { msg: "path parameter 'article_id' must be non-empty" } }
-  let full_url = (build-url $base ({article_id: (encode-path-segment $article_id)} | format pattern "/articles/{article_id}"))
+  let full_url = (build-url $base ({article_id: (encode-path-segment $article_id)} | format pattern "/articles/{article_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List article files
@@ -3545,10 +4802,21 @@ export def "articles-files get" [
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($article_id | is-empty) { error make --unspanned { msg: "path parameter 'article_id' must be non-empty" } }
-  let full_url = (build-url $base ({article_id: (encode-path-segment $article_id)} | format pattern "/articles/{article_id}/files"))
+  let full_url = (build-url $base ({article_id: (encode-path-segment $article_id)} | format pattern "/articles/{article_id}/files") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Article file details
@@ -3572,10 +4840,21 @@ export def "articles-files get-details" [
   let base = ($base_url | default $BASE_URL)
   if ($article_id | is-empty) { error make --unspanned { msg: "path parameter 'article_id' must be non-empty" } }
   if ($file_id | is-empty) { error make --unspanned { msg: "path parameter 'file_id' must be non-empty" } }
-  let full_url = (build-url $base ({article_id: (encode-path-segment $article_id), file_id: (encode-path-segment $file_id)} | format pattern "/articles/{article_id}/files/{file_id}"))
+  let full_url = (build-url $base ({article_id: (encode-path-segment $article_id), file_id: (encode-path-segment $file_id)} | format pattern "/articles/{article_id}/files/{file_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List article versions
@@ -3597,10 +4876,21 @@ export def "articles-versions get" [
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($article_id | is-empty) { error make --unspanned { msg: "path parameter 'article_id' must be non-empty" } }
-  let full_url = (build-url $base ({article_id: (encode-path-segment $article_id)} | format pattern "/articles/{article_id}/versions"))
+  let full_url = (build-url $base ({article_id: (encode-path-segment $article_id)} | format pattern "/articles/{article_id}/versions") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Article details for version
@@ -3624,10 +4914,21 @@ export def "articles-versions version-details" [
   let base = ($base_url | default $BASE_URL)
   if ($article_id | is-empty) { error make --unspanned { msg: "path parameter 'article_id' must be non-empty" } }
   if ($v_number | is-empty) { error make --unspanned { msg: "path parameter 'v_number' must be non-empty" } }
-  let full_url = (build-url $base ({article_id: (encode-path-segment $article_id), v_number: (encode-path-segment $v_number)} | format pattern "/articles/{article_id}/versions/{v_number}"))
+  let full_url = (build-url $base ({article_id: (encode-path-segment $article_id), v_number: (encode-path-segment $v_number)} | format pattern "/articles/{article_id}/versions/{v_number}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Public Article Confidentiality for article version
@@ -3651,10 +4952,21 @@ export def "articles-versions-confidentiality version" [
   let base = ($base_url | default $BASE_URL)
   if ($article_id | is-empty) { error make --unspanned { msg: "path parameter 'article_id' must be non-empty" } }
   if ($v_number | is-empty) { error make --unspanned { msg: "path parameter 'v_number' must be non-empty" } }
-  let full_url = (build-url $base ({article_id: (encode-path-segment $article_id), v_number: (encode-path-segment $v_number)} | format pattern "/articles/{article_id}/versions/{v_number}/confidentiality"))
+  let full_url = (build-url $base ({article_id: (encode-path-segment $article_id), v_number: (encode-path-segment $v_number)} | format pattern "/articles/{article_id}/versions/{v_number}/confidentiality") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Public Article Embargo for article version
@@ -3678,10 +4990,21 @@ export def "articles-versions-embargo version" [
   let base = ($base_url | default $BASE_URL)
   if ($article_id | is-empty) { error make --unspanned { msg: "path parameter 'article_id' must be non-empty" } }
   if ($v_number | is-empty) { error make --unspanned { msg: "path parameter 'v_number' must be non-empty" } }
-  let full_url = (build-url $base ({article_id: (encode-path-segment $article_id), v_number: (encode-path-segment $v_number)} | format pattern "/articles/{article_id}/versions/{v_number}/embargo"))
+  let full_url = (build-url $base ({article_id: (encode-path-segment $article_id), v_number: (encode-path-segment $v_number)} | format pattern "/articles/{article_id}/versions/{v_number}/embargo") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Public Categories
@@ -3701,10 +5024,21 @@ export def "categories list" [
 ]: nothing -> table<id: int, parent_id: int, path: string, source_id: string, taxonomy_id: int, title: string> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/categories")
+  let full_url = (build-url $base "/categories" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Public Collections
@@ -3739,12 +5073,23 @@ export def "collections list" [
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "order_direction" $order_direction "scalar") (serialize-qp "institution" $institution "scalar") (serialize-qp "published_since" $published_since "scalar") (serialize-qp "modified_since" $modified_since "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "resource_doi" $resource_doi "scalar") (serialize-qp "doi" $doi "scalar") (serialize-qp "handle" $handle "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/collections" $qp)
+  let full_url = (build-url $base "/collections" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Cursor": $x_cursor} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "page_size": $page_size, "limit": $limit, "offset": $offset, "order": $order, "order_direction": $order_direction, "institution": $institution, "published_since": $published_since, "modified_since": $modified_since, "group": $group, "resource_doi": $resource_doi, "doi": $doi, "handle": $handle} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"page": $page, "page_size": $page_size, "limit": $limit, "offset": $offset, "order": $order, "order_direction": $order_direction, "institution": $institution, "published_since": $published_since, "modified_since": $modified_since, "group": $group, "resource_doi": $resource_doi, "doi": $doi, "handle": $handle} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Public Collections Search
@@ -3780,14 +5125,25 @@ export def "collections-search list" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/collections/search")
+  let full_url = (build-url $base "/collections/search" $auth.query)
   let req_body = {"doi": $doi, "handle": $handle, "order": $order, "resource_doi": $resource_doi, "group": $group, "institution": $institution, "limit": $limit, "modified_since": $modified_since, "offset": $offset, "order_direction": $order_direction, "page": $page, "page_size": $page_size, "published_since": $published_since, "search_for": $search_for} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Cursor": $x_cursor} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Collection details
@@ -3809,10 +5165,21 @@ export def "collections get-details" [
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($collection_id | is-empty) { error make --unspanned { msg: "path parameter 'collection_id' must be non-empty" } }
-  let full_url = (build-url $base ({collection_id: (encode-path-segment $collection_id)} | format pattern "/collections/{collection_id}"))
+  let full_url = (build-url $base ({collection_id: (encode-path-segment $collection_id)} | format pattern "/collections/{collection_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Public Collection Articles
@@ -3839,10 +5206,21 @@ export def "collections-articles get" [
   let base = ($base_url | default $BASE_URL)
   if ($collection_id | is-empty) { error make --unspanned { msg: "path parameter 'collection_id' must be non-empty" } }
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({collection_id: (encode-path-segment $collection_id)} | format pattern "/collections/{collection_id}/articles") $qp)
+  let full_url = (build-url $base ({collection_id: (encode-path-segment $collection_id)} | format pattern "/collections/{collection_id}/articles") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "page_size": $page_size, "limit": $limit, "offset": $offset} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"page": $page, "page_size": $page_size, "limit": $limit, "offset": $offset} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Collection Versions list
@@ -3864,10 +5242,21 @@ export def "collections-versions get" [
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($collection_id | is-empty) { error make --unspanned { msg: "path parameter 'collection_id' must be non-empty" } }
-  let full_url = (build-url $base ({collection_id: (encode-path-segment $collection_id)} | format pattern "/collections/{collection_id}/versions"))
+  let full_url = (build-url $base ({collection_id: (encode-path-segment $collection_id)} | format pattern "/collections/{collection_id}/versions") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Collection Version details
@@ -3891,10 +5280,21 @@ export def "collections-versions version-details" [
   let base = ($base_url | default $BASE_URL)
   if ($collection_id | is-empty) { error make --unspanned { msg: "path parameter 'collection_id' must be non-empty" } }
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'version_id' must be non-empty" } }
-  let full_url = (build-url $base ({collection_id: (encode-path-segment $collection_id), version_id: (encode-path-segment $version_id)} | format pattern "/collections/{collection_id}/versions/{version_id}"))
+  let full_url = (build-url $base ({collection_id: (encode-path-segment $collection_id), version_id: (encode-path-segment $version_id)} | format pattern "/collections/{collection_id}/versions/{version_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Public File Download
@@ -3916,10 +5316,21 @@ export def "file-download download" [
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($file_id | is-empty) { error make --unspanned { msg: "path parameter 'file_id' must be non-empty" } }
-  let full_url = (build-url $base ({file_id: (encode-path-segment $file_id)} | format pattern "/file/download/{file_id}"))
+  let full_url = (build-url $base ({file_id: (encode-path-segment $file_id)} | format pattern "/file/download/{file_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Private Institution HRfeed Upload
@@ -3941,14 +5352,25 @@ export def "institution-hrfeed-upload upload" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/institution/hrfeed/upload")
+  let full_url = (build-url $base "/institution/hrfeed/upload" $auth.query)
   let req_body = {"hrfeed": $hrfeed} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body ["hrfeed"] $dry_run)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: $mp.content_type
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $mp.body $insecure $raw $allow_errors $full [200]
 }
 
 # Public Licenses
@@ -3973,10 +5395,21 @@ export def "institutions-articles-filter-by get" [
   let base = ($base_url | default $BASE_URL)
   if ($institution_string_id | is-empty) { error make --unspanned { msg: "path parameter 'institution_string_id' must be non-empty" } }
   let qp = [(serialize-qp "resource_id" $resource_id "scalar") (serialize-qp "filename" $filename "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({institution_string_id: (encode-path-segment $institution_string_id)} | format pattern "/institutions/{institution_string_id}/articles/filter-by") $qp)
+  let full_url = (build-url $base ({institution_string_id: (encode-path-segment $institution_string_id)} | format pattern "/institutions/{institution_string_id}/articles/filter-by") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"resource_id": $resource_id, "filename": $filename} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"resource_id": $resource_id, "filename": $filename} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Item Types
@@ -3998,10 +5431,21 @@ export def "item-types list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "group_id" $group_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/item_types" $qp)
+  let full_url = (build-url $base "/item_types" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"group_id": $group_id} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"group_id": $group_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Public Licenses
@@ -4021,10 +5465,21 @@ export def "licenses list" [
 ]: nothing -> table<name: string, url: string, value: int> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/licenses")
+  let full_url = (build-url $base "/licenses" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Public Projects
@@ -4055,12 +5510,23 @@ export def "projects list" [
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "order_direction" $order_direction "scalar") (serialize-qp "institution" $institution "scalar") (serialize-qp "published_since" $published_since "scalar") (serialize-qp "group" $group "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/projects" $qp)
+  let full_url = (build-url $base "/projects" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Cursor": $x_cursor} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "page_size": $page_size, "limit": $limit, "offset": $offset, "order": $order, "order_direction": $order_direction, "institution": $institution, "published_since": $published_since, "group": $group} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"page": $page, "page_size": $page_size, "limit": $limit, "offset": $offset, "order": $order, "order_direction": $order_direction, "institution": $institution, "published_since": $published_since, "group": $group} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Public Projects Search
@@ -4093,14 +5559,25 @@ export def "projects-search list" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/projects/search")
+  let full_url = (build-url $base "/projects/search" $auth.query)
   let req_body = {"order": $order, "group": $group, "institution": $institution, "limit": $limit, "modified_since": $modified_since, "offset": $offset, "order_direction": $order_direction, "page": $page, "page_size": $page_size, "published_since": $published_since, "search_for": $search_for} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Cursor": $x_cursor} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Public Project
@@ -4122,10 +5599,21 @@ export def "projects get-details" [
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
-  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/projects/{project_id}"))
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/projects/{project_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Public Project Articles
@@ -4147,8 +5635,19 @@ export def "projects-articles get" [
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
-  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/projects/{project_id}/articles"))
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/projects/{project_id}/articles") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }

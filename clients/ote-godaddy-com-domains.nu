@@ -8,7 +8,7 @@ const BASE_URL = "http://localhost//api.ote-godaddy.com"
 # `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
 # where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o _TOKEN | default "" }
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o _TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
@@ -40,14 +40,11 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
-# Trick: `url encode --all` over-encodes, then we decode the four unreserved
-# punctuation chars back. Pre-existing %XX sequences in the input survive
-# because `url encode --all` first turns their % into %25.
 def encode-path-segment [v: any]: nothing -> string {
   $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
-# Serialize an array-typed path parameter (issue 49.A). OpenAPI 3 `style: simple`
+# Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
 # (the default for path params) and Swagger 2 `collectionFormat: csv` both join
 # the elements with a literal comma WITHIN the single path segment, each element
 # RFC-3986-encoded individually (so a comma inside an element stays %2C). Without
@@ -58,51 +55,63 @@ def encode-path-array [v: any]: nothing -> string {
   if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
 }
 
-# Build URL from base, path, and optional query string
-def build-url [base: string, path: string, query?: string]: nothing -> string {
+# Build the request URL from base, path, and any number of pre-encoded query
+# fragments (param serializer output and/or the auth query). Each fragment is an
+# `&`-joinable `key=value` string already percent-encoded by its producer; empty
+# fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
+# delimiters are hand-spliced — and any query already on the base URL is merged in.
+def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
   let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
-  let result = ($parsed | upsert path $full_path)
-  if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
+  let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
+  $parsed | upsert path $full_path | upsert query $query | url join
 }
 
-# Build the dry-run record returned by --dry-run. Shape:
-#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
-#    auth: {scheme, location}}
-# `meta` carries logical-form data (the query record by spec name, the pre-serialization
-# body) that do-request itself cannot reconstruct from its wire-format args.
-def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
-  let m = ($meta | default {})
-  {
-    dry_run: true
-    method: $method
-    url: $url
-    query: ($m | get -o query | default {})
-    headers: $auth.headers
-    body: ($m | get -o body)
-    content_type: $content_type
-    timeout: $timeout
-    auth: {scheme: $auth.scheme, location: $auth.location}
-  }
+# Success policy: did this response succeed? Single source of truth, consulted by
+# handle-response and the HEAD header-unwrap. Empty ok_codes means the spec listed
+# none, so fall back to < 400. Otherwise: any 2xx, plus documented success codes.
+def status-ok [status: int, ok_codes: list<int>]: nothing -> bool {
+  if ($ok_codes | is-empty) { $status < 400 } else { ($status >= 200 and $status < 300) or ($status in $ok_codes) }
 }
 
-# Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
-  let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
-  let timeout = ($max_time | default 30min)
-  let ct = ($content_type | default "application/json")
-  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
-  let resp = match $method {
-    "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
-  }
-  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
-  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
+# Unwrap a `--full` HTTP response into the user-facing value. Response arrives
+# via pipeline; ok_codes gates the error throw (see status-ok).
+def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: record -> any {
+  let resp = $in
+  if $allow_errors { return $resp }
+  if not (status-ok $resp.status $ok_codes) { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } }
+  if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
+  if $resp.status == 204 { return null }
+  $resp.body
+}
+
+# GET — bodyless, honours --raw
+def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+}
+
+# POST — body + content-type
+def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# PUT — body + content-type
+def send-put [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http put --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http put --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# PATCH — body + content-type
+def send-patch [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http patch --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http patch --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# DELETE — body via --data
+def send-delete [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http delete --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url } else { http delete --headers $req.headers --content-type $req.content_type --data $body --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url }
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 def base-url-completer [] { ["http://localhost//api.ote-godaddy.com"] }
@@ -165,12 +174,23 @@ export def "domains list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "statuses" $statuses "csv") (serialize-qp "statusGroups" $status_groups "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "marker" $marker "scalar") (serialize-qp "includes" $includes "csv") (serialize-qp "modifiedDate" $modified_date "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v1/domains" $qp)
+  let full_url = (build-url $base "/v1/domains" $qp $auth.query)
   let accept_val = ($accept | default "application/javascript")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Shopper-Id": $x_shopper_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"statuses": $statuses, "statusGroups": $status_groups, "limit": $limit, "marker": $marker, "includes": $includes, "modifiedDate": $modified_date} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"statuses": $statuses, "statusGroups": $status_groups, "limit": $limit, "marker": $marker, "includes": $includes, "modifiedDate": $modified_date} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve the legal agreement(s) required to purchase the specified TLD and add-ons
@@ -196,12 +216,23 @@ export def "domains-agreements get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "tlds" $tlds "csv") (serialize-qp "privacy" $privacy "scalar") (serialize-qp "forTransfer" $for_transfer "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v1/domains/agreements" $qp)
+  let full_url = (build-url $base "/v1/domains/agreements" $qp $auth.query)
   let accept_val = ($accept | default "application/javascript")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Market-Id": $x_market_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"tlds": $tlds, "privacy": $privacy, "forTransfer": $for_transfer} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"tlds": $tlds, "privacy": $privacy, "forTransfer": $for_transfer} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Determine whether or not the specified domain is available for purchase
@@ -226,10 +257,21 @@ export def "domains-available get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain" $domain "scalar") (serialize-qp "checkType" $check_type "scalar") (serialize-qp "forTransfer" $for_transfer "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v1/domains/available" $qp)
+  let full_url = (build-url $base "/v1/domains/available" $qp $auth.query)
   let accept_val = ($accept | default "application/javascript")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"domain": $domain, "checkType": $check_type, "forTransfer": $for_transfer} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"domain": $domain, "checkType": $check_type, "forTransfer": $for_transfer} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Determine whether or not the specified domains are available for purchase
@@ -254,12 +296,23 @@ export def "domains-available create-bulk" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "checkType" $check_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v1/domains/available" $qp)
+  let full_url = (build-url $base "/v1/domains/available" $qp $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = ($accept | default "application/javascript")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"checkType": $check_type} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"checkType": $check_type} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200 203]
 }
 
 # Validate the request body using the Domain Contact Validation Schema for specified domains.
@@ -295,14 +348,25 @@ export def "domains-contacts-validate validate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "marketId" $market_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v1/domains/contacts/validate" $qp)
+  let full_url = (build-url $base "/v1/domains/contacts/validate" $qp $auth.query)
   let req_body = {"contactAdmin": $contact_admin, "contactBilling": $contact_billing, "contactPresence": $contact_presence, "contactRegistrant": $contact_registrant, "contactTech": $contact_tech, "domains": $domains, "entityType": $entity_type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Private-Label-Id": $x_private_label_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"marketId": $market_id} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"marketId": $market_id} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200 204]
 }
 
 # Purchase and register the specified Domain
@@ -340,14 +404,25 @@ export def "domains-purchase create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v1/domains/purchase")
+  let full_url = (build-url $base "/v1/domains/purchase" $auth.query)
   let req_body = {"consent": $consent, "contactAdmin": $contact_admin, "contactBilling": $contact_billing, "contactRegistrant": $contact_registrant, "contactTech": $contact_tech, "domain": $domain, "nameServers": $name_servers, "period": $period, "privacy": $privacy, "renewAuto": $renew_auto} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/javascript")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Shopper-Id": $x_shopper_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve the schema to be submitted when registering a Domain for the specified TLD
@@ -370,10 +445,21 @@ export def "domains-purchase-schema get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tld | is-empty) { error make --unspanned { msg: "path parameter 'tld' must be non-empty" } }
-  let full_url = (build-url $base ({tld: (encode-path-segment $tld)} | format pattern "/v1/domains/purchase/schema/{tld}"))
+  let full_url = (build-url $base ({tld: (encode-path-segment $tld)} | format pattern "/v1/domains/purchase/schema/{tld}") $auth.query)
   let accept_val = ($accept | default "application/javascript")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Validate the request body using the Domain Purchase Schema for the specified TLD
@@ -409,12 +495,23 @@ export def "domains-purchase-validate validate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v1/domains/purchase/validate")
+  let full_url = (build-url $base "/v1/domains/purchase/validate" $auth.query)
   let req_body = {"consent": $consent, "contactAdmin": $contact_admin, "contactBilling": $contact_billing, "contactRegistrant": $contact_registrant, "contactTech": $contact_tech, "domain": $domain, "nameServers": $name_servers, "period": $period, "privacy": $privacy, "renewAuto": $renew_auto} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Suggest alternate Domain names based on a seed Domain, a set of keywords, or the shopper's purchase history
@@ -446,12 +543,23 @@ export def "domains-suggest get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "city" $city "scalar") (serialize-qp "sources" $sources "csv") (serialize-qp "tlds" $tlds "csv") (serialize-qp "lengthMax" $length_max "scalar") (serialize-qp "lengthMin" $length_min "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "waitMs" $wait_ms "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v1/domains/suggest" $qp)
+  let full_url = (build-url $base "/v1/domains/suggest" $qp $auth.query)
   let accept_val = ($accept | default "application/javascript")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Shopper-Id": $x_shopper_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"query": $query, "country": $country, "city": $city, "sources": $sources, "tlds": $tlds, "lengthMax": $length_max, "lengthMin": $length_min, "limit": $limit, "waitMs": $wait_ms} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"query": $query, "country": $country, "city": $city, "sources": $sources, "tlds": $tlds, "lengthMax": $length_max, "lengthMin": $length_min, "limit": $limit, "waitMs": $wait_ms} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieves a list of TLDs supported and enabled for sale
@@ -472,10 +580,21 @@ export def "domains-tlds get" [
 ]: nothing -> table<name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v1/domains/tlds")
+  let full_url = (build-url $base "/v1/domains/tlds" $auth.query)
   let accept_val = ($accept | default "application/javascript")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Cancel a purchased domain
@@ -497,10 +616,21 @@ export def "domains cancel" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domain | is-empty) { error make --unspanned { msg: "path parameter 'domain' must be non-empty" } }
-  let full_url = (build-url $base ({domain: (encode-path-segment $domain)} | format pattern "/v1/domains/{domain}"))
+  let full_url = (build-url $base ({domain: (encode-path-segment $domain)} | format pattern "/v1/domains/{domain}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve details for the specified Domain
@@ -524,12 +654,23 @@ export def "domains get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domain | is-empty) { error make --unspanned { msg: "path parameter 'domain' must be non-empty" } }
-  let full_url = (build-url $base ({domain: (encode-path-segment $domain)} | format pattern "/v1/domains/{domain}"))
+  let full_url = (build-url $base ({domain: (encode-path-segment $domain)} | format pattern "/v1/domains/{domain}") $auth.query)
   let accept_val = ($accept | default "application/javascript")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Shopper-Id": $x_shopper_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 203]
 }
 
 # Update details for the specified Domain
@@ -560,14 +701,25 @@ export def "domains update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domain | is-empty) { error make --unspanned { msg: "path parameter 'domain' must be non-empty" } }
-  let full_url = (build-url $base ({domain: (encode-path-segment $domain)} | format pattern "/v1/domains/{domain}"))
+  let full_url = (build-url $base ({domain: (encode-path-segment $domain)} | format pattern "/v1/domains/{domain}") $auth.query)
   let req_body = {"consent": $consent, "exposeWhois": $expose_whois, "locked": $locked, "nameServers": $name_servers, "renewAuto": $renew_auto, "subaccountId": $subaccount_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Shopper-Id": $x_shopper_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Update domain
@@ -599,14 +751,25 @@ export def "domains-contacts update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domain | is-empty) { error make --unspanned { msg: "path parameter 'domain' must be non-empty" } }
-  let full_url = (build-url $base ({domain: (encode-path-segment $domain)} | format pattern "/v1/domains/{domain}/contacts"))
+  let full_url = (build-url $base ({domain: (encode-path-segment $domain)} | format pattern "/v1/domains/{domain}/contacts") $auth.query)
   let req_body = {"contactAdmin": $contact_admin, "contactBilling": $contact_billing, "contactRegistrant": $contact_registrant, "contactTech": $contact_tech} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Shopper-Id": $x_shopper_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200 204]
 }
 
 # Submit a privacy cancellation request for the given domain
@@ -629,12 +792,23 @@ export def "domains-privacy cancel" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domain | is-empty) { error make --unspanned { msg: "path parameter 'domain' must be non-empty" } }
-  let full_url = (build-url $base ({domain: (encode-path-segment $domain)} | format pattern "/v1/domains/{domain}/privacy"))
+  let full_url = (build-url $base ({domain: (encode-path-segment $domain)} | format pattern "/v1/domains/{domain}/privacy") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Shopper-Id": $x_shopper_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Purchase privacy for a specified domain
@@ -661,14 +835,25 @@ export def "domains-privacy-purchase create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domain | is-empty) { error make --unspanned { msg: "path parameter 'domain' must be non-empty" } }
-  let full_url = (build-url $base ({domain: (encode-path-segment $domain)} | format pattern "/v1/domains/{domain}/privacy/purchase"))
+  let full_url = (build-url $base ({domain: (encode-path-segment $domain)} | format pattern "/v1/domains/{domain}/privacy/purchase") $auth.query)
   let req_body = {"consent": $consent} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/javascript")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Shopper-Id": $x_shopper_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Add the specified DNS Records to the specified Domain
@@ -693,14 +878,25 @@ export def "domains-records create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domain | is-empty) { error make --unspanned { msg: "path parameter 'domain' must be non-empty" } }
-  let full_url = (build-url $base ({domain: (encode-path-segment $domain)} | format pattern "/v1/domains/{domain}/records"))
+  let full_url = (build-url $base ({domain: (encode-path-segment $domain)} | format pattern "/v1/domains/{domain}/records") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Shopper-Id": $x_shopper_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Replace all DNS Records for the specified Domain
@@ -725,14 +921,25 @@ export def "domains-records update-by-domain" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domain | is-empty) { error make --unspanned { msg: "path parameter 'domain' must be non-empty" } }
-  let full_url = (build-url $base ({domain: (encode-path-segment $domain)} | format pattern "/v1/domains/{domain}/records"))
+  let full_url = (build-url $base ({domain: (encode-path-segment $domain)} | format pattern "/v1/domains/{domain}/records") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Shopper-Id": $x_shopper_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Replace all DNS Records for the specified Domain with the specified Type
@@ -759,14 +966,25 @@ export def "domains-records update-by-domain-type" [
   let base = ($base_url | default $BASE_URL)
   if ($domain | is-empty) { error make --unspanned { msg: "path parameter 'domain' must be non-empty" } }
   if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
-  let full_url = (build-url $base ({domain: (encode-path-segment $domain), type: (encode-path-segment $type)} | format pattern "/v1/domains/{domain}/records/{type}"))
+  let full_url = (build-url $base ({domain: (encode-path-segment $domain), type: (encode-path-segment $type)} | format pattern "/v1/domains/{domain}/records/{type}") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Shopper-Id": $x_shopper_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Delete all DNS Records for the specified Domain with the specified Type and Name
@@ -793,12 +1011,23 @@ export def "domains-records delete" [
   if ($domain | is-empty) { error make --unspanned { msg: "path parameter 'domain' must be non-empty" } }
   if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
-  let full_url = (build-url $base ({domain: (encode-path-segment $domain), type: (encode-path-segment $type), name: (encode-path-segment $name)} | format pattern "/v1/domains/{domain}/records/{type}/{name}"))
+  let full_url = (build-url $base ({domain: (encode-path-segment $domain), type: (encode-path-segment $type), name: (encode-path-segment $name)} | format pattern "/v1/domains/{domain}/records/{type}/{name}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Shopper-Id": $x_shopper_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Retrieve DNS Records for the specified Domain, optionally with the specified Type and/or Name
@@ -829,12 +1058,23 @@ export def "domains-records get" [
   if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({domain: (encode-path-segment $domain), type: (encode-path-segment $type), name: (encode-path-segment $name)} | format pattern "/v1/domains/{domain}/records/{type}/{name}") $qp)
+  let full_url = (build-url $base ({domain: (encode-path-segment $domain), type: (encode-path-segment $type), name: (encode-path-segment $name)} | format pattern "/v1/domains/{domain}/records/{type}/{name}") $qp $auth.query)
   let accept_val = ($accept | default "application/javascript")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Shopper-Id": $x_shopper_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"offset": $offset, "limit": $limit} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"offset": $offset, "limit": $limit} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Replace all DNS Records for the specified Domain with the specified Type and Name
@@ -863,14 +1103,25 @@ export def "domains-records update-by-domain-type-name" [
   if ($domain | is-empty) { error make --unspanned { msg: "path parameter 'domain' must be non-empty" } }
   if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
-  let full_url = (build-url $base ({domain: (encode-path-segment $domain), type: (encode-path-segment $type), name: (encode-path-segment $name)} | format pattern "/v1/domains/{domain}/records/{type}/{name}"))
+  let full_url = (build-url $base ({domain: (encode-path-segment $domain), type: (encode-path-segment $type), name: (encode-path-segment $name)} | format pattern "/v1/domains/{domain}/records/{type}/{name}") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Shopper-Id": $x_shopper_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Renew the specified Domain
@@ -896,14 +1147,25 @@ export def "domains-renew create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domain | is-empty) { error make --unspanned { msg: "path parameter 'domain' must be non-empty" } }
-  let full_url = (build-url $base ({domain: (encode-path-segment $domain)} | format pattern "/v1/domains/{domain}/renew"))
+  let full_url = (build-url $base ({domain: (encode-path-segment $domain)} | format pattern "/v1/domains/{domain}/renew") $auth.query)
   let req_body = {"period": $period} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/javascript")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Shopper-Id": $x_shopper_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Purchase and start or restart transfer process
@@ -942,14 +1204,25 @@ export def "domains-transfer create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domain | is-empty) { error make --unspanned { msg: "path parameter 'domain' must be non-empty" } }
-  let full_url = (build-url $base ({domain: (encode-path-segment $domain)} | format pattern "/v1/domains/{domain}/transfer"))
+  let full_url = (build-url $base ({domain: (encode-path-segment $domain)} | format pattern "/v1/domains/{domain}/transfer") $auth.query)
   let req_body = {"authCode": $auth_code, "consent": $consent, "contactAdmin": $contact_admin, "contactBilling": $contact_billing, "contactRegistrant": $contact_registrant, "contactTech": $contact_tech, "period": $period, "privacy": $privacy, "renewAuto": $renew_auto} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/javascript")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Shopper-Id": $x_shopper_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Re-send Contact E-mail Verification for specified Domain
@@ -972,12 +1245,23 @@ export def "domains-verify-registrant-email verify" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domain | is-empty) { error make --unspanned { msg: "path parameter 'domain' must be non-empty" } }
-  let full_url = (build-url $base ({domain: (encode-path-segment $domain)} | format pattern "/v1/domains/{domain}/verifyRegistrantEmail"))
+  let full_url = (build-url $base ({domain: (encode-path-segment $domain)} | format pattern "/v1/domains/{domain}/verifyRegistrantEmail") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Shopper-Id": $x_shopper_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Submit a forwarding cancellation request for the given fqdn
@@ -1001,10 +1285,21 @@ export def "customers-domains-forwards delete" [
   let base = ($base_url | default $BASE_URL)
   if ($customer_id | is-empty) { error make --unspanned { msg: "path parameter 'customerId' must be non-empty" } }
   if ($fqdn | is-empty) { error make --unspanned { msg: "path parameter 'fqdn' must be non-empty" } }
-  let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id), fqdn: (encode-path-segment $fqdn)} | format pattern "/v2/customers/{customer_id}/domains/forwards/{fqdn}"))
+  let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id), fqdn: (encode-path-segment $fqdn)} | format pattern "/v2/customers/{customer_id}/domains/forwards/{fqdn}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Retrieve the forwarding information for the given fqdn
@@ -1030,10 +1325,21 @@ export def "customers-domains-forwards get" [
   if ($customer_id | is-empty) { error make --unspanned { msg: "path parameter 'customerId' must be non-empty" } }
   if ($fqdn | is-empty) { error make --unspanned { msg: "path parameter 'fqdn' must be non-empty" } }
   let qp = [(serialize-qp "includeSubs" $include_subs "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id), fqdn: (encode-path-segment $fqdn)} | format pattern "/v2/customers/{customer_id}/domains/forwards/{fqdn}") $qp)
+  let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id), fqdn: (encode-path-segment $fqdn)} | format pattern "/v2/customers/{customer_id}/domains/forwards/{fqdn}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"includeSubs": $include_subs} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"includeSubs": $include_subs} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a new forwarding configuration for the given FQDN
@@ -1062,12 +1368,23 @@ export def "customers-domains-forwards create" [
   let base = ($base_url | default $BASE_URL)
   if ($customer_id | is-empty) { error make --unspanned { msg: "path parameter 'customerId' must be non-empty" } }
   if ($fqdn | is-empty) { error make --unspanned { msg: "path parameter 'fqdn' must be non-empty" } }
-  let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id), fqdn: (encode-path-segment $fqdn)} | format pattern "/v2/customers/{customer_id}/domains/forwards/{fqdn}"))
+  let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id), fqdn: (encode-path-segment $fqdn)} | format pattern "/v2/customers/{customer_id}/domains/forwards/{fqdn}") $auth.query)
   let req_body = {"mask": $mask, "type": $type, "url": $url} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Modify the forwarding information for the given fqdn
@@ -1096,12 +1413,23 @@ export def "customers-domains-forwards update" [
   let base = ($base_url | default $BASE_URL)
   if ($customer_id | is-empty) { error make --unspanned { msg: "path parameter 'customerId' must be non-empty" } }
   if ($fqdn | is-empty) { error make --unspanned { msg: "path parameter 'fqdn' must be non-empty" } }
-  let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id), fqdn: (encode-path-segment $fqdn)} | format pattern "/v2/customers/{customer_id}/domains/forwards/{fqdn}"))
+  let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id), fqdn: (encode-path-segment $fqdn)} | format pattern "/v2/customers/{customer_id}/domains/forwards/{fqdn}") $auth.query)
   let req_body = {"mask": $mask, "type": $type, "url": $url} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Retrieve the next domain notification
@@ -1123,12 +1451,23 @@ export def "customers-domains-notifications get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($customer_id | is-empty) { error make --unspanned { msg: "path parameter 'customerId' must be non-empty" } }
-  let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id)} | format pattern "/v2/customers/{customer_id}/domains/notifications"))
+  let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id)} | format pattern "/v2/customers/{customer_id}/domains/notifications") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Request-Id": $x_request_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve a list of notification types that are opted in
@@ -1150,12 +1489,23 @@ export def "customers-domains-notifications-opt-in get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($customer_id | is-empty) { error make --unspanned { msg: "path parameter 'customerId' must be non-empty" } }
-  let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id)} | format pattern "/v2/customers/{customer_id}/domains/notifications/optIn"))
+  let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id)} | format pattern "/v2/customers/{customer_id}/domains/notifications/optIn") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Request-Id": $x_request_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Opt in to recieve notifications for the submitted notification types
@@ -1179,12 +1529,23 @@ export def "customers-domains-notifications-opt-in update" [
   let base = ($base_url | default $BASE_URL)
   if ($customer_id | is-empty) { error make --unspanned { msg: "path parameter 'customerId' must be non-empty" } }
   let qp = [(serialize-qp "types" $types "csv")] | flatten | str join "&"
-  let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id)} | format pattern "/v2/customers/{customer_id}/domains/notifications/optIn") $qp)
+  let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id)} | format pattern "/v2/customers/{customer_id}/domains/notifications/optIn") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Request-Id": $x_request_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"types": $types} | compact), body: null}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"types": $types} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Retrieve the schema for the notification data for the specified notification type
@@ -1208,12 +1569,23 @@ export def "customers-domains-notifications-schemas get" [
   let base = ($base_url | default $BASE_URL)
   if ($customer_id | is-empty) { error make --unspanned { msg: "path parameter 'customerId' must be non-empty" } }
   if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
-  let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id), type: (encode-path-segment $type)} | format pattern "/v2/customers/{customer_id}/domains/notifications/schemas/{type}"))
+  let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id), type: (encode-path-segment $type)} | format pattern "/v2/customers/{customer_id}/domains/notifications/schemas/{type}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Request-Id": $x_request_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Acknowledge a domain notification
@@ -1237,12 +1609,23 @@ export def "customers-domains-notifications-acknowledge create" [
   let base = ($base_url | default $BASE_URL)
   if ($customer_id | is-empty) { error make --unspanned { msg: "path parameter 'customerId' must be non-empty" } }
   if ($notification_id | is-empty) { error make --unspanned { msg: "path parameter 'notificationId' must be non-empty" } }
-  let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id), notification_id: (encode-path-segment $notification_id)} | format pattern "/v2/customers/{customer_id}/domains/notifications/{notification_id}/acknowledge"))
+  let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id), notification_id: (encode-path-segment $notification_id)} | format pattern "/v2/customers/{customer_id}/domains/notifications/{notification_id}/acknowledge") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Request-Id": $x_request_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Retrieve details for the specified Domain
@@ -1268,12 +1651,23 @@ export def "customers-domains get" [
   if ($customer_id | is-empty) { error make --unspanned { msg: "path parameter 'customerId' must be non-empty" } }
   if ($domain | is-empty) { error make --unspanned { msg: "path parameter 'domain' must be non-empty" } }
   let qp = [(serialize-qp "includes" $includes "csv")] | flatten | str join "&"
-  let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id), domain: (encode-path-segment $domain)} | format pattern "/v2/customers/{customer_id}/domains/{domain}") $qp)
+  let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id), domain: (encode-path-segment $domain)} | format pattern "/v2/customers/{customer_id}/domains/{domain}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Request-Id": $x_request_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"includes": $includes} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"includes": $includes} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 203]
 }
 
 # Retrieves a list of the most recent actions for the specified domain
@@ -1297,12 +1691,23 @@ export def "customers-domains-actions list" [
   let base = ($base_url | default $BASE_URL)
   if ($customer_id | is-empty) { error make --unspanned { msg: "path parameter 'customerId' must be non-empty" } }
   if ($domain | is-empty) { error make --unspanned { msg: "path parameter 'domain' must be non-empty" } }
-  let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id), domain: (encode-path-segment $domain)} | format pattern "/v2/customers/{customer_id}/domains/{domain}/actions"))
+  let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id), domain: (encode-path-segment $domain)} | format pattern "/v2/customers/{customer_id}/domains/{domain}/actions") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Request-Id": $x_request_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Cancel the most recent user action for the specified domain
@@ -1328,12 +1733,23 @@ export def "customers-domains-actions delete" [
   if ($customer_id | is-empty) { error make --unspanned { msg: "path parameter 'customerId' must be non-empty" } }
   if ($domain | is-empty) { error make --unspanned { msg: "path parameter 'domain' must be non-empty" } }
   if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
-  let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id), domain: (encode-path-segment $domain), type: (encode-path-segment $type)} | format pattern "/v2/customers/{customer_id}/domains/{domain}/actions/{type}"))
+  let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id), domain: (encode-path-segment $domain), type: (encode-path-segment $type)} | format pattern "/v2/customers/{customer_id}/domains/{domain}/actions/{type}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Request-Id": $x_request_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Retrieves the most recent action for the specified domain
@@ -1359,12 +1775,23 @@ export def "customers-domains-actions get" [
   if ($customer_id | is-empty) { error make --unspanned { msg: "path parameter 'customerId' must be non-empty" } }
   if ($domain | is-empty) { error make --unspanned { msg: "path parameter 'domain' must be non-empty" } }
   if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
-  let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id), domain: (encode-path-segment $domain), type: (encode-path-segment $type)} | format pattern "/v2/customers/{customer_id}/domains/{domain}/actions/{type}"))
+  let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id), domain: (encode-path-segment $domain), type: (encode-path-segment $type)} | format pattern "/v2/customers/{customer_id}/domains/{domain}/actions/{type}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Request-Id": $x_request_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Purchase a restore for the given domain to bring it out of redemption
@@ -1391,14 +1818,25 @@ export def "customers-domains-redeem create" [
   let base = ($base_url | default $BASE_URL)
   if ($customer_id | is-empty) { error make --unspanned { msg: "path parameter 'customerId' must be non-empty" } }
   if ($domain | is-empty) { error make --unspanned { msg: "path parameter 'domain' must be non-empty" } }
-  let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id), domain: (encode-path-segment $domain)} | format pattern "/v2/customers/{customer_id}/domains/{domain}/redeem"))
+  let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id), domain: (encode-path-segment $domain)} | format pattern "/v2/customers/{customer_id}/domains/{domain}/redeem") $auth.query)
   let req_body = {"consent": $consent} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Request-Id": $x_request_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [202]
 }
 
 # Initiate transfer out to another registrar for a .uk domain.
@@ -1424,12 +1862,23 @@ export def "customers-domains-transfer-out create" [
   if ($customer_id | is-empty) { error make --unspanned { msg: "path parameter 'customerId' must be non-empty" } }
   if ($domain | is-empty) { error make --unspanned { msg: "path parameter 'domain' must be non-empty" } }
   let qp = [(serialize-qp "registrar" $registrar "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id), domain: (encode-path-segment $domain)} | format pattern "/v2/customers/{customer_id}/domains/{domain}/transferOut") $qp)
+  let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id), domain: (encode-path-segment $domain)} | format pattern "/v2/customers/{customer_id}/domains/{domain}/transferOut") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Request-Id": $x_request_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"registrar": $registrar} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"registrar": $registrar} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [202]
 }
 
 # Retrieve a list of upcoming system Maintenances
@@ -1454,12 +1903,23 @@ export def "domains-maintenances list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "status" $status "scalar") (serialize-qp "modifiedAtAfter" $modified_at_after "scalar") (serialize-qp "startsAtAfter" $starts_at_after "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v2/domains/maintenances" $qp)
+  let full_url = (build-url $base "/v2/domains/maintenances" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Request-Id": $x_request_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"status": $status, "modifiedAtAfter": $modified_at_after, "startsAtAfter": $starts_at_after, "limit": $limit} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"status": $status, "modifiedAtAfter": $modified_at_after, "startsAtAfter": $starts_at_after, "limit": $limit} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve the details for an upcoming system Maintenances
@@ -1481,10 +1941,21 @@ export def "domains-maintenances get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($maintenance_id | is-empty) { error make --unspanned { msg: "path parameter 'maintenanceId' must be non-empty" } }
-  let full_url = (build-url $base ({maintenance_id: (encode-path-segment $maintenance_id)} | format pattern "/v2/domains/maintenances/{maintenance_id}"))
+  let full_url = (build-url $base ({maintenance_id: (encode-path-segment $maintenance_id)} | format pattern "/v2/domains/maintenances/{maintenance_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Request-Id": $x_request_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }

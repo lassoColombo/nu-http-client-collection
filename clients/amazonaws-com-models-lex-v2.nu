@@ -8,7 +8,7 @@ const BASE_URL = "http://models-v2-lex.us-east-1.amazonaws.com"
 # `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
 # where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o AMAZON_LEX_MODEL_BUILDING_V2_TOKEN | default "" }
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o AMAZON_LEX_MODEL_BUILDING_V2_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
@@ -41,14 +41,11 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
-# Trick: `url encode --all` over-encodes, then we decode the four unreserved
-# punctuation chars back. Pre-existing %XX sequences in the input survive
-# because `url encode --all` first turns their % into %25.
 def encode-path-segment [v: any]: nothing -> string {
   $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
-# Serialize an array-typed path parameter (issue 49.A). OpenAPI 3 `style: simple`
+# Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
 # (the default for path params) and Swagger 2 `collectionFormat: csv` both join
 # the elements with a literal comma WITHIN the single path segment, each element
 # RFC-3986-encoded individually (so a comma inside an element stays %2C). Without
@@ -59,51 +56,57 @@ def encode-path-array [v: any]: nothing -> string {
   if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
 }
 
-# Build URL from base, path, and optional query string
-def build-url [base: string, path: string, query?: string]: nothing -> string {
+# Build the request URL from base, path, and any number of pre-encoded query
+# fragments (param serializer output and/or the auth query). Each fragment is an
+# `&`-joinable `key=value` string already percent-encoded by its producer; empty
+# fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
+# delimiters are hand-spliced — and any query already on the base URL is merged in.
+def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
   let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
-  let result = ($parsed | upsert path $full_path)
-  if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
+  let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
+  $parsed | upsert path $full_path | upsert query $query | url join
 }
 
-# Build the dry-run record returned by --dry-run. Shape:
-#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
-#    auth: {scheme, location}}
-# `meta` carries logical-form data (the query record by spec name, the pre-serialization
-# body) that do-request itself cannot reconstruct from its wire-format args.
-def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
-  let m = ($meta | default {})
-  {
-    dry_run: true
-    method: $method
-    url: $url
-    query: ($m | get -o query | default {})
-    headers: $auth.headers
-    body: ($m | get -o body)
-    content_type: $content_type
-    timeout: $timeout
-    auth: {scheme: $auth.scheme, location: $auth.location}
-  }
+# Success policy: did this response succeed? Single source of truth, consulted by
+# handle-response and the HEAD header-unwrap. Empty ok_codes means the spec listed
+# none, so fall back to < 400. Otherwise: any 2xx, plus documented success codes.
+def status-ok [status: int, ok_codes: list<int>]: nothing -> bool {
+  if ($ok_codes | is-empty) { $status < 400 } else { ($status >= 200 and $status < 300) or ($status in $ok_codes) }
 }
 
-# Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
-  let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
-  let timeout = ($max_time | default 30min)
-  let ct = ($content_type | default "application/json")
-  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
-  let resp = match $method {
-    "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
-  }
-  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
-  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
+# Unwrap a `--full` HTTP response into the user-facing value. Response arrives
+# via pipeline; ok_codes gates the error throw (see status-ok).
+def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: record -> any {
+  let resp = $in
+  if $allow_errors { return $resp }
+  if not (status-ok $resp.status $ok_codes) { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } }
+  if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
+  if $resp.status == 204 { return null }
+  $resp.body
+}
+
+# GET — bodyless, honours --raw
+def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+}
+
+# POST — body + content-type
+def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# PUT — body + content-type
+def send-put [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http put --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http put --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# DELETE — body via --data
+def send-delete [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http delete --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url } else { http delete --headers $req.headers --content-type $req.content_type --data $body --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url }
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 def base-url-completer [] { ["http://models-v2-lex.us-east-1.amazonaws.com" "http://models-v2-lex.us-east-2.amazonaws.com" "http://models-v2-lex.us-west-1.amazonaws.com" "http://models-v2-lex.us-west-2.amazonaws.com" "http://models-v2-lex.us-gov-west-1.amazonaws.com" "http://models-v2-lex.us-gov-east-1.amazonaws.com" "http://models-v2-lex.ca-central-1.amazonaws.com" "http://models-v2-lex.eu-north-1.amazonaws.com" "http://models-v2-lex.eu-west-1.amazonaws.com" "http://models-v2-lex.eu-west-2.amazonaws.com" "http://models-v2-lex.eu-west-3.amazonaws.com" "http://models-v2-lex.eu-central-1.amazonaws.com" "http://models-v2-lex.eu-south-1.amazonaws.com" "http://models-v2-lex.af-south-1.amazonaws.com" "http://models-v2-lex.ap-northeast-1.amazonaws.com" "http://models-v2-lex.ap-northeast-2.amazonaws.com" "http://models-v2-lex.ap-northeast-3.amazonaws.com" "http://models-v2-lex.ap-southeast-1.amazonaws.com" "http://models-v2-lex.ap-southeast-2.amazonaws.com" "http://models-v2-lex.ap-east-1.amazonaws.com" "http://models-v2-lex.ap-south-1.amazonaws.com" "http://models-v2-lex.sa-east-1.amazonaws.com" "http://models-v2-lex.me-south-1.amazonaws.com" "https://models-v2-lex.us-east-1.amazonaws.com" "https://models-v2-lex.us-east-2.amazonaws.com" "https://models-v2-lex.us-west-1.amazonaws.com" "https://models-v2-lex.us-west-2.amazonaws.com" "https://models-v2-lex.us-gov-west-1.amazonaws.com" "https://models-v2-lex.us-gov-east-1.amazonaws.com" "https://models-v2-lex.ca-central-1.amazonaws.com" "https://models-v2-lex.eu-north-1.amazonaws.com" "https://models-v2-lex.eu-west-1.amazonaws.com" "https://models-v2-lex.eu-west-2.amazonaws.com" "https://models-v2-lex.eu-west-3.amazonaws.com" "https://models-v2-lex.eu-central-1.amazonaws.com" "https://models-v2-lex.eu-south-1.amazonaws.com" "https://models-v2-lex.af-south-1.amazonaws.com" "https://models-v2-lex.ap-northeast-1.amazonaws.com" "https://models-v2-lex.ap-northeast-2.amazonaws.com" "https://models-v2-lex.ap-northeast-3.amazonaws.com" "https://models-v2-lex.ap-southeast-1.amazonaws.com" "https://models-v2-lex.ap-southeast-2.amazonaws.com" "https://models-v2-lex.ap-east-1.amazonaws.com" "https://models-v2-lex.ap-south-1.amazonaws.com" "https://models-v2-lex.sa-east-1.amazonaws.com" "https://models-v2-lex.me-south-1.amazonaws.com" "http://models-v2-lex.cn-north-1.amazonaws.com.cn" "http://models-v2-lex.cn-northwest-1.amazonaws.com.cn" "https://models-v2-lex.cn-north-1.amazonaws.com.cn" "https://models-v2-lex.cn-northwest-1.amazonaws.com.cn"] }
@@ -172,14 +175,25 @@ export def "bots-botversions-botlocales-customvocabulary-default-batchcreate cre
   if ($bot_id | is-empty) { error make --unspanned { msg: "path parameter 'botId' must be non-empty" } }
   if ($bot_version | is-empty) { error make --unspanned { msg: "path parameter 'botVersion' must be non-empty" } }
   if ($locale_id | is-empty) { error make --unspanned { msg: "path parameter 'localeId' must be non-empty" } }
-  let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id), bot_version: (encode-path-segment $bot_version), locale_id: (encode-path-segment $locale_id)} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/{locale_id}/customvocabulary/DEFAULT/batchcreate"))
+  let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id), bot_version: (encode-path-segment $bot_version), locale_id: (encode-path-segment $locale_id)} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/{locale_id}/customvocabulary/DEFAULT/batchcreate") $auth.query)
   let req_body = {"customVocabularyItemList": $custom_vocabulary_item_list} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Delete a batch of custom vocabulary items for a given bot locale's custom vocabulary.
@@ -215,14 +229,25 @@ export def "bots-botversions-botlocales-customvocabulary-default-batchdelete del
   if ($bot_id | is-empty) { error make --unspanned { msg: "path parameter 'botId' must be non-empty" } }
   if ($bot_version | is-empty) { error make --unspanned { msg: "path parameter 'botVersion' must be non-empty" } }
   if ($locale_id | is-empty) { error make --unspanned { msg: "path parameter 'localeId' must be non-empty" } }
-  let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id), bot_version: (encode-path-segment $bot_version), locale_id: (encode-path-segment $locale_id)} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/{locale_id}/customvocabulary/DEFAULT/batchdelete"))
+  let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id), bot_version: (encode-path-segment $bot_version), locale_id: (encode-path-segment $locale_id)} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/{locale_id}/customvocabulary/DEFAULT/batchdelete") $auth.query)
   let req_body = {"customVocabularyItemList": $custom_vocabulary_item_list} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Update a batch of custom vocabulary items for a given bot locale's custom vocabulary.
@@ -258,14 +283,25 @@ export def "bots-botversions-botlocales-customvocabulary-default-batchupdate upd
   if ($bot_id | is-empty) { error make --unspanned { msg: "path parameter 'botId' must be non-empty" } }
   if ($bot_version | is-empty) { error make --unspanned { msg: "path parameter 'botVersion' must be non-empty" } }
   if ($locale_id | is-empty) { error make --unspanned { msg: "path parameter 'localeId' must be non-empty" } }
-  let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id), bot_version: (encode-path-segment $bot_version), locale_id: (encode-path-segment $locale_id)} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/{locale_id}/customvocabulary/DEFAULT/batchupdate"))
+  let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id), bot_version: (encode-path-segment $bot_version), locale_id: (encode-path-segment $locale_id)} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/{locale_id}/customvocabulary/DEFAULT/batchupdate") $auth.query)
   let req_body = {"customVocabularyItemList": $custom_vocabulary_item_list} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Builds a bot, its intents, and its slot types into a specific locale. A bot can be built into multiple locales. At runtime the locale is used to choose a specific build of the bot.
@@ -298,12 +334,23 @@ export def "bots-botversions-botlocales build-locale" [
   if ($bot_id | is-empty) { error make --unspanned { msg: "path parameter 'botId' must be non-empty" } }
   if ($bot_version | is-empty) { error make --unspanned { msg: "path parameter 'botVersion' must be non-empty" } }
   if ($locale_id | is-empty) { error make --unspanned { msg: "path parameter 'localeId' must be non-empty" } }
-  let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id), bot_version: (encode-path-segment $bot_version), locale_id: (encode-path-segment $locale_id)} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/{locale_id}/"))
+  let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id), bot_version: (encode-path-segment $bot_version), locale_id: (encode-path-segment $locale_id)} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/{locale_id}/") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [202]
 }
 
 # Removes a locale from a bot. When you delete a locale, all intents, slots, and slot types defined for the locale are also deleted.
@@ -336,12 +383,23 @@ export def "bots-botversions-botlocales delete-locale" [
   if ($bot_id | is-empty) { error make --unspanned { msg: "path parameter 'botId' must be non-empty" } }
   if ($bot_version | is-empty) { error make --unspanned { msg: "path parameter 'botVersion' must be non-empty" } }
   if ($locale_id | is-empty) { error make --unspanned { msg: "path parameter 'localeId' must be non-empty" } }
-  let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id), bot_version: (encode-path-segment $bot_version), locale_id: (encode-path-segment $locale_id)} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/{locale_id}/"))
+  let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id), bot_version: (encode-path-segment $bot_version), locale_id: (encode-path-segment $locale_id)} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/{locale_id}/") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [202]
 }
 
 # Describes the settings that a bot has for a specific locale.
@@ -374,12 +432,23 @@ export def "bots-botversions-botlocales get-locale" [
   if ($bot_id | is-empty) { error make --unspanned { msg: "path parameter 'botId' must be non-empty" } }
   if ($bot_version | is-empty) { error make --unspanned { msg: "path parameter 'botVersion' must be non-empty" } }
   if ($locale_id | is-empty) { error make --unspanned { msg: "path parameter 'localeId' must be non-empty" } }
-  let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id), bot_version: (encode-path-segment $bot_version), locale_id: (encode-path-segment $locale_id)} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/{locale_id}/"))
+  let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id), bot_version: (encode-path-segment $bot_version), locale_id: (encode-path-segment $locale_id)} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/{locale_id}/") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates the settings that a bot has for a specific locale.
@@ -417,14 +486,25 @@ export def "bots-botversions-botlocales update-locale" [
   if ($bot_id | is-empty) { error make --unspanned { msg: "path parameter 'botId' must be non-empty" } }
   if ($bot_version | is-empty) { error make --unspanned { msg: "path parameter 'botVersion' must be non-empty" } }
   if ($locale_id | is-empty) { error make --unspanned { msg: "path parameter 'localeId' must be non-empty" } }
-  let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id), bot_version: (encode-path-segment $bot_version), locale_id: (encode-path-segment $locale_id)} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/{locale_id}/"))
+  let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id), bot_version: (encode-path-segment $bot_version), locale_id: (encode-path-segment $locale_id)} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/{locale_id}/") $auth.query)
   let req_body = {"description": $description, "nluIntentConfidenceThreshold": $nlu_intent_confidence_threshold, "voiceSettings": $voice_settings} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [202]
 }
 
 # Creates an Amazon Lex conversational bot.
@@ -463,14 +543,25 @@ export def "bots create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/bots/")
+  let full_url = (build-url $base "/bots/" $auth.query)
   let req_body = {"botName": $bot_name, "description": $description, "roleArn": $role_arn, "dataPrivacy": $data_privacy, "idleSessionTTLInSeconds": $idle_session_ttl_in_seconds, "botTags": $bot_tags, "testBotAliasTags": $test_bot_alias_tags, "botType": $bot_type, "botMembers": $bot_members} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [202]
 }
 
 # Gets a list of available bots.
@@ -507,14 +598,25 @@ export def "bots list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/bots/" $qp)
+  let full_url = (build-url $base "/bots/" $qp $auth.query)
   let req_body = {"sortBy": $sort_by, "filters": $filters, "maxResults": $max_results_body, "nextToken": $next_token_body} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"maxResults": $max_results, "nextToken": $next_token} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"maxResults": $max_results, "nextToken": $next_token} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Creates an alias for the specified version of a bot. Use an alias to enable you to change the version of a bot without updating applications that use the bot. For example, you can create an alias called "PROD" that your applications use to call the Amazon Lex bot.
@@ -553,14 +655,25 @@ export def "bots-botaliases create-alias" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bot_id | is-empty) { error make --unspanned { msg: "path parameter 'botId' must be non-empty" } }
-  let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id)} | format pattern "/bots/{bot_id}/botaliases/"))
+  let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id)} | format pattern "/bots/{bot_id}/botaliases/") $auth.query)
   let req_body = {"botAliasName": $bot_alias_name, "description": $description, "botVersion": $bot_version, "botAliasLocaleSettings": $bot_alias_locale_settings, "conversationLogSettings": $conversation_log_settings, "sentimentAnalysisSettings": $sentiment_analysis_settings, "tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [202]
 }
 
 # Gets a list of aliases for the specified bot.
@@ -595,14 +708,25 @@ export def "bots-botaliases list-aliases" [
   let base = ($base_url | default $BASE_URL)
   if ($bot_id | is-empty) { error make --unspanned { msg: "path parameter 'botId' must be non-empty" } }
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id)} | format pattern "/bots/{bot_id}/botaliases/") $qp)
+  let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id)} | format pattern "/bots/{bot_id}/botaliases/") $qp $auth.query)
   let req_body = {"maxResults": $max_results_body, "nextToken": $next_token_body} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"maxResults": $max_results, "nextToken": $next_token} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"maxResults": $max_results, "nextToken": $next_token} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Creates a locale in the bot. The locale contains the intents and slot types that the bot uses in conversations with users in the specified language and locale. You must add a locale to a bot before you can add intents and slot types to the bot.
@@ -639,14 +763,25 @@ export def "bots-botversions-botlocales create-locale" [
   let base = ($base_url | default $BASE_URL)
   if ($bot_id | is-empty) { error make --unspanned { msg: "path parameter 'botId' must be non-empty" } }
   if ($bot_version | is-empty) { error make --unspanned { msg: "path parameter 'botVersion' must be non-empty" } }
-  let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id), bot_version: (encode-path-segment $bot_version)} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/"))
+  let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id), bot_version: (encode-path-segment $bot_version)} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/") $auth.query)
   let req_body = {"localeId": $locale_id, "description": $description, "nluIntentConfidenceThreshold": $nlu_intent_confidence_threshold, "voiceSettings": $voice_settings} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [202]
 }
 
 # Gets a list of locales for the specified bot.
@@ -687,14 +822,25 @@ export def "bots-botversions-botlocales list-locales" [
   if ($bot_id | is-empty) { error make --unspanned { msg: "path parameter 'botId' must be non-empty" } }
   if ($bot_version | is-empty) { error make --unspanned { msg: "path parameter 'botVersion' must be non-empty" } }
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id), bot_version: (encode-path-segment $bot_version)} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/") $qp)
+  let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id), bot_version: (encode-path-segment $bot_version)} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/") $qp $auth.query)
   let req_body = {"sortBy": $sort_by, "filters": $filters, "maxResults": $max_results_body, "nextToken": $next_token_body} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"maxResults": $max_results, "nextToken": $next_token} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"maxResults": $max_results, "nextToken": $next_token} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Creates a new version of the bot based on the DRAFT version. If the DRAFT version of this resource hasn't changed since you created the last version, Amazon Lex doesn't create a new version, it returns the last created version. When you create the first version of a bot, Amazon Lex sets the version to 1. Subsequent versions increment by 1.
@@ -726,14 +872,25 @@ export def "bots-botversions create-version" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bot_id | is-empty) { error make --unspanned { msg: "path parameter 'botId' must be non-empty" } }
-  let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id)} | format pattern "/bots/{bot_id}/botversions/"))
+  let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id)} | format pattern "/bots/{bot_id}/botversions/") $auth.query)
   let req_body = {"description": $description, "botVersionLocaleSpecification": $bot_version_locale_specification} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [202]
 }
 
 # Gets information about all of the versions of a bot. The ListBotVersions operation returns a summary of each version of a bot. For example, if a bot has three numbered versions, the ListBotVersions operation returns for summaries, one for each numbered version and one for the DRAFT version. The ListBotVersions operation always returns at least one version, the DRAFT version.
@@ -770,14 +927,25 @@ export def "bots-botversions list-versions" [
   let base = ($base_url | default $BASE_URL)
   if ($bot_id | is-empty) { error make --unspanned { msg: "path parameter 'botId' must be non-empty" } }
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id)} | format pattern "/bots/{bot_id}/botversions/") $qp)
+  let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id)} | format pattern "/bots/{bot_id}/botversions/") $qp $auth.query)
   let req_body = {"sortBy": $sort_by, "maxResults": $max_results_body, "nextToken": $next_token_body} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"maxResults": $max_results, "nextToken": $next_token} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"maxResults": $max_results, "nextToken": $next_token} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Creates a zip archive containing the contents of a bot or a bot locale. The archive contains a directory structure that contains JSON files that define the bot. You can create an archive that contains the complete definition of a bot, or you can specify that the archive contain only the definition of a single bot locale. For more information about exporting bots, and about the structure of the export archive, see Importing and exporting bots (https://docs.aws.amazon.com/lexv2/latest/dg/importing-exporting.html)
@@ -809,14 +977,25 @@ export def "exports create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/exports/")
+  let full_url = (build-url $base "/exports/" $auth.query)
   let req_body = {"resourceSpecification": $resource_specification, "fileFormat": $file_format, "filePassword": $file_password} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [202]
 }
 
 # Lists the exports for a bot, bot locale, or custom vocabulary. Exports are kept in the list for 7 days.
@@ -856,14 +1035,25 @@ export def "exports list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/exports/" $qp)
+  let full_url = (build-url $base "/exports/" $qp $auth.query)
   let req_body = {"botId": $bot_id, "botVersion": $bot_version, "sortBy": $sort_by, "filters": $filters, "maxResults": $max_results_body, "nextToken": $next_token_body, "localeId": $locale_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"maxResults": $max_results, "nextToken": $next_token} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"maxResults": $max_results, "nextToken": $next_token} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Creates an intent. To define the interaction between the user and your bot, you define one or more intents. For example, for a pizza ordering bot you would create an OrderPizza intent. When you create an intent, you must provide a name. You can optionally provide the following: Sample utterances. For example, "I want to order a pizza" and "Can I order a pizza." You can't provide utterances for built-in intents. Information to be gathered. You specify slots for the information that you bot requests from the user. You can specify standard slot types, such as date and time, or custom slot types for your application. How the intent is fulfilled. You can provide a Lambda function or configure the intent to return the intent information to your client application. If you use a Lambda function, Amazon Lex invokes the function when all of the intent information is available. A confirmation prompt to send to the user to confirm an intent. For example, "Shall I order your pizza?" A conclusion statement to send to the user after the intent is fulfilled. For example, "I ordered your pizza." A follow-up prompt that asks the user for additional activity. For example, "Do you want a drink with your pizza?"
@@ -918,14 +1108,25 @@ export def "bots-botversions-botlocales-intents create" [
   if ($bot_id | is-empty) { error make --unspanned { msg: "path parameter 'botId' must be non-empty" } }
   if ($bot_version | is-empty) { error make --unspanned { msg: "path parameter 'botVersion' must be non-empty" } }
   if ($locale_id | is-empty) { error make --unspanned { msg: "path parameter 'localeId' must be non-empty" } }
-  let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id), bot_version: (encode-path-segment $bot_version), locale_id: (encode-path-segment $locale_id)} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/{locale_id}/intents/"))
+  let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id), bot_version: (encode-path-segment $bot_version), locale_id: (encode-path-segment $locale_id)} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/{locale_id}/intents/") $auth.query)
   let req_body = {"intentName": $intent_name, "description": $description, "parentIntentSignature": $parent_intent_signature, "sampleUtterances": $sample_utterances, "dialogCodeHook": $dialog_code_hook, "fulfillmentCodeHook": $fulfillment_code_hook, "intentConfirmationSetting": $intent_confirmation_setting, "intentClosingSetting": $intent_closing_setting, "inputContexts": $input_contexts, "outputContexts": $output_contexts, "kendraConfiguration": $kendra_configuration, "initialResponseSetting": $initial_response_setting} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get a list of intents that meet the specified criteria.
@@ -968,14 +1169,25 @@ export def "bots-botversions-botlocales-intents list" [
   if ($bot_version | is-empty) { error make --unspanned { msg: "path parameter 'botVersion' must be non-empty" } }
   if ($locale_id | is-empty) { error make --unspanned { msg: "path parameter 'localeId' must be non-empty" } }
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id), bot_version: (encode-path-segment $bot_version), locale_id: (encode-path-segment $locale_id)} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/{locale_id}/intents/") $qp)
+  let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id), bot_version: (encode-path-segment $bot_version), locale_id: (encode-path-segment $locale_id)} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/{locale_id}/intents/") $qp $auth.query)
   let req_body = {"sortBy": $sort_by, "filters": $filters, "maxResults": $max_results_body, "nextToken": $next_token_body} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"maxResults": $max_results, "nextToken": $next_token} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"maxResults": $max_results, "nextToken": $next_token} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Creates a new resource policy with the specified policy statements.
@@ -1006,14 +1218,25 @@ export def "policy create-resource" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn | is-empty) { error make --unspanned { msg: "path parameter 'resourceArn' must be non-empty" } }
-  let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn)} | format pattern "/policy/{resource_arn}/"))
+  let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn)} | format pattern "/policy/{resource_arn}/") $auth.query)
   let req_body = {"policy": $policy} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Removes an existing policy from a bot or bot alias. If the resource doesn't have a policy attached, Amazon Lex returns an exception.
@@ -1044,12 +1267,23 @@ export def "policy delete-resource" [
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn | is-empty) { error make --unspanned { msg: "path parameter 'resourceArn' must be non-empty" } }
   let qp = [(serialize-qp "expectedRevisionId" $expected_revision_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn)} | format pattern "/policy/{resource_arn}/") $qp)
+  let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn)} | format pattern "/policy/{resource_arn}/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expectedRevisionId": $expected_revision_id} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"expectedRevisionId": $expected_revision_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Gets the resource policy and policy revision for a bot or bot alias.
@@ -1078,12 +1312,23 @@ export def "policy get-resource" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn | is-empty) { error make --unspanned { msg: "path parameter 'resourceArn' must be non-empty" } }
-  let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn)} | format pattern "/policy/{resource_arn}/"))
+  let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn)} | format pattern "/policy/{resource_arn}/") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Replaces the existing resource policy for a bot or bot alias with a new one. If the policy doesn't exist, Amazon Lex returns an exception.
@@ -1116,14 +1361,25 @@ export def "policy update-resource" [
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn | is-empty) { error make --unspanned { msg: "path parameter 'resourceArn' must be non-empty" } }
   let qp = [(serialize-qp "expectedRevisionId" $expected_revision_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn)} | format pattern "/policy/{resource_arn}/") $qp)
+  let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn)} | format pattern "/policy/{resource_arn}/") $qp $auth.query)
   let req_body = {"policy": $policy} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"expectedRevisionId": $expected_revision_id} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"expectedRevisionId": $expected_revision_id} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Adds a new resource policy statement to a bot or bot alias. If a resource policy exists, the statement is added to the current resource policy. If a policy doesn't exist, a new policy is created. You can't create a resource policy statement that allows cross-account access.
@@ -1161,14 +1417,25 @@ export def "policy-statements create-resource" [
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn | is-empty) { error make --unspanned { msg: "path parameter 'resourceArn' must be non-empty" } }
   let qp = [(serialize-qp "expectedRevisionId" $expected_revision_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn)} | format pattern "/policy/{resource_arn}/statements/") $qp)
+  let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn)} | format pattern "/policy/{resource_arn}/statements/") $qp $auth.query)
   let req_body = {"statementId": $statement_id, "effect": $effect, "principal": $principal, "action": $action, "condition": $condition} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"expectedRevisionId": $expected_revision_id} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"expectedRevisionId": $expected_revision_id} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Creates a slot in an intent. A slot is a variable needed to fulfill an intent. For example, an OrderPizza intent might need slots for size, crust, and number of pizzas. For each slot, you define one or more utterances that Amazon Lex uses to elicit a response from the user.
@@ -1215,14 +1482,25 @@ export def "bots-botversions-botlocales-intents-slots create" [
   if ($bot_version | is-empty) { error make --unspanned { msg: "path parameter 'botVersion' must be non-empty" } }
   if ($locale_id | is-empty) { error make --unspanned { msg: "path parameter 'localeId' must be non-empty" } }
   if ($intent_id | is-empty) { error make --unspanned { msg: "path parameter 'intentId' must be non-empty" } }
-  let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id), bot_version: (encode-path-segment $bot_version), locale_id: (encode-path-segment $locale_id), intent_id: (encode-path-segment $intent_id)} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/{locale_id}/intents/{intent_id}/slots/"))
+  let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id), bot_version: (encode-path-segment $bot_version), locale_id: (encode-path-segment $locale_id), intent_id: (encode-path-segment $intent_id)} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/{locale_id}/intents/{intent_id}/slots/") $auth.query)
   let req_body = {"slotName": $slot_name, "description": $description, "slotTypeId": $slot_type_id, "valueElicitationSetting": $value_elicitation_setting, "obfuscationSetting": $obfuscation_setting, "multipleValuesSetting": $multiple_values_setting, "subSlotSetting": $sub_slot_setting} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Gets a list of slots that match the specified criteria.
@@ -1267,14 +1545,25 @@ export def "bots-botversions-botlocales-intents-slots list" [
   if ($locale_id | is-empty) { error make --unspanned { msg: "path parameter 'localeId' must be non-empty" } }
   if ($intent_id | is-empty) { error make --unspanned { msg: "path parameter 'intentId' must be non-empty" } }
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id), bot_version: (encode-path-segment $bot_version), locale_id: (encode-path-segment $locale_id), intent_id: (encode-path-segment $intent_id)} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/{locale_id}/intents/{intent_id}/slots/") $qp)
+  let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id), bot_version: (encode-path-segment $bot_version), locale_id: (encode-path-segment $locale_id), intent_id: (encode-path-segment $intent_id)} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/{locale_id}/intents/{intent_id}/slots/") $qp $auth.query)
   let req_body = {"sortBy": $sort_by, "filters": $filters, "maxResults": $max_results_body, "nextToken": $next_token_body} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"maxResults": $max_results, "nextToken": $next_token} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"maxResults": $max_results, "nextToken": $next_token} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Creates a custom slot type To create a custom slot type, specify a name for the slot type and a set of enumeration values, the values that a slot of this type can assume.
@@ -1319,14 +1608,25 @@ export def "bots-botversions-botlocales-slottypes create-slot-type" [
   if ($bot_id | is-empty) { error make --unspanned { msg: "path parameter 'botId' must be non-empty" } }
   if ($bot_version | is-empty) { error make --unspanned { msg: "path parameter 'botVersion' must be non-empty" } }
   if ($locale_id | is-empty) { error make --unspanned { msg: "path parameter 'localeId' must be non-empty" } }
-  let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id), bot_version: (encode-path-segment $bot_version), locale_id: (encode-path-segment $locale_id)} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/{locale_id}/slottypes/"))
+  let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id), bot_version: (encode-path-segment $bot_version), locale_id: (encode-path-segment $locale_id)} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/{locale_id}/slottypes/") $auth.query)
   let req_body = {"slotTypeName": $slot_type_name, "description": $description, "slotTypeValues": $slot_type_values, "valueSelectionSetting": $value_selection_setting, "parentSlotTypeSignature": $parent_slot_type_signature, "externalSourceSetting": $external_source_setting, "compositeSlotTypeSetting": $composite_slot_type_setting} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Gets a list of slot types that match the specified criteria.
@@ -1369,14 +1669,25 @@ export def "bots-botversions-botlocales-slottypes list-slot-types" [
   if ($bot_version | is-empty) { error make --unspanned { msg: "path parameter 'botVersion' must be non-empty" } }
   if ($locale_id | is-empty) { error make --unspanned { msg: "path parameter 'localeId' must be non-empty" } }
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id), bot_version: (encode-path-segment $bot_version), locale_id: (encode-path-segment $locale_id)} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/{locale_id}/slottypes/") $qp)
+  let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id), bot_version: (encode-path-segment $bot_version), locale_id: (encode-path-segment $locale_id)} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/{locale_id}/slottypes/") $qp $auth.query)
   let req_body = {"sortBy": $sort_by, "filters": $filters, "maxResults": $max_results_body, "nextToken": $next_token_body} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"maxResults": $max_results, "nextToken": $next_token} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"maxResults": $max_results, "nextToken": $next_token} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Gets a pre-signed S3 write URL that you use to upload the zip archive when importing a bot or a bot locale.
@@ -1403,12 +1714,23 @@ export def "create-uploadurl upload-url" [
 ]: nothing -> record<importId: record, uploadUrl: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/createuploadurl/")
+  let full_url = (build-url $base "/createuploadurl/" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes all versions of a bot, including the Draft version. To delete a specific version, use the DeleteBotVersion operation. When you delete a bot, all of the resources contained in the bot are also deleted. Deleting a bot removes all locales, intents, slot, and slot types defined for the bot. If a bot has an alias, the DeleteBot operation returns a ResourceInUseException exception. If you want to delete the bot and the alias, set the skipResourceInUseCheck parameter to true.
@@ -1439,12 +1761,23 @@ export def "bots delete" [
   let base = ($base_url | default $BASE_URL)
   if ($bot_id | is-empty) { error make --unspanned { msg: "path parameter 'botId' must be non-empty" } }
   let qp = [(serialize-qp "skipResourceInUseCheck" $skip_resource_in_use_check "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id)} | format pattern "/bots/{bot_id}/") $qp)
+  let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id)} | format pattern "/bots/{bot_id}/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"skipResourceInUseCheck": $skip_resource_in_use_check} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"skipResourceInUseCheck": $skip_resource_in_use_check} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [202]
 }
 
 # Provides metadata information about a bot.
@@ -1473,12 +1806,23 @@ export def "bots get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bot_id | is-empty) { error make --unspanned { msg: "path parameter 'botId' must be non-empty" } }
-  let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id)} | format pattern "/bots/{bot_id}/"))
+  let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id)} | format pattern "/bots/{bot_id}/") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates the configuration of an existing bot.
@@ -1517,14 +1861,25 @@ export def "bots update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bot_id | is-empty) { error make --unspanned { msg: "path parameter 'botId' must be non-empty" } }
-  let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id)} | format pattern "/bots/{bot_id}/"))
+  let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id)} | format pattern "/bots/{bot_id}/") $auth.query)
   let req_body = {"botName": $bot_name, "description": $description, "roleArn": $role_arn, "dataPrivacy": $data_privacy, "idleSessionTTLInSeconds": $idle_session_ttl_in_seconds, "botType": $bot_type, "botMembers": $bot_members} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [202]
 }
 
 # Deletes the specified bot alias.
@@ -1557,12 +1912,23 @@ export def "bots-botaliases delete-alias" [
   if ($bot_id | is-empty) { error make --unspanned { msg: "path parameter 'botId' must be non-empty" } }
   if ($bot_alias_id | is-empty) { error make --unspanned { msg: "path parameter 'botAliasId' must be non-empty" } }
   let qp = [(serialize-qp "skipResourceInUseCheck" $skip_resource_in_use_check "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id), bot_alias_id: (encode-path-segment $bot_alias_id)} | format pattern "/bots/{bot_id}/botaliases/{bot_alias_id}/") $qp)
+  let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id), bot_alias_id: (encode-path-segment $bot_alias_id)} | format pattern "/bots/{bot_id}/botaliases/{bot_alias_id}/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"skipResourceInUseCheck": $skip_resource_in_use_check} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"skipResourceInUseCheck": $skip_resource_in_use_check} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [202]
 }
 
 # Get information about a specific bot alias.
@@ -1593,12 +1959,23 @@ export def "bots-botaliases get-alias" [
   let base = ($base_url | default $BASE_URL)
   if ($bot_id | is-empty) { error make --unspanned { msg: "path parameter 'botId' must be non-empty" } }
   if ($bot_alias_id | is-empty) { error make --unspanned { msg: "path parameter 'botAliasId' must be non-empty" } }
-  let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id), bot_alias_id: (encode-path-segment $bot_alias_id)} | format pattern "/bots/{bot_id}/botaliases/{bot_alias_id}/"))
+  let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id), bot_alias_id: (encode-path-segment $bot_alias_id)} | format pattern "/bots/{bot_id}/botaliases/{bot_alias_id}/") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates the configuration of an existing bot alias.
@@ -1638,14 +2015,25 @@ export def "bots-botaliases update-alias" [
   let base = ($base_url | default $BASE_URL)
   if ($bot_id | is-empty) { error make --unspanned { msg: "path parameter 'botId' must be non-empty" } }
   if ($bot_alias_id | is-empty) { error make --unspanned { msg: "path parameter 'botAliasId' must be non-empty" } }
-  let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id), bot_alias_id: (encode-path-segment $bot_alias_id)} | format pattern "/bots/{bot_id}/botaliases/{bot_alias_id}/"))
+  let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id), bot_alias_id: (encode-path-segment $bot_alias_id)} | format pattern "/bots/{bot_id}/botaliases/{bot_alias_id}/") $auth.query)
   let req_body = {"botAliasName": $bot_alias_name, "description": $description, "botVersion": $bot_version, "botAliasLocaleSettings": $bot_alias_locale_settings, "conversationLogSettings": $conversation_log_settings, "sentimentAnalysisSettings": $sentiment_analysis_settings} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [202]
 }
 
 # Deletes a specific version of a bot. To delete all versions of a bot, use the DeleteBot (https://docs.aws.amazon.com/lexv2/latest/APIReference/API_DeleteBot.html) operation.
@@ -1678,12 +2066,23 @@ export def "bots-botversions delete-version" [
   if ($bot_id | is-empty) { error make --unspanned { msg: "path parameter 'botId' must be non-empty" } }
   if ($bot_version | is-empty) { error make --unspanned { msg: "path parameter 'botVersion' must be non-empty" } }
   let qp = [(serialize-qp "skipResourceInUseCheck" $skip_resource_in_use_check "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id), bot_version: (encode-path-segment $bot_version)} | format pattern "/bots/{bot_id}/botversions/{bot_version}/") $qp)
+  let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id), bot_version: (encode-path-segment $bot_version)} | format pattern "/bots/{bot_id}/botversions/{bot_version}/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"skipResourceInUseCheck": $skip_resource_in_use_check} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"skipResourceInUseCheck": $skip_resource_in_use_check} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [202]
 }
 
 # Provides metadata about a version of a bot.
@@ -1714,12 +2113,23 @@ export def "bots-botversions get-version" [
   let base = ($base_url | default $BASE_URL)
   if ($bot_id | is-empty) { error make --unspanned { msg: "path parameter 'botId' must be non-empty" } }
   if ($bot_version | is-empty) { error make --unspanned { msg: "path parameter 'botVersion' must be non-empty" } }
-  let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id), bot_version: (encode-path-segment $bot_version)} | format pattern "/bots/{bot_id}/botversions/{bot_version}/"))
+  let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id), bot_version: (encode-path-segment $bot_version)} | format pattern "/bots/{bot_id}/botversions/{bot_version}/") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Removes a custom vocabulary from the specified locale in the specified bot.
@@ -1752,12 +2162,23 @@ export def "bots-botversions-botlocales-customvocabulary delete-custom-vocabular
   if ($bot_id | is-empty) { error make --unspanned { msg: "path parameter 'botId' must be non-empty" } }
   if ($bot_version | is-empty) { error make --unspanned { msg: "path parameter 'botVersion' must be non-empty" } }
   if ($locale_id | is-empty) { error make --unspanned { msg: "path parameter 'localeId' must be non-empty" } }
-  let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id), bot_version: (encode-path-segment $bot_version), locale_id: (encode-path-segment $locale_id)} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/{locale_id}/customvocabulary"))
+  let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id), bot_version: (encode-path-segment $bot_version), locale_id: (encode-path-segment $locale_id)} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/{locale_id}/customvocabulary") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [202]
 }
 
 # Removes a previous export and the associated files stored in an S3 bucket.
@@ -1786,12 +2207,23 @@ export def "exports delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($export_id | is-empty) { error make --unspanned { msg: "path parameter 'exportId' must be non-empty" } }
-  let full_url = (build-url $base ({export_id: (encode-path-segment $export_id)} | format pattern "/exports/{export_id}/"))
+  let full_url = (build-url $base ({export_id: (encode-path-segment $export_id)} | format pattern "/exports/{export_id}/") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [202]
 }
 
 # Gets information about a specific export.
@@ -1820,12 +2252,23 @@ export def "exports get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($export_id | is-empty) { error make --unspanned { msg: "path parameter 'exportId' must be non-empty" } }
-  let full_url = (build-url $base ({export_id: (encode-path-segment $export_id)} | format pattern "/exports/{export_id}/"))
+  let full_url = (build-url $base ({export_id: (encode-path-segment $export_id)} | format pattern "/exports/{export_id}/") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates the password used to protect an export zip archive. The password is not required. If you don't supply a password, Amazon Lex generates a zip file that is not protected by a password. This is the archive that is available at the pre-signed S3 URL provided by the DescribeExport (https://docs.aws.amazon.com/lexv2/latest/APIReference/API_DescribeExport.html) operation.
@@ -1856,14 +2299,25 @@ export def "exports update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($export_id | is-empty) { error make --unspanned { msg: "path parameter 'exportId' must be non-empty" } }
-  let full_url = (build-url $base ({export_id: (encode-path-segment $export_id)} | format pattern "/exports/{export_id}/"))
+  let full_url = (build-url $base ({export_id: (encode-path-segment $export_id)} | format pattern "/exports/{export_id}/") $auth.query)
   let req_body = {"filePassword": $file_password} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [202]
 }
 
 # Removes a previous import and the associated file stored in an S3 bucket.
@@ -1892,12 +2346,23 @@ export def "imports delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($import_id | is-empty) { error make --unspanned { msg: "path parameter 'importId' must be non-empty" } }
-  let full_url = (build-url $base ({import_id: (encode-path-segment $import_id)} | format pattern "/imports/{import_id}/"))
+  let full_url = (build-url $base ({import_id: (encode-path-segment $import_id)} | format pattern "/imports/{import_id}/") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [202]
 }
 
 # Gets information about a specific import.
@@ -1926,12 +2391,23 @@ export def "imports get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($import_id | is-empty) { error make --unspanned { msg: "path parameter 'importId' must be non-empty" } }
-  let full_url = (build-url $base ({import_id: (encode-path-segment $import_id)} | format pattern "/imports/{import_id}/"))
+  let full_url = (build-url $base ({import_id: (encode-path-segment $import_id)} | format pattern "/imports/{import_id}/") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Removes the specified intent. Deleting an intent also deletes the slots associated with the intent.
@@ -1966,12 +2442,23 @@ export def "bots-botversions-botlocales-intents delete" [
   if ($bot_version | is-empty) { error make --unspanned { msg: "path parameter 'botVersion' must be non-empty" } }
   if ($locale_id | is-empty) { error make --unspanned { msg: "path parameter 'localeId' must be non-empty" } }
   if ($intent_id | is-empty) { error make --unspanned { msg: "path parameter 'intentId' must be non-empty" } }
-  let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id), bot_version: (encode-path-segment $bot_version), locale_id: (encode-path-segment $locale_id), intent_id: (encode-path-segment $intent_id)} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/{locale_id}/intents/{intent_id}/"))
+  let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id), bot_version: (encode-path-segment $bot_version), locale_id: (encode-path-segment $locale_id), intent_id: (encode-path-segment $intent_id)} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/{locale_id}/intents/{intent_id}/") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Returns metadata about an intent.
@@ -2006,12 +2493,23 @@ export def "bots-botversions-botlocales-intents get" [
   if ($bot_version | is-empty) { error make --unspanned { msg: "path parameter 'botVersion' must be non-empty" } }
   if ($locale_id | is-empty) { error make --unspanned { msg: "path parameter 'localeId' must be non-empty" } }
   if ($intent_id | is-empty) { error make --unspanned { msg: "path parameter 'intentId' must be non-empty" } }
-  let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id), bot_version: (encode-path-segment $bot_version), locale_id: (encode-path-segment $locale_id), intent_id: (encode-path-segment $intent_id)} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/{locale_id}/intents/{intent_id}/"))
+  let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id), bot_version: (encode-path-segment $bot_version), locale_id: (encode-path-segment $locale_id), intent_id: (encode-path-segment $intent_id)} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/{locale_id}/intents/{intent_id}/") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates the settings for an intent.
@@ -2070,14 +2568,25 @@ export def "bots-botversions-botlocales-intents update" [
   if ($bot_version | is-empty) { error make --unspanned { msg: "path parameter 'botVersion' must be non-empty" } }
   if ($locale_id | is-empty) { error make --unspanned { msg: "path parameter 'localeId' must be non-empty" } }
   if ($intent_id | is-empty) { error make --unspanned { msg: "path parameter 'intentId' must be non-empty" } }
-  let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id), bot_version: (encode-path-segment $bot_version), locale_id: (encode-path-segment $locale_id), intent_id: (encode-path-segment $intent_id)} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/{locale_id}/intents/{intent_id}/"))
+  let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id), bot_version: (encode-path-segment $bot_version), locale_id: (encode-path-segment $locale_id), intent_id: (encode-path-segment $intent_id)} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/{locale_id}/intents/{intent_id}/") $auth.query)
   let req_body = {"intentName": $intent_name, "description": $description, "parentIntentSignature": $parent_intent_signature, "sampleUtterances": $sample_utterances, "dialogCodeHook": $dialog_code_hook, "fulfillmentCodeHook": $fulfillment_code_hook, "slotPriorities": $slot_priorities, "intentConfirmationSetting": $intent_confirmation_setting, "intentClosingSetting": $intent_closing_setting, "inputContexts": $input_contexts, "outputContexts": $output_contexts, "kendraConfiguration": $kendra_configuration, "initialResponseSetting": $initial_response_setting} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes a policy statement from a resource policy. If you delete the last statement from a policy, the policy is deleted. If you specify a statement ID that doesn't exist in the policy, or if the bot or bot alias doesn't have a policy attached, Amazon Lex returns an exception.
@@ -2110,12 +2619,23 @@ export def "policy-statements delete-resource" [
   if ($resource_arn | is-empty) { error make --unspanned { msg: "path parameter 'resourceArn' must be non-empty" } }
   if ($statement_id | is-empty) { error make --unspanned { msg: "path parameter 'statementId' must be non-empty" } }
   let qp = [(serialize-qp "expectedRevisionId" $expected_revision_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn), statement_id: (encode-path-segment $statement_id)} | format pattern "/policy/{resource_arn}/statements/{statement_id}/") $qp)
+  let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn), statement_id: (encode-path-segment $statement_id)} | format pattern "/policy/{resource_arn}/statements/{statement_id}/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expectedRevisionId": $expected_revision_id} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"expectedRevisionId": $expected_revision_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Deletes the specified slot from an intent.
@@ -2152,12 +2672,23 @@ export def "bots-botversions-botlocales-intents-slots delete" [
   if ($locale_id | is-empty) { error make --unspanned { msg: "path parameter 'localeId' must be non-empty" } }
   if ($intent_id | is-empty) { error make --unspanned { msg: "path parameter 'intentId' must be non-empty" } }
   if ($slot_id | is-empty) { error make --unspanned { msg: "path parameter 'slotId' must be non-empty" } }
-  let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id), bot_version: (encode-path-segment $bot_version), locale_id: (encode-path-segment $locale_id), intent_id: (encode-path-segment $intent_id), slot_id: (encode-path-segment $slot_id)} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/{locale_id}/intents/{intent_id}/slots/{slot_id}/"))
+  let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id), bot_version: (encode-path-segment $bot_version), locale_id: (encode-path-segment $locale_id), intent_id: (encode-path-segment $intent_id), slot_id: (encode-path-segment $slot_id)} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/{locale_id}/intents/{intent_id}/slots/{slot_id}/") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Gets metadata information about a slot.
@@ -2194,12 +2725,23 @@ export def "bots-botversions-botlocales-intents-slots get" [
   if ($locale_id | is-empty) { error make --unspanned { msg: "path parameter 'localeId' must be non-empty" } }
   if ($intent_id | is-empty) { error make --unspanned { msg: "path parameter 'intentId' must be non-empty" } }
   if ($slot_id | is-empty) { error make --unspanned { msg: "path parameter 'slotId' must be non-empty" } }
-  let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id), bot_version: (encode-path-segment $bot_version), locale_id: (encode-path-segment $locale_id), intent_id: (encode-path-segment $intent_id), slot_id: (encode-path-segment $slot_id)} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/{locale_id}/intents/{intent_id}/slots/{slot_id}/"))
+  let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id), bot_version: (encode-path-segment $bot_version), locale_id: (encode-path-segment $locale_id), intent_id: (encode-path-segment $intent_id), slot_id: (encode-path-segment $slot_id)} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/{locale_id}/intents/{intent_id}/slots/{slot_id}/") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates the settings for a slot.
@@ -2248,14 +2790,25 @@ export def "bots-botversions-botlocales-intents-slots update" [
   if ($locale_id | is-empty) { error make --unspanned { msg: "path parameter 'localeId' must be non-empty" } }
   if ($intent_id | is-empty) { error make --unspanned { msg: "path parameter 'intentId' must be non-empty" } }
   if ($slot_id | is-empty) { error make --unspanned { msg: "path parameter 'slotId' must be non-empty" } }
-  let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id), bot_version: (encode-path-segment $bot_version), locale_id: (encode-path-segment $locale_id), intent_id: (encode-path-segment $intent_id), slot_id: (encode-path-segment $slot_id)} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/{locale_id}/intents/{intent_id}/slots/{slot_id}/"))
+  let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id), bot_version: (encode-path-segment $bot_version), locale_id: (encode-path-segment $locale_id), intent_id: (encode-path-segment $intent_id), slot_id: (encode-path-segment $slot_id)} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/{locale_id}/intents/{intent_id}/slots/{slot_id}/") $auth.query)
   let req_body = {"slotName": $slot_name, "description": $description, "slotTypeId": $slot_type_id, "valueElicitationSetting": $value_elicitation_setting, "obfuscationSetting": $obfuscation_setting, "multipleValuesSetting": $multiple_values_setting, "subSlotSetting": $sub_slot_setting} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes a slot type from a bot locale. If a slot is using the slot type, Amazon Lex throws a ResourceInUseException exception. To avoid the exception, set the skipResourceInUseCheck parameter to true.
@@ -2292,12 +2845,23 @@ export def "bots-botversions-botlocales-slottypes delete-slot-type" [
   if ($locale_id | is-empty) { error make --unspanned { msg: "path parameter 'localeId' must be non-empty" } }
   if ($slot_type_id | is-empty) { error make --unspanned { msg: "path parameter 'slotTypeId' must be non-empty" } }
   let qp = [(serialize-qp "skipResourceInUseCheck" $skip_resource_in_use_check "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id), bot_version: (encode-path-segment $bot_version), locale_id: (encode-path-segment $locale_id), slot_type_id: (encode-path-segment $slot_type_id)} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/{locale_id}/slottypes/{slot_type_id}/") $qp)
+  let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id), bot_version: (encode-path-segment $bot_version), locale_id: (encode-path-segment $locale_id), slot_type_id: (encode-path-segment $slot_type_id)} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/{locale_id}/slottypes/{slot_type_id}/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"skipResourceInUseCheck": $skip_resource_in_use_check} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"skipResourceInUseCheck": $skip_resource_in_use_check} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Gets metadata information about a slot type.
@@ -2332,12 +2896,23 @@ export def "bots-botversions-botlocales-slottypes get-slot-type" [
   if ($bot_version | is-empty) { error make --unspanned { msg: "path parameter 'botVersion' must be non-empty" } }
   if ($locale_id | is-empty) { error make --unspanned { msg: "path parameter 'localeId' must be non-empty" } }
   if ($slot_type_id | is-empty) { error make --unspanned { msg: "path parameter 'slotTypeId' must be non-empty" } }
-  let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id), bot_version: (encode-path-segment $bot_version), locale_id: (encode-path-segment $locale_id), slot_type_id: (encode-path-segment $slot_type_id)} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/{locale_id}/slottypes/{slot_type_id}/"))
+  let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id), bot_version: (encode-path-segment $bot_version), locale_id: (encode-path-segment $locale_id), slot_type_id: (encode-path-segment $slot_type_id)} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/{locale_id}/slottypes/{slot_type_id}/") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates the configuration of an existing slot type.
@@ -2384,14 +2959,25 @@ export def "bots-botversions-botlocales-slottypes update-slot-type" [
   if ($bot_version | is-empty) { error make --unspanned { msg: "path parameter 'botVersion' must be non-empty" } }
   if ($locale_id | is-empty) { error make --unspanned { msg: "path parameter 'localeId' must be non-empty" } }
   if ($slot_type_id | is-empty) { error make --unspanned { msg: "path parameter 'slotTypeId' must be non-empty" } }
-  let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id), bot_version: (encode-path-segment $bot_version), locale_id: (encode-path-segment $locale_id), slot_type_id: (encode-path-segment $slot_type_id)} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/{locale_id}/slottypes/{slot_type_id}/"))
+  let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id), bot_version: (encode-path-segment $bot_version), locale_id: (encode-path-segment $locale_id), slot_type_id: (encode-path-segment $slot_type_id)} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/{locale_id}/slottypes/{slot_type_id}/") $auth.query)
   let req_body = {"slotTypeName": $slot_type_name, "description": $description, "slotTypeValues": $slot_type_values, "valueSelectionSetting": $value_selection_setting, "parentSlotTypeSignature": $parent_slot_type_signature, "externalSourceSetting": $external_source_setting, "compositeSlotTypeSetting": $composite_slot_type_setting} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [202]
 }
 
 # Deletes stored utterances. Amazon Lex stores the utterances that users send to your bot. Utterances are stored for 15 days for use with the ListAggregatedUtterances (https://docs.aws.amazon.com/lexv2/latest/APIReference/API_ListAggregatedUtterances.html) operation, and then stored indefinitely for use in improving the ability of your bot to respond to user input.. Use the DeleteUtterances operation to manually delete utterances for a specific session. When you use the DeleteUtterances operation, utterances stored for improving your bot's ability to respond to user input are deleted immediately. Utterances stored for use with the ListAggregatedUtterances operation are deleted after 15 days.
@@ -2423,12 +3009,23 @@ export def "bots-utterances delete" [
   let base = ($base_url | default $BASE_URL)
   if ($bot_id | is-empty) { error make --unspanned { msg: "path parameter 'botId' must be non-empty" } }
   let qp = [(serialize-qp "localeId" $locale_id "scalar") (serialize-qp "sessionId" $session_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id)} | format pattern "/bots/{bot_id}/utterances/") $qp)
+  let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id)} | format pattern "/bots/{bot_id}/utterances/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"localeId": $locale_id, "sessionId": $session_id} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"localeId": $locale_id, "sessionId": $session_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Provides metadata information about a bot recommendation. This information will enable you to get a description on the request inputs, to download associated transcripts after processing is complete, and to download intents and slot-types generated by the bot recommendation.
@@ -2463,12 +3060,23 @@ export def "bots-botversions-botlocales-botrecommendations get-recommendation" [
   if ($bot_version | is-empty) { error make --unspanned { msg: "path parameter 'botVersion' must be non-empty" } }
   if ($locale_id | is-empty) { error make --unspanned { msg: "path parameter 'localeId' must be non-empty" } }
   if ($bot_recommendation_id | is-empty) { error make --unspanned { msg: "path parameter 'botRecommendationId' must be non-empty" } }
-  let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id), bot_version: (encode-path-segment $bot_version), locale_id: (encode-path-segment $locale_id), bot_recommendation_id: (encode-path-segment $bot_recommendation_id)} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/{locale_id}/botrecommendations/{bot_recommendation_id}/"))
+  let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id), bot_version: (encode-path-segment $bot_version), locale_id: (encode-path-segment $locale_id), bot_recommendation_id: (encode-path-segment $bot_recommendation_id)} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/{locale_id}/botrecommendations/{bot_recommendation_id}/") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates an existing bot recommendation request.
@@ -2506,14 +3114,25 @@ export def "bots-botversions-botlocales-botrecommendations update-recommendation
   if ($bot_version | is-empty) { error make --unspanned { msg: "path parameter 'botVersion' must be non-empty" } }
   if ($locale_id | is-empty) { error make --unspanned { msg: "path parameter 'localeId' must be non-empty" } }
   if ($bot_recommendation_id | is-empty) { error make --unspanned { msg: "path parameter 'botRecommendationId' must be non-empty" } }
-  let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id), bot_version: (encode-path-segment $bot_version), locale_id: (encode-path-segment $locale_id), bot_recommendation_id: (encode-path-segment $bot_recommendation_id)} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/{locale_id}/botrecommendations/{bot_recommendation_id}/"))
+  let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id), bot_version: (encode-path-segment $bot_version), locale_id: (encode-path-segment $locale_id), bot_recommendation_id: (encode-path-segment $bot_recommendation_id)} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/{locale_id}/botrecommendations/{bot_recommendation_id}/") $auth.query)
   let req_body = {"encryptionSetting": $encryption_setting} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [202]
 }
 
 # Provides metadata information about a custom vocabulary.
@@ -2546,12 +3165,23 @@ export def "bots-botversions-botlocales-customvocabulary-default-metadata get-cu
   if ($bot_id | is-empty) { error make --unspanned { msg: "path parameter 'botId' must be non-empty" } }
   if ($bot_version | is-empty) { error make --unspanned { msg: "path parameter 'botVersion' must be non-empty" } }
   if ($locale_id | is-empty) { error make --unspanned { msg: "path parameter 'localeId' must be non-empty" } }
-  let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id), bot_version: (encode-path-segment $bot_version), locale_id: (encode-path-segment $locale_id)} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/{locale_id}/customvocabulary/DEFAULT/metadata"))
+  let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id), bot_version: (encode-path-segment $bot_version), locale_id: (encode-path-segment $locale_id)} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/{locale_id}/customvocabulary/DEFAULT/metadata") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Provides a list of utterances that users have sent to the bot. Utterances are aggregated by the text of the utterance. For example, all instances where customers used the phrase "I want to order pizza" are aggregated into the same line in the response. You can see both detected utterances and missed utterances. A detected utterance is where the bot properly recognized the utterance and activated the associated intent. A missed utterance was not recognized by the bot and didn't activate an intent. Utterances can be aggregated for a bot alias or for a bot version, but not both at the same time. Utterances statistics are not generated under the following conditions: The childDirected field was set to true when the bot was created. You are using slot obfuscation with one or more slots. You opted out of participating in improving Amazon Lex.
@@ -2595,14 +3225,25 @@ export def "bots-aggregatedutterances list-aggregated-utterances" [
   let base = ($base_url | default $BASE_URL)
   if ($bot_id | is-empty) { error make --unspanned { msg: "path parameter 'botId' must be non-empty" } }
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id)} | format pattern "/bots/{bot_id}/aggregatedutterances/") $qp)
+  let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id)} | format pattern "/bots/{bot_id}/aggregatedutterances/") $qp $auth.query)
   let req_body = {"botAliasId": $bot_alias_id, "botVersion": $bot_version, "localeId": $locale_id, "aggregationDuration": $aggregation_duration, "sortBy": $sort_by, "filters": $filters, "maxResults": $max_results_body, "nextToken": $next_token_body} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"maxResults": $max_results, "nextToken": $next_token} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"maxResults": $max_results, "nextToken": $next_token} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get a list of bot recommendations that meet the specified criteria.
@@ -2641,14 +3282,25 @@ export def "bots-botversions-botlocales-botrecommendations list-recommendations"
   if ($bot_version | is-empty) { error make --unspanned { msg: "path parameter 'botVersion' must be non-empty" } }
   if ($locale_id | is-empty) { error make --unspanned { msg: "path parameter 'localeId' must be non-empty" } }
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id), bot_version: (encode-path-segment $bot_version), locale_id: (encode-path-segment $locale_id)} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/{locale_id}/botrecommendations/") $qp)
+  let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id), bot_version: (encode-path-segment $bot_version), locale_id: (encode-path-segment $locale_id)} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/{locale_id}/botrecommendations/") $qp $auth.query)
   let req_body = {"maxResults": $max_results_body, "nextToken": $next_token_body} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"maxResults": $max_results, "nextToken": $next_token} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"maxResults": $max_results, "nextToken": $next_token} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Use this to provide your transcript data, and to start the bot recommendation process.
@@ -2686,14 +3338,25 @@ export def "bots-botversions-botlocales-botrecommendations start-recommendation"
   if ($bot_id | is-empty) { error make --unspanned { msg: "path parameter 'botId' must be non-empty" } }
   if ($bot_version | is-empty) { error make --unspanned { msg: "path parameter 'botVersion' must be non-empty" } }
   if ($locale_id | is-empty) { error make --unspanned { msg: "path parameter 'localeId' must be non-empty" } }
-  let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id), bot_version: (encode-path-segment $bot_version), locale_id: (encode-path-segment $locale_id)} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/{locale_id}/botrecommendations/"))
+  let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id), bot_version: (encode-path-segment $bot_version), locale_id: (encode-path-segment $locale_id)} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/{locale_id}/botrecommendations/") $auth.query)
   let req_body = {"transcriptSourceSetting": $transcript_source_setting, "encryptionSetting": $encryption_setting} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [202]
 }
 
 # Gets a list of built-in intents provided by Amazon Lex that you can use in your bot. To use a built-in intent as a the base for your own intent, include the built-in intent signature in the parentIntentSignature parameter when you call the CreateIntent operation. For more information, see CreateIntent (https://docs.aws.amazon.com/lexv2/latest/APIReference/API_CreateIntent.html).
@@ -2730,14 +3393,25 @@ export def "builtins-locales-intents list-built" [
   let base = ($base_url | default $BASE_URL)
   if ($locale_id | is-empty) { error make --unspanned { msg: "path parameter 'localeId' must be non-empty" } }
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({locale_id: (encode-path-segment $locale_id)} | format pattern "/builtins/locales/{locale_id}/intents/") $qp)
+  let full_url = (build-url $base ({locale_id: (encode-path-segment $locale_id)} | format pattern "/builtins/locales/{locale_id}/intents/") $qp $auth.query)
   let req_body = {"sortBy": $sort_by, "maxResults": $max_results_body, "nextToken": $next_token_body} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"maxResults": $max_results, "nextToken": $next_token} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"maxResults": $max_results, "nextToken": $next_token} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Gets a list of built-in slot types that meet the specified criteria.
@@ -2774,14 +3448,25 @@ export def "builtins-locales-slottypes list-built-in-slot-types" [
   let base = ($base_url | default $BASE_URL)
   if ($locale_id | is-empty) { error make --unspanned { msg: "path parameter 'localeId' must be non-empty" } }
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({locale_id: (encode-path-segment $locale_id)} | format pattern "/builtins/locales/{locale_id}/slottypes/") $qp)
+  let full_url = (build-url $base ({locale_id: (encode-path-segment $locale_id)} | format pattern "/builtins/locales/{locale_id}/slottypes/") $qp $auth.query)
   let req_body = {"sortBy": $sort_by, "maxResults": $max_results_body, "nextToken": $next_token_body} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"maxResults": $max_results, "nextToken": $next_token} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"maxResults": $max_results, "nextToken": $next_token} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Paginated list of custom vocabulary items for a given bot locale's custom vocabulary.
@@ -2820,14 +3505,25 @@ export def "bots-botversions-botlocales-customvocabulary-default-list list-custo
   if ($bot_version | is-empty) { error make --unspanned { msg: "path parameter 'botVersion' must be non-empty" } }
   if ($locale_id | is-empty) { error make --unspanned { msg: "path parameter 'localeId' must be non-empty" } }
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id), bot_version: (encode-path-segment $bot_version), locale_id: (encode-path-segment $locale_id)} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/{locale_id}/customvocabulary/DEFAULT/list") $qp)
+  let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id), bot_version: (encode-path-segment $bot_version), locale_id: (encode-path-segment $locale_id)} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/{locale_id}/customvocabulary/DEFAULT/list") $qp $auth.query)
   let req_body = {"maxResults": $max_results_body, "nextToken": $next_token_body} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"maxResults": $max_results, "nextToken": $next_token} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"maxResults": $max_results, "nextToken": $next_token} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Lists the imports for a bot, bot locale, or custom vocabulary. Imports are kept in the list for 7 days.
@@ -2867,14 +3563,25 @@ export def "imports list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/imports/" $qp)
+  let full_url = (build-url $base "/imports/" $qp $auth.query)
   let req_body = {"botId": $bot_id, "botVersion": $bot_version, "sortBy": $sort_by, "filters": $filters, "maxResults": $max_results_body, "nextToken": $next_token_body, "localeId": $locale_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"maxResults": $max_results, "nextToken": $next_token} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"maxResults": $max_results, "nextToken": $next_token} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Starts importing a bot, bot locale, or custom vocabulary from a zip archive that you uploaded to an S3 bucket.
@@ -2907,14 +3614,25 @@ export def "imports start" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/imports/")
+  let full_url = (build-url $base "/imports/" $auth.query)
   let req_body = {"importId": $import_id, "resourceSpecification": $resource_specification, "mergeStrategy": $merge_strategy, "filePassword": $file_password} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [202]
 }
 
 # Gets a list of recommended intents provided by the bot recommendation that you can use in your bot. Intents in the response are ordered by relevance.
@@ -2955,14 +3673,25 @@ export def "bots-botversions-botlocales-botrecommendations-intents list-recommen
   if ($locale_id | is-empty) { error make --unspanned { msg: "path parameter 'localeId' must be non-empty" } }
   if ($bot_recommendation_id | is-empty) { error make --unspanned { msg: "path parameter 'botRecommendationId' must be non-empty" } }
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id), bot_version: (encode-path-segment $bot_version), locale_id: (encode-path-segment $locale_id), bot_recommendation_id: (encode-path-segment $bot_recommendation_id)} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/{locale_id}/botrecommendations/{bot_recommendation_id}/intents") $qp)
+  let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id), bot_version: (encode-path-segment $bot_version), locale_id: (encode-path-segment $locale_id), bot_recommendation_id: (encode-path-segment $bot_recommendation_id)} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/{locale_id}/botrecommendations/{bot_recommendation_id}/intents") $qp $auth.query)
   let req_body = {"nextToken": $next_token_body, "maxResults": $max_results_body} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"maxResults": $max_results, "nextToken": $next_token} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"maxResults": $max_results, "nextToken": $next_token} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Gets a list of tags associated with a resource. Only bots, bot aliases, and bot channels can have tags associated with them.
@@ -2991,12 +3720,23 @@ export def "tags list-for-resource" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn | is-empty) { error make --unspanned { msg: "path parameter 'resourceARN' must be non-empty" } }
-  let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn)} | format pattern "/tags/{resource_arn}"))
+  let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn)} | format pattern "/tags/{resource_arn}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Adds the specified tags to the specified resource. If a tag key already exists, the existing value is replaced with the new value.
@@ -3027,14 +3767,25 @@ export def "tags tag-resource" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn | is-empty) { error make --unspanned { msg: "path parameter 'resourceARN' must be non-empty" } }
-  let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn)} | format pattern "/tags/{resource_arn}"))
+  let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn)} | format pattern "/tags/{resource_arn}") $auth.query)
   let req_body = {"tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Search for associated transcripts that meet the specified criteria.
@@ -3075,14 +3826,25 @@ export def "bots-botversions-botlocales-botrecommendations-associatedtranscripts
   if ($bot_version | is-empty) { error make --unspanned { msg: "path parameter 'botVersion' must be non-empty" } }
   if ($locale_id | is-empty) { error make --unspanned { msg: "path parameter 'localeId' must be non-empty" } }
   if ($bot_recommendation_id | is-empty) { error make --unspanned { msg: "path parameter 'botRecommendationId' must be non-empty" } }
-  let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id), bot_version: (encode-path-segment $bot_version), locale_id: (encode-path-segment $locale_id), bot_recommendation_id: (encode-path-segment $bot_recommendation_id)} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/{locale_id}/botrecommendations/{bot_recommendation_id}/associatedtranscripts"))
+  let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id), bot_version: (encode-path-segment $bot_version), locale_id: (encode-path-segment $locale_id), bot_recommendation_id: (encode-path-segment $bot_recommendation_id)} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/{locale_id}/botrecommendations/{bot_recommendation_id}/associatedtranscripts") $auth.query)
   let req_body = {"searchOrder": $search_order, "filters": $filters, "maxResults": $max_results, "nextIndex": $next_index} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Stop an already running Bot Recommendation request.
@@ -3117,12 +3879,23 @@ export def "bots-botversions-botlocales-botrecommendations-stopbotrecommendation
   if ($bot_version | is-empty) { error make --unspanned { msg: "path parameter 'botVersion' must be non-empty" } }
   if ($locale_id | is-empty) { error make --unspanned { msg: "path parameter 'localeId' must be non-empty" } }
   if ($bot_recommendation_id | is-empty) { error make --unspanned { msg: "path parameter 'botRecommendationId' must be non-empty" } }
-  let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id), bot_version: (encode-path-segment $bot_version), locale_id: (encode-path-segment $locale_id), bot_recommendation_id: (encode-path-segment $bot_recommendation_id)} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/{locale_id}/botrecommendations/{bot_recommendation_id}/stopbotrecommendation"))
+  let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id), bot_version: (encode-path-segment $bot_version), locale_id: (encode-path-segment $locale_id), bot_recommendation_id: (encode-path-segment $bot_recommendation_id)} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/{locale_id}/botrecommendations/{bot_recommendation_id}/stopbotrecommendation") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req null $insecure $raw $allow_errors $full [202]
 }
 
 # Removes tags from a bot, bot alias, or bot channel.
@@ -3153,10 +3926,21 @@ export def "tags untag-resource" [
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn | is-empty) { error make --unspanned { msg: "path parameter 'resourceARN' must be non-empty" } }
   let qp = [(serialize-qp "tagKeys" $tag_keys "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn)} | format pattern "/tags/{resource_arn}") $qp)
+  let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn)} | format pattern "/tags/{resource_arn}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"tagKeys": $tag_keys} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"tagKeys": $tag_keys} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }

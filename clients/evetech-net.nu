@@ -8,7 +8,7 @@ const BASE_URL = "https://esi.evetech.net/latest"
 # `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
 # where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o EVE_SWAGGER_INTERFACE_TOKEN | default "" }
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o EVE_SWAGGER_INTERFACE_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
@@ -41,14 +41,11 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
-# Trick: `url encode --all` over-encodes, then we decode the four unreserved
-# punctuation chars back. Pre-existing %XX sequences in the input survive
-# because `url encode --all` first turns their % into %25.
 def encode-path-segment [v: any]: nothing -> string {
   $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
-# Serialize an array-typed path parameter (issue 49.A). OpenAPI 3 `style: simple`
+# Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
 # (the default for path params) and Swagger 2 `collectionFormat: csv` both join
 # the elements with a literal comma WITHIN the single path segment, each element
 # RFC-3986-encoded individually (so a comma inside an element stays %2C). Without
@@ -59,51 +56,57 @@ def encode-path-array [v: any]: nothing -> string {
   if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
 }
 
-# Build URL from base, path, and optional query string
-def build-url [base: string, path: string, query?: string]: nothing -> string {
+# Build the request URL from base, path, and any number of pre-encoded query
+# fragments (param serializer output and/or the auth query). Each fragment is an
+# `&`-joinable `key=value` string already percent-encoded by its producer; empty
+# fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
+# delimiters are hand-spliced — and any query already on the base URL is merged in.
+def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
   let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
-  let result = ($parsed | upsert path $full_path)
-  if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
+  let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
+  $parsed | upsert path $full_path | upsert query $query | url join
 }
 
-# Build the dry-run record returned by --dry-run. Shape:
-#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
-#    auth: {scheme, location}}
-# `meta` carries logical-form data (the query record by spec name, the pre-serialization
-# body) that do-request itself cannot reconstruct from its wire-format args.
-def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
-  let m = ($meta | default {})
-  {
-    dry_run: true
-    method: $method
-    url: $url
-    query: ($m | get -o query | default {})
-    headers: $auth.headers
-    body: ($m | get -o body)
-    content_type: $content_type
-    timeout: $timeout
-    auth: {scheme: $auth.scheme, location: $auth.location}
-  }
+# Success policy: did this response succeed? Single source of truth, consulted by
+# handle-response and the HEAD header-unwrap. Empty ok_codes means the spec listed
+# none, so fall back to < 400. Otherwise: any 2xx, plus documented success codes.
+def status-ok [status: int, ok_codes: list<int>]: nothing -> bool {
+  if ($ok_codes | is-empty) { $status < 400 } else { ($status >= 200 and $status < 300) or ($status in $ok_codes) }
 }
 
-# Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
-  let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
-  let timeout = ($max_time | default 30min)
-  let ct = ($content_type | default "application/json")
-  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
-  let resp = match $method {
-    "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
-  }
-  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
-  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
+# Unwrap a `--full` HTTP response into the user-facing value. Response arrives
+# via pipeline; ok_codes gates the error throw (see status-ok).
+def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: record -> any {
+  let resp = $in
+  if $allow_errors { return $resp }
+  if not (status-ok $resp.status $ok_codes) { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } }
+  if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
+  if $resp.status == 204 { return null }
+  $resp.body
+}
+
+# GET — bodyless, honours --raw
+def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+}
+
+# POST — body + content-type
+def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# PUT — body + content-type
+def send-put [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http put --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http put --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# DELETE — body via --data
+def send-delete [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http delete --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url } else { http delete --headers $req.headers --content-type $req.content_type --data $body --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url }
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 def base-url-completer [] { ["https://esi.evetech.net/latest"] }
@@ -163,12 +166,23 @@ export def "alliances list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/alliances/" $qp)
+  let full_url = (build-url $base "/alliances/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Get alliance information
@@ -193,12 +207,23 @@ export def "alliances get" [
   let base = ($base_url | default $BASE_URL)
   if ($alliance_id | is-empty) { error make --unspanned { msg: "path parameter 'alliance_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({alliance_id: (encode-path-segment $alliance_id)} | format pattern "/alliances/{alliance_id}/") $qp)
+  let full_url = (build-url $base ({alliance_id: (encode-path-segment $alliance_id)} | format pattern "/alliances/{alliance_id}/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Get alliance contacts
@@ -225,12 +250,23 @@ export def "alliances-contacts get" [
   let base = ($base_url | default $BASE_URL)
   if ($alliance_id | is-empty) { error make --unspanned { msg: "path parameter 'alliance_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({alliance_id: (encode-path-segment $alliance_id)} | format pattern "/alliances/{alliance_id}/contacts/") $qp)
+  let full_url = (build-url $base ({alliance_id: (encode-path-segment $alliance_id)} | format pattern "/alliances/{alliance_id}/contacts/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource, "page": $page, "token": $qp_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource, "page": $page, "token": $qp_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Get alliance contact labels
@@ -256,12 +292,23 @@ export def "alliances-contacts-labels get" [
   let base = ($base_url | default $BASE_URL)
   if ($alliance_id | is-empty) { error make --unspanned { msg: "path parameter 'alliance_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({alliance_id: (encode-path-segment $alliance_id)} | format pattern "/alliances/{alliance_id}/contacts/labels/") $qp)
+  let full_url = (build-url $base ({alliance_id: (encode-path-segment $alliance_id)} | format pattern "/alliances/{alliance_id}/contacts/labels/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource, "token": $qp_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource, "token": $qp_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # List alliance's corporations
@@ -286,12 +333,23 @@ export def "alliances-corporations get" [
   let base = ($base_url | default $BASE_URL)
   if ($alliance_id | is-empty) { error make --unspanned { msg: "path parameter 'alliance_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({alliance_id: (encode-path-segment $alliance_id)} | format pattern "/alliances/{alliance_id}/corporations/") $qp)
+  let full_url = (build-url $base ({alliance_id: (encode-path-segment $alliance_id)} | format pattern "/alliances/{alliance_id}/corporations/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Get alliance icon
@@ -316,12 +374,23 @@ export def "alliances-icons get" [
   let base = ($base_url | default $BASE_URL)
   if ($alliance_id | is-empty) { error make --unspanned { msg: "path parameter 'alliance_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({alliance_id: (encode-path-segment $alliance_id)} | format pattern "/alliances/{alliance_id}/icons/") $qp)
+  let full_url = (build-url $base ({alliance_id: (encode-path-segment $alliance_id)} | format pattern "/alliances/{alliance_id}/icons/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Character affiliation
@@ -345,12 +414,23 @@ export def "characters-affiliation create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/characters/affiliation/" $qp)
+  let full_url = (build-url $base "/characters/affiliation/" $qp $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"datasource": $datasource} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"datasource": $datasource} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get character's public information
@@ -375,12 +455,23 @@ export def "characters get" [
   let base = ($base_url | default $BASE_URL)
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'character_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/") $qp)
+  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Get agents research
@@ -406,12 +497,23 @@ export def "characters-agents-research get" [
   let base = ($base_url | default $BASE_URL)
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'character_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/agents_research/") $qp)
+  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/agents_research/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource, "token": $qp_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource, "token": $qp_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Get character assets
@@ -438,12 +540,23 @@ export def "characters-assets get" [
   let base = ($base_url | default $BASE_URL)
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'character_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/assets/") $qp)
+  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/assets/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource, "page": $page, "token": $qp_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource, "page": $page, "token": $qp_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Get character asset locations
@@ -470,12 +583,23 @@ export def "characters-assets-locations create" [
   let base = ($base_url | default $BASE_URL)
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'character_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/assets/locations/") $qp)
+  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/assets/locations/") $qp $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"datasource": $datasource, "token": $qp_token} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"datasource": $datasource, "token": $qp_token} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get character asset names
@@ -502,12 +626,23 @@ export def "characters-assets-names create" [
   let base = ($base_url | default $BASE_URL)
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'character_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/assets/names/") $qp)
+  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/assets/names/") $qp $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"datasource": $datasource, "token": $qp_token} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"datasource": $datasource, "token": $qp_token} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get character attributes
@@ -533,12 +668,23 @@ export def "characters-attributes get" [
   let base = ($base_url | default $BASE_URL)
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'character_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/attributes/") $qp)
+  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/attributes/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource, "token": $qp_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource, "token": $qp_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Get blueprints
@@ -565,12 +711,23 @@ export def "characters-blueprints get" [
   let base = ($base_url | default $BASE_URL)
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'character_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/blueprints/") $qp)
+  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/blueprints/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource, "page": $page, "token": $qp_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource, "page": $page, "token": $qp_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # List bookmarks
@@ -597,12 +754,23 @@ export def "characters-bookmarks get" [
   let base = ($base_url | default $BASE_URL)
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'character_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/bookmarks/") $qp)
+  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/bookmarks/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource, "page": $page, "token": $qp_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource, "page": $page, "token": $qp_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # List bookmark folders
@@ -629,12 +797,23 @@ export def "characters-bookmarks-folders get" [
   let base = ($base_url | default $BASE_URL)
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'character_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/bookmarks/folders/") $qp)
+  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/bookmarks/folders/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource, "page": $page, "token": $qp_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource, "page": $page, "token": $qp_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # List calendar event summaries
@@ -661,12 +840,23 @@ export def "characters-calendar list" [
   let base = ($base_url | default $BASE_URL)
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'character_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "from_event" $from_event "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/calendar/") $qp)
+  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/calendar/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource, "from_event": $from_event, "token": $qp_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource, "from_event": $from_event, "token": $qp_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Get an event
@@ -694,12 +884,23 @@ export def "characters-calendar get" [
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'character_id' must be non-empty" } }
   if ($event_id | is-empty) { error make --unspanned { msg: "path parameter 'event_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id), event_id: (encode-path-segment $event_id)} | format pattern "/characters/{character_id}/calendar/{event_id}/") $qp)
+  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id), event_id: (encode-path-segment $event_id)} | format pattern "/characters/{character_id}/calendar/{event_id}/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource, "token": $qp_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource, "token": $qp_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Respond to an event
@@ -728,12 +929,23 @@ export def "characters-calendar update" [
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'character_id' must be non-empty" } }
   if ($event_id | is-empty) { error make --unspanned { msg: "path parameter 'event_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id), event_id: (encode-path-segment $event_id)} | format pattern "/characters/{character_id}/calendar/{event_id}/") $qp)
+  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id), event_id: (encode-path-segment $event_id)} | format pattern "/characters/{character_id}/calendar/{event_id}/") $qp $auth.query)
   let req_body = {"response": $response} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"datasource": $datasource, "token": $qp_token} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"datasource": $datasource, "token": $qp_token} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Get attendees
@@ -761,12 +973,23 @@ export def "characters-calendar-attendees get" [
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'character_id' must be non-empty" } }
   if ($event_id | is-empty) { error make --unspanned { msg: "path parameter 'event_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id), event_id: (encode-path-segment $event_id)} | format pattern "/characters/{character_id}/calendar/{event_id}/attendees/") $qp)
+  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id), event_id: (encode-path-segment $event_id)} | format pattern "/characters/{character_id}/calendar/{event_id}/attendees/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource, "token": $qp_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource, "token": $qp_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Get clones
@@ -792,12 +1015,23 @@ export def "characters-clones get" [
   let base = ($base_url | default $BASE_URL)
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'character_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/clones/") $qp)
+  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/clones/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource, "token": $qp_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource, "token": $qp_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Delete contacts
@@ -823,10 +1057,21 @@ export def "characters-contacts delete" [
   let base = ($base_url | default $BASE_URL)
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'character_id' must be non-empty" } }
   let qp = [(serialize-qp "contact_ids" $contact_ids "csv") (serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/contacts/") $qp)
+  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/contacts/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"contact_ids": $contact_ids, "datasource": $datasource, "token": $qp_token} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"contact_ids": $contact_ids, "datasource": $datasource, "token": $qp_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Get contacts
@@ -853,12 +1098,23 @@ export def "characters-contacts get" [
   let base = ($base_url | default $BASE_URL)
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'character_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/contacts/") $qp)
+  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/contacts/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource, "page": $page, "token": $qp_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource, "page": $page, "token": $qp_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Add contacts
@@ -888,12 +1144,23 @@ export def "characters-contacts create" [
   let base = ($base_url | default $BASE_URL)
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'character_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "label_ids" $label_ids "csv") (serialize-qp "standing" $standing "scalar") (serialize-qp "token" $qp_token "scalar") (serialize-qp "watched" $watched "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/contacts/") $qp)
+  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/contacts/") $qp $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"datasource": $datasource, "label_ids": $label_ids, "standing": $standing, "token": $qp_token, "watched": $watched} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"datasource": $datasource, "label_ids": $label_ids, "standing": $standing, "token": $qp_token, "watched": $watched} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Edit contacts
@@ -923,12 +1190,23 @@ export def "characters-contacts update" [
   let base = ($base_url | default $BASE_URL)
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'character_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "label_ids" $label_ids "csv") (serialize-qp "standing" $standing "scalar") (serialize-qp "token" $qp_token "scalar") (serialize-qp "watched" $watched "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/contacts/") $qp)
+  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/contacts/") $qp $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"datasource": $datasource, "label_ids": $label_ids, "standing": $standing, "token": $qp_token, "watched": $watched} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"datasource": $datasource, "label_ids": $label_ids, "standing": $standing, "token": $qp_token, "watched": $watched} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Get contact labels
@@ -954,12 +1232,23 @@ export def "characters-contacts-labels get" [
   let base = ($base_url | default $BASE_URL)
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'character_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/contacts/labels/") $qp)
+  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/contacts/labels/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource, "token": $qp_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource, "token": $qp_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Get contracts
@@ -986,12 +1275,23 @@ export def "characters-contracts get" [
   let base = ($base_url | default $BASE_URL)
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'character_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/contracts/") $qp)
+  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/contracts/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource, "page": $page, "token": $qp_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource, "page": $page, "token": $qp_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Get contract bids
@@ -1019,12 +1319,23 @@ export def "characters-contracts-bids get" [
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'character_id' must be non-empty" } }
   if ($contract_id | is-empty) { error make --unspanned { msg: "path parameter 'contract_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id), contract_id: (encode-path-segment $contract_id)} | format pattern "/characters/{character_id}/contracts/{contract_id}/bids/") $qp)
+  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id), contract_id: (encode-path-segment $contract_id)} | format pattern "/characters/{character_id}/contracts/{contract_id}/bids/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource, "token": $qp_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource, "token": $qp_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Get contract items
@@ -1052,12 +1363,23 @@ export def "characters-contracts-items get" [
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'character_id' must be non-empty" } }
   if ($contract_id | is-empty) { error make --unspanned { msg: "path parameter 'contract_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id), contract_id: (encode-path-segment $contract_id)} | format pattern "/characters/{character_id}/contracts/{contract_id}/items/") $qp)
+  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id), contract_id: (encode-path-segment $contract_id)} | format pattern "/characters/{character_id}/contracts/{contract_id}/items/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource, "token": $qp_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource, "token": $qp_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Get corporation history
@@ -1082,12 +1404,23 @@ export def "characters-corporationhistory get" [
   let base = ($base_url | default $BASE_URL)
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'character_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/corporationhistory/") $qp)
+  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/corporationhistory/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Calculate a CSPA charge cost
@@ -1114,12 +1447,23 @@ export def "characters-cspa create" [
   let base = ($base_url | default $BASE_URL)
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'character_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/cspa/") $qp)
+  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/cspa/") $qp $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"datasource": $datasource, "token": $qp_token} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"datasource": $datasource, "token": $qp_token} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Get jump fatigue
@@ -1145,12 +1489,23 @@ export def "characters-fatigue get" [
   let base = ($base_url | default $BASE_URL)
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'character_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/fatigue/") $qp)
+  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/fatigue/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource, "token": $qp_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource, "token": $qp_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Get fittings
@@ -1176,12 +1531,23 @@ export def "characters-fittings get" [
   let base = ($base_url | default $BASE_URL)
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'character_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/fittings/") $qp)
+  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/fittings/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource, "token": $qp_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource, "token": $qp_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Create fitting
@@ -1212,12 +1578,23 @@ export def "characters-fittings create" [
   let base = ($base_url | default $BASE_URL)
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'character_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/fittings/") $qp)
+  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/fittings/") $qp $auth.query)
   let req_body = {"description": $description, "items": $items, "name": $name, "ship_type_id": $ship_type_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"datasource": $datasource, "token": $qp_token} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"datasource": $datasource, "token": $qp_token} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Delete fitting
@@ -1244,10 +1621,21 @@ export def "characters-fittings delete" [
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'character_id' must be non-empty" } }
   if ($fitting_id | is-empty) { error make --unspanned { msg: "path parameter 'fitting_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id), fitting_id: (encode-path-segment $fitting_id)} | format pattern "/characters/{character_id}/fittings/{fitting_id}/") $qp)
+  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id), fitting_id: (encode-path-segment $fitting_id)} | format pattern "/characters/{character_id}/fittings/{fitting_id}/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource, "token": $qp_token} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"datasource": $datasource, "token": $qp_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Get character fleet info
@@ -1273,12 +1661,23 @@ export def "characters-fleet get" [
   let base = ($base_url | default $BASE_URL)
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'character_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/fleet/") $qp)
+  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/fleet/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource, "token": $qp_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource, "token": $qp_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Overview of a character involved in faction warfare
@@ -1304,12 +1703,23 @@ export def "characters-fw-stats get" [
   let base = ($base_url | default $BASE_URL)
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'character_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/fw/stats/") $qp)
+  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/fw/stats/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource, "token": $qp_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource, "token": $qp_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Get active implants
@@ -1335,12 +1745,23 @@ export def "characters-implants get" [
   let base = ($base_url | default $BASE_URL)
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'character_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/implants/") $qp)
+  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/implants/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource, "token": $qp_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource, "token": $qp_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # List character industry jobs
@@ -1367,12 +1788,23 @@ export def "characters-industry-jobs get" [
   let base = ($base_url | default $BASE_URL)
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'character_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "include_completed" $include_completed "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/industry/jobs/") $qp)
+  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/industry/jobs/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource, "include_completed": $include_completed, "token": $qp_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource, "include_completed": $include_completed, "token": $qp_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Get a character's recent kills and losses
@@ -1399,12 +1831,23 @@ export def "characters-killmails-recent get" [
   let base = ($base_url | default $BASE_URL)
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'character_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/killmails/recent/") $qp)
+  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/killmails/recent/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource, "page": $page, "token": $qp_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource, "page": $page, "token": $qp_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Get character location
@@ -1430,12 +1873,23 @@ export def "characters-location get" [
   let base = ($base_url | default $BASE_URL)
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'character_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/location/") $qp)
+  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/location/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource, "token": $qp_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource, "token": $qp_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Get loyalty points
@@ -1461,12 +1915,23 @@ export def "characters-loyalty-points get" [
   let base = ($base_url | default $BASE_URL)
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'character_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/loyalty/points/") $qp)
+  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/loyalty/points/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource, "token": $qp_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource, "token": $qp_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Return mail headers
@@ -1494,12 +1959,23 @@ export def "characters-mail list" [
   let base = ($base_url | default $BASE_URL)
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'character_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "labels" $labels "csv") (serialize-qp "last_mail_id" $last_mail_id "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/mail/") $qp)
+  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/mail/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource, "labels": $labels, "last_mail_id": $last_mail_id, "token": $qp_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource, "labels": $labels, "last_mail_id": $last_mail_id, "token": $qp_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Send a new mail
@@ -1530,12 +2006,23 @@ export def "characters-mail create" [
   let base = ($base_url | default $BASE_URL)
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'character_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/mail/") $qp)
+  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/mail/") $qp $auth.query)
   let req_body = {"approved_cost": $approved_cost, "body": $body, "recipients": $recipients, "subject": $subject} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"datasource": $datasource, "token": $qp_token} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"datasource": $datasource, "token": $qp_token} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Get mail labels and unread counts
@@ -1561,12 +2048,23 @@ export def "characters-mail-labels get" [
   let base = ($base_url | default $BASE_URL)
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'character_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/mail/labels/") $qp)
+  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/mail/labels/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource, "token": $qp_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource, "token": $qp_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Create a mail label
@@ -1594,12 +2092,23 @@ export def "characters-mail-labels create" [
   let base = ($base_url | default $BASE_URL)
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'character_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/mail/labels/") $qp)
+  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/mail/labels/") $qp $auth.query)
   let req_body = {"color": $color, "name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"datasource": $datasource, "token": $qp_token} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"datasource": $datasource, "token": $qp_token} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Delete a mail label
@@ -1626,10 +2135,21 @@ export def "characters-mail-labels delete" [
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'character_id' must be non-empty" } }
   if ($label_id | is-empty) { error make --unspanned { msg: "path parameter 'label_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id), label_id: (encode-path-segment $label_id)} | format pattern "/characters/{character_id}/mail/labels/{label_id}/") $qp)
+  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id), label_id: (encode-path-segment $label_id)} | format pattern "/characters/{character_id}/mail/labels/{label_id}/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource, "token": $qp_token} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"datasource": $datasource, "token": $qp_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Return mailing list subscriptions
@@ -1655,12 +2175,23 @@ export def "characters-mail-lists get" [
   let base = ($base_url | default $BASE_URL)
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'character_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/mail/lists/") $qp)
+  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/mail/lists/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource, "token": $qp_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource, "token": $qp_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Delete a mail
@@ -1687,10 +2218,21 @@ export def "characters-mail delete" [
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'character_id' must be non-empty" } }
   if ($mail_id | is-empty) { error make --unspanned { msg: "path parameter 'mail_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id), mail_id: (encode-path-segment $mail_id)} | format pattern "/characters/{character_id}/mail/{mail_id}/") $qp)
+  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id), mail_id: (encode-path-segment $mail_id)} | format pattern "/characters/{character_id}/mail/{mail_id}/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource, "token": $qp_token} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"datasource": $datasource, "token": $qp_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Return a mail
@@ -1718,12 +2260,23 @@ export def "characters-mail get" [
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'character_id' must be non-empty" } }
   if ($mail_id | is-empty) { error make --unspanned { msg: "path parameter 'mail_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id), mail_id: (encode-path-segment $mail_id)} | format pattern "/characters/{character_id}/mail/{mail_id}/") $qp)
+  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id), mail_id: (encode-path-segment $mail_id)} | format pattern "/characters/{character_id}/mail/{mail_id}/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource, "token": $qp_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource, "token": $qp_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Update metadata about a mail
@@ -1753,12 +2306,23 @@ export def "characters-mail update" [
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'character_id' must be non-empty" } }
   if ($mail_id | is-empty) { error make --unspanned { msg: "path parameter 'mail_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id), mail_id: (encode-path-segment $mail_id)} | format pattern "/characters/{character_id}/mail/{mail_id}/") $qp)
+  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id), mail_id: (encode-path-segment $mail_id)} | format pattern "/characters/{character_id}/mail/{mail_id}/") $qp $auth.query)
   let req_body = {"labels": $labels, "read": $read} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"datasource": $datasource, "token": $qp_token} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"datasource": $datasource, "token": $qp_token} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Get medals
@@ -1784,12 +2348,23 @@ export def "characters-medals get" [
   let base = ($base_url | default $BASE_URL)
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'character_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/medals/") $qp)
+  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/medals/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource, "token": $qp_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource, "token": $qp_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Character mining ledger
@@ -1816,12 +2391,23 @@ export def "characters-mining get" [
   let base = ($base_url | default $BASE_URL)
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'character_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/mining/") $qp)
+  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/mining/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource, "page": $page, "token": $qp_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource, "page": $page, "token": $qp_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Get character notifications
@@ -1847,12 +2433,23 @@ export def "characters-notifications get" [
   let base = ($base_url | default $BASE_URL)
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'character_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/notifications/") $qp)
+  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/notifications/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource, "token": $qp_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource, "token": $qp_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Get new contact notifications
@@ -1878,12 +2475,23 @@ export def "characters-notifications-contacts get" [
   let base = ($base_url | default $BASE_URL)
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'character_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/notifications/contacts/") $qp)
+  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/notifications/contacts/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource, "token": $qp_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource, "token": $qp_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Get character online
@@ -1909,12 +2517,23 @@ export def "characters-online get" [
   let base = ($base_url | default $BASE_URL)
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'character_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/online/") $qp)
+  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/online/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource, "token": $qp_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource, "token": $qp_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Get a character's completed tasks
@@ -1940,12 +2559,23 @@ export def "characters-opportunities get" [
   let base = ($base_url | default $BASE_URL)
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'character_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/opportunities/") $qp)
+  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/opportunities/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource, "token": $qp_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource, "token": $qp_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # List open orders from a character
@@ -1971,12 +2601,23 @@ export def "characters-orders get" [
   let base = ($base_url | default $BASE_URL)
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'character_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/orders/") $qp)
+  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/orders/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource, "token": $qp_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource, "token": $qp_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # List historical orders by a character
@@ -2003,12 +2644,23 @@ export def "characters-orders-history get" [
   let base = ($base_url | default $BASE_URL)
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'character_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/orders/history/") $qp)
+  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/orders/history/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource, "page": $page, "token": $qp_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource, "page": $page, "token": $qp_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Get colonies
@@ -2034,12 +2686,23 @@ export def "characters-planets list" [
   let base = ($base_url | default $BASE_URL)
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'character_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/planets/") $qp)
+  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/planets/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource, "token": $qp_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource, "token": $qp_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Get colony layout
@@ -2067,12 +2730,23 @@ export def "characters-planets get" [
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'character_id' must be non-empty" } }
   if ($planet_id | is-empty) { error make --unspanned { msg: "path parameter 'planet_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id), planet_id: (encode-path-segment $planet_id)} | format pattern "/characters/{character_id}/planets/{planet_id}/") $qp)
+  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id), planet_id: (encode-path-segment $planet_id)} | format pattern "/characters/{character_id}/planets/{planet_id}/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource, "token": $qp_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource, "token": $qp_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Get character portraits
@@ -2097,12 +2771,23 @@ export def "characters-portrait get" [
   let base = ($base_url | default $BASE_URL)
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'character_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/portrait/") $qp)
+  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/portrait/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Get character corporation roles
@@ -2128,12 +2813,23 @@ export def "characters-roles get" [
   let base = ($base_url | default $BASE_URL)
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'character_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/roles/") $qp)
+  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/roles/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource, "token": $qp_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource, "token": $qp_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Search on a string
@@ -2164,12 +2860,23 @@ export def "characters-search get" [
   let base = ($base_url | default $BASE_URL)
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'character_id' must be non-empty" } }
   let qp = [(serialize-qp "categories" $categories "csv") (serialize-qp "datasource" $datasource "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "strict" $strict "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/search/") $qp)
+  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/search/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language, "If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"categories": $categories, "datasource": $datasource, "language": $language, "search": $search, "strict": $strict, "token": $qp_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"categories": $categories, "datasource": $datasource, "language": $language, "search": $search, "strict": $strict, "token": $qp_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Get current ship
@@ -2195,12 +2902,23 @@ export def "characters-ship get" [
   let base = ($base_url | default $BASE_URL)
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'character_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/ship/") $qp)
+  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/ship/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource, "token": $qp_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource, "token": $qp_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Get character's skill queue
@@ -2226,12 +2944,23 @@ export def "characters-skillqueue get" [
   let base = ($base_url | default $BASE_URL)
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'character_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/skillqueue/") $qp)
+  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/skillqueue/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource, "token": $qp_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource, "token": $qp_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Get character skills
@@ -2257,12 +2986,23 @@ export def "characters-skills get" [
   let base = ($base_url | default $BASE_URL)
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'character_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/skills/") $qp)
+  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/skills/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource, "token": $qp_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource, "token": $qp_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Get standings
@@ -2288,12 +3028,23 @@ export def "characters-standings get" [
   let base = ($base_url | default $BASE_URL)
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'character_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/standings/") $qp)
+  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/standings/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource, "token": $qp_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource, "token": $qp_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Yearly aggregate stats
@@ -2319,12 +3070,23 @@ export def "characters-stats get" [
   let base = ($base_url | default $BASE_URL)
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'character_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/stats/") $qp)
+  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/stats/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource, "token": $qp_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource, "token": $qp_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Get character corporation titles
@@ -2350,12 +3112,23 @@ export def "characters-titles get" [
   let base = ($base_url | default $BASE_URL)
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'character_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/titles/") $qp)
+  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/titles/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource, "token": $qp_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource, "token": $qp_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Get a character's wallet balance
@@ -2381,12 +3154,23 @@ export def "characters-wallet get" [
   let base = ($base_url | default $BASE_URL)
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'character_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/wallet/") $qp)
+  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/wallet/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource, "token": $qp_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource, "token": $qp_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Get character wallet journal
@@ -2413,12 +3197,23 @@ export def "characters-wallet-journal get" [
   let base = ($base_url | default $BASE_URL)
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'character_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/wallet/journal/") $qp)
+  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/wallet/journal/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource, "page": $page, "token": $qp_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource, "page": $page, "token": $qp_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Get wallet transactions
@@ -2445,12 +3240,23 @@ export def "characters-wallet-transactions get" [
   let base = ($base_url | default $BASE_URL)
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'character_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "from_id" $from_id "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/wallet/transactions/") $qp)
+  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/wallet/transactions/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource, "from_id": $from_id, "token": $qp_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource, "from_id": $from_id, "token": $qp_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Get public contract bids
@@ -2476,12 +3282,23 @@ export def "contracts-public-bids get" [
   let base = ($base_url | default $BASE_URL)
   if ($contract_id | is-empty) { error make --unspanned { msg: "path parameter 'contract_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({contract_id: (encode-path-segment $contract_id)} | format pattern "/contracts/public/bids/{contract_id}/") $qp)
+  let full_url = (build-url $base ({contract_id: (encode-path-segment $contract_id)} | format pattern "/contracts/public/bids/{contract_id}/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource, "page": $page} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource, "page": $page} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 204 304]
 }
 
 # Get public contract items
@@ -2507,12 +3324,23 @@ export def "contracts-public-items get" [
   let base = ($base_url | default $BASE_URL)
   if ($contract_id | is-empty) { error make --unspanned { msg: "path parameter 'contract_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({contract_id: (encode-path-segment $contract_id)} | format pattern "/contracts/public/items/{contract_id}/") $qp)
+  let full_url = (build-url $base ({contract_id: (encode-path-segment $contract_id)} | format pattern "/contracts/public/items/{contract_id}/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource, "page": $page} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource, "page": $page} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 204 304]
 }
 
 # Get public contracts
@@ -2538,12 +3366,23 @@ export def "contracts-public get" [
   let base = ($base_url | default $BASE_URL)
   if ($region_id | is-empty) { error make --unspanned { msg: "path parameter 'region_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({region_id: (encode-path-segment $region_id)} | format pattern "/contracts/public/{region_id}/") $qp)
+  let full_url = (build-url $base ({region_id: (encode-path-segment $region_id)} | format pattern "/contracts/public/{region_id}/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource, "page": $page} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource, "page": $page} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Moon extraction timers
@@ -2570,12 +3409,23 @@ export def "corporation-mining-extractions get" [
   let base = ($base_url | default $BASE_URL)
   if ($corporation_id | is-empty) { error make --unspanned { msg: "path parameter 'corporation_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporation/{corporation_id}/mining/extractions/") $qp)
+  let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporation/{corporation_id}/mining/extractions/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource, "page": $page, "token": $qp_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource, "page": $page, "token": $qp_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Corporation mining observers
@@ -2602,12 +3452,23 @@ export def "corporation-mining-observers list" [
   let base = ($base_url | default $BASE_URL)
   if ($corporation_id | is-empty) { error make --unspanned { msg: "path parameter 'corporation_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporation/{corporation_id}/mining/observers/") $qp)
+  let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporation/{corporation_id}/mining/observers/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource, "page": $page, "token": $qp_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource, "page": $page, "token": $qp_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Observed corporation mining
@@ -2636,12 +3497,23 @@ export def "corporation-mining-observers get" [
   if ($corporation_id | is-empty) { error make --unspanned { msg: "path parameter 'corporation_id' must be non-empty" } }
   if ($observer_id | is-empty) { error make --unspanned { msg: "path parameter 'observer_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id), observer_id: (encode-path-segment $observer_id)} | format pattern "/corporation/{corporation_id}/mining/observers/{observer_id}/") $qp)
+  let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id), observer_id: (encode-path-segment $observer_id)} | format pattern "/corporation/{corporation_id}/mining/observers/{observer_id}/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource, "page": $page, "token": $qp_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource, "page": $page, "token": $qp_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Get npc corporations
@@ -2664,12 +3536,23 @@ export def "corporations-npccorps get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/corporations/npccorps/" $qp)
+  let full_url = (build-url $base "/corporations/npccorps/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Get corporation information
@@ -2694,12 +3577,23 @@ export def "corporations get" [
   let base = ($base_url | default $BASE_URL)
   if ($corporation_id | is-empty) { error make --unspanned { msg: "path parameter 'corporation_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/") $qp)
+  let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Get alliance history
@@ -2724,12 +3618,23 @@ export def "corporations-alliancehistory get" [
   let base = ($base_url | default $BASE_URL)
   if ($corporation_id | is-empty) { error make --unspanned { msg: "path parameter 'corporation_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/alliancehistory/") $qp)
+  let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/alliancehistory/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Get corporation assets
@@ -2756,12 +3661,23 @@ export def "corporations-assets get" [
   let base = ($base_url | default $BASE_URL)
   if ($corporation_id | is-empty) { error make --unspanned { msg: "path parameter 'corporation_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/assets/") $qp)
+  let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/assets/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource, "page": $page, "token": $qp_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource, "page": $page, "token": $qp_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Get corporation asset locations
@@ -2788,12 +3704,23 @@ export def "corporations-assets-locations create" [
   let base = ($base_url | default $BASE_URL)
   if ($corporation_id | is-empty) { error make --unspanned { msg: "path parameter 'corporation_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/assets/locations/") $qp)
+  let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/assets/locations/") $qp $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"datasource": $datasource, "token": $qp_token} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"datasource": $datasource, "token": $qp_token} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get corporation asset names
@@ -2820,12 +3747,23 @@ export def "corporations-assets-names create" [
   let base = ($base_url | default $BASE_URL)
   if ($corporation_id | is-empty) { error make --unspanned { msg: "path parameter 'corporation_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/assets/names/") $qp)
+  let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/assets/names/") $qp $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"datasource": $datasource, "token": $qp_token} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"datasource": $datasource, "token": $qp_token} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get corporation blueprints
@@ -2852,12 +3790,23 @@ export def "corporations-blueprints get" [
   let base = ($base_url | default $BASE_URL)
   if ($corporation_id | is-empty) { error make --unspanned { msg: "path parameter 'corporation_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/blueprints/") $qp)
+  let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/blueprints/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource, "page": $page, "token": $qp_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource, "page": $page, "token": $qp_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # List corporation bookmarks
@@ -2884,12 +3833,23 @@ export def "corporations-bookmarks get" [
   let base = ($base_url | default $BASE_URL)
   if ($corporation_id | is-empty) { error make --unspanned { msg: "path parameter 'corporation_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/bookmarks/") $qp)
+  let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/bookmarks/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource, "page": $page, "token": $qp_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource, "page": $page, "token": $qp_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # List corporation bookmark folders
@@ -2916,12 +3876,23 @@ export def "corporations-bookmarks-folders get" [
   let base = ($base_url | default $BASE_URL)
   if ($corporation_id | is-empty) { error make --unspanned { msg: "path parameter 'corporation_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/bookmarks/folders/") $qp)
+  let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/bookmarks/folders/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource, "page": $page, "token": $qp_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource, "page": $page, "token": $qp_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Get corporation contacts
@@ -2948,12 +3919,23 @@ export def "corporations-contacts get" [
   let base = ($base_url | default $BASE_URL)
   if ($corporation_id | is-empty) { error make --unspanned { msg: "path parameter 'corporation_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/contacts/") $qp)
+  let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/contacts/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource, "page": $page, "token": $qp_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource, "page": $page, "token": $qp_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Get corporation contact labels
@@ -2979,12 +3961,23 @@ export def "corporations-contacts-labels get" [
   let base = ($base_url | default $BASE_URL)
   if ($corporation_id | is-empty) { error make --unspanned { msg: "path parameter 'corporation_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/contacts/labels/") $qp)
+  let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/contacts/labels/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource, "token": $qp_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource, "token": $qp_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Get all corporation ALSC logs
@@ -3011,12 +4004,23 @@ export def "corporations-containers-logs get" [
   let base = ($base_url | default $BASE_URL)
   if ($corporation_id | is-empty) { error make --unspanned { msg: "path parameter 'corporation_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/containers/logs/") $qp)
+  let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/containers/logs/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource, "page": $page, "token": $qp_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource, "page": $page, "token": $qp_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Get corporation contracts
@@ -3043,12 +4047,23 @@ export def "corporations-contracts get" [
   let base = ($base_url | default $BASE_URL)
   if ($corporation_id | is-empty) { error make --unspanned { msg: "path parameter 'corporation_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/contracts/") $qp)
+  let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/contracts/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource, "page": $page, "token": $qp_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource, "page": $page, "token": $qp_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Get corporation contract bids
@@ -3077,12 +4092,23 @@ export def "corporations-contracts-bids get" [
   if ($corporation_id | is-empty) { error make --unspanned { msg: "path parameter 'corporation_id' must be non-empty" } }
   if ($contract_id | is-empty) { error make --unspanned { msg: "path parameter 'contract_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id), contract_id: (encode-path-segment $contract_id)} | format pattern "/corporations/{corporation_id}/contracts/{contract_id}/bids/") $qp)
+  let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id), contract_id: (encode-path-segment $contract_id)} | format pattern "/corporations/{corporation_id}/contracts/{contract_id}/bids/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource, "page": $page, "token": $qp_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource, "page": $page, "token": $qp_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Get corporation contract items
@@ -3110,12 +4136,23 @@ export def "corporations-contracts-items get" [
   if ($corporation_id | is-empty) { error make --unspanned { msg: "path parameter 'corporation_id' must be non-empty" } }
   if ($contract_id | is-empty) { error make --unspanned { msg: "path parameter 'contract_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id), contract_id: (encode-path-segment $contract_id)} | format pattern "/corporations/{corporation_id}/contracts/{contract_id}/items/") $qp)
+  let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id), contract_id: (encode-path-segment $contract_id)} | format pattern "/corporations/{corporation_id}/contracts/{contract_id}/items/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource, "token": $qp_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource, "token": $qp_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # List corporation customs offices
@@ -3142,12 +4179,23 @@ export def "corporations-customs-offices get" [
   let base = ($base_url | default $BASE_URL)
   if ($corporation_id | is-empty) { error make --unspanned { msg: "path parameter 'corporation_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/customs_offices/") $qp)
+  let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/customs_offices/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource, "page": $page, "token": $qp_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource, "page": $page, "token": $qp_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Get corporation divisions
@@ -3173,12 +4221,23 @@ export def "corporations-divisions get" [
   let base = ($base_url | default $BASE_URL)
   if ($corporation_id | is-empty) { error make --unspanned { msg: "path parameter 'corporation_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/divisions/") $qp)
+  let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/divisions/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource, "token": $qp_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource, "token": $qp_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Get corporation facilities
@@ -3204,12 +4263,23 @@ export def "corporations-facilities get" [
   let base = ($base_url | default $BASE_URL)
   if ($corporation_id | is-empty) { error make --unspanned { msg: "path parameter 'corporation_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/facilities/") $qp)
+  let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/facilities/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource, "token": $qp_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource, "token": $qp_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Overview of a corporation involved in faction warfare
@@ -3235,12 +4305,23 @@ export def "corporations-fw-stats get" [
   let base = ($base_url | default $BASE_URL)
   if ($corporation_id | is-empty) { error make --unspanned { msg: "path parameter 'corporation_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/fw/stats/") $qp)
+  let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/fw/stats/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource, "token": $qp_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource, "token": $qp_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Get corporation icon
@@ -3265,12 +4346,23 @@ export def "corporations-icons get" [
   let base = ($base_url | default $BASE_URL)
   if ($corporation_id | is-empty) { error make --unspanned { msg: "path parameter 'corporation_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/icons/") $qp)
+  let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/icons/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # List corporation industry jobs
@@ -3298,12 +4390,23 @@ export def "corporations-industry-jobs get" [
   let base = ($base_url | default $BASE_URL)
   if ($corporation_id | is-empty) { error make --unspanned { msg: "path parameter 'corporation_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "include_completed" $include_completed "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/industry/jobs/") $qp)
+  let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/industry/jobs/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource, "include_completed": $include_completed, "page": $page, "token": $qp_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource, "include_completed": $include_completed, "page": $page, "token": $qp_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Get a corporation's recent kills and losses
@@ -3330,12 +4433,23 @@ export def "corporations-killmails-recent get" [
   let base = ($base_url | default $BASE_URL)
   if ($corporation_id | is-empty) { error make --unspanned { msg: "path parameter 'corporation_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/killmails/recent/") $qp)
+  let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/killmails/recent/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource, "page": $page, "token": $qp_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource, "page": $page, "token": $qp_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Get corporation medals
@@ -3362,12 +4476,23 @@ export def "corporations-medals get" [
   let base = ($base_url | default $BASE_URL)
   if ($corporation_id | is-empty) { error make --unspanned { msg: "path parameter 'corporation_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/medals/") $qp)
+  let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/medals/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource, "page": $page, "token": $qp_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource, "page": $page, "token": $qp_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Get corporation issued medals
@@ -3394,12 +4519,23 @@ export def "corporations-medals-issued get" [
   let base = ($base_url | default $BASE_URL)
   if ($corporation_id | is-empty) { error make --unspanned { msg: "path parameter 'corporation_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/medals/issued/") $qp)
+  let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/medals/issued/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource, "page": $page, "token": $qp_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource, "page": $page, "token": $qp_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Get corporation members
@@ -3425,12 +4561,23 @@ export def "corporations-members get" [
   let base = ($base_url | default $BASE_URL)
   if ($corporation_id | is-empty) { error make --unspanned { msg: "path parameter 'corporation_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/members/") $qp)
+  let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/members/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource, "token": $qp_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource, "token": $qp_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Get corporation member limit
@@ -3456,12 +4603,23 @@ export def "corporations-members-limit get" [
   let base = ($base_url | default $BASE_URL)
   if ($corporation_id | is-empty) { error make --unspanned { msg: "path parameter 'corporation_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/members/limit/") $qp)
+  let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/members/limit/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource, "token": $qp_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource, "token": $qp_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Get corporation's members' titles
@@ -3487,12 +4645,23 @@ export def "corporations-members-titles get" [
   let base = ($base_url | default $BASE_URL)
   if ($corporation_id | is-empty) { error make --unspanned { msg: "path parameter 'corporation_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/members/titles/") $qp)
+  let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/members/titles/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource, "token": $qp_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource, "token": $qp_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Track corporation members
@@ -3518,12 +4687,23 @@ export def "corporations-membertracking get" [
   let base = ($base_url | default $BASE_URL)
   if ($corporation_id | is-empty) { error make --unspanned { msg: "path parameter 'corporation_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/membertracking/") $qp)
+  let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/membertracking/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource, "token": $qp_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource, "token": $qp_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # List open orders from a corporation
@@ -3550,12 +4730,23 @@ export def "corporations-orders get" [
   let base = ($base_url | default $BASE_URL)
   if ($corporation_id | is-empty) { error make --unspanned { msg: "path parameter 'corporation_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/orders/") $qp)
+  let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/orders/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource, "page": $page, "token": $qp_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource, "page": $page, "token": $qp_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # List historical orders from a corporation
@@ -3582,12 +4773,23 @@ export def "corporations-orders-history get" [
   let base = ($base_url | default $BASE_URL)
   if ($corporation_id | is-empty) { error make --unspanned { msg: "path parameter 'corporation_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/orders/history/") $qp)
+  let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/orders/history/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource, "page": $page, "token": $qp_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource, "page": $page, "token": $qp_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Get corporation member roles
@@ -3613,12 +4815,23 @@ export def "corporations-roles get" [
   let base = ($base_url | default $BASE_URL)
   if ($corporation_id | is-empty) { error make --unspanned { msg: "path parameter 'corporation_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/roles/") $qp)
+  let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/roles/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource, "token": $qp_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource, "token": $qp_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Get corporation member roles history
@@ -3645,12 +4858,23 @@ export def "corporations-roles-history get" [
   let base = ($base_url | default $BASE_URL)
   if ($corporation_id | is-empty) { error make --unspanned { msg: "path parameter 'corporation_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/roles/history/") $qp)
+  let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/roles/history/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource, "page": $page, "token": $qp_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource, "page": $page, "token": $qp_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Get corporation shareholders
@@ -3677,12 +4901,23 @@ export def "corporations-shareholders get" [
   let base = ($base_url | default $BASE_URL)
   if ($corporation_id | is-empty) { error make --unspanned { msg: "path parameter 'corporation_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/shareholders/") $qp)
+  let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/shareholders/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource, "page": $page, "token": $qp_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource, "page": $page, "token": $qp_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Get corporation standings
@@ -3709,12 +4944,23 @@ export def "corporations-standings get" [
   let base = ($base_url | default $BASE_URL)
   if ($corporation_id | is-empty) { error make --unspanned { msg: "path parameter 'corporation_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/standings/") $qp)
+  let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/standings/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource, "page": $page, "token": $qp_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource, "page": $page, "token": $qp_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Get corporation starbases (POSes)
@@ -3741,12 +4987,23 @@ export def "corporations-starbases list" [
   let base = ($base_url | default $BASE_URL)
   if ($corporation_id | is-empty) { error make --unspanned { msg: "path parameter 'corporation_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/starbases/") $qp)
+  let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/starbases/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource, "page": $page, "token": $qp_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource, "page": $page, "token": $qp_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Get starbase (POS) detail
@@ -3775,12 +5032,23 @@ export def "corporations-starbases get" [
   if ($corporation_id | is-empty) { error make --unspanned { msg: "path parameter 'corporation_id' must be non-empty" } }
   if ($starbase_id | is-empty) { error make --unspanned { msg: "path parameter 'starbase_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "system_id" $system_id "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id), starbase_id: (encode-path-segment $starbase_id)} | format pattern "/corporations/{corporation_id}/starbases/{starbase_id}/") $qp)
+  let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id), starbase_id: (encode-path-segment $starbase_id)} | format pattern "/corporations/{corporation_id}/starbases/{starbase_id}/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource, "system_id": $system_id, "token": $qp_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource, "system_id": $system_id, "token": $qp_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Get corporation structures
@@ -3809,12 +5077,23 @@ export def "corporations-structures get" [
   let base = ($base_url | default $BASE_URL)
   if ($corporation_id | is-empty) { error make --unspanned { msg: "path parameter 'corporation_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/structures/") $qp)
+  let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/structures/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language, "If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource, "language": $language, "page": $page, "token": $qp_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource, "language": $language, "page": $page, "token": $qp_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Get corporation titles
@@ -3840,12 +5119,23 @@ export def "corporations-titles get" [
   let base = ($base_url | default $BASE_URL)
   if ($corporation_id | is-empty) { error make --unspanned { msg: "path parameter 'corporation_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/titles/") $qp)
+  let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/titles/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource, "token": $qp_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource, "token": $qp_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Returns a corporation's wallet balance
@@ -3871,12 +5161,23 @@ export def "corporations-wallets get" [
   let base = ($base_url | default $BASE_URL)
   if ($corporation_id | is-empty) { error make --unspanned { msg: "path parameter 'corporation_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/wallets/") $qp)
+  let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/wallets/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource, "token": $qp_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource, "token": $qp_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Get corporation wallet journal
@@ -3905,12 +5206,23 @@ export def "corporations-wallets-journal get" [
   if ($corporation_id | is-empty) { error make --unspanned { msg: "path parameter 'corporation_id' must be non-empty" } }
   if ($division | is-empty) { error make --unspanned { msg: "path parameter 'division' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id), division: (encode-path-segment $division)} | format pattern "/corporations/{corporation_id}/wallets/{division}/journal/") $qp)
+  let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id), division: (encode-path-segment $division)} | format pattern "/corporations/{corporation_id}/wallets/{division}/journal/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource, "page": $page, "token": $qp_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource, "page": $page, "token": $qp_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Get corporation wallet transactions
@@ -3939,12 +5251,23 @@ export def "corporations-wallets-transactions get" [
   if ($corporation_id | is-empty) { error make --unspanned { msg: "path parameter 'corporation_id' must be non-empty" } }
   if ($division | is-empty) { error make --unspanned { msg: "path parameter 'division' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "from_id" $from_id "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id), division: (encode-path-segment $division)} | format pattern "/corporations/{corporation_id}/wallets/{division}/transactions/") $qp)
+  let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id), division: (encode-path-segment $division)} | format pattern "/corporations/{corporation_id}/wallets/{division}/transactions/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource, "from_id": $from_id, "token": $qp_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource, "from_id": $from_id, "token": $qp_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Get attributes
@@ -3967,12 +5290,23 @@ export def "dogma-attributes list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/dogma/attributes/" $qp)
+  let full_url = (build-url $base "/dogma/attributes/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Get attribute information
@@ -3997,12 +5331,23 @@ export def "dogma-attributes get" [
   let base = ($base_url | default $BASE_URL)
   if ($attribute_id | is-empty) { error make --unspanned { msg: "path parameter 'attribute_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({attribute_id: (encode-path-segment $attribute_id)} | format pattern "/dogma/attributes/{attribute_id}/") $qp)
+  let full_url = (build-url $base ({attribute_id: (encode-path-segment $attribute_id)} | format pattern "/dogma/attributes/{attribute_id}/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Get dynamic item information
@@ -4029,12 +5374,23 @@ export def "dogma-dynamic-items get" [
   if ($type_id | is-empty) { error make --unspanned { msg: "path parameter 'type_id' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'item_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({type_id: (encode-path-segment $type_id), item_id: (encode-path-segment $item_id)} | format pattern "/dogma/dynamic/items/{type_id}/{item_id}/") $qp)
+  let full_url = (build-url $base ({type_id: (encode-path-segment $type_id), item_id: (encode-path-segment $item_id)} | format pattern "/dogma/dynamic/items/{type_id}/{item_id}/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Get effects
@@ -4057,12 +5413,23 @@ export def "dogma-effects list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/dogma/effects/" $qp)
+  let full_url = (build-url $base "/dogma/effects/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Get effect information
@@ -4087,12 +5454,23 @@ export def "dogma-effects get" [
   let base = ($base_url | default $BASE_URL)
   if ($effect_id | is-empty) { error make --unspanned { msg: "path parameter 'effect_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({effect_id: (encode-path-segment $effect_id)} | format pattern "/dogma/effects/{effect_id}/") $qp)
+  let full_url = (build-url $base ({effect_id: (encode-path-segment $effect_id)} | format pattern "/dogma/effects/{effect_id}/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Get fleet information
@@ -4118,12 +5496,23 @@ export def "fleets get" [
   let base = ($base_url | default $BASE_URL)
   if ($fleet_id | is-empty) { error make --unspanned { msg: "path parameter 'fleet_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({fleet_id: (encode-path-segment $fleet_id)} | format pattern "/fleets/{fleet_id}/") $qp)
+  let full_url = (build-url $base ({fleet_id: (encode-path-segment $fleet_id)} | format pattern "/fleets/{fleet_id}/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource, "token": $qp_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource, "token": $qp_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Update fleet
@@ -4151,12 +5540,23 @@ export def "fleets update" [
   let base = ($base_url | default $BASE_URL)
   if ($fleet_id | is-empty) { error make --unspanned { msg: "path parameter 'fleet_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({fleet_id: (encode-path-segment $fleet_id)} | format pattern "/fleets/{fleet_id}/") $qp)
+  let full_url = (build-url $base ({fleet_id: (encode-path-segment $fleet_id)} | format pattern "/fleets/{fleet_id}/") $qp $auth.query)
   let req_body = {"is_free_move": $is_free_move, "motd": $motd} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"datasource": $datasource, "token": $qp_token} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"datasource": $datasource, "token": $qp_token} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Get fleet members
@@ -4184,12 +5584,23 @@ export def "fleets-members get" [
   let base = ($base_url | default $BASE_URL)
   if ($fleet_id | is-empty) { error make --unspanned { msg: "path parameter 'fleet_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({fleet_id: (encode-path-segment $fleet_id)} | format pattern "/fleets/{fleet_id}/members/") $qp)
+  let full_url = (build-url $base ({fleet_id: (encode-path-segment $fleet_id)} | format pattern "/fleets/{fleet_id}/members/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language, "If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource, "language": $language, "token": $qp_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource, "language": $language, "token": $qp_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Create fleet invitation
@@ -4219,12 +5630,23 @@ export def "fleets-members create" [
   let base = ($base_url | default $BASE_URL)
   if ($fleet_id | is-empty) { error make --unspanned { msg: "path parameter 'fleet_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({fleet_id: (encode-path-segment $fleet_id)} | format pattern "/fleets/{fleet_id}/members/") $qp)
+  let full_url = (build-url $base ({fleet_id: (encode-path-segment $fleet_id)} | format pattern "/fleets/{fleet_id}/members/") $qp $auth.query)
   let req_body = {"character_id": $character_id, "role": $role, "squad_id": $squad_id, "wing_id": $wing_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"datasource": $datasource, "token": $qp_token} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"datasource": $datasource, "token": $qp_token} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Kick fleet member
@@ -4251,10 +5673,21 @@ export def "fleets-members delete" [
   if ($fleet_id | is-empty) { error make --unspanned { msg: "path parameter 'fleet_id' must be non-empty" } }
   if ($member_id | is-empty) { error make --unspanned { msg: "path parameter 'member_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({fleet_id: (encode-path-segment $fleet_id), member_id: (encode-path-segment $member_id)} | format pattern "/fleets/{fleet_id}/members/{member_id}/") $qp)
+  let full_url = (build-url $base ({fleet_id: (encode-path-segment $fleet_id), member_id: (encode-path-segment $member_id)} | format pattern "/fleets/{fleet_id}/members/{member_id}/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource, "token": $qp_token} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"datasource": $datasource, "token": $qp_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Move fleet member
@@ -4285,12 +5718,23 @@ export def "fleets-members update" [
   if ($fleet_id | is-empty) { error make --unspanned { msg: "path parameter 'fleet_id' must be non-empty" } }
   if ($member_id | is-empty) { error make --unspanned { msg: "path parameter 'member_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({fleet_id: (encode-path-segment $fleet_id), member_id: (encode-path-segment $member_id)} | format pattern "/fleets/{fleet_id}/members/{member_id}/") $qp)
+  let full_url = (build-url $base ({fleet_id: (encode-path-segment $fleet_id), member_id: (encode-path-segment $member_id)} | format pattern "/fleets/{fleet_id}/members/{member_id}/") $qp $auth.query)
   let req_body = {"role": $role, "squad_id": $squad_id, "wing_id": $wing_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"datasource": $datasource, "token": $qp_token} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"datasource": $datasource, "token": $qp_token} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Delete fleet squad
@@ -4317,10 +5761,21 @@ export def "fleets-squads delete" [
   if ($fleet_id | is-empty) { error make --unspanned { msg: "path parameter 'fleet_id' must be non-empty" } }
   if ($squad_id | is-empty) { error make --unspanned { msg: "path parameter 'squad_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({fleet_id: (encode-path-segment $fleet_id), squad_id: (encode-path-segment $squad_id)} | format pattern "/fleets/{fleet_id}/squads/{squad_id}/") $qp)
+  let full_url = (build-url $base ({fleet_id: (encode-path-segment $fleet_id), squad_id: (encode-path-segment $squad_id)} | format pattern "/fleets/{fleet_id}/squads/{squad_id}/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource, "token": $qp_token} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"datasource": $datasource, "token": $qp_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Rename fleet squad
@@ -4349,12 +5804,23 @@ export def "fleets-squads update" [
   if ($fleet_id | is-empty) { error make --unspanned { msg: "path parameter 'fleet_id' must be non-empty" } }
   if ($squad_id | is-empty) { error make --unspanned { msg: "path parameter 'squad_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({fleet_id: (encode-path-segment $fleet_id), squad_id: (encode-path-segment $squad_id)} | format pattern "/fleets/{fleet_id}/squads/{squad_id}/") $qp)
+  let full_url = (build-url $base ({fleet_id: (encode-path-segment $fleet_id), squad_id: (encode-path-segment $squad_id)} | format pattern "/fleets/{fleet_id}/squads/{squad_id}/") $qp $auth.query)
   let req_body = {"name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"datasource": $datasource, "token": $qp_token} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"datasource": $datasource, "token": $qp_token} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Get fleet wings
@@ -4382,12 +5848,23 @@ export def "fleets-wings get" [
   let base = ($base_url | default $BASE_URL)
   if ($fleet_id | is-empty) { error make --unspanned { msg: "path parameter 'fleet_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({fleet_id: (encode-path-segment $fleet_id)} | format pattern "/fleets/{fleet_id}/wings/") $qp)
+  let full_url = (build-url $base ({fleet_id: (encode-path-segment $fleet_id)} | format pattern "/fleets/{fleet_id}/wings/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language, "If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource, "language": $language, "token": $qp_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource, "language": $language, "token": $qp_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Create fleet wing
@@ -4412,10 +5889,21 @@ export def "fleets-wings create" [
   let base = ($base_url | default $BASE_URL)
   if ($fleet_id | is-empty) { error make --unspanned { msg: "path parameter 'fleet_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({fleet_id: (encode-path-segment $fleet_id)} | format pattern "/fleets/{fleet_id}/wings/") $qp)
+  let full_url = (build-url $base ({fleet_id: (encode-path-segment $fleet_id)} | format pattern "/fleets/{fleet_id}/wings/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource, "token": $qp_token} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"datasource": $datasource, "token": $qp_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [201]
 }
 
 # Delete fleet wing
@@ -4442,10 +5930,21 @@ export def "fleets-wings delete" [
   if ($fleet_id | is-empty) { error make --unspanned { msg: "path parameter 'fleet_id' must be non-empty" } }
   if ($wing_id | is-empty) { error make --unspanned { msg: "path parameter 'wing_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({fleet_id: (encode-path-segment $fleet_id), wing_id: (encode-path-segment $wing_id)} | format pattern "/fleets/{fleet_id}/wings/{wing_id}/") $qp)
+  let full_url = (build-url $base ({fleet_id: (encode-path-segment $fleet_id), wing_id: (encode-path-segment $wing_id)} | format pattern "/fleets/{fleet_id}/wings/{wing_id}/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource, "token": $qp_token} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"datasource": $datasource, "token": $qp_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Rename fleet wing
@@ -4474,12 +5973,23 @@ export def "fleets-wings update" [
   if ($fleet_id | is-empty) { error make --unspanned { msg: "path parameter 'fleet_id' must be non-empty" } }
   if ($wing_id | is-empty) { error make --unspanned { msg: "path parameter 'wing_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({fleet_id: (encode-path-segment $fleet_id), wing_id: (encode-path-segment $wing_id)} | format pattern "/fleets/{fleet_id}/wings/{wing_id}/") $qp)
+  let full_url = (build-url $base ({fleet_id: (encode-path-segment $fleet_id), wing_id: (encode-path-segment $wing_id)} | format pattern "/fleets/{fleet_id}/wings/{wing_id}/") $qp $auth.query)
   let req_body = {"name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"datasource": $datasource, "token": $qp_token} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"datasource": $datasource, "token": $qp_token} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Create fleet squad
@@ -4506,10 +6016,21 @@ export def "fleets-wings-squads create" [
   if ($fleet_id | is-empty) { error make --unspanned { msg: "path parameter 'fleet_id' must be non-empty" } }
   if ($wing_id | is-empty) { error make --unspanned { msg: "path parameter 'wing_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({fleet_id: (encode-path-segment $fleet_id), wing_id: (encode-path-segment $wing_id)} | format pattern "/fleets/{fleet_id}/wings/{wing_id}/squads/") $qp)
+  let full_url = (build-url $base ({fleet_id: (encode-path-segment $fleet_id), wing_id: (encode-path-segment $wing_id)} | format pattern "/fleets/{fleet_id}/wings/{wing_id}/squads/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource, "token": $qp_token} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"datasource": $datasource, "token": $qp_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [201]
 }
 
 # List of the top factions in faction warfare
@@ -4532,12 +6053,23 @@ export def "fw-leaderboards get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/fw/leaderboards/" $qp)
+  let full_url = (build-url $base "/fw/leaderboards/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # List of the top pilots in faction warfare
@@ -4560,12 +6092,23 @@ export def "fw-leaderboards-characters get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/fw/leaderboards/characters/" $qp)
+  let full_url = (build-url $base "/fw/leaderboards/characters/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # List of the top corporations in faction warfare
@@ -4588,12 +6131,23 @@ export def "fw-leaderboards-corporations get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/fw/leaderboards/corporations/" $qp)
+  let full_url = (build-url $base "/fw/leaderboards/corporations/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # An overview of statistics about factions involved in faction warfare
@@ -4616,12 +6170,23 @@ export def "fw-stats get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/fw/stats/" $qp)
+  let full_url = (build-url $base "/fw/stats/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Ownership of faction warfare systems
@@ -4644,12 +6209,23 @@ export def "fw-systems get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/fw/systems/" $qp)
+  let full_url = (build-url $base "/fw/systems/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Data about which NPC factions are at war
@@ -4672,12 +6248,23 @@ export def "fw-wars get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/fw/wars/" $qp)
+  let full_url = (build-url $base "/fw/wars/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # List incursions
@@ -4700,12 +6287,23 @@ export def "incursions get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/incursions/" $qp)
+  let full_url = (build-url $base "/incursions/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # List industry facilities
@@ -4728,12 +6326,23 @@ export def "industry-facilities get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/industry/facilities/" $qp)
+  let full_url = (build-url $base "/industry/facilities/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # List solar system cost indices
@@ -4756,12 +6365,23 @@ export def "industry-systems get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/industry/systems/" $qp)
+  let full_url = (build-url $base "/industry/systems/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # List insurance levels
@@ -4786,12 +6406,23 @@ export def "insurance-prices get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "language" $language "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/insurance/prices/" $qp)
+  let full_url = (build-url $base "/insurance/prices/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language, "If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource, "language": $language} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource, "language": $language} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Get a single killmail
@@ -4818,12 +6449,23 @@ export def "killmails get" [
   if ($killmail_id | is-empty) { error make --unspanned { msg: "path parameter 'killmail_id' must be non-empty" } }
   if ($killmail_hash | is-empty) { error make --unspanned { msg: "path parameter 'killmail_hash' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({killmail_id: (encode-path-segment $killmail_id), killmail_hash: (encode-path-segment $killmail_hash)} | format pattern "/killmails/{killmail_id}/{killmail_hash}/") $qp)
+  let full_url = (build-url $base ({killmail_id: (encode-path-segment $killmail_id), killmail_hash: (encode-path-segment $killmail_hash)} | format pattern "/killmails/{killmail_id}/{killmail_hash}/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # List loyalty store offers
@@ -4848,12 +6490,23 @@ export def "loyalty-stores-offers get" [
   let base = ($base_url | default $BASE_URL)
   if ($corporation_id | is-empty) { error make --unspanned { msg: "path parameter 'corporation_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/loyalty/stores/{corporation_id}/offers/") $qp)
+  let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/loyalty/stores/{corporation_id}/offers/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Get item groups
@@ -4876,12 +6529,23 @@ export def "markets-groups list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/markets/groups/" $qp)
+  let full_url = (build-url $base "/markets/groups/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Get item group information
@@ -4908,12 +6572,23 @@ export def "markets-groups get" [
   let base = ($base_url | default $BASE_URL)
   if ($market_group_id | is-empty) { error make --unspanned { msg: "path parameter 'market_group_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "language" $language "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({market_group_id: (encode-path-segment $market_group_id)} | format pattern "/markets/groups/{market_group_id}/") $qp)
+  let full_url = (build-url $base ({market_group_id: (encode-path-segment $market_group_id)} | format pattern "/markets/groups/{market_group_id}/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language, "If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource, "language": $language} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource, "language": $language} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # List market prices
@@ -4936,12 +6611,23 @@ export def "markets-prices get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/markets/prices/" $qp)
+  let full_url = (build-url $base "/markets/prices/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # List orders in a structure
@@ -4968,12 +6654,23 @@ export def "markets-structures get" [
   let base = ($base_url | default $BASE_URL)
   if ($structure_id | is-empty) { error make --unspanned { msg: "path parameter 'structure_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({structure_id: (encode-path-segment $structure_id)} | format pattern "/markets/structures/{structure_id}/") $qp)
+  let full_url = (build-url $base ({structure_id: (encode-path-segment $structure_id)} | format pattern "/markets/structures/{structure_id}/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource, "page": $page, "token": $qp_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource, "page": $page, "token": $qp_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # List historical market statistics in a region
@@ -4999,12 +6696,23 @@ export def "markets-history get" [
   let base = ($base_url | default $BASE_URL)
   if ($region_id | is-empty) { error make --unspanned { msg: "path parameter 'region_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "type_id" $type_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({region_id: (encode-path-segment $region_id)} | format pattern "/markets/{region_id}/history/") $qp)
+  let full_url = (build-url $base ({region_id: (encode-path-segment $region_id)} | format pattern "/markets/{region_id}/history/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource, "type_id": $type_id} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource, "type_id": $type_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # List orders in a region
@@ -5032,12 +6740,23 @@ export def "markets-orders get" [
   let base = ($base_url | default $BASE_URL)
   if ($region_id | is-empty) { error make --unspanned { msg: "path parameter 'region_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "order_type" $order_type "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "type_id" $type_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({region_id: (encode-path-segment $region_id)} | format pattern "/markets/{region_id}/orders/") $qp)
+  let full_url = (build-url $base ({region_id: (encode-path-segment $region_id)} | format pattern "/markets/{region_id}/orders/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource, "order_type": $order_type, "page": $page, "type_id": $type_id} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource, "order_type": $order_type, "page": $page, "type_id": $type_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # List type IDs relevant to a market
@@ -5063,12 +6782,23 @@ export def "markets-types get" [
   let base = ($base_url | default $BASE_URL)
   if ($region_id | is-empty) { error make --unspanned { msg: "path parameter 'region_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({region_id: (encode-path-segment $region_id)} | format pattern "/markets/{region_id}/types/") $qp)
+  let full_url = (build-url $base ({region_id: (encode-path-segment $region_id)} | format pattern "/markets/{region_id}/types/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource, "page": $page} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource, "page": $page} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Get opportunities groups
@@ -5091,12 +6821,23 @@ export def "opportunities-groups list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/opportunities/groups/" $qp)
+  let full_url = (build-url $base "/opportunities/groups/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Get opportunities group
@@ -5123,12 +6864,23 @@ export def "opportunities-groups get" [
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'group_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "language" $language "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/opportunities/groups/{group_id}/") $qp)
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/opportunities/groups/{group_id}/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language, "If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource, "language": $language} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource, "language": $language} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Get opportunities tasks
@@ -5151,12 +6903,23 @@ export def "opportunities-tasks list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/opportunities/tasks/" $qp)
+  let full_url = (build-url $base "/opportunities/tasks/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Get opportunities task
@@ -5181,12 +6944,23 @@ export def "opportunities-tasks get" [
   let base = ($base_url | default $BASE_URL)
   if ($task_id | is-empty) { error make --unspanned { msg: "path parameter 'task_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({task_id: (encode-path-segment $task_id)} | format pattern "/opportunities/tasks/{task_id}/") $qp)
+  let full_url = (build-url $base ({task_id: (encode-path-segment $task_id)} | format pattern "/opportunities/tasks/{task_id}/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Get route
@@ -5216,12 +6990,23 @@ export def "route get" [
   if ($origin | is-empty) { error make --unspanned { msg: "path parameter 'origin' must be non-empty" } }
   if ($destination | is-empty) { error make --unspanned { msg: "path parameter 'destination' must be non-empty" } }
   let qp = [(serialize-qp "avoid" $avoid "csv") (serialize-qp "connections" $connections "csv") (serialize-qp "datasource" $datasource "scalar") (serialize-qp "flag" $flag "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({origin: (encode-path-segment $origin), destination: (encode-path-segment $destination)} | format pattern "/route/{origin}/{destination}/") $qp)
+  let full_url = (build-url $base ({origin: (encode-path-segment $origin), destination: (encode-path-segment $destination)} | format pattern "/route/{origin}/{destination}/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"avoid": $avoid, "connections": $connections, "datasource": $datasource, "flag": $flag} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"avoid": $avoid, "connections": $connections, "datasource": $datasource, "flag": $flag} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Search on a string
@@ -5249,12 +7034,23 @@ export def "search get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "categories" $categories "csv") (serialize-qp "datasource" $datasource "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "strict" $strict "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/search/" $qp)
+  let full_url = (build-url $base "/search/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language, "If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"categories": $categories, "datasource": $datasource, "language": $language, "search": $search, "strict": $strict} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"categories": $categories, "datasource": $datasource, "language": $language, "search": $search, "strict": $strict} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # List sovereignty campaigns
@@ -5277,12 +7073,23 @@ export def "sovereignty-campaigns get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/sovereignty/campaigns/" $qp)
+  let full_url = (build-url $base "/sovereignty/campaigns/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # List sovereignty of systems
@@ -5305,12 +7112,23 @@ export def "sovereignty-map get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/sovereignty/map/" $qp)
+  let full_url = (build-url $base "/sovereignty/map/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # List sovereignty structures
@@ -5333,12 +7151,23 @@ export def "sovereignty-structures get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/sovereignty/structures/" $qp)
+  let full_url = (build-url $base "/sovereignty/structures/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Retrieve the uptime and player counts
@@ -5361,12 +7190,23 @@ export def "status get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/status/" $qp)
+  let full_url = (build-url $base "/status/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Set Autopilot Waypoint
@@ -5392,10 +7232,21 @@ export def "ui-autopilot-waypoint create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "add_to_beginning" $add_to_beginning "scalar") (serialize-qp "clear_other_waypoints" $clear_other_waypoints "scalar") (serialize-qp "datasource" $datasource "scalar") (serialize-qp "destination_id" $destination_id "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/ui/autopilot/waypoint/" $qp)
+  let full_url = (build-url $base "/ui/autopilot/waypoint/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"add_to_beginning": $add_to_beginning, "clear_other_waypoints": $clear_other_waypoints, "datasource": $datasource, "destination_id": $destination_id, "token": $qp_token} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"add_to_beginning": $add_to_beginning, "clear_other_waypoints": $clear_other_waypoints, "datasource": $datasource, "destination_id": $destination_id, "token": $qp_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Open Contract Window
@@ -5419,10 +7270,21 @@ export def "ui-openwindow-contract create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "contract_id" $contract_id "scalar") (serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/ui/openwindow/contract/" $qp)
+  let full_url = (build-url $base "/ui/openwindow/contract/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"contract_id": $contract_id, "datasource": $datasource, "token": $qp_token} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"contract_id": $contract_id, "datasource": $datasource, "token": $qp_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Open Information Window
@@ -5446,10 +7308,21 @@ export def "ui-openwindow-information create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "target_id" $target_id "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/ui/openwindow/information/" $qp)
+  let full_url = (build-url $base "/ui/openwindow/information/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource, "target_id": $target_id, "token": $qp_token} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"datasource": $datasource, "target_id": $target_id, "token": $qp_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Open Market Details
@@ -5473,10 +7346,21 @@ export def "ui-openwindow-marketdetails create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar") (serialize-qp "type_id" $type_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/ui/openwindow/marketdetails/" $qp)
+  let full_url = (build-url $base "/ui/openwindow/marketdetails/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource, "token": $qp_token, "type_id": $type_id} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"datasource": $datasource, "token": $qp_token, "type_id": $type_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Open New Mail Window
@@ -5505,12 +7389,23 @@ export def "ui-openwindow-newmail create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/ui/openwindow/newmail/" $qp)
+  let full_url = (build-url $base "/ui/openwindow/newmail/" $qp $auth.query)
   let req_body = {"body": $body, "recipients": $recipients, "subject": $subject, "to_corp_or_alliance_id": $to_corp_or_alliance_id, "to_mailing_list_id": $to_mailing_list_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"datasource": $datasource, "token": $qp_token} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"datasource": $datasource, "token": $qp_token} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Get ancestries
@@ -5535,12 +7430,23 @@ export def "universe-ancestries get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "language" $language "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/universe/ancestries/" $qp)
+  let full_url = (build-url $base "/universe/ancestries/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language, "If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource, "language": $language} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource, "language": $language} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Get asteroid belt information
@@ -5565,12 +7471,23 @@ export def "universe-asteroid-belts get" [
   let base = ($base_url | default $BASE_URL)
   if ($asteroid_belt_id | is-empty) { error make --unspanned { msg: "path parameter 'asteroid_belt_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({asteroid_belt_id: (encode-path-segment $asteroid_belt_id)} | format pattern "/universe/asteroid_belts/{asteroid_belt_id}/") $qp)
+  let full_url = (build-url $base ({asteroid_belt_id: (encode-path-segment $asteroid_belt_id)} | format pattern "/universe/asteroid_belts/{asteroid_belt_id}/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Get bloodlines
@@ -5595,12 +7512,23 @@ export def "universe-bloodlines get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "language" $language "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/universe/bloodlines/" $qp)
+  let full_url = (build-url $base "/universe/bloodlines/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language, "If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource, "language": $language} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource, "language": $language} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Get item categories
@@ -5623,12 +7551,23 @@ export def "universe-categories list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/universe/categories/" $qp)
+  let full_url = (build-url $base "/universe/categories/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Get item category information
@@ -5655,12 +7594,23 @@ export def "universe-categories get" [
   let base = ($base_url | default $BASE_URL)
   if ($category_id | is-empty) { error make --unspanned { msg: "path parameter 'category_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "language" $language "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({category_id: (encode-path-segment $category_id)} | format pattern "/universe/categories/{category_id}/") $qp)
+  let full_url = (build-url $base ({category_id: (encode-path-segment $category_id)} | format pattern "/universe/categories/{category_id}/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language, "If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource, "language": $language} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource, "language": $language} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Get constellations
@@ -5683,12 +7633,23 @@ export def "universe-constellations list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/universe/constellations/" $qp)
+  let full_url = (build-url $base "/universe/constellations/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Get constellation information
@@ -5715,12 +7676,23 @@ export def "universe-constellations get" [
   let base = ($base_url | default $BASE_URL)
   if ($constellation_id | is-empty) { error make --unspanned { msg: "path parameter 'constellation_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "language" $language "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({constellation_id: (encode-path-segment $constellation_id)} | format pattern "/universe/constellations/{constellation_id}/") $qp)
+  let full_url = (build-url $base ({constellation_id: (encode-path-segment $constellation_id)} | format pattern "/universe/constellations/{constellation_id}/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language, "If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource, "language": $language} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource, "language": $language} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Get factions
@@ -5745,12 +7717,23 @@ export def "universe-factions get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "language" $language "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/universe/factions/" $qp)
+  let full_url = (build-url $base "/universe/factions/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language, "If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource, "language": $language} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource, "language": $language} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Get graphics
@@ -5773,12 +7756,23 @@ export def "universe-graphics list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/universe/graphics/" $qp)
+  let full_url = (build-url $base "/universe/graphics/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Get graphic information
@@ -5803,12 +7797,23 @@ export def "universe-graphics get" [
   let base = ($base_url | default $BASE_URL)
   if ($graphic_id | is-empty) { error make --unspanned { msg: "path parameter 'graphic_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({graphic_id: (encode-path-segment $graphic_id)} | format pattern "/universe/graphics/{graphic_id}/") $qp)
+  let full_url = (build-url $base ({graphic_id: (encode-path-segment $graphic_id)} | format pattern "/universe/graphics/{graphic_id}/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Get item groups
@@ -5832,12 +7837,23 @@ export def "universe-groups list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/universe/groups/" $qp)
+  let full_url = (build-url $base "/universe/groups/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource, "page": $page} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource, "page": $page} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Get item group information
@@ -5864,12 +7880,23 @@ export def "universe-groups get" [
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'group_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "language" $language "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/universe/groups/{group_id}/") $qp)
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/universe/groups/{group_id}/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language, "If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource, "language": $language} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource, "language": $language} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Bulk names to IDs
@@ -5895,14 +7922,25 @@ export def "universe-ids create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "language" $language "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/universe/ids/" $qp)
+  let full_url = (build-url $base "/universe/ids/" $qp $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"datasource": $datasource, "language": $language} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"datasource": $datasource, "language": $language} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get moon information
@@ -5927,12 +7965,23 @@ export def "universe-moons get" [
   let base = ($base_url | default $BASE_URL)
   if ($moon_id | is-empty) { error make --unspanned { msg: "path parameter 'moon_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({moon_id: (encode-path-segment $moon_id)} | format pattern "/universe/moons/{moon_id}/") $qp)
+  let full_url = (build-url $base ({moon_id: (encode-path-segment $moon_id)} | format pattern "/universe/moons/{moon_id}/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Get names and categories for a set of ID's
@@ -5956,12 +8005,23 @@ export def "universe-names create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/universe/names/" $qp)
+  let full_url = (build-url $base "/universe/names/" $qp $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"datasource": $datasource} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"datasource": $datasource} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get planet information
@@ -5986,12 +8046,23 @@ export def "universe-planets get" [
   let base = ($base_url | default $BASE_URL)
   if ($planet_id | is-empty) { error make --unspanned { msg: "path parameter 'planet_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({planet_id: (encode-path-segment $planet_id)} | format pattern "/universe/planets/{planet_id}/") $qp)
+  let full_url = (build-url $base ({planet_id: (encode-path-segment $planet_id)} | format pattern "/universe/planets/{planet_id}/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Get character races
@@ -6016,12 +8087,23 @@ export def "universe-races get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "language" $language "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/universe/races/" $qp)
+  let full_url = (build-url $base "/universe/races/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language, "If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource, "language": $language} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource, "language": $language} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Get regions
@@ -6044,12 +8126,23 @@ export def "universe-regions list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/universe/regions/" $qp)
+  let full_url = (build-url $base "/universe/regions/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Get region information
@@ -6076,12 +8169,23 @@ export def "universe-regions get" [
   let base = ($base_url | default $BASE_URL)
   if ($region_id | is-empty) { error make --unspanned { msg: "path parameter 'region_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "language" $language "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({region_id: (encode-path-segment $region_id)} | format pattern "/universe/regions/{region_id}/") $qp)
+  let full_url = (build-url $base ({region_id: (encode-path-segment $region_id)} | format pattern "/universe/regions/{region_id}/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language, "If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource, "language": $language} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource, "language": $language} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Get schematic information
@@ -6106,12 +8210,23 @@ export def "universe-schematics get" [
   let base = ($base_url | default $BASE_URL)
   if ($schematic_id | is-empty) { error make --unspanned { msg: "path parameter 'schematic_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({schematic_id: (encode-path-segment $schematic_id)} | format pattern "/universe/schematics/{schematic_id}/") $qp)
+  let full_url = (build-url $base ({schematic_id: (encode-path-segment $schematic_id)} | format pattern "/universe/schematics/{schematic_id}/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Get stargate information
@@ -6136,12 +8251,23 @@ export def "universe-stargates get" [
   let base = ($base_url | default $BASE_URL)
   if ($stargate_id | is-empty) { error make --unspanned { msg: "path parameter 'stargate_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({stargate_id: (encode-path-segment $stargate_id)} | format pattern "/universe/stargates/{stargate_id}/") $qp)
+  let full_url = (build-url $base ({stargate_id: (encode-path-segment $stargate_id)} | format pattern "/universe/stargates/{stargate_id}/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Get star information
@@ -6166,12 +8292,23 @@ export def "universe-stars get" [
   let base = ($base_url | default $BASE_URL)
   if ($star_id | is-empty) { error make --unspanned { msg: "path parameter 'star_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({star_id: (encode-path-segment $star_id)} | format pattern "/universe/stars/{star_id}/") $qp)
+  let full_url = (build-url $base ({star_id: (encode-path-segment $star_id)} | format pattern "/universe/stars/{star_id}/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Get station information
@@ -6196,12 +8333,23 @@ export def "universe-stations get" [
   let base = ($base_url | default $BASE_URL)
   if ($station_id | is-empty) { error make --unspanned { msg: "path parameter 'station_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({station_id: (encode-path-segment $station_id)} | format pattern "/universe/stations/{station_id}/") $qp)
+  let full_url = (build-url $base ({station_id: (encode-path-segment $station_id)} | format pattern "/universe/stations/{station_id}/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # List all public structures
@@ -6225,12 +8373,23 @@ export def "universe-structures list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/universe/structures/" $qp)
+  let full_url = (build-url $base "/universe/structures/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource, "filter": $filter} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource, "filter": $filter} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Get structure information
@@ -6256,12 +8415,23 @@ export def "universe-structures get" [
   let base = ($base_url | default $BASE_URL)
   if ($structure_id | is-empty) { error make --unspanned { msg: "path parameter 'structure_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({structure_id: (encode-path-segment $structure_id)} | format pattern "/universe/structures/{structure_id}/") $qp)
+  let full_url = (build-url $base ({structure_id: (encode-path-segment $structure_id)} | format pattern "/universe/structures/{structure_id}/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource, "token": $qp_token} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource, "token": $qp_token} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Get system jumps
@@ -6284,12 +8454,23 @@ export def "universe-system-jumps get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/universe/system_jumps/" $qp)
+  let full_url = (build-url $base "/universe/system_jumps/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Get system kills
@@ -6312,12 +8493,23 @@ export def "universe-system-kills get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/universe/system_kills/" $qp)
+  let full_url = (build-url $base "/universe/system_kills/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Get solar systems
@@ -6340,12 +8532,23 @@ export def "universe-systems list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/universe/systems/" $qp)
+  let full_url = (build-url $base "/universe/systems/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Get solar system information
@@ -6372,12 +8575,23 @@ export def "universe-systems get" [
   let base = ($base_url | default $BASE_URL)
   if ($system_id | is-empty) { error make --unspanned { msg: "path parameter 'system_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "language" $language "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({system_id: (encode-path-segment $system_id)} | format pattern "/universe/systems/{system_id}/") $qp)
+  let full_url = (build-url $base ({system_id: (encode-path-segment $system_id)} | format pattern "/universe/systems/{system_id}/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language, "If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource, "language": $language} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource, "language": $language} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Get types
@@ -6401,12 +8615,23 @@ export def "universe-types list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/universe/types/" $qp)
+  let full_url = (build-url $base "/universe/types/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource, "page": $page} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource, "page": $page} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Get type information
@@ -6433,12 +8658,23 @@ export def "universe-types get" [
   let base = ($base_url | default $BASE_URL)
   if ($type_id | is-empty) { error make --unspanned { msg: "path parameter 'type_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "language" $language "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({type_id: (encode-path-segment $type_id)} | format pattern "/universe/types/{type_id}/") $qp)
+  let full_url = (build-url $base ({type_id: (encode-path-segment $type_id)} | format pattern "/universe/types/{type_id}/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language, "If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource, "language": $language} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource, "language": $language} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # List wars
@@ -6462,12 +8698,23 @@ export def "wars list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "max_war_id" $max_war_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/wars/" $qp)
+  let full_url = (build-url $base "/wars/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource, "max_war_id": $max_war_id} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource, "max_war_id": $max_war_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Get war information
@@ -6492,12 +8739,23 @@ export def "wars get" [
   let base = ($base_url | default $BASE_URL)
   if ($war_id | is-empty) { error make --unspanned { msg: "path parameter 'war_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({war_id: (encode-path-segment $war_id)} | format pattern "/wars/{war_id}/") $qp)
+  let full_url = (build-url $base ({war_id: (encode-path-segment $war_id)} | format pattern "/wars/{war_id}/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # List kills for a war
@@ -6523,10 +8781,21 @@ export def "wars-killmails get" [
   let base = ($base_url | default $BASE_URL)
   if ($war_id | is-empty) { error make --unspanned { msg: "path parameter 'war_id' must be non-empty" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({war_id: (encode-path-segment $war_id)} | format pattern "/wars/{war_id}/killmails/") $qp)
+  let full_url = (build-url $base ({war_id: (encode-path-segment $war_id)} | format pattern "/wars/{war_id}/killmails/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datasource": $datasource, "page": $page} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"datasource": $datasource, "page": $page} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }

@@ -8,7 +8,7 @@ const BASE_URL = "http://localhost"
 # `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
 # where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o CIS_AUTOMOTIVE_API_TOKEN | default "" }
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o CIS_AUTOMOTIVE_API_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
@@ -40,14 +40,11 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
-# Trick: `url encode --all` over-encodes, then we decode the four unreserved
-# punctuation chars back. Pre-existing %XX sequences in the input survive
-# because `url encode --all` first turns their % into %25.
 def encode-path-segment [v: any]: nothing -> string {
   $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
-# Serialize an array-typed path parameter (issue 49.A). OpenAPI 3 `style: simple`
+# Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
 # (the default for path params) and Swagger 2 `collectionFormat: csv` both join
 # the elements with a literal comma WITHIN the single path segment, each element
 # RFC-3986-encoded individually (so a comma inside an element stays %2C). Without
@@ -58,51 +55,51 @@ def encode-path-array [v: any]: nothing -> string {
   if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
 }
 
-# Build URL from base, path, and optional query string
-def build-url [base: string, path: string, query?: string]: nothing -> string {
+# Build the request URL from base, path, and any number of pre-encoded query
+# fragments (param serializer output and/or the auth query). Each fragment is an
+# `&`-joinable `key=value` string already percent-encoded by its producer; empty
+# fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
+# delimiters are hand-spliced — and any query already on the base URL is merged in.
+def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
   let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
-  let result = ($parsed | upsert path $full_path)
-  if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
+  let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
+  $parsed | upsert path $full_path | upsert query $query | url join
 }
 
-# Build the dry-run record returned by --dry-run. Shape:
-#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
-#    auth: {scheme, location}}
-# `meta` carries logical-form data (the query record by spec name, the pre-serialization
-# body) that do-request itself cannot reconstruct from its wire-format args.
-def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
-  let m = ($meta | default {})
-  {
-    dry_run: true
-    method: $method
-    url: $url
-    query: ($m | get -o query | default {})
-    headers: $auth.headers
-    body: ($m | get -o body)
-    content_type: $content_type
-    timeout: $timeout
-    auth: {scheme: $auth.scheme, location: $auth.location}
-  }
+# Success policy: did this response succeed? Single source of truth, consulted by
+# handle-response and the HEAD header-unwrap. Empty ok_codes means the spec listed
+# none, so fall back to < 400. Otherwise: any 2xx, plus documented success codes.
+def status-ok [status: int, ok_codes: list<int>]: nothing -> bool {
+  if ($ok_codes | is-empty) { $status < 400 } else { ($status >= 200 and $status < 300) or ($status in $ok_codes) }
 }
 
-# Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
-  let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
-  let timeout = ($max_time | default 30min)
-  let ct = ($content_type | default "application/json")
-  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
-  let resp = match $method {
-    "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
-  }
-  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
-  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
+# Unwrap a `--full` HTTP response into the user-facing value. Response arrives
+# via pipeline; ok_codes gates the error throw (see status-ok).
+def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: record -> any {
+  let resp = $in
+  if $allow_errors { return $resp }
+  if not (status-ok $resp.status $ok_codes) { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } }
+  if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
+  if $resp.status == 204 { return null }
+  $resp.body
+}
+
+# GET — bodyless, honours --raw
+def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+}
+
+# POST — body + content-type
+def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# PUT — body + content-type
+def send-put [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http put --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http put --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 def base-url-completer [] { ["http://localhost"] }
@@ -153,10 +150,21 @@ export def "days-supply get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "brandName" $brand_name "scalar") (serialize-qp "regionName" $region_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/daysSupply" $qp)
+  let full_url = (build-url $base "/daysSupply" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"jwt": $jwt, "brandName": $brand_name, "regionName": $region_name} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"jwt": $jwt, "brandName": $brand_name, "regionName": $region_name} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Days a vehicle takes to sell
@@ -180,10 +188,21 @@ export def "days-to-sell get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "brandName" $brand_name "scalar") (serialize-qp "regionName" $region_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/daysToSell" $qp)
+  let full_url = (build-url $base "/daysToSell" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"jwt": $jwt, "brandName": $brand_name, "regionName": $region_name} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"jwt": $jwt, "brandName": $brand_name, "regionName": $region_name} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get a list of brand names
@@ -205,10 +224,21 @@ export def "get-brands get-names" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "jwt" $jwt "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/getBrands" $qp)
+  let full_url = (build-url $base "/getBrands" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"jwt": $jwt} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"jwt": $jwt} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Premium. Dealers in a zip code.
@@ -231,10 +261,21 @@ export def "get-dealers get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "zipCode" $zip_code "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/getDealers" $qp)
+  let full_url = (build-url $base "/getDealers" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"jwt": $jwt, "zipCode": $zip_code} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"jwt": $jwt, "zipCode": $zip_code} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Premium. Dealers by ID
@@ -257,10 +298,21 @@ export def "get-dealers-by-id get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "dealerID" $dealer_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/getDealersByID" $qp)
+  let full_url = (build-url $base "/getDealersByID" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"jwt": $jwt, "dealerID": $dealer_id} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"jwt": $jwt, "dealerID": $dealer_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Premium. Dealers in a region.
@@ -284,10 +336,21 @@ export def "get-dealers-by-region get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "regionName" $region_name "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/getDealersByRegion" $qp)
+  let full_url = (build-url $base "/getDealersByRegion" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"jwt": $jwt, "regionName": $region_name, "page": $page} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"jwt": $jwt, "regionName": $region_name, "page": $page} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get a list of model names including discontinued models
@@ -310,10 +373,21 @@ export def "get-inactive-models list-names" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "brandName" $brand_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/getInactiveModels" $qp)
+  let full_url = (build-url $base "/getInactiveModels" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"jwt": $jwt, "brandName": $brand_name} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"jwt": $jwt, "brandName": $brand_name} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get a list of model names
@@ -336,10 +410,21 @@ export def "get-models get-names" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "brandName" $brand_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/getModels" $qp)
+  let full_url = (build-url $base "/getModels" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"jwt": $jwt, "brandName": $brand_name} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"jwt": $jwt, "brandName": $brand_name} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Market share of a brand in region
@@ -363,10 +448,21 @@ export def "get-region-brand-market-share get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "brandName" $brand_name "scalar") (serialize-qp "regionName" $region_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/getRegionBrandMarketShare" $qp)
+  let full_url = (build-url $base "/getRegionBrandMarketShare" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"jwt": $jwt, "brandName": $brand_name, "regionName": $region_name} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"jwt": $jwt, "brandName": $brand_name, "regionName": $region_name} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Market share of all brands in region
@@ -389,10 +485,21 @@ export def "get-region-market-share get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "regionName" $region_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/getRegionMarketShare" $qp)
+  let full_url = (build-url $base "/getRegionMarketShare" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"jwt": $jwt, "regionName": $region_name} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"jwt": $jwt, "regionName": $region_name} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get a list of region names
@@ -414,10 +521,21 @@ export def "get-regions get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "jwt" $jwt "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/getRegions" $qp)
+  let full_url = (build-url $base "/getRegions" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"jwt": $jwt} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"jwt": $jwt} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get all Sub User Keys associated with your account.
@@ -440,10 +558,21 @@ export def "get-sub-user-keys get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "apiID" $api_id "scalar") (serialize-qp "apiKey" $api_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/getSubUserKeys" $qp)
+  let full_url = (build-url $base "/getSubUserKeys" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"apiID": $api_id, "apiKey": $api_key} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"apiID": $api_id, "apiKey": $api_key} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get a JWT from your API credentials
@@ -466,10 +595,21 @@ export def "get-token get-make" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "apiID" $api_id "scalar") (serialize-qp "apiKey" $api_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/getToken" $qp)
+  let full_url = (build-url $base "/getToken" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"apiID": $api_id, "apiKey": $api_key} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"apiID": $api_id, "apiKey": $api_key} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get a JWT from your API credentials
@@ -492,10 +632,21 @@ export def "get-token create-make" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "apiID" $api_id "scalar") (serialize-qp "apiKey" $api_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/getToken" $qp)
+  let full_url = (build-url $base "/getToken" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"apiID": $api_id, "apiKey": $api_key} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"apiID": $api_id, "apiKey": $api_key} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Stats on ask price of new vehicles
@@ -519,10 +670,21 @@ export def "list-price get-avg" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "brandName" $brand_name "scalar") (serialize-qp "regionName" $region_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/listPrice" $qp)
+  let full_url = (build-url $base "/listPrice" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"jwt": $jwt, "brandName": $brand_name, "regionName": $region_name} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"jwt": $jwt, "brandName": $brand_name, "regionName": $region_name} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Listings by Dealer ID
@@ -547,10 +709,21 @@ export def "listings get-by-dealer" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "dealerID" $dealer_id "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "newCars" $new_cars "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/listings" $qp)
+  let full_url = (build-url $base "/listings" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"jwt": $jwt, "dealerID": $dealer_id, "page": $page, "newCars": $new_cars} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"jwt": $jwt, "dealerID": $dealer_id, "page": $page, "newCars": $new_cars} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Flexible Listing Search
@@ -589,10 +762,21 @@ export def "listings2 get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "dealerID" $dealer_id "scalar") (serialize-qp "zipCode" $zip_code "scalar") (serialize-qp "latitude" $latitude "scalar") (serialize-qp "longitude" $longitude "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "regionName" $region_name "scalar") (serialize-qp "brandName" $brand_name "scalar") (serialize-qp "modelName" $model_name "scalar") (serialize-qp "modelYear" $model_year "scalar") (serialize-qp "mileageLow" $mileage_low "scalar") (serialize-qp "mileageHigh" $mileage_high "scalar") (serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar") (serialize-qp "daysBack" $days_back "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "newCars" $new_cars "scalar") (serialize-qp "extendedSearch" $extended_search "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/listings2" $qp)
+  let full_url = (build-url $base "/listings2" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"jwt": $jwt, "dealerID": $dealer_id, "zipCode": $zip_code, "latitude": $latitude, "longitude": $longitude, "radius": $radius, "regionName": $region_name, "brandName": $brand_name, "modelName": $model_name, "modelYear": $model_year, "mileageLow": $mileage_low, "mileageHigh": $mileage_high, "startDate": $start_date, "endDate": $end_date, "daysBack": $days_back, "page": $page, "newCars": $new_cars, "extendedSearch": $extended_search} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"jwt": $jwt, "dealerID": $dealer_id, "zipCode": $zip_code, "latitude": $latitude, "longitude": $longitude, "radius": $radius, "regionName": $region_name, "brandName": $brand_name, "modelName": $model_name, "modelYear": $model_year, "mileageLow": $mileage_low, "mileageHigh": $mileage_high, "startDate": $start_date, "endDate": $end_date, "daysBack": $days_back, "page": $page, "newCars": $new_cars, "extendedSearch": $extended_search} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Listings by Dealer ID and Date
@@ -619,10 +803,21 @@ export def "listings-by-date get-dealer" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "dealerID" $dealer_id "scalar") (serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "newCars" $new_cars "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/listingsByDate" $qp)
+  let full_url = (build-url $base "/listingsByDate" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"jwt": $jwt, "dealerID": $dealer_id, "startDate": $start_date, "endDate": $end_date, "page": $page, "newCars": $new_cars} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"jwt": $jwt, "dealerID": $dealer_id, "startDate": $start_date, "endDate": $end_date, "page": $page, "newCars": $new_cars} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Listings by Region
@@ -649,10 +844,21 @@ export def "listings-by-region get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "regionName" $region_name "scalar") (serialize-qp "modelName" $model_name "scalar") (serialize-qp "daysBack" $days_back "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "newCars" $new_cars "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/listingsByRegion" $qp)
+  let full_url = (build-url $base "/listingsByRegion" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"jwt": $jwt, "regionName": $region_name, "modelName": $model_name, "daysBack": $days_back, "page": $page, "newCars": $new_cars} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"jwt": $jwt, "regionName": $region_name, "modelName": $model_name, "daysBack": $days_back, "page": $page, "newCars": $new_cars} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Listings by Region and Date
@@ -680,10 +886,21 @@ export def "listings-by-region-and-date get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "regionName" $region_name "scalar") (serialize-qp "modelName" $model_name "scalar") (serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "newCars" $new_cars "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/listingsByRegionAndDate" $qp)
+  let full_url = (build-url $base "/listingsByRegionAndDate" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"jwt": $jwt, "regionName": $region_name, "modelName": $model_name, "startDate": $start_date, "endDate": $end_date, "page": $page, "newCars": $new_cars} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"jwt": $jwt, "regionName": $region_name, "modelName": $model_name, "startDate": $start_date, "endDate": $end_date, "page": $page, "newCars": $new_cars} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Listings by ZipCode
@@ -709,10 +926,21 @@ export def "listings-by-zip-code get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "zipCode" $zip_code "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "newCars" $new_cars "scalar") (serialize-qp "modelName" $model_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/listingsByZipCode" $qp)
+  let full_url = (build-url $base "/listingsByZipCode" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"jwt": $jwt, "zipCode": $zip_code, "page": $page, "newCars": $new_cars, "modelName": $model_name} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"jwt": $jwt, "zipCode": $zip_code, "page": $page, "newCars": $new_cars, "modelName": $model_name} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Listings by ZipCode and Date
@@ -740,10 +968,21 @@ export def "listings-by-zip-code-and-date get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "zipCode" $zip_code "scalar") (serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "newCars" $new_cars "scalar") (serialize-qp "modelName" $model_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/listingsByZipCodeAndDate" $qp)
+  let full_url = (build-url $base "/listingsByZipCodeAndDate" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"jwt": $jwt, "zipCode": $zip_code, "startDate": $start_date, "endDate": $end_date, "page": $page, "newCars": $new_cars, "modelName": $model_name} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"jwt": $jwt, "zipCode": $zip_code, "startDate": $start_date, "endDate": $end_date, "page": $page, "newCars": $new_cars, "modelName": $model_name} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Generate a Sub User Key that can be used by your users to make API calls in frontend applications.
@@ -769,12 +1008,23 @@ export def "make-sub-user-key create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "apiID" $api_id "scalar") (serialize-qp "apiKey" $api_key "scalar") (serialize-qp "siteName" $site_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/makeSubUserKey" $qp)
+  let full_url = (build-url $base "/makeSubUserKey" $qp $auth.query)
   let req_body = {"endPoints": $end_points} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"apiID": $api_id, "apiKey": $api_key, "siteName": $site_name} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"apiID": $api_id, "apiKey": $api_key, "siteName": $site_name} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Used market share of model year by model
@@ -799,10 +1049,21 @@ export def "model-year-dist get-used" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "modelName" $model_name "scalar") (serialize-qp "brandName" $brand_name "scalar") (serialize-qp "regionName" $region_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/modelYearDist" $qp)
+  let full_url = (build-url $base "/modelYearDist" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"jwt": $jwt, "modelName": $model_name, "brandName": $brand_name, "regionName": $region_name} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"jwt": $jwt, "modelName": $model_name, "brandName": $brand_name, "regionName": $region_name} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Brand sales by region and Day
@@ -827,10 +1088,21 @@ export def "region-daily-sales get-dealer" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "brandName" $brand_name "scalar") (serialize-qp "regionName" $region_name "scalar") (serialize-qp "day" $day "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/regionDailySales" $qp)
+  let full_url = (build-url $base "/regionDailySales" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"jwt": $jwt, "brandName": $brand_name, "regionName": $region_name, "day": $day} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"jwt": $jwt, "brandName": $brand_name, "regionName": $region_name, "day": $day} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Premium. Brand sales by region and month
@@ -855,10 +1127,21 @@ export def "region-sales get-dealer" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "brandName" $brand_name "scalar") (serialize-qp "regionName" $region_name "scalar") (serialize-qp "month" $month "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/regionSales" $qp)
+  let full_url = (build-url $base "/regionSales" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"jwt": $jwt, "brandName": $brand_name, "regionName": $region_name, "month": $month} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"jwt": $jwt, "brandName": $brand_name, "regionName": $region_name, "month": $month} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Revoke a Sub User Key associated with your account.
@@ -882,10 +1165,21 @@ export def "revoke-sub-user-key update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "apiID" $api_id "scalar") (serialize-qp "apiKey" $api_key "scalar") (serialize-qp "subUserKeyUUID" $sub_user_key_uuid "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/revokeSubUserKey" $qp)
+  let full_url = (build-url $base "/revokeSubUserKey" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"apiID": $api_id, "apiKey": $api_key, "subUserKeyUUID": $sub_user_key_uuid} | compact), body: null}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"apiID": $api_id, "apiKey": $api_key, "subUserKeyUUID": $sub_user_key_uuid} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Stats on sale price of new vehicles
@@ -909,10 +1203,21 @@ export def "sale-price get-avg" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "brandName" $brand_name "scalar") (serialize-qp "regionName" $region_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/salePrice" $qp)
+  let full_url = (build-url $base "/salePrice" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"jwt": $jwt, "brandName": $brand_name, "regionName": $region_name} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"jwt": $jwt, "brandName": $brand_name, "regionName": $region_name} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Histogram of sales price of new vehicles by model
@@ -937,10 +1242,21 @@ export def "sale-price-histogram get-model-buckets" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "modelName" $model_name "scalar") (serialize-qp "brandName" $brand_name "scalar") (serialize-qp "regionName" $region_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/salePriceHistogram" $qp)
+  let full_url = (build-url $base "/salePriceHistogram" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"jwt": $jwt, "modelName": $model_name, "brandName": $brand_name, "regionName": $region_name} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"jwt": $jwt, "modelName": $model_name, "brandName": $brand_name, "regionName": $region_name} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Premium. Simple Vehicle Market Report
@@ -966,10 +1282,21 @@ export def "similar-sale-price get-market3" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "vin" $vin "scalar") (serialize-qp "regionName" $region_name "scalar") (serialize-qp "daysBack" $days_back "scalar") (serialize-qp "sameYear" $same_year "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/similarSalePrice" $qp)
+  let full_url = (build-url $base "/similarSalePrice" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"jwt": $jwt, "vin": $vin, "regionName": $region_name, "daysBack": $days_back, "sameYear": $same_year} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"jwt": $jwt, "vin": $vin, "regionName": $region_name, "daysBack": $days_back, "sameYear": $same_year} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Top models in a given region
@@ -992,10 +1319,21 @@ export def "top-models get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "regionName" $region_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/topModels" $qp)
+  let full_url = (build-url $base "/topModels" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"jwt": $jwt, "regionName": $region_name} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"jwt": $jwt, "regionName": $region_name} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Premium. Simple Vehicle Market Report Over Arbitrary Locations and Vehicles.
@@ -1032,10 +1370,21 @@ export def "valuation get-market4" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "vin" $vin "scalar") (serialize-qp "dealerID" $dealer_id "scalar") (serialize-qp "zipCode" $zip_code "scalar") (serialize-qp "latitude" $latitude "scalar") (serialize-qp "longitude" $longitude "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "regionName" $region_name "scalar") (serialize-qp "mileageLow" $mileage_low "scalar") (serialize-qp "mileageHigh" $mileage_high "scalar") (serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar") (serialize-qp "daysBack" $days_back "scalar") (serialize-qp "newCars" $new_cars "scalar") (serialize-qp "extendedSearch" $extended_search "scalar") (serialize-qp "sameYear" $same_year "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/valuation" $qp)
+  let full_url = (build-url $base "/valuation" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"jwt": $jwt, "vin": $vin, "dealerID": $dealer_id, "zipCode": $zip_code, "latitude": $latitude, "longitude": $longitude, "radius": $radius, "regionName": $region_name, "mileageLow": $mileage_low, "mileageHigh": $mileage_high, "startDate": $start_date, "endDate": $end_date, "daysBack": $days_back, "newCars": $new_cars, "extendedSearch": $extended_search, "sameYear": $same_year} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"jwt": $jwt, "vin": $vin, "dealerID": $dealer_id, "zipCode": $zip_code, "latitude": $latitude, "longitude": $longitude, "radius": $radius, "regionName": $region_name, "mileageLow": $mileage_low, "mileageHigh": $mileage_high, "startDate": $start_date, "endDate": $end_date, "daysBack": $days_back, "newCars": $new_cars, "extendedSearch": $extended_search, "sameYear": $same_year} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Premium. Simple Vehicle History Report
@@ -1058,10 +1407,21 @@ export def "vehicle-history get-history2" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "vin" $vin "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/vehicleHistory" $qp)
+  let full_url = (build-url $base "/vehicleHistory" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"jwt": $jwt, "vin": $vin} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"jwt": $jwt, "vin": $vin} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Checks if a VIN appeared on the market on or after a given date.
@@ -1085,10 +1445,21 @@ export def "vehicle-seen get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "vin" $vin "scalar") (serialize-qp "afterDate" $after_date "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/vehicleSeen" $qp)
+  let full_url = (build-url $base "/vehicleSeen" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"jwt": $jwt, "vin": $vin, "afterDate": $after_date} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"jwt": $jwt, "vin": $vin, "afterDate": $after_date} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Vin decoder and Recall Info
@@ -1113,8 +1484,19 @@ export def "vin-decode get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "vin" $vin "scalar") (serialize-qp "passEmpty" $pass_empty "scalar") (serialize-qp "includeRecall" $include_recall "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/vinDecode" $qp)
+  let full_url = (build-url $base "/vinDecode" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"jwt": $jwt, "vin": $vin, "passEmpty": $pass_empty, "includeRecall": $include_recall} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"jwt": $jwt, "vin": $vin, "passEmpty": $pass_empty, "includeRecall": $include_recall} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }

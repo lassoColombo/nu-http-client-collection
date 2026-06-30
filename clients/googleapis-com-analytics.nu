@@ -8,7 +8,7 @@ const BASE_URL = "https://analytics.googleapis.com/analytics/v3"
 # `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
 # where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o GOOGLE_ANALYTICS_API_TOKEN | default "" }
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o GOOGLE_ANALYTICS_API_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
@@ -51,14 +51,11 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
-# Trick: `url encode --all` over-encodes, then we decode the four unreserved
-# punctuation chars back. Pre-existing %XX sequences in the input survive
-# because `url encode --all` first turns their % into %25.
 def encode-path-segment [v: any]: nothing -> string {
   $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
-# Serialize an array-typed path parameter (issue 49.A). OpenAPI 3 `style: simple`
+# Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
 # (the default for path params) and Swagger 2 `collectionFormat: csv` both join
 # the elements with a literal comma WITHIN the single path segment, each element
 # RFC-3986-encoded individually (so a comma inside an element stays %2C). Without
@@ -69,51 +66,63 @@ def encode-path-array [v: any]: nothing -> string {
   if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
 }
 
-# Build URL from base, path, and optional query string
-def build-url [base: string, path: string, query?: string]: nothing -> string {
+# Build the request URL from base, path, and any number of pre-encoded query
+# fragments (param serializer output and/or the auth query). Each fragment is an
+# `&`-joinable `key=value` string already percent-encoded by its producer; empty
+# fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
+# delimiters are hand-spliced — and any query already on the base URL is merged in.
+def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
   let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
-  let result = ($parsed | upsert path $full_path)
-  if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
+  let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
+  $parsed | upsert path $full_path | upsert query $query | url join
 }
 
-# Build the dry-run record returned by --dry-run. Shape:
-#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
-#    auth: {scheme, location}}
-# `meta` carries logical-form data (the query record by spec name, the pre-serialization
-# body) that do-request itself cannot reconstruct from its wire-format args.
-def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
-  let m = ($meta | default {})
-  {
-    dry_run: true
-    method: $method
-    url: $url
-    query: ($m | get -o query | default {})
-    headers: $auth.headers
-    body: ($m | get -o body)
-    content_type: $content_type
-    timeout: $timeout
-    auth: {scheme: $auth.scheme, location: $auth.location}
-  }
+# Success policy: did this response succeed? Single source of truth, consulted by
+# handle-response and the HEAD header-unwrap. Empty ok_codes means the spec listed
+# none, so fall back to < 400. Otherwise: any 2xx, plus documented success codes.
+def status-ok [status: int, ok_codes: list<int>]: nothing -> bool {
+  if ($ok_codes | is-empty) { $status < 400 } else { ($status >= 200 and $status < 300) or ($status in $ok_codes) }
 }
 
-# Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
-  let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
-  let timeout = ($max_time | default 30min)
-  let ct = ($content_type | default "application/json")
-  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
-  let resp = match $method {
-    "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
-  }
-  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
-  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
+# Unwrap a `--full` HTTP response into the user-facing value. Response arrives
+# via pipeline; ok_codes gates the error throw (see status-ok).
+def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: record -> any {
+  let resp = $in
+  if $allow_errors { return $resp }
+  if not (status-ok $resp.status $ok_codes) { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } }
+  if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
+  if $resp.status == 204 { return null }
+  $resp.body
+}
+
+# GET — bodyless, honours --raw
+def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+}
+
+# POST — body + content-type
+def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# PUT — body + content-type
+def send-put [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http put --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http put --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# PATCH — body + content-type
+def send-patch [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http patch --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http patch --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# DELETE — body via --data
+def send-delete [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http delete --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url } else { http delete --headers $req.headers --content-type $req.content_type --data $body --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url }
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 def base-url-completer [] { ["https://analytics.googleapis.com/analytics/v3"] }
@@ -185,10 +194,21 @@ export def "data-ga get" [
   let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_ANALYTICS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_ANALYTICS_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "ids" $ids "scalar") (serialize-qp "start-date" $start_date "scalar") (serialize-qp "end-date" $end_date "scalar") (serialize-qp "metrics" $metrics "scalar") (serialize-qp "dimensions" $dimensions "scalar") (serialize-qp "filters" $filters "scalar") (serialize-qp "include-empty-rows" $include_empty_rows "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "output" $output "scalar") (serialize-qp "samplingLevel" $sampling_level "scalar") (serialize-qp "segment" $segment "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "start-index" $start_index "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/data/ga" $qp)
+  let full_url = (build-url $base "/data/ga" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "ids": $ids, "start-date": $start_date, "end-date": $end_date, "metrics": $metrics, "dimensions": $dimensions, "filters": $filters, "include-empty-rows": $include_empty_rows, "max-results": $max_results, "output": $output, "samplingLevel": $sampling_level, "segment": $segment, "sort": $qp_sort, "start-index": $start_index} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "ids": $ids, "start-date": $start_date, "end-date": $end_date, "metrics": $metrics, "dimensions": $dimensions, "filters": $filters, "include-empty-rows": $include_empty_rows, "max-results": $max_results, "output": $output, "samplingLevel": $sampling_level, "segment": $segment, "sort": $qp_sort, "start-index": $start_index} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns Analytics Multi-Channel Funnels data for a view (profile).
@@ -226,10 +246,21 @@ export def "data-mcf get" [
   let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_ANALYTICS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_ANALYTICS_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "ids" $ids "scalar") (serialize-qp "start-date" $start_date "scalar") (serialize-qp "end-date" $end_date "scalar") (serialize-qp "metrics" $metrics "scalar") (serialize-qp "dimensions" $dimensions "scalar") (serialize-qp "filters" $filters "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "samplingLevel" $sampling_level "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "start-index" $start_index "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/data/mcf" $qp)
+  let full_url = (build-url $base "/data/mcf" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "ids": $ids, "start-date": $start_date, "end-date": $end_date, "metrics": $metrics, "dimensions": $dimensions, "filters": $filters, "max-results": $max_results, "samplingLevel": $sampling_level, "sort": $qp_sort, "start-index": $start_index} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "ids": $ids, "start-date": $start_date, "end-date": $end_date, "metrics": $metrics, "dimensions": $dimensions, "filters": $filters, "max-results": $max_results, "samplingLevel": $sampling_level, "sort": $qp_sort, "start-index": $start_index} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns real time data for a view (profile).
@@ -263,10 +294,21 @@ export def "data-realtime get" [
   let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_ANALYTICS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_ANALYTICS_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "ids" $ids "scalar") (serialize-qp "metrics" $metrics "scalar") (serialize-qp "dimensions" $dimensions "scalar") (serialize-qp "filters" $filters "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/data/realtime" $qp)
+  let full_url = (build-url $base "/data/realtime" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "ids": $ids, "metrics": $metrics, "dimensions": $dimensions, "filters": $filters, "max-results": $max_results, "sort": $qp_sort} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "ids": $ids, "metrics": $metrics, "dimensions": $dimensions, "filters": $filters, "max-results": $max_results, "sort": $qp_sort} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Lists account summaries (lightweight tree comprised of accounts/properties/profiles) to which the user has access.
@@ -296,10 +338,21 @@ export def "management-account-summaries list" [
   let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_ANALYTICS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_ANALYTICS_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "start-index" $start_index "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/management/accountSummaries" $qp)
+  let full_url = (build-url $base "/management/accountSummaries" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "max-results": $max_results, "start-index": $start_index} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "max-results": $max_results, "start-index": $start_index} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Lists all accounts to which the user has access.
@@ -329,10 +382,21 @@ export def "management-accounts list" [
   let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_ANALYTICS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_ANALYTICS_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "start-index" $start_index "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/management/accounts" $qp)
+  let full_url = (build-url $base "/management/accounts" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "max-results": $max_results, "start-index": $start_index} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "max-results": $max_results, "start-index": $start_index} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Lists account-user links for a given account.
@@ -364,10 +428,21 @@ export def "management-accounts-entity-user-links list" [
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "start-index" $start_index "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/management/accounts/{account_id}/entityUserLinks") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/management/accounts/{account_id}/entityUserLinks") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "max-results": $max_results, "start-index": $start_index} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "max-results": $max_results, "start-index": $start_index} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Adds a new user to the given account.
@@ -407,12 +482,23 @@ export def "management-accounts-entity-user-links create" [
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/management/accounts/{account_id}/entityUserLinks") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/management/accounts/{account_id}/entityUserLinks") $qp $auth.query)
   let req_body = {"entity": $entity, "id": $id, "kind": $kind, "permissions": $permissions, "selfLink": $self_link, "userRef": $user_ref} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Removes a user from the given account.
@@ -444,10 +530,21 @@ export def "management-accounts-entity-user-links delete" [
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   if ($link_id | is-empty) { error make --unspanned { msg: "path parameter 'linkId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), link_id: (encode-path-segment $link_id)} | format pattern "/management/accounts/{account_id}/entityUserLinks/{link_id}") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), link_id: (encode-path-segment $link_id)} | format pattern "/management/accounts/{account_id}/entityUserLinks/{link_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Updates permissions for an existing user on the given account.
@@ -489,12 +586,23 @@ export def "management-accounts-entity-user-links update" [
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   if ($link_id | is-empty) { error make --unspanned { msg: "path parameter 'linkId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), link_id: (encode-path-segment $link_id)} | format pattern "/management/accounts/{account_id}/entityUserLinks/{link_id}") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), link_id: (encode-path-segment $link_id)} | format pattern "/management/accounts/{account_id}/entityUserLinks/{link_id}") $qp $auth.query)
   let req_body = {"entity": $entity, "id": $id, "kind": $kind, "permissions": $permissions, "selfLink": $self_link, "userRef": $user_ref} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Lists all filters for an account
@@ -526,10 +634,21 @@ export def "management-accounts-filters list" [
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "start-index" $start_index "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/management/accounts/{account_id}/filters") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/management/accounts/{account_id}/filters") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "max-results": $max_results, "start-index": $start_index} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "max-results": $max_results, "start-index": $start_index} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a new filter.
@@ -578,12 +697,23 @@ export def "management-accounts-filters create" [
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/management/accounts/{account_id}/filters") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/management/accounts/{account_id}/filters") $qp $auth.query)
   let req_body = {"accountId": $body_account_id, "advancedDetails": $advanced_details, "excludeDetails": $exclude_details, "id": $id, "includeDetails": $include_details, "lowercaseDetails": $lowercase_details, "name": $name, "parentLink": $parent_link, "searchAndReplaceDetails": $search_and_replace_details, "type": $type, "uppercaseDetails": $uppercase_details} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Delete a filter.
@@ -615,10 +745,21 @@ export def "management-accounts-filters delete" [
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   if ($filter_id | is-empty) { error make --unspanned { msg: "path parameter 'filterId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), filter_id: (encode-path-segment $filter_id)} | format pattern "/management/accounts/{account_id}/filters/{filter_id}") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), filter_id: (encode-path-segment $filter_id)} | format pattern "/management/accounts/{account_id}/filters/{filter_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Returns filters to which the user has access.
@@ -650,10 +791,21 @@ export def "management-accounts-filters get" [
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   if ($filter_id | is-empty) { error make --unspanned { msg: "path parameter 'filterId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), filter_id: (encode-path-segment $filter_id)} | format pattern "/management/accounts/{account_id}/filters/{filter_id}") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), filter_id: (encode-path-segment $filter_id)} | format pattern "/management/accounts/{account_id}/filters/{filter_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates an existing filter. This method supports patch semantics.
@@ -704,12 +856,23 @@ export def "management-accounts-filters update-by-account-id-filter-id" [
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   if ($filter_id | is-empty) { error make --unspanned { msg: "path parameter 'filterId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), filter_id: (encode-path-segment $filter_id)} | format pattern "/management/accounts/{account_id}/filters/{filter_id}") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), filter_id: (encode-path-segment $filter_id)} | format pattern "/management/accounts/{account_id}/filters/{filter_id}") $qp $auth.query)
   let req_body = {"accountId": $body_account_id, "advancedDetails": $advanced_details, "excludeDetails": $exclude_details, "id": $id, "includeDetails": $include_details, "lowercaseDetails": $lowercase_details, "name": $name, "parentLink": $parent_link, "searchAndReplaceDetails": $search_and_replace_details, "type": $type, "uppercaseDetails": $uppercase_details} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact), body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Updates an existing filter.
@@ -760,12 +923,23 @@ export def "management-accounts-filters update-by-account-id-filter-id-1" [
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   if ($filter_id | is-empty) { error make --unspanned { msg: "path parameter 'filterId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), filter_id: (encode-path-segment $filter_id)} | format pattern "/management/accounts/{account_id}/filters/{filter_id}") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), filter_id: (encode-path-segment $filter_id)} | format pattern "/management/accounts/{account_id}/filters/{filter_id}") $qp $auth.query)
   let req_body = {"accountId": $body_account_id, "advancedDetails": $advanced_details, "excludeDetails": $exclude_details, "id": $id, "includeDetails": $include_details, "lowercaseDetails": $lowercase_details, "name": $name, "parentLink": $parent_link, "searchAndReplaceDetails": $search_and_replace_details, "type": $type, "uppercaseDetails": $uppercase_details} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Lists web properties to which the user has access.
@@ -797,10 +971,21 @@ export def "management-accounts-webproperties list" [
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "start-index" $start_index "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/management/accounts/{account_id}/webproperties") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/management/accounts/{account_id}/webproperties") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "max-results": $max_results, "start-index": $start_index} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "max-results": $max_results, "start-index": $start_index} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a new property if the account has fewer than 20 properties. Web properties are visible in the Google Analytics interface only if they have at least one profile.
@@ -845,12 +1030,23 @@ export def "management-accounts-webproperties create" [
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/management/accounts/{account_id}/webproperties") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/management/accounts/{account_id}/webproperties") $qp $auth.query)
   let req_body = {"accountId": $body_account_id, "childLink": $child_link, "dataRetentionResetOnNewActivity": $data_retention_reset_on_new_activity, "dataRetentionTtl": $data_retention_ttl, "defaultProfileId": $default_profile_id, "id": $id, "industryVertical": $industry_vertical, "name": $name, "parentLink": $parent_link, "permissions": $permissions, "starred": $starred, "websiteUrl": $website_url} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Gets a web property to which the user has access.
@@ -882,10 +1078,21 @@ export def "management-accounts-webproperties get" [
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   if ($web_property_id | is-empty) { error make --unspanned { msg: "path parameter 'webPropertyId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates an existing web property. This method supports patch semantics.
@@ -932,12 +1139,23 @@ export def "management-accounts-webproperties update-by-account-id-web-property-
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   if ($web_property_id | is-empty) { error make --unspanned { msg: "path parameter 'webPropertyId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}") $qp $auth.query)
   let req_body = {"accountId": $body_account_id, "childLink": $child_link, "dataRetentionResetOnNewActivity": $data_retention_reset_on_new_activity, "dataRetentionTtl": $data_retention_ttl, "defaultProfileId": $default_profile_id, "id": $id, "industryVertical": $industry_vertical, "name": $name, "parentLink": $parent_link, "permissions": $permissions, "starred": $starred, "websiteUrl": $website_url} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact), body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Updates an existing web property.
@@ -984,12 +1202,23 @@ export def "management-accounts-webproperties update-by-account-id-web-property-
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   if ($web_property_id | is-empty) { error make --unspanned { msg: "path parameter 'webPropertyId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}") $qp $auth.query)
   let req_body = {"accountId": $body_account_id, "childLink": $child_link, "dataRetentionResetOnNewActivity": $data_retention_reset_on_new_activity, "dataRetentionTtl": $data_retention_ttl, "defaultProfileId": $default_profile_id, "id": $id, "industryVertical": $industry_vertical, "name": $name, "parentLink": $parent_link, "permissions": $permissions, "starred": $starred, "websiteUrl": $website_url} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # List custom data sources to which the user has access.
@@ -1023,10 +1252,21 @@ export def "management-accounts-webproperties-custom-data-sources list" [
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   if ($web_property_id | is-empty) { error make --unspanned { msg: "path parameter 'webPropertyId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "start-index" $start_index "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/customDataSources") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/customDataSources") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "max-results": $max_results, "start-index": $start_index} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "max-results": $max_results, "start-index": $start_index} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Delete data associated with a previous upload.
@@ -1062,12 +1302,23 @@ export def "management-accounts-webproperties-custom-data-sources-delete-upload-
   if ($web_property_id | is-empty) { error make --unspanned { msg: "path parameter 'webPropertyId' must be non-empty" } }
   if ($custom_data_source_id | is-empty) { error make --unspanned { msg: "path parameter 'customDataSourceId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), custom_data_source_id: (encode-path-segment $custom_data_source_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/customDataSources/{custom_data_source_id}/deleteUploadData") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), custom_data_source_id: (encode-path-segment $custom_data_source_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/customDataSources/{custom_data_source_id}/deleteUploadData") $qp $auth.query)
   let req_body = {"customDataImportUids": $custom_data_import_uids} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # List uploads to which the user has access.
@@ -1103,10 +1354,21 @@ export def "management-accounts-webproperties-custom-data-sources-uploads list" 
   if ($web_property_id | is-empty) { error make --unspanned { msg: "path parameter 'webPropertyId' must be non-empty" } }
   if ($custom_data_source_id | is-empty) { error make --unspanned { msg: "path parameter 'customDataSourceId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "start-index" $start_index "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), custom_data_source_id: (encode-path-segment $custom_data_source_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/customDataSources/{custom_data_source_id}/uploads") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), custom_data_source_id: (encode-path-segment $custom_data_source_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/customDataSources/{custom_data_source_id}/uploads") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "max-results": $max_results, "start-index": $start_index} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "max-results": $max_results, "start-index": $start_index} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Upload data for a custom data source.
@@ -1140,10 +1402,21 @@ export def "management-accounts-webproperties-custom-data-sources-uploads upload
   if ($web_property_id | is-empty) { error make --unspanned { msg: "path parameter 'webPropertyId' must be non-empty" } }
   if ($custom_data_source_id | is-empty) { error make --unspanned { msg: "path parameter 'customDataSourceId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), custom_data_source_id: (encode-path-segment $custom_data_source_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/customDataSources/{custom_data_source_id}/uploads") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), custom_data_source_id: (encode-path-segment $custom_data_source_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/customDataSources/{custom_data_source_id}/uploads") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # List uploads to which the user has access.
@@ -1179,10 +1452,21 @@ export def "management-accounts-webproperties-custom-data-sources-uploads get" [
   if ($custom_data_source_id | is-empty) { error make --unspanned { msg: "path parameter 'customDataSourceId' must be non-empty" } }
   if ($upload_id | is-empty) { error make --unspanned { msg: "path parameter 'uploadId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), custom_data_source_id: (encode-path-segment $custom_data_source_id), upload_id: (encode-path-segment $upload_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/customDataSources/{custom_data_source_id}/uploads/{upload_id}") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), custom_data_source_id: (encode-path-segment $custom_data_source_id), upload_id: (encode-path-segment $upload_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/customDataSources/{custom_data_source_id}/uploads/{upload_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Lists custom dimensions to which the user has access.
@@ -1216,10 +1500,21 @@ export def "management-accounts-webproperties-custom-dimensions list" [
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   if ($web_property_id | is-empty) { error make --unspanned { msg: "path parameter 'webPropertyId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "start-index" $start_index "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/customDimensions") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/customDimensions") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "max-results": $max_results, "start-index": $start_index} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "max-results": $max_results, "start-index": $start_index} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a new custom dimension.
@@ -1260,12 +1555,23 @@ export def "management-accounts-webproperties-custom-dimensions create" [
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   if ($web_property_id | is-empty) { error make --unspanned { msg: "path parameter 'webPropertyId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/customDimensions") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/customDimensions") $qp $auth.query)
   let req_body = {"accountId": $body_account_id, "active": $active, "id": $id, "name": $name, "parentLink": $parent_link, "scope": $scope, "webPropertyId": $body_web_property_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get a custom dimension to which the user has access.
@@ -1299,10 +1605,21 @@ export def "management-accounts-webproperties-custom-dimensions get" [
   if ($web_property_id | is-empty) { error make --unspanned { msg: "path parameter 'webPropertyId' must be non-empty" } }
   if ($custom_dimension_id | is-empty) { error make --unspanned { msg: "path parameter 'customDimensionId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), custom_dimension_id: (encode-path-segment $custom_dimension_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/customDimensions/{custom_dimension_id}") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), custom_dimension_id: (encode-path-segment $custom_dimension_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/customDimensions/{custom_dimension_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates an existing custom dimension. This method supports patch semantics.
@@ -1346,12 +1663,23 @@ export def "management-accounts-webproperties-custom-dimensions update-by-accoun
   if ($web_property_id | is-empty) { error make --unspanned { msg: "path parameter 'webPropertyId' must be non-empty" } }
   if ($custom_dimension_id | is-empty) { error make --unspanned { msg: "path parameter 'customDimensionId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "ignoreCustomDataSourceLinks" $ignore_custom_data_source_links "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), custom_dimension_id: (encode-path-segment $custom_dimension_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/customDimensions/{custom_dimension_id}") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), custom_dimension_id: (encode-path-segment $custom_dimension_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/customDimensions/{custom_dimension_id}") $qp $auth.query)
   let req_body = {"accountId": $body_account_id, "active": $active, "id": $id, "name": $name, "parentLink": $parent_link, "scope": $scope, "webPropertyId": $body_web_property_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "ignoreCustomDataSourceLinks": $ignore_custom_data_source_links} | compact), body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "ignoreCustomDataSourceLinks": $ignore_custom_data_source_links} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Updates an existing custom dimension.
@@ -1395,12 +1723,23 @@ export def "management-accounts-webproperties-custom-dimensions update-by-accoun
   if ($web_property_id | is-empty) { error make --unspanned { msg: "path parameter 'webPropertyId' must be non-empty" } }
   if ($custom_dimension_id | is-empty) { error make --unspanned { msg: "path parameter 'customDimensionId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "ignoreCustomDataSourceLinks" $ignore_custom_data_source_links "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), custom_dimension_id: (encode-path-segment $custom_dimension_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/customDimensions/{custom_dimension_id}") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), custom_dimension_id: (encode-path-segment $custom_dimension_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/customDimensions/{custom_dimension_id}") $qp $auth.query)
   let req_body = {"accountId": $body_account_id, "active": $active, "id": $id, "name": $name, "parentLink": $parent_link, "scope": $scope, "webPropertyId": $body_web_property_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "ignoreCustomDataSourceLinks": $ignore_custom_data_source_links} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "ignoreCustomDataSourceLinks": $ignore_custom_data_source_links} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Lists custom metrics to which the user has access.
@@ -1434,10 +1773,21 @@ export def "management-accounts-webproperties-custom-metrics list" [
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   if ($web_property_id | is-empty) { error make --unspanned { msg: "path parameter 'webPropertyId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "start-index" $start_index "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/customMetrics") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/customMetrics") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "max-results": $max_results, "start-index": $start_index} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "max-results": $max_results, "start-index": $start_index} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a new custom metric.
@@ -1481,12 +1831,23 @@ export def "management-accounts-webproperties-custom-metrics create" [
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   if ($web_property_id | is-empty) { error make --unspanned { msg: "path parameter 'webPropertyId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/customMetrics") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/customMetrics") $qp $auth.query)
   let req_body = {"accountId": $body_account_id, "active": $active, "id": $id, "max_value": $max_value, "min_value": $min_value, "name": $name, "parentLink": $parent_link, "scope": $scope, "type": $type, "webPropertyId": $body_web_property_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get a custom metric to which the user has access.
@@ -1520,10 +1881,21 @@ export def "management-accounts-webproperties-custom-metrics get" [
   if ($web_property_id | is-empty) { error make --unspanned { msg: "path parameter 'webPropertyId' must be non-empty" } }
   if ($custom_metric_id | is-empty) { error make --unspanned { msg: "path parameter 'customMetricId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), custom_metric_id: (encode-path-segment $custom_metric_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/customMetrics/{custom_metric_id}") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), custom_metric_id: (encode-path-segment $custom_metric_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/customMetrics/{custom_metric_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates an existing custom metric. This method supports patch semantics.
@@ -1570,12 +1942,23 @@ export def "management-accounts-webproperties-custom-metrics update-by-account-i
   if ($web_property_id | is-empty) { error make --unspanned { msg: "path parameter 'webPropertyId' must be non-empty" } }
   if ($custom_metric_id | is-empty) { error make --unspanned { msg: "path parameter 'customMetricId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "ignoreCustomDataSourceLinks" $ignore_custom_data_source_links "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), custom_metric_id: (encode-path-segment $custom_metric_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/customMetrics/{custom_metric_id}") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), custom_metric_id: (encode-path-segment $custom_metric_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/customMetrics/{custom_metric_id}") $qp $auth.query)
   let req_body = {"accountId": $body_account_id, "active": $active, "id": $id, "max_value": $max_value, "min_value": $min_value, "name": $name, "parentLink": $parent_link, "scope": $scope, "type": $type, "webPropertyId": $body_web_property_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "ignoreCustomDataSourceLinks": $ignore_custom_data_source_links} | compact), body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "ignoreCustomDataSourceLinks": $ignore_custom_data_source_links} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Updates an existing custom metric.
@@ -1622,12 +2005,23 @@ export def "management-accounts-webproperties-custom-metrics update-by-account-i
   if ($web_property_id | is-empty) { error make --unspanned { msg: "path parameter 'webPropertyId' must be non-empty" } }
   if ($custom_metric_id | is-empty) { error make --unspanned { msg: "path parameter 'customMetricId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "ignoreCustomDataSourceLinks" $ignore_custom_data_source_links "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), custom_metric_id: (encode-path-segment $custom_metric_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/customMetrics/{custom_metric_id}") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), custom_metric_id: (encode-path-segment $custom_metric_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/customMetrics/{custom_metric_id}") $qp $auth.query)
   let req_body = {"accountId": $body_account_id, "active": $active, "id": $id, "max_value": $max_value, "min_value": $min_value, "name": $name, "parentLink": $parent_link, "scope": $scope, "type": $type, "webPropertyId": $body_web_property_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "ignoreCustomDataSourceLinks": $ignore_custom_data_source_links} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "ignoreCustomDataSourceLinks": $ignore_custom_data_source_links} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Lists webProperty-Google Ads links for a given web property.
@@ -1661,10 +2055,21 @@ export def "management-accounts-webproperties-entity-ad-words-links list" [
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   if ($web_property_id | is-empty) { error make --unspanned { msg: "path parameter 'webPropertyId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "start-index" $start_index "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/entityAdWordsLinks") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/entityAdWordsLinks") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "max-results": $max_results, "start-index": $start_index} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "max-results": $max_results, "start-index": $start_index} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Creates a webProperty-Google Ads link.
@@ -1706,12 +2111,23 @@ export def "management-accounts-webproperties-entity-ad-words-links create" [
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   if ($web_property_id | is-empty) { error make --unspanned { msg: "path parameter 'webPropertyId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/entityAdWordsLinks") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/entityAdWordsLinks") $qp $auth.query)
   let req_body = {"adWordsAccounts": $ad_words_accounts, "entity": $entity, "id": $id, "kind": $kind, "name": $name, "profileIds": $profile_ids, "selfLink": $self_link} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes a web property-Google Ads link.
@@ -1745,10 +2161,21 @@ export def "management-accounts-webproperties-entity-ad-words-links delete" [
   if ($web_property_id | is-empty) { error make --unspanned { msg: "path parameter 'webPropertyId' must be non-empty" } }
   if ($web_property_ad_words_link_id | is-empty) { error make --unspanned { msg: "path parameter 'webPropertyAdWordsLinkId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), web_property_ad_words_link_id: (encode-path-segment $web_property_ad_words_link_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/entityAdWordsLinks/{web_property_ad_words_link_id}") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), web_property_ad_words_link_id: (encode-path-segment $web_property_ad_words_link_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/entityAdWordsLinks/{web_property_ad_words_link_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Returns a web property-Google Ads link to which the user has access.
@@ -1782,10 +2209,21 @@ export def "management-accounts-webproperties-entity-ad-words-links get" [
   if ($web_property_id | is-empty) { error make --unspanned { msg: "path parameter 'webPropertyId' must be non-empty" } }
   if ($web_property_ad_words_link_id | is-empty) { error make --unspanned { msg: "path parameter 'webPropertyAdWordsLinkId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), web_property_ad_words_link_id: (encode-path-segment $web_property_ad_words_link_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/entityAdWordsLinks/{web_property_ad_words_link_id}") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), web_property_ad_words_link_id: (encode-path-segment $web_property_ad_words_link_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/entityAdWordsLinks/{web_property_ad_words_link_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates an existing webProperty-Google Ads link. This method supports patch semantics.
@@ -1829,12 +2267,23 @@ export def "management-accounts-webproperties-entity-ad-words-links update-by-ac
   if ($web_property_id | is-empty) { error make --unspanned { msg: "path parameter 'webPropertyId' must be non-empty" } }
   if ($web_property_ad_words_link_id | is-empty) { error make --unspanned { msg: "path parameter 'webPropertyAdWordsLinkId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), web_property_ad_words_link_id: (encode-path-segment $web_property_ad_words_link_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/entityAdWordsLinks/{web_property_ad_words_link_id}") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), web_property_ad_words_link_id: (encode-path-segment $web_property_ad_words_link_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/entityAdWordsLinks/{web_property_ad_words_link_id}") $qp $auth.query)
   let req_body = {"adWordsAccounts": $ad_words_accounts, "entity": $entity, "id": $id, "kind": $kind, "name": $name, "profileIds": $profile_ids, "selfLink": $self_link} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact), body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Updates an existing webProperty-Google Ads link.
@@ -1878,12 +2327,23 @@ export def "management-accounts-webproperties-entity-ad-words-links update-by-ac
   if ($web_property_id | is-empty) { error make --unspanned { msg: "path parameter 'webPropertyId' must be non-empty" } }
   if ($web_property_ad_words_link_id | is-empty) { error make --unspanned { msg: "path parameter 'webPropertyAdWordsLinkId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), web_property_ad_words_link_id: (encode-path-segment $web_property_ad_words_link_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/entityAdWordsLinks/{web_property_ad_words_link_id}") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), web_property_ad_words_link_id: (encode-path-segment $web_property_ad_words_link_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/entityAdWordsLinks/{web_property_ad_words_link_id}") $qp $auth.query)
   let req_body = {"adWordsAccounts": $ad_words_accounts, "entity": $entity, "id": $id, "kind": $kind, "name": $name, "profileIds": $profile_ids, "selfLink": $self_link} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Lists webProperty-user links for a given web property.
@@ -1917,10 +2377,21 @@ export def "management-accounts-webproperties-entity-user-links list" [
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   if ($web_property_id | is-empty) { error make --unspanned { msg: "path parameter 'webPropertyId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "start-index" $start_index "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/entityUserLinks") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/entityUserLinks") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "max-results": $max_results, "start-index": $start_index} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "max-results": $max_results, "start-index": $start_index} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Adds a new user to the given web property.
@@ -1962,12 +2433,23 @@ export def "management-accounts-webproperties-entity-user-links create" [
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   if ($web_property_id | is-empty) { error make --unspanned { msg: "path parameter 'webPropertyId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/entityUserLinks") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/entityUserLinks") $qp $auth.query)
   let req_body = {"entity": $entity, "id": $id, "kind": $kind, "permissions": $permissions, "selfLink": $self_link, "userRef": $user_ref} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Removes a user from the given web property.
@@ -2001,10 +2483,21 @@ export def "management-accounts-webproperties-entity-user-links delete" [
   if ($web_property_id | is-empty) { error make --unspanned { msg: "path parameter 'webPropertyId' must be non-empty" } }
   if ($link_id | is-empty) { error make --unspanned { msg: "path parameter 'linkId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), link_id: (encode-path-segment $link_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/entityUserLinks/{link_id}") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), link_id: (encode-path-segment $link_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/entityUserLinks/{link_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Updates permissions for an existing user on the given web property.
@@ -2048,12 +2541,23 @@ export def "management-accounts-webproperties-entity-user-links update" [
   if ($web_property_id | is-empty) { error make --unspanned { msg: "path parameter 'webPropertyId' must be non-empty" } }
   if ($link_id | is-empty) { error make --unspanned { msg: "path parameter 'linkId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), link_id: (encode-path-segment $link_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/entityUserLinks/{link_id}") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), link_id: (encode-path-segment $link_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/entityUserLinks/{link_id}") $qp $auth.query)
   let req_body = {"entity": $entity, "id": $id, "kind": $kind, "permissions": $permissions, "selfLink": $self_link, "userRef": $user_ref} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Lists views (profiles) to which the user has access.
@@ -2087,10 +2591,21 @@ export def "management-accounts-webproperties-profiles list" [
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   if ($web_property_id | is-empty) { error make --unspanned { msg: "path parameter 'webPropertyId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "start-index" $start_index "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/profiles") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/profiles") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "max-results": $max_results, "start-index": $start_index} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "max-results": $max_results, "start-index": $start_index} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a new view (profile).
@@ -2145,12 +2660,23 @@ export def "management-accounts-webproperties-profiles create" [
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   if ($web_property_id | is-empty) { error make --unspanned { msg: "path parameter 'webPropertyId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/profiles") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/profiles") $qp $auth.query)
   let req_body = {"accountId": $body_account_id, "botFilteringEnabled": $bot_filtering_enabled, "childLink": $child_link, "currency": $currency, "defaultPage": $default_page, "eCommerceTracking": $e_commerce_tracking, "enhancedECommerceTracking": $enhanced_e_commerce_tracking, "excludeQueryParameters": $exclude_query_parameters, "id": $id, "name": $name, "parentLink": $parent_link, "permissions": $permissions, "siteSearchCategoryParameters": $site_search_category_parameters, "siteSearchQueryParameters": $site_search_query_parameters, "starred": $starred, "stripSiteSearchCategoryParameters": $strip_site_search_category_parameters, "stripSiteSearchQueryParameters": $strip_site_search_query_parameters, "timezone": $timezone, "type": $type, "websiteUrl": $website_url} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes a view (profile).
@@ -2184,10 +2710,21 @@ export def "management-accounts-webproperties-profiles delete" [
   if ($web_property_id | is-empty) { error make --unspanned { msg: "path parameter 'webPropertyId' must be non-empty" } }
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), profile_id: (encode-path-segment $profile_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/profiles/{profile_id}") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), profile_id: (encode-path-segment $profile_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/profiles/{profile_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Gets a view (profile) to which the user has access.
@@ -2221,10 +2758,21 @@ export def "management-accounts-webproperties-profiles get" [
   if ($web_property_id | is-empty) { error make --unspanned { msg: "path parameter 'webPropertyId' must be non-empty" } }
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), profile_id: (encode-path-segment $profile_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/profiles/{profile_id}") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), profile_id: (encode-path-segment $profile_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/profiles/{profile_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates an existing view (profile). This method supports patch semantics.
@@ -2281,12 +2829,23 @@ export def "management-accounts-webproperties-profiles update-by-account-id-web-
   if ($web_property_id | is-empty) { error make --unspanned { msg: "path parameter 'webPropertyId' must be non-empty" } }
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), profile_id: (encode-path-segment $profile_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/profiles/{profile_id}") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), profile_id: (encode-path-segment $profile_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/profiles/{profile_id}") $qp $auth.query)
   let req_body = {"accountId": $body_account_id, "botFilteringEnabled": $bot_filtering_enabled, "childLink": $child_link, "currency": $currency, "defaultPage": $default_page, "eCommerceTracking": $e_commerce_tracking, "enhancedECommerceTracking": $enhanced_e_commerce_tracking, "excludeQueryParameters": $exclude_query_parameters, "id": $id, "name": $name, "parentLink": $parent_link, "permissions": $permissions, "siteSearchCategoryParameters": $site_search_category_parameters, "siteSearchQueryParameters": $site_search_query_parameters, "starred": $starred, "stripSiteSearchCategoryParameters": $strip_site_search_category_parameters, "stripSiteSearchQueryParameters": $strip_site_search_query_parameters, "timezone": $timezone, "type": $type, "websiteUrl": $website_url} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact), body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Updates an existing view (profile).
@@ -2343,12 +2902,23 @@ export def "management-accounts-webproperties-profiles update-by-account-id-web-
   if ($web_property_id | is-empty) { error make --unspanned { msg: "path parameter 'webPropertyId' must be non-empty" } }
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), profile_id: (encode-path-segment $profile_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/profiles/{profile_id}") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), profile_id: (encode-path-segment $profile_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/profiles/{profile_id}") $qp $auth.query)
   let req_body = {"accountId": $body_account_id, "botFilteringEnabled": $bot_filtering_enabled, "childLink": $child_link, "currency": $currency, "defaultPage": $default_page, "eCommerceTracking": $e_commerce_tracking, "enhancedECommerceTracking": $enhanced_e_commerce_tracking, "excludeQueryParameters": $exclude_query_parameters, "id": $id, "name": $name, "parentLink": $parent_link, "permissions": $permissions, "siteSearchCategoryParameters": $site_search_category_parameters, "siteSearchQueryParameters": $site_search_query_parameters, "starred": $starred, "stripSiteSearchCategoryParameters": $strip_site_search_category_parameters, "stripSiteSearchQueryParameters": $strip_site_search_query_parameters, "timezone": $timezone, "type": $type, "websiteUrl": $website_url} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Lists profile-user links for a given view (profile).
@@ -2384,10 +2954,21 @@ export def "management-accounts-webproperties-profiles-entity-user-links list" [
   if ($web_property_id | is-empty) { error make --unspanned { msg: "path parameter 'webPropertyId' must be non-empty" } }
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "start-index" $start_index "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), profile_id: (encode-path-segment $profile_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/profiles/{profile_id}/entityUserLinks") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), profile_id: (encode-path-segment $profile_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/profiles/{profile_id}/entityUserLinks") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "max-results": $max_results, "start-index": $start_index} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "max-results": $max_results, "start-index": $start_index} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Adds a new user to the given view (profile).
@@ -2431,12 +3012,23 @@ export def "management-accounts-webproperties-profiles-entity-user-links create"
   if ($web_property_id | is-empty) { error make --unspanned { msg: "path parameter 'webPropertyId' must be non-empty" } }
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), profile_id: (encode-path-segment $profile_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/profiles/{profile_id}/entityUserLinks") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), profile_id: (encode-path-segment $profile_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/profiles/{profile_id}/entityUserLinks") $qp $auth.query)
   let req_body = {"entity": $entity, "id": $id, "kind": $kind, "permissions": $permissions, "selfLink": $self_link, "userRef": $user_ref} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Removes a user from the given view (profile).
@@ -2472,10 +3064,21 @@ export def "management-accounts-webproperties-profiles-entity-user-links delete"
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($link_id | is-empty) { error make --unspanned { msg: "path parameter 'linkId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), profile_id: (encode-path-segment $profile_id), link_id: (encode-path-segment $link_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/profiles/{profile_id}/entityUserLinks/{link_id}") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), profile_id: (encode-path-segment $profile_id), link_id: (encode-path-segment $link_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/profiles/{profile_id}/entityUserLinks/{link_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Updates permissions for an existing user on the given view (profile).
@@ -2521,12 +3124,23 @@ export def "management-accounts-webproperties-profiles-entity-user-links update"
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($link_id | is-empty) { error make --unspanned { msg: "path parameter 'linkId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), profile_id: (encode-path-segment $profile_id), link_id: (encode-path-segment $link_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/profiles/{profile_id}/entityUserLinks/{link_id}") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), profile_id: (encode-path-segment $profile_id), link_id: (encode-path-segment $link_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/profiles/{profile_id}/entityUserLinks/{link_id}") $qp $auth.query)
   let req_body = {"entity": $entity, "id": $id, "kind": $kind, "permissions": $permissions, "selfLink": $self_link, "userRef": $user_ref} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Lists experiments to which the user has access.
@@ -2562,10 +3176,21 @@ export def "management-accounts-webproperties-profiles-experiments list" [
   if ($web_property_id | is-empty) { error make --unspanned { msg: "path parameter 'webPropertyId' must be non-empty" } }
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "start-index" $start_index "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), profile_id: (encode-path-segment $profile_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/profiles/{profile_id}/experiments") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), profile_id: (encode-path-segment $profile_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/profiles/{profile_id}/experiments") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "max-results": $max_results, "start-index": $start_index} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "max-results": $max_results, "start-index": $start_index} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a new experiment.
@@ -2630,12 +3255,23 @@ export def "management-accounts-webproperties-profiles-experiments create" [
   if ($web_property_id | is-empty) { error make --unspanned { msg: "path parameter 'webPropertyId' must be non-empty" } }
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), profile_id: (encode-path-segment $profile_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/profiles/{profile_id}/experiments") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), profile_id: (encode-path-segment $profile_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/profiles/{profile_id}/experiments") $qp $auth.query)
   let req_body = {"accountId": $body_account_id, "created": $created, "description": $description, "editableInGaUi": $editable_in_ga_ui, "endTime": $end_time, "equalWeighting": $equal_weighting, "id": $id, "internalWebPropertyId": $internal_web_property_id, "kind": $kind, "minimumExperimentLengthInDays": $minimum_experiment_length_in_days, "name": $name, "objectiveMetric": $objective_metric, "optimizationType": $optimization_type, "parentLink": $parent_link, "profileId": $body_profile_id, "reasonExperimentEnded": $reason_experiment_ended, "rewriteVariationUrlsAsOriginal": $rewrite_variation_urls_as_original, "selfLink": $self_link, "servingFramework": $serving_framework, "snippet": $snippet, "startTime": $start_time, "status": $status, "trafficCoverage": $traffic_coverage, "updated": $updated, "variations": $variations, "webPropertyId": $body_web_property_id, "winnerConfidenceLevel": $winner_confidence_level, "winnerFound": $winner_found} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Delete an experiment.
@@ -2671,10 +3307,21 @@ export def "management-accounts-webproperties-profiles-experiments delete" [
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($experiment_id | is-empty) { error make --unspanned { msg: "path parameter 'experimentId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), profile_id: (encode-path-segment $profile_id), experiment_id: (encode-path-segment $experiment_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/profiles/{profile_id}/experiments/{experiment_id}") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), profile_id: (encode-path-segment $profile_id), experiment_id: (encode-path-segment $experiment_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/profiles/{profile_id}/experiments/{experiment_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Returns an experiment to which the user has access.
@@ -2710,10 +3357,21 @@ export def "management-accounts-webproperties-profiles-experiments get" [
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($experiment_id | is-empty) { error make --unspanned { msg: "path parameter 'experimentId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), profile_id: (encode-path-segment $profile_id), experiment_id: (encode-path-segment $experiment_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/profiles/{profile_id}/experiments/{experiment_id}") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), profile_id: (encode-path-segment $profile_id), experiment_id: (encode-path-segment $experiment_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/profiles/{profile_id}/experiments/{experiment_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update an existing experiment. This method supports patch semantics.
@@ -2780,12 +3438,23 @@ export def "management-accounts-webproperties-profiles-experiments update-by-acc
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($experiment_id | is-empty) { error make --unspanned { msg: "path parameter 'experimentId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), profile_id: (encode-path-segment $profile_id), experiment_id: (encode-path-segment $experiment_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/profiles/{profile_id}/experiments/{experiment_id}") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), profile_id: (encode-path-segment $profile_id), experiment_id: (encode-path-segment $experiment_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/profiles/{profile_id}/experiments/{experiment_id}") $qp $auth.query)
   let req_body = {"accountId": $body_account_id, "created": $created, "description": $description, "editableInGaUi": $editable_in_ga_ui, "endTime": $end_time, "equalWeighting": $equal_weighting, "id": $id, "internalWebPropertyId": $internal_web_property_id, "kind": $kind, "minimumExperimentLengthInDays": $minimum_experiment_length_in_days, "name": $name, "objectiveMetric": $objective_metric, "optimizationType": $optimization_type, "parentLink": $parent_link, "profileId": $body_profile_id, "reasonExperimentEnded": $reason_experiment_ended, "rewriteVariationUrlsAsOriginal": $rewrite_variation_urls_as_original, "selfLink": $self_link, "servingFramework": $serving_framework, "snippet": $snippet, "startTime": $start_time, "status": $status, "trafficCoverage": $traffic_coverage, "updated": $updated, "variations": $variations, "webPropertyId": $body_web_property_id, "winnerConfidenceLevel": $winner_confidence_level, "winnerFound": $winner_found} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact), body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Update an existing experiment.
@@ -2852,12 +3521,23 @@ export def "management-accounts-webproperties-profiles-experiments update-by-acc
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($experiment_id | is-empty) { error make --unspanned { msg: "path parameter 'experimentId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), profile_id: (encode-path-segment $profile_id), experiment_id: (encode-path-segment $experiment_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/profiles/{profile_id}/experiments/{experiment_id}") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), profile_id: (encode-path-segment $profile_id), experiment_id: (encode-path-segment $experiment_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/profiles/{profile_id}/experiments/{experiment_id}") $qp $auth.query)
   let req_body = {"accountId": $body_account_id, "created": $created, "description": $description, "editableInGaUi": $editable_in_ga_ui, "endTime": $end_time, "equalWeighting": $equal_weighting, "id": $id, "internalWebPropertyId": $internal_web_property_id, "kind": $kind, "minimumExperimentLengthInDays": $minimum_experiment_length_in_days, "name": $name, "objectiveMetric": $objective_metric, "optimizationType": $optimization_type, "parentLink": $parent_link, "profileId": $body_profile_id, "reasonExperimentEnded": $reason_experiment_ended, "rewriteVariationUrlsAsOriginal": $rewrite_variation_urls_as_original, "selfLink": $self_link, "servingFramework": $serving_framework, "snippet": $snippet, "startTime": $start_time, "status": $status, "trafficCoverage": $traffic_coverage, "updated": $updated, "variations": $variations, "webPropertyId": $body_web_property_id, "winnerConfidenceLevel": $winner_confidence_level, "winnerFound": $winner_found} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Lists goals to which the user has access.
@@ -2893,10 +3573,21 @@ export def "management-accounts-webproperties-profiles-goals list" [
   if ($web_property_id | is-empty) { error make --unspanned { msg: "path parameter 'webPropertyId' must be non-empty" } }
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "start-index" $start_index "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), profile_id: (encode-path-segment $profile_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/profiles/{profile_id}/goals") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), profile_id: (encode-path-segment $profile_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/profiles/{profile_id}/goals") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "max-results": $max_results, "start-index": $start_index} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "max-results": $max_results, "start-index": $start_index} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a new goal.
@@ -2954,12 +3645,23 @@ export def "management-accounts-webproperties-profiles-goals create" [
   if ($web_property_id | is-empty) { error make --unspanned { msg: "path parameter 'webPropertyId' must be non-empty" } }
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), profile_id: (encode-path-segment $profile_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/profiles/{profile_id}/goals") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), profile_id: (encode-path-segment $profile_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/profiles/{profile_id}/goals") $qp $auth.query)
   let req_body = {"accountId": $body_account_id, "active": $active, "created": $created, "eventDetails": $event_details, "id": $id, "internalWebPropertyId": $internal_web_property_id, "kind": $kind, "name": $name, "parentLink": $parent_link, "profileId": $body_profile_id, "selfLink": $self_link, "type": $type, "updated": $updated, "urlDestinationDetails": $url_destination_details, "value": $value, "visitNumPagesDetails": $visit_num_pages_details, "visitTimeOnSiteDetails": $visit_time_on_site_details, "webPropertyId": $body_web_property_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Gets a goal to which the user has access.
@@ -2995,10 +3697,21 @@ export def "management-accounts-webproperties-profiles-goals get" [
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($goal_id | is-empty) { error make --unspanned { msg: "path parameter 'goalId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), profile_id: (encode-path-segment $profile_id), goal_id: (encode-path-segment $goal_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/profiles/{profile_id}/goals/{goal_id}") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), profile_id: (encode-path-segment $profile_id), goal_id: (encode-path-segment $goal_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/profiles/{profile_id}/goals/{goal_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates an existing goal. This method supports patch semantics.
@@ -3058,12 +3771,23 @@ export def "management-accounts-webproperties-profiles-goals update-by-account-i
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($goal_id | is-empty) { error make --unspanned { msg: "path parameter 'goalId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), profile_id: (encode-path-segment $profile_id), goal_id: (encode-path-segment $goal_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/profiles/{profile_id}/goals/{goal_id}") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), profile_id: (encode-path-segment $profile_id), goal_id: (encode-path-segment $goal_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/profiles/{profile_id}/goals/{goal_id}") $qp $auth.query)
   let req_body = {"accountId": $body_account_id, "active": $active, "created": $created, "eventDetails": $event_details, "id": $id, "internalWebPropertyId": $internal_web_property_id, "kind": $kind, "name": $name, "parentLink": $parent_link, "profileId": $body_profile_id, "selfLink": $self_link, "type": $type, "updated": $updated, "urlDestinationDetails": $url_destination_details, "value": $value, "visitNumPagesDetails": $visit_num_pages_details, "visitTimeOnSiteDetails": $visit_time_on_site_details, "webPropertyId": $body_web_property_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact), body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Updates an existing goal.
@@ -3123,12 +3847,23 @@ export def "management-accounts-webproperties-profiles-goals update-by-account-i
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($goal_id | is-empty) { error make --unspanned { msg: "path parameter 'goalId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), profile_id: (encode-path-segment $profile_id), goal_id: (encode-path-segment $goal_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/profiles/{profile_id}/goals/{goal_id}") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), profile_id: (encode-path-segment $profile_id), goal_id: (encode-path-segment $goal_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/profiles/{profile_id}/goals/{goal_id}") $qp $auth.query)
   let req_body = {"accountId": $body_account_id, "active": $active, "created": $created, "eventDetails": $event_details, "id": $id, "internalWebPropertyId": $internal_web_property_id, "kind": $kind, "name": $name, "parentLink": $parent_link, "profileId": $body_profile_id, "selfLink": $self_link, "type": $type, "updated": $updated, "urlDestinationDetails": $url_destination_details, "value": $value, "visitNumPagesDetails": $visit_num_pages_details, "visitTimeOnSiteDetails": $visit_time_on_site_details, "webPropertyId": $body_web_property_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Lists all profile filter links for a profile.
@@ -3164,10 +3899,21 @@ export def "management-accounts-webproperties-profiles-profile-filter-links list
   if ($web_property_id | is-empty) { error make --unspanned { msg: "path parameter 'webPropertyId' must be non-empty" } }
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "start-index" $start_index "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), profile_id: (encode-path-segment $profile_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/profiles/{profile_id}/profileFilterLinks") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), profile_id: (encode-path-segment $profile_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/profiles/{profile_id}/profileFilterLinks") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "max-results": $max_results, "start-index": $start_index} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "max-results": $max_results, "start-index": $start_index} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a new profile filter link.
@@ -3208,12 +3954,23 @@ export def "management-accounts-webproperties-profiles-profile-filter-links crea
   if ($web_property_id | is-empty) { error make --unspanned { msg: "path parameter 'webPropertyId' must be non-empty" } }
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), profile_id: (encode-path-segment $profile_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/profiles/{profile_id}/profileFilterLinks") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), profile_id: (encode-path-segment $profile_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/profiles/{profile_id}/profileFilterLinks") $qp $auth.query)
   let req_body = {"filterRef": $filter_ref, "id": $id, "profileRef": $profile_ref, "rank": $rank} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Delete a profile filter link.
@@ -3249,10 +4006,21 @@ export def "management-accounts-webproperties-profiles-profile-filter-links dele
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($link_id | is-empty) { error make --unspanned { msg: "path parameter 'linkId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), profile_id: (encode-path-segment $profile_id), link_id: (encode-path-segment $link_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/profiles/{profile_id}/profileFilterLinks/{link_id}") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), profile_id: (encode-path-segment $profile_id), link_id: (encode-path-segment $link_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/profiles/{profile_id}/profileFilterLinks/{link_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Returns a single profile filter link.
@@ -3288,10 +4056,21 @@ export def "management-accounts-webproperties-profiles-profile-filter-links get"
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($link_id | is-empty) { error make --unspanned { msg: "path parameter 'linkId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), profile_id: (encode-path-segment $profile_id), link_id: (encode-path-segment $link_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/profiles/{profile_id}/profileFilterLinks/{link_id}") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), profile_id: (encode-path-segment $profile_id), link_id: (encode-path-segment $link_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/profiles/{profile_id}/profileFilterLinks/{link_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update an existing profile filter link. This method supports patch semantics.
@@ -3334,12 +4113,23 @@ export def "management-accounts-webproperties-profiles-profile-filter-links upda
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($link_id | is-empty) { error make --unspanned { msg: "path parameter 'linkId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), profile_id: (encode-path-segment $profile_id), link_id: (encode-path-segment $link_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/profiles/{profile_id}/profileFilterLinks/{link_id}") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), profile_id: (encode-path-segment $profile_id), link_id: (encode-path-segment $link_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/profiles/{profile_id}/profileFilterLinks/{link_id}") $qp $auth.query)
   let req_body = {"filterRef": $filter_ref, "id": $id, "profileRef": $profile_ref, "rank": $rank} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact), body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Update an existing profile filter link.
@@ -3382,12 +4172,23 @@ export def "management-accounts-webproperties-profiles-profile-filter-links upda
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($link_id | is-empty) { error make --unspanned { msg: "path parameter 'linkId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), profile_id: (encode-path-segment $profile_id), link_id: (encode-path-segment $link_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/profiles/{profile_id}/profileFilterLinks/{link_id}") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), profile_id: (encode-path-segment $profile_id), link_id: (encode-path-segment $link_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/profiles/{profile_id}/profileFilterLinks/{link_id}") $qp $auth.query)
   let req_body = {"filterRef": $filter_ref, "id": $id, "profileRef": $profile_ref, "rank": $rank} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Lists unsampled reports to which the user has access.
@@ -3423,10 +4224,21 @@ export def "management-accounts-webproperties-profiles-unsampled-reports list" [
   if ($web_property_id | is-empty) { error make --unspanned { msg: "path parameter 'webPropertyId' must be non-empty" } }
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "start-index" $start_index "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), profile_id: (encode-path-segment $profile_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/profiles/{profile_id}/unsampledReports") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), profile_id: (encode-path-segment $profile_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/profiles/{profile_id}/unsampledReports") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "max-results": $max_results, "start-index": $start_index} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "max-results": $max_results, "start-index": $start_index} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a new unsampled report.
@@ -3474,12 +4286,23 @@ export def "management-accounts-webproperties-profiles-unsampled-reports create"
   if ($web_property_id | is-empty) { error make --unspanned { msg: "path parameter 'webPropertyId' must be non-empty" } }
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), profile_id: (encode-path-segment $profile_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/profiles/{profile_id}/unsampledReports") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), profile_id: (encode-path-segment $profile_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/profiles/{profile_id}/unsampledReports") $qp $auth.query)
   let req_body = {"accountId": $body_account_id, "dimensions": $dimensions, "end-date": $end_date, "filters": $filters, "id": $id, "metrics": $metrics, "profileId": $body_profile_id, "segment": $segment, "start-date": $start_date, "title": $title, "webPropertyId": $body_web_property_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes an unsampled report.
@@ -3515,10 +4338,21 @@ export def "management-accounts-webproperties-profiles-unsampled-reports delete"
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($unsampled_report_id | is-empty) { error make --unspanned { msg: "path parameter 'unsampledReportId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), profile_id: (encode-path-segment $profile_id), unsampled_report_id: (encode-path-segment $unsampled_report_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/profiles/{profile_id}/unsampledReports/{unsampled_report_id}") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), profile_id: (encode-path-segment $profile_id), unsampled_report_id: (encode-path-segment $unsampled_report_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/profiles/{profile_id}/unsampledReports/{unsampled_report_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Returns a single unsampled report.
@@ -3554,10 +4388,21 @@ export def "management-accounts-webproperties-profiles-unsampled-reports get" [
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($unsampled_report_id | is-empty) { error make --unspanned { msg: "path parameter 'unsampledReportId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), profile_id: (encode-path-segment $profile_id), unsampled_report_id: (encode-path-segment $unsampled_report_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/profiles/{profile_id}/unsampledReports/{unsampled_report_id}") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), profile_id: (encode-path-segment $profile_id), unsampled_report_id: (encode-path-segment $unsampled_report_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/profiles/{profile_id}/unsampledReports/{unsampled_report_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Lists remarketing audiences to which the user has access.
@@ -3592,10 +4437,21 @@ export def "management-accounts-webproperties-remarketing-audiences list" [
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   if ($web_property_id | is-empty) { error make --unspanned { msg: "path parameter 'webPropertyId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "start-index" $start_index "scalar") (serialize-qp "type" $type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/remarketingAudiences") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/remarketingAudiences") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "max-results": $max_results, "start-index": $start_index, "type": $type} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "max-results": $max_results, "start-index": $start_index, "type": $type} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Creates a new remarketing audience.
@@ -3641,12 +4497,23 @@ export def "management-accounts-webproperties-remarketing-audiences create" [
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   if ($web_property_id | is-empty) { error make --unspanned { msg: "path parameter 'webPropertyId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/remarketingAudiences") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/remarketingAudiences") $qp $auth.query)
   let req_body = {"accountId": $body_account_id, "audienceDefinition": $audience_definition, "audienceType": $audience_type, "id": $id, "kind": $kind, "linkedAdAccounts": $linked_ad_accounts, "linkedViews": $linked_views, "name": $name, "stateBasedAudienceDefinition": $state_based_audience_definition, "webPropertyId": $body_web_property_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Delete a remarketing audience.
@@ -3680,10 +4547,21 @@ export def "management-accounts-webproperties-remarketing-audiences delete" [
   if ($web_property_id | is-empty) { error make --unspanned { msg: "path parameter 'webPropertyId' must be non-empty" } }
   if ($remarketing_audience_id | is-empty) { error make --unspanned { msg: "path parameter 'remarketingAudienceId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), remarketing_audience_id: (encode-path-segment $remarketing_audience_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/remarketingAudiences/{remarketing_audience_id}") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), remarketing_audience_id: (encode-path-segment $remarketing_audience_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/remarketingAudiences/{remarketing_audience_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Gets a remarketing audience to which the user has access.
@@ -3717,10 +4595,21 @@ export def "management-accounts-webproperties-remarketing-audiences get" [
   if ($web_property_id | is-empty) { error make --unspanned { msg: "path parameter 'webPropertyId' must be non-empty" } }
   if ($remarketing_audience_id | is-empty) { error make --unspanned { msg: "path parameter 'remarketingAudienceId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), remarketing_audience_id: (encode-path-segment $remarketing_audience_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/remarketingAudiences/{remarketing_audience_id}") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), remarketing_audience_id: (encode-path-segment $remarketing_audience_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/remarketingAudiences/{remarketing_audience_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates an existing remarketing audience. This method supports patch semantics.
@@ -3768,12 +4657,23 @@ export def "management-accounts-webproperties-remarketing-audiences update-by-ac
   if ($web_property_id | is-empty) { error make --unspanned { msg: "path parameter 'webPropertyId' must be non-empty" } }
   if ($remarketing_audience_id | is-empty) { error make --unspanned { msg: "path parameter 'remarketingAudienceId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), remarketing_audience_id: (encode-path-segment $remarketing_audience_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/remarketingAudiences/{remarketing_audience_id}") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), remarketing_audience_id: (encode-path-segment $remarketing_audience_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/remarketingAudiences/{remarketing_audience_id}") $qp $auth.query)
   let req_body = {"accountId": $body_account_id, "audienceDefinition": $audience_definition, "audienceType": $audience_type, "id": $id, "kind": $kind, "linkedAdAccounts": $linked_ad_accounts, "linkedViews": $linked_views, "name": $name, "stateBasedAudienceDefinition": $state_based_audience_definition, "webPropertyId": $body_web_property_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact), body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Updates an existing remarketing audience.
@@ -3821,12 +4721,23 @@ export def "management-accounts-webproperties-remarketing-audiences update-by-ac
   if ($web_property_id | is-empty) { error make --unspanned { msg: "path parameter 'webPropertyId' must be non-empty" } }
   if ($remarketing_audience_id | is-empty) { error make --unspanned { msg: "path parameter 'remarketingAudienceId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), remarketing_audience_id: (encode-path-segment $remarketing_audience_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/remarketingAudiences/{remarketing_audience_id}") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), remarketing_audience_id: (encode-path-segment $remarketing_audience_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/remarketingAudiences/{remarketing_audience_id}") $qp $auth.query)
   let req_body = {"accountId": $body_account_id, "audienceDefinition": $audience_definition, "audienceType": $audience_type, "id": $id, "kind": $kind, "linkedAdAccounts": $linked_ad_accounts, "linkedViews": $linked_views, "name": $name, "stateBasedAudienceDefinition": $state_based_audience_definition, "webPropertyId": $body_web_property_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Hashes the given Client ID.
@@ -3858,12 +4769,23 @@ export def "management-client-id-hash-client-id create" [
   let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_ANALYTICS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_ANALYTICS_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/management/clientId:hashClientId" $qp)
+  let full_url = (build-url $base "/management/clientId:hashClientId" $qp $auth.query)
   let req_body = {"clientId": $client_id, "kind": $kind, "webPropertyId": $web_property_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Lists segments to which the user has access.
@@ -3893,10 +4815,21 @@ export def "management-segments list" [
   let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_ANALYTICS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_ANALYTICS_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "start-index" $start_index "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/management/segments" $qp)
+  let full_url = (build-url $base "/management/segments" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "max-results": $max_results, "start-index": $start_index} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "max-results": $max_results, "start-index": $start_index} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Lists all columns for a report type
@@ -3926,10 +4859,21 @@ export def "metadata-columns list" [
   let base = ($base_url | default $BASE_URL)
   if ($report_type | is-empty) { error make --unspanned { msg: "path parameter 'reportType' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({report_type: (encode-path-segment $report_type)} | format pattern "/metadata/{report_type}/columns") $qp)
+  let full_url = (build-url $base ({report_type: (encode-path-segment $report_type)} | format pattern "/metadata/{report_type}/columns") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Creates an account ticket.
@@ -3967,12 +4911,23 @@ export def "provisioning-create-account-ticket create" [
   let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_ANALYTICS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_ANALYTICS_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/provisioning/createAccountTicket" $qp)
+  let full_url = (build-url $base "/provisioning/createAccountTicket" $qp $auth.query)
   let req_body = {"account": $account, "id": $id, "kind": $kind, "profile": $profile, "redirectUri": $redirect_uri, "webproperty": $webproperty} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Provision account.
@@ -4007,12 +4962,23 @@ export def "provisioning-create-account-tree create" [
   let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_ANALYTICS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_ANALYTICS_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/provisioning/createAccountTree" $qp)
+  let full_url = (build-url $base "/provisioning/createAccountTree" $qp $auth.query)
   let req_body = {"accountName": $account_name, "kind": $kind, "profileName": $profile_name, "timezone": $timezone, "webpropertyName": $webproperty_name, "websiteUrl": $website_url} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Insert or update a user deletion requests.
@@ -4047,10 +5013,21 @@ export def "user-deletion-user-deletion-requests-upsert update" [
   let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_ANALYTICS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_ANALYTICS_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/userDeletion/userDeletionRequests:upsert" $qp)
+  let full_url = (build-url $base "/userDeletion/userDeletionRequests:upsert" $qp $auth.query)
   let req_body = {"firebaseProjectId": $firebase_project_id, "id": $id, "kind": $kind, "propertyId": $property_id, "webPropertyId": $web_property_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }

@@ -8,7 +8,7 @@ const BASE_URL = "https://www.googleapis.com/groups/v1/groups"
 # `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
 # where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o GROUPS_SETTINGS_API_TOKEN | default "" }
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o GROUPS_SETTINGS_API_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
@@ -51,14 +51,11 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
-# Trick: `url encode --all` over-encodes, then we decode the four unreserved
-# punctuation chars back. Pre-existing %XX sequences in the input survive
-# because `url encode --all` first turns their % into %25.
 def encode-path-segment [v: any]: nothing -> string {
   $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
-# Serialize an array-typed path parameter (issue 49.A). OpenAPI 3 `style: simple`
+# Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
 # (the default for path params) and Swagger 2 `collectionFormat: csv` both join
 # the elements with a literal comma WITHIN the single path segment, each element
 # RFC-3986-encoded individually (so a comma inside an element stays %2C). Without
@@ -69,51 +66,51 @@ def encode-path-array [v: any]: nothing -> string {
   if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
 }
 
-# Build URL from base, path, and optional query string
-def build-url [base: string, path: string, query?: string]: nothing -> string {
+# Build the request URL from base, path, and any number of pre-encoded query
+# fragments (param serializer output and/or the auth query). Each fragment is an
+# `&`-joinable `key=value` string already percent-encoded by its producer; empty
+# fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
+# delimiters are hand-spliced — and any query already on the base URL is merged in.
+def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
   let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
-  let result = ($parsed | upsert path $full_path)
-  if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
+  let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
+  $parsed | upsert path $full_path | upsert query $query | url join
 }
 
-# Build the dry-run record returned by --dry-run. Shape:
-#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
-#    auth: {scheme, location}}
-# `meta` carries logical-form data (the query record by spec name, the pre-serialization
-# body) that do-request itself cannot reconstruct from its wire-format args.
-def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
-  let m = ($meta | default {})
-  {
-    dry_run: true
-    method: $method
-    url: $url
-    query: ($m | get -o query | default {})
-    headers: $auth.headers
-    body: ($m | get -o body)
-    content_type: $content_type
-    timeout: $timeout
-    auth: {scheme: $auth.scheme, location: $auth.location}
-  }
+# Success policy: did this response succeed? Single source of truth, consulted by
+# handle-response and the HEAD header-unwrap. Empty ok_codes means the spec listed
+# none, so fall back to < 400. Otherwise: any 2xx, plus documented success codes.
+def status-ok [status: int, ok_codes: list<int>]: nothing -> bool {
+  if ($ok_codes | is-empty) { $status < 400 } else { ($status >= 200 and $status < 300) or ($status in $ok_codes) }
 }
 
-# Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
-  let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
-  let timeout = ($max_time | default 30min)
-  let ct = ($content_type | default "application/json")
-  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
-  let resp = match $method {
-    "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
-  }
-  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
-  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
+# Unwrap a `--full` HTTP response into the user-facing value. Response arrives
+# via pipeline; ok_codes gates the error throw (see status-ok).
+def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: record -> any {
+  let resp = $in
+  if $allow_errors { return $resp }
+  if not (status-ok $resp.status $ok_codes) { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } }
+  if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
+  if $resp.status == 204 { return null }
+  $resp.body
+}
+
+# GET — bodyless, honours --raw
+def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+}
+
+# PUT — body + content-type
+def send-put [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http put --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http put --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# PATCH — body + content-type
+def send-patch [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http patch --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http patch --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 def base-url-completer [] { ["https://www.googleapis.com/groups/v1/groups"] }
@@ -172,10 +169,21 @@ export def "groups get" [
   let base = ($base_url | default $BASE_URL)
   if ($group_unique_id | is-empty) { error make --unspanned { msg: "path parameter 'groupUniqueId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({group_unique_id: (encode-path-segment $group_unique_id)} | format pattern "/{group_unique_id}") $qp)
+  let full_url = (build-url $base ({group_unique_id: (encode-path-segment $group_unique_id)} | format pattern "/{group_unique_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates an existing resource. This method supports patch semantics.
@@ -268,12 +276,23 @@ export def "groups update-by-group-unique-id" [
   let base = ($base_url | default $BASE_URL)
   if ($group_unique_id | is-empty) { error make --unspanned { msg: "path parameter 'groupUniqueId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({group_unique_id: (encode-path-segment $group_unique_id)} | format pattern "/{group_unique_id}") $qp)
+  let full_url = (build-url $base ({group_unique_id: (encode-path-segment $group_unique_id)} | format pattern "/{group_unique_id}") $qp $auth.query)
   let req_body = {"allowExternalMembers": $allow_external_members, "allowGoogleCommunication": $allow_google_communication, "allowWebPosting": $allow_web_posting, "archiveOnly": $archive_only, "customFooterText": $custom_footer_text, "customReplyTo": $custom_reply_to, "customRolesEnabledForSettingsToBeMerged": $custom_roles_enabled_for_settings_to_be_merged, "defaultMessageDenyNotificationText": $default_message_deny_notification_text, "default_sender": $default_sender, "description": $description, "email": $email, "enableCollaborativeInbox": $enable_collaborative_inbox, "favoriteRepliesOnTop": $favorite_replies_on_top, "includeCustomFooter": $include_custom_footer, "includeInGlobalAddressList": $include_in_global_address_list, "isArchived": $is_archived, "kind": $kind, "maxMessageBytes": $max_message_bytes, "membersCanPostAsTheGroup": $members_can_post_as_the_group, "messageDisplayFont": $message_display_font, "messageModerationLevel": $message_moderation_level, "name": $name, "primaryLanguage": $primary_language, "replyTo": $reply_to, "sendMessageDenyNotification": $send_message_deny_notification, "showInGroupDirectory": $show_in_group_directory, "spamModerationLevel": $spam_moderation_level, "whoCanAdd": $who_can_add, "whoCanAddReferences": $who_can_add_references, "whoCanApproveMembers": $who_can_approve_members, "whoCanApproveMessages": $who_can_approve_messages, "whoCanAssignTopics": $who_can_assign_topics, "whoCanAssistContent": $who_can_assist_content, "whoCanBanUsers": $who_can_ban_users, "whoCanContactOwner": $who_can_contact_owner, "whoCanDeleteAnyPost": $who_can_delete_any_post, "whoCanDeleteTopics": $who_can_delete_topics, "whoCanDiscoverGroup": $who_can_discover_group, "whoCanEnterFreeFormTags": $who_can_enter_free_form_tags, "whoCanHideAbuse": $who_can_hide_abuse, "whoCanInvite": $who_can_invite, "whoCanJoin": $who_can_join, "whoCanLeaveGroup": $who_can_leave_group, "whoCanLockTopics": $who_can_lock_topics, "whoCanMakeTopicsSticky": $who_can_make_topics_sticky, "whoCanMarkDuplicate": $who_can_mark_duplicate, "whoCanMarkFavoriteReplyOnAnyTopic": $who_can_mark_favorite_reply_on_any_topic, "whoCanMarkFavoriteReplyOnOwnTopic": $who_can_mark_favorite_reply_on_own_topic, "whoCanMarkNoResponseNeeded": $who_can_mark_no_response_needed, "whoCanModerateContent": $who_can_moderate_content, "whoCanModerateMembers": $who_can_moderate_members, "whoCanModifyMembers": $who_can_modify_members, "whoCanModifyTagsAndCategories": $who_can_modify_tags_and_categories, "whoCanMoveTopicsIn": $who_can_move_topics_in, "whoCanMoveTopicsOut": $who_can_move_topics_out, "whoCanPostAnnouncements": $who_can_post_announcements, "whoCanPostMessage": $who_can_post_message, "whoCanTakeTopics": $who_can_take_topics, "whoCanUnassignTopic": $who_can_unassign_topic, "whoCanUnmarkFavoriteReplyOnAnyTopic": $who_can_unmark_favorite_reply_on_any_topic, "whoCanViewGroup": $who_can_view_group, "whoCanViewMembership": $who_can_view_membership} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact), body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Updates an existing resource.
@@ -366,10 +385,21 @@ export def "groups update-by-group-unique-id-1" [
   let base = ($base_url | default $BASE_URL)
   if ($group_unique_id | is-empty) { error make --unspanned { msg: "path parameter 'groupUniqueId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({group_unique_id: (encode-path-segment $group_unique_id)} | format pattern "/{group_unique_id}") $qp)
+  let full_url = (build-url $base ({group_unique_id: (encode-path-segment $group_unique_id)} | format pattern "/{group_unique_id}") $qp $auth.query)
   let req_body = {"allowExternalMembers": $allow_external_members, "allowGoogleCommunication": $allow_google_communication, "allowWebPosting": $allow_web_posting, "archiveOnly": $archive_only, "customFooterText": $custom_footer_text, "customReplyTo": $custom_reply_to, "customRolesEnabledForSettingsToBeMerged": $custom_roles_enabled_for_settings_to_be_merged, "defaultMessageDenyNotificationText": $default_message_deny_notification_text, "default_sender": $default_sender, "description": $description, "email": $email, "enableCollaborativeInbox": $enable_collaborative_inbox, "favoriteRepliesOnTop": $favorite_replies_on_top, "includeCustomFooter": $include_custom_footer, "includeInGlobalAddressList": $include_in_global_address_list, "isArchived": $is_archived, "kind": $kind, "maxMessageBytes": $max_message_bytes, "membersCanPostAsTheGroup": $members_can_post_as_the_group, "messageDisplayFont": $message_display_font, "messageModerationLevel": $message_moderation_level, "name": $name, "primaryLanguage": $primary_language, "replyTo": $reply_to, "sendMessageDenyNotification": $send_message_deny_notification, "showInGroupDirectory": $show_in_group_directory, "spamModerationLevel": $spam_moderation_level, "whoCanAdd": $who_can_add, "whoCanAddReferences": $who_can_add_references, "whoCanApproveMembers": $who_can_approve_members, "whoCanApproveMessages": $who_can_approve_messages, "whoCanAssignTopics": $who_can_assign_topics, "whoCanAssistContent": $who_can_assist_content, "whoCanBanUsers": $who_can_ban_users, "whoCanContactOwner": $who_can_contact_owner, "whoCanDeleteAnyPost": $who_can_delete_any_post, "whoCanDeleteTopics": $who_can_delete_topics, "whoCanDiscoverGroup": $who_can_discover_group, "whoCanEnterFreeFormTags": $who_can_enter_free_form_tags, "whoCanHideAbuse": $who_can_hide_abuse, "whoCanInvite": $who_can_invite, "whoCanJoin": $who_can_join, "whoCanLeaveGroup": $who_can_leave_group, "whoCanLockTopics": $who_can_lock_topics, "whoCanMakeTopicsSticky": $who_can_make_topics_sticky, "whoCanMarkDuplicate": $who_can_mark_duplicate, "whoCanMarkFavoriteReplyOnAnyTopic": $who_can_mark_favorite_reply_on_any_topic, "whoCanMarkFavoriteReplyOnOwnTopic": $who_can_mark_favorite_reply_on_own_topic, "whoCanMarkNoResponseNeeded": $who_can_mark_no_response_needed, "whoCanModerateContent": $who_can_moderate_content, "whoCanModerateMembers": $who_can_moderate_members, "whoCanModifyMembers": $who_can_modify_members, "whoCanModifyTagsAndCategories": $who_can_modify_tags_and_categories, "whoCanMoveTopicsIn": $who_can_move_topics_in, "whoCanMoveTopicsOut": $who_can_move_topics_out, "whoCanPostAnnouncements": $who_can_post_announcements, "whoCanPostMessage": $who_can_post_message, "whoCanTakeTopics": $who_can_take_topics, "whoCanUnassignTopic": $who_can_unassign_topic, "whoCanUnmarkFavoriteReplyOnAnyTopic": $who_can_unmark_favorite_reply_on_any_topic, "whoCanViewGroup": $who_can_view_group, "whoCanViewMembership": $who_can_view_membership} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }

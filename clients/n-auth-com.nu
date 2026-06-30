@@ -8,7 +8,7 @@ const BASE_URL = "https://api.nextauth.com"
 # `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
 # where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o NEXTAUTH_API_TOKEN | default "" }
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o NEXTAUTH_API_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
@@ -42,14 +42,11 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
-# Trick: `url encode --all` over-encodes, then we decode the four unreserved
-# punctuation chars back. Pre-existing %XX sequences in the input survive
-# because `url encode --all` first turns their % into %25.
 def encode-path-segment [v: any]: nothing -> string {
   $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
-# Serialize an array-typed path parameter (issue 49.A). OpenAPI 3 `style: simple`
+# Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
 # (the default for path params) and Swagger 2 `collectionFormat: csv` both join
 # the elements with a literal comma WITHIN the single path segment, each element
 # RFC-3986-encoded individually (so a comma inside an element stays %2C). Without
@@ -60,51 +57,57 @@ def encode-path-array [v: any]: nothing -> string {
   if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
 }
 
-# Build URL from base, path, and optional query string
-def build-url [base: string, path: string, query?: string]: nothing -> string {
+# Build the request URL from base, path, and any number of pre-encoded query
+# fragments (param serializer output and/or the auth query). Each fragment is an
+# `&`-joinable `key=value` string already percent-encoded by its producer; empty
+# fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
+# delimiters are hand-spliced — and any query already on the base URL is merged in.
+def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
   let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
-  let result = ($parsed | upsert path $full_path)
-  if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
+  let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
+  $parsed | upsert path $full_path | upsert query $query | url join
 }
 
-# Build the dry-run record returned by --dry-run. Shape:
-#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
-#    auth: {scheme, location}}
-# `meta` carries logical-form data (the query record by spec name, the pre-serialization
-# body) that do-request itself cannot reconstruct from its wire-format args.
-def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
-  let m = ($meta | default {})
-  {
-    dry_run: true
-    method: $method
-    url: $url
-    query: ($m | get -o query | default {})
-    headers: $auth.headers
-    body: ($m | get -o body)
-    content_type: $content_type
-    timeout: $timeout
-    auth: {scheme: $auth.scheme, location: $auth.location}
-  }
+# Success policy: did this response succeed? Single source of truth, consulted by
+# handle-response and the HEAD header-unwrap. Empty ok_codes means the spec listed
+# none, so fall back to < 400. Otherwise: any 2xx, plus documented success codes.
+def status-ok [status: int, ok_codes: list<int>]: nothing -> bool {
+  if ($ok_codes | is-empty) { $status < 400 } else { ($status >= 200 and $status < 300) or ($status in $ok_codes) }
 }
 
-# Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
-  let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
-  let timeout = ($max_time | default 30min)
-  let ct = ($content_type | default "application/json")
-  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
-  let resp = match $method {
-    "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
-  }
-  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
-  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
+# Unwrap a `--full` HTTP response into the user-facing value. Response arrives
+# via pipeline; ok_codes gates the error throw (see status-ok).
+def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: record -> any {
+  let resp = $in
+  if $allow_errors { return $resp }
+  if not (status-ok $resp.status $ok_codes) { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } }
+  if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
+  if $resp.status == 204 { return null }
+  $resp.body
+}
+
+# GET — bodyless, honours --raw
+def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+}
+
+# POST — body + content-type
+def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# PUT — body + content-type
+def send-put [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http put --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http put --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# DELETE — body via --data
+def send-delete [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http delete --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url } else { http delete --headers $req.headers --content-type $req.content_type --data $body --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url }
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 def base-url-completer [] { ["https://api.nextauth.com"] }
@@ -151,10 +154,21 @@ export def "apikeys get-keys" [
 ]: nothing -> record<apikeys: table<apikey: string, description: string, role: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/apikeys/")
+  let full_url = (build-url $base "/apikeys/" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a new API key.
@@ -176,10 +190,21 @@ export def "apikeys create-key" [
   let auth = (build-auth $token ($auth_scheme | default "x-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "description" $description "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/apikeys/" $qp)
+  let full_url = (build-url $base "/apikeys/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"description": $description} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"description": $description} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Delete all global attributes
@@ -199,10 +224,21 @@ export def "attributes delete-global" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/attributes/")
+  let full_url = (build-url $base "/attributes/" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Get all global attributes
@@ -222,10 +258,21 @@ export def "attributes get-global" [
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/attributes/")
+  let full_url = (build-url $base "/attributes/" $auth.query)
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Set all global attributes
@@ -247,12 +294,23 @@ export def "attributes update-global" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/attributes/")
+  let full_url = (build-url $base "/attributes/" $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Update specified global attributes
@@ -274,12 +332,23 @@ export def "attributes update-global-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/attributes/")
+  let full_url = (build-url $base "/attributes/" $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Delete specific global attribute
@@ -301,10 +370,21 @@ export def "attributes delete-global-by-attributekey" [
   let auth = (build-auth $token ($auth_scheme | default "x-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($attributekey | is-empty) { error make --unspanned { msg: "path parameter 'attributekey' must be non-empty" } }
-  let full_url = (build-url $base ({attributekey: (encode-path-segment $attributekey)} | format pattern "/attributes/{attributekey}"))
+  let full_url = (build-url $base ({attributekey: (encode-path-segment $attributekey)} | format pattern "/attributes/{attributekey}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # List all your servers
@@ -327,10 +407,21 @@ export def "servers list" [
   let auth = (build-auth $token ($auth_scheme | default "x-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "marker" $marker "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/servers/" $qp)
+  let full_url = (build-url $base "/servers/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"limit": $limit, "marker": $marker} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"limit": $limit, "marker": $marker} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a new server
@@ -368,12 +459,23 @@ export def "servers create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/servers/")
+  let full_url = (build-url $base "/servers/" $auth.query)
   let req_body = {"accountCount": $account_count, "appandroid": $appandroid, "appios": $appios, "appname": $appname, "appurl": $appurl, "lastLogin": $last_login, "logo": $logo, "owner": $owner, "pinTimeout": $pin_timeout, "pinTransTimeout": $pin_trans_timeout, "pingTime": $ping_time, "serverFlags": $server_flags, "serverName": $server_name, "serverid": $serverid, "serverpk": $serverpk, "siteurl": $siteurl, "wsurl": $wsurl} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Configuration of a specific server
@@ -395,10 +497,21 @@ export def "servers get" [
   let auth = (build-auth $token ($auth_scheme | default "x-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($serverid | is-empty) { error make --unspanned { msg: "path parameter 'serverid' must be non-empty" } }
-  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid)} | format pattern "/servers/{serverid}/"))
+  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid)} | format pattern "/servers/{serverid}/") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update configuration of a specific server
@@ -438,12 +551,23 @@ export def "servers update" [
   let auth = (build-auth $token ($auth_scheme | default "x-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($serverid | is-empty) { error make --unspanned { msg: "path parameter 'serverid' must be non-empty" } }
-  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid)} | format pattern "/servers/{serverid}/"))
+  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid)} | format pattern "/servers/{serverid}/") $auth.query)
   let req_body = {"accountCount": $account_count, "appandroid": $appandroid, "appios": $appios, "appname": $appname, "appurl": $appurl, "lastLogin": $last_login, "logo": $logo, "owner": $owner, "pinTimeout": $pin_timeout, "pinTransTimeout": $pin_trans_timeout, "pingTime": $ping_time, "serverFlags": $server_flags, "serverName": $server_name, "serverid": $body_serverid, "serverpk": $serverpk, "siteurl": $siteurl, "wsurl": $wsurl} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get all accounts
@@ -470,10 +594,21 @@ export def "servers-accounts get-list" [
   let base = ($base_url | default $BASE_URL)
   if ($serverid | is-empty) { error make --unspanned { msg: "path parameter 'serverid' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "marker" $marker "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid)} | format pattern "/servers/{serverid}/accounts/") $qp)
+  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid)} | format pattern "/servers/{serverid}/accounts/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "limit": $limit, "marker": $marker, "sort": $qp_sort} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"filter": $filter, "limit": $limit, "marker": $marker, "sort": $qp_sort} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Delete specific account
@@ -497,10 +632,21 @@ export def "servers-accounts delete" [
   let base = ($base_url | default $BASE_URL)
   if ($serverid | is-empty) { error make --unspanned { msg: "path parameter 'serverid' must be non-empty" } }
   if ($accountid | is-empty) { error make --unspanned { msg: "path parameter 'accountid' must be non-empty" } }
-  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid), accountid: (encode-path-segment $accountid)} | format pattern "/servers/{serverid}/accounts/{accountid}/"))
+  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid), accountid: (encode-path-segment $accountid)} | format pattern "/servers/{serverid}/accounts/{accountid}/") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Get specific account
@@ -524,10 +670,21 @@ export def "servers-accounts get" [
   let base = ($base_url | default $BASE_URL)
   if ($serverid | is-empty) { error make --unspanned { msg: "path parameter 'serverid' must be non-empty" } }
   if ($accountid | is-empty) { error make --unspanned { msg: "path parameter 'accountid' must be non-empty" } }
-  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid), accountid: (encode-path-segment $accountid)} | format pattern "/servers/{serverid}/accounts/{accountid}/"))
+  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid), accountid: (encode-path-segment $accountid)} | format pattern "/servers/{serverid}/accounts/{accountid}/") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update specific account
@@ -553,10 +710,21 @@ export def "servers-accounts update" [
   if ($serverid | is-empty) { error make --unspanned { msg: "path parameter 'serverid' must be non-empty" } }
   if ($accountid | is-empty) { error make --unspanned { msg: "path parameter 'accountid' must be non-empty" } }
   let qp = [(serialize-qp "blocked" $blocked "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid), accountid: (encode-path-segment $accountid)} | format pattern "/servers/{serverid}/accounts/{accountid}/") $qp)
+  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid), accountid: (encode-path-segment $accountid)} | format pattern "/servers/{serverid}/accounts/{accountid}/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"blocked": $blocked} | compact), body: null}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"blocked": $blocked} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Push a login confirmation to the user's app
@@ -586,14 +754,25 @@ export def "servers-accounts-provokelogin create-provoke-login" [
   let base = ($base_url | default $BASE_URL)
   if ($serverid | is-empty) { error make --unspanned { msg: "path parameter 'serverid' must be non-empty" } }
   if ($accountid | is-empty) { error make --unspanned { msg: "path parameter 'accountid' must be non-empty" } }
-  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid), accountid: (encode-path-segment $accountid)} | format pattern "/servers/{serverid}/accounts/{accountid}/provokelogin"))
+  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid), accountid: (encode-path-segment $accountid)} | format pattern "/servers/{serverid}/accounts/{accountid}/provokelogin") $auth.query)
   let req_body = {"announceinfo": $announceinfo, "sessioninfo": $sessioninfo} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-nonce": $x_nonce} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Update user of the given account.
@@ -619,10 +798,21 @@ export def "servers-accounts-user update" [
   if ($serverid | is-empty) { error make --unspanned { msg: "path parameter 'serverid' must be non-empty" } }
   if ($accountid | is-empty) { error make --unspanned { msg: "path parameter 'accountid' must be non-empty" } }
   let qp = [(serialize-qp "userid" $userid "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid), accountid: (encode-path-segment $accountid)} | format pattern "/servers/{serverid}/accounts/{accountid}/user") $qp)
+  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid), accountid: (encode-path-segment $accountid)} | format pattern "/servers/{serverid}/accounts/{accountid}/user") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"userid": $userid} | compact), body: null}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"userid": $userid} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Delete all attributes of a specific server
@@ -644,10 +834,21 @@ export def "servers-attributes delete-by-serverid" [
   let auth = (build-auth $token ($auth_scheme | default "x-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($serverid | is-empty) { error make --unspanned { msg: "path parameter 'serverid' must be non-empty" } }
-  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid)} | format pattern "/servers/{serverid}/attributes/"))
+  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid)} | format pattern "/servers/{serverid}/attributes/") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Get all attributes of a specific server
@@ -669,10 +870,21 @@ export def "servers-attributes get" [
   let auth = (build-auth $token ($auth_scheme | default "x-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($serverid | is-empty) { error make --unspanned { msg: "path parameter 'serverid' must be non-empty" } }
-  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid)} | format pattern "/servers/{serverid}/attributes/"))
+  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid)} | format pattern "/servers/{serverid}/attributes/") $auth.query)
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Set all attributes of a specific server
@@ -696,12 +908,23 @@ export def "servers-attributes update-by-serverid" [
   let auth = (build-auth $token ($auth_scheme | default "x-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($serverid | is-empty) { error make --unspanned { msg: "path parameter 'serverid' must be non-empty" } }
-  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid)} | format pattern "/servers/{serverid}/attributes/"))
+  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid)} | format pattern "/servers/{serverid}/attributes/") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Update specified attributes of a specific server
@@ -725,12 +948,23 @@ export def "servers-attributes update-by-serverid-1" [
   let auth = (build-auth $token ($auth_scheme | default "x-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($serverid | is-empty) { error make --unspanned { msg: "path parameter 'serverid' must be non-empty" } }
-  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid)} | format pattern "/servers/{serverid}/attributes/"))
+  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid)} | format pattern "/servers/{serverid}/attributes/") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Delete specific attribute of a specific server
@@ -754,10 +988,21 @@ export def "servers-attributes delete-by-serverid-attributekey" [
   let base = ($base_url | default $BASE_URL)
   if ($serverid | is-empty) { error make --unspanned { msg: "path parameter 'serverid' must be non-empty" } }
   if ($attributekey | is-empty) { error make --unspanned { msg: "path parameter 'attributekey' must be non-empty" } }
-  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid), attributekey: (encode-path-segment $attributekey)} | format pattern "/servers/{serverid}/attributes/{attributekey}"))
+  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid), attributekey: (encode-path-segment $attributekey)} | format pattern "/servers/{serverid}/attributes/{attributekey}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Get all permissions for the specified server.
@@ -779,10 +1024,21 @@ export def "servers-permissions get-list" [
   let auth = (build-auth $token ($auth_scheme | default "x-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($serverid | is-empty) { error make --unspanned { msg: "path parameter 'serverid' must be non-empty" } }
-  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid)} | format pattern "/servers/{serverid}/permissions/"))
+  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid)} | format pattern "/servers/{serverid}/permissions/") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Revoke all permissions for the specified server and role.
@@ -806,10 +1062,21 @@ export def "servers-permissions delete" [
   let base = ($base_url | default $BASE_URL)
   if ($serverid | is-empty) { error make --unspanned { msg: "path parameter 'serverid' must be non-empty" } }
   if ($roleid | is-empty) { error make --unspanned { msg: "path parameter 'roleid' must be non-empty" } }
-  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid), roleid: (encode-path-segment $roleid)} | format pattern "/servers/{serverid}/permissions/{roleid}"))
+  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid), roleid: (encode-path-segment $roleid)} | format pattern "/servers/{serverid}/permissions/{roleid}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Get all permissions for the specified server and role.
@@ -833,10 +1100,21 @@ export def "servers-permissions get" [
   let base = ($base_url | default $BASE_URL)
   if ($serverid | is-empty) { error make --unspanned { msg: "path parameter 'serverid' must be non-empty" } }
   if ($roleid | is-empty) { error make --unspanned { msg: "path parameter 'roleid' must be non-empty" } }
-  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid), roleid: (encode-path-segment $roleid)} | format pattern "/servers/{serverid}/permissions/{roleid}"))
+  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid), roleid: (encode-path-segment $roleid)} | format pattern "/servers/{serverid}/permissions/{roleid}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Set new permissions for the specified role on a server
@@ -862,12 +1140,23 @@ export def "servers-permissions create-grant" [
   let base = ($base_url | default $BASE_URL)
   if ($serverid | is-empty) { error make --unspanned { msg: "path parameter 'serverid' must be non-empty" } }
   if ($roleid | is-empty) { error make --unspanned { msg: "path parameter 'roleid' must be non-empty" } }
-  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid), roleid: (encode-path-segment $roleid)} | format pattern "/servers/{serverid}/permissions/{roleid}"))
+  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid), roleid: (encode-path-segment $roleid)} | format pattern "/servers/{serverid}/permissions/{roleid}") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Delete all privileged attributes of a specific server
@@ -889,10 +1178,21 @@ export def "servers-privilegedattributes delete-privileged-attributes" [
   let auth = (build-auth $token ($auth_scheme | default "x-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($serverid | is-empty) { error make --unspanned { msg: "path parameter 'serverid' must be non-empty" } }
-  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid)} | format pattern "/servers/{serverid}/privilegedattributes/"))
+  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid)} | format pattern "/servers/{serverid}/privilegedattributes/") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Get all privileged attributes of a specific server
@@ -914,10 +1214,21 @@ export def "servers-privilegedattributes get-privileged-attributes" [
   let auth = (build-auth $token ($auth_scheme | default "x-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($serverid | is-empty) { error make --unspanned { msg: "path parameter 'serverid' must be non-empty" } }
-  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid)} | format pattern "/servers/{serverid}/privilegedattributes/"))
+  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid)} | format pattern "/servers/{serverid}/privilegedattributes/") $auth.query)
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Set all privileged attributes of a specific server
@@ -941,12 +1252,23 @@ export def "servers-privilegedattributes update-privileged-attributes-by-serveri
   let auth = (build-auth $token ($auth_scheme | default "x-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($serverid | is-empty) { error make --unspanned { msg: "path parameter 'serverid' must be non-empty" } }
-  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid)} | format pattern "/servers/{serverid}/privilegedattributes/"))
+  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid)} | format pattern "/servers/{serverid}/privilegedattributes/") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Update privileged specified attributes of a specific server
@@ -970,12 +1292,23 @@ export def "servers-privilegedattributes update-privileged-attributes-by-serveri
   let auth = (build-auth $token ($auth_scheme | default "x-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($serverid | is-empty) { error make --unspanned { msg: "path parameter 'serverid' must be non-empty" } }
-  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid)} | format pattern "/servers/{serverid}/privilegedattributes/"))
+  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid)} | format pattern "/servers/{serverid}/privilegedattributes/") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Delete specific privileged attribute of a specific server
@@ -999,10 +1332,21 @@ export def "servers-privilegedattributes delete-privileged-attribute" [
   let base = ($base_url | default $BASE_URL)
   if ($serverid | is-empty) { error make --unspanned { msg: "path parameter 'serverid' must be non-empty" } }
   if ($attributekey | is-empty) { error make --unspanned { msg: "path parameter 'attributekey' must be non-empty" } }
-  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid), attributekey: (encode-path-segment $attributekey)} | format pattern "/servers/{serverid}/privilegedattributes/{attributekey}"))
+  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid), attributekey: (encode-path-segment $attributekey)} | format pattern "/servers/{serverid}/privilegedattributes/{attributekey}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Check if the user is logged in
@@ -1025,12 +1369,23 @@ export def "servers-sessions get" [
   let auth = (build-auth $token ($auth_scheme | default "x-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($serverid | is-empty) { error make --unspanned { msg: "path parameter 'serverid' must be non-empty" } }
-  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid)} | format pattern "/servers/{serverid}/sessions/"))
+  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid)} | format pattern "/servers/{serverid}/sessions/") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-nonce": $x_nonce} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Generate HTML to enrol a new user
@@ -1056,12 +1411,23 @@ export def "servers-sessions-html-enrol get" [
   let base = ($base_url | default $BASE_URL)
   if ($serverid | is-empty) { error make --unspanned { msg: "path parameter 'serverid' must be non-empty" } }
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "userid" $userid "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid)} | format pattern "/servers/{serverid}/sessions/html/enrol") $qp)
+  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid)} | format pattern "/servers/{serverid}/sessions/html/enrol") $qp $auth.query)
   let accept_val = "text/html"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-nonce": $x_nonce} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"name": $name, "userid": $userid} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"name": $name, "userid": $userid} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Generic HTML to add to footer. Required for login/logout/enrol functionality.
@@ -1081,20 +1447,27 @@ export def "servers-sessions-html-footer get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-nonce: string # Nonce to identify the browser/webserver session
-  --sessions: list # item shape: {serverid: string, sessionid: string}
-]: any -> oneof<string, record, nothing> {
-  let input = $in
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($serverid | is-empty) { error make --unspanned { msg: "path parameter 'serverid' must be non-empty" } }
-  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid)} | format pattern "/servers/{serverid}/sessions/html/footer"))
-  let req_body = {"sessions": $sessions} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid)} | format pattern "/servers/{serverid}/sessions/html/footer") $auth.query)
   let accept_val = "text/html"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-nonce": $x_nonce} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Generate HTML for the login block
@@ -1115,21 +1488,27 @@ export def "servers-sessions-html-login get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-nonce: string # Nonce to identify the browser/webserver session
-  --announceinfo: any # shape: {info?: record, ip?: string, logo?: string, useragent?: string}
-  --sessioninfo: any # shape: {info?: record, ip?: string, logo?: string, useragent?: string}
-]: any -> oneof<string, record, nothing> {
-  let input = $in
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($serverid | is-empty) { error make --unspanned { msg: "path parameter 'serverid' must be non-empty" } }
-  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid)} | format pattern "/servers/{serverid}/sessions/html/login"))
-  let req_body = {"announceinfo": $announceinfo, "sessioninfo": $sessioninfo} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid)} | format pattern "/servers/{serverid}/sessions/html/login") $auth.query)
   let accept_val = "text/html"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-nonce": $x_nonce} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Force a logout on the given session
@@ -1152,12 +1531,23 @@ export def "servers-sessions-logout create" [
   let auth = (build-auth $token ($auth_scheme | default "x-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($serverid | is-empty) { error make --unspanned { msg: "path parameter 'serverid' must be non-empty" } }
-  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid)} | format pattern "/servers/{serverid}/sessions/logout"))
+  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid)} | format pattern "/servers/{serverid}/sessions/logout") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-nonce": $x_nonce} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Push a login confirmation to the user's app
@@ -1185,14 +1575,25 @@ export def "servers-sessions-provokelogin create-provoke-login" [
   let auth = (build-auth $token ($auth_scheme | default "x-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($serverid | is-empty) { error make --unspanned { msg: "path parameter 'serverid' must be non-empty" } }
-  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid)} | format pattern "/servers/{serverid}/sessions/provokelogin"))
+  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid)} | format pattern "/servers/{serverid}/sessions/provokelogin") $auth.query)
   let req_body = {"announceinfo": $announceinfo, "sessioninfo": $sessioninfo} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-nonce": $x_nonce} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Generate data for an enrol qr code
@@ -1220,12 +1621,23 @@ export def "servers-sessions-qr-enrol get" [
   let base = ($base_url | default $BASE_URL)
   if ($serverid | is-empty) { error make --unspanned { msg: "path parameter 'serverid' must be non-empty" } }
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "userid" $userid "scalar") (serialize-qp "img" $img "scalar") (serialize-qp "s" $s "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid)} | format pattern "/servers/{serverid}/sessions/qr/enrol") $qp)
+  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid)} | format pattern "/servers/{serverid}/sessions/qr/enrol") $qp $auth.query)
   let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-nonce": $x_nonce} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"name": $name, "userid": $userid, "img": $img, "s": $s} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"name": $name, "userid": $userid, "img": $img, "s": $s} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Generate data for a login qr code
@@ -1248,22 +1660,28 @@ export def "servers-sessions-qr-login get" [
   --img: string # "png" for a PNG image, not set for raw data in the qr code
   --s: int # size in pixels of the qr code, defaults to 500
   --x-nonce: string # Nonce to identify the browser/webserver session
-  --announceinfo: any # shape: {info?: record, ip?: string, logo?: string, useragent?: string}
-  --sessioninfo: any # shape: {info?: record, ip?: string, logo?: string, useragent?: string}
-]: any -> any {
-  let input = $in
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($serverid | is-empty) { error make --unspanned { msg: "path parameter 'serverid' must be non-empty" } }
   let qp = [(serialize-qp "img" $img "scalar") (serialize-qp "s" $s "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid)} | format pattern "/servers/{serverid}/sessions/qr/login") $qp)
-  let req_body = {"announceinfo": $announceinfo, "sessioninfo": $sessioninfo} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid)} | format pattern "/servers/{serverid}/sessions/qr/login") $qp $auth.query)
   let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-nonce": $x_nonce} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"img": $img, "s": $s} | compact), body: $req_body}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"img": $img, "s": $s} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Register a userid for the currently logged in account.
@@ -1288,12 +1706,23 @@ export def "servers-sessions-registeruser create-user" [
   let base = ($base_url | default $BASE_URL)
   if ($serverid | is-empty) { error make --unspanned { msg: "path parameter 'serverid' must be non-empty" } }
   let qp = [(serialize-qp "userid" $userid "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid)} | format pattern "/servers/{serverid}/sessions/registeruser") $qp)
+  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid)} | format pattern "/servers/{serverid}/sessions/registeruser") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-nonce": $x_nonce} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"userid": $userid} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"userid": $userid} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Create a transaction to be approved within the current session.
@@ -1320,14 +1749,25 @@ export def "servers-sessions-transactions create" [
   let auth = (build-auth $token ($auth_scheme | default "x-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($serverid | is-empty) { error make --unspanned { msg: "path parameter 'serverid' must be non-empty" } }
-  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid)} | format pattern "/servers/{serverid}/sessions/transactions"))
+  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid)} | format pattern "/servers/{serverid}/sessions/transactions") $auth.query)
   let req_body = {"amount": $amount, "benificiary": $benificiary, "description": $description} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-nonce": $x_nonce} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get transaction result for a given transaction.
@@ -1351,10 +1791,21 @@ export def "servers-transactions get-result" [
   let base = ($base_url | default $BASE_URL)
   if ($serverid | is-empty) { error make --unspanned { msg: "path parameter 'serverid' must be non-empty" } }
   if ($transactionid | is-empty) { error make --unspanned { msg: "path parameter 'transactionid' must be non-empty" } }
-  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid), transactionid: (encode-path-segment $transactionid)} | format pattern "/servers/{serverid}/transactions/{transactionid}"))
+  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid), transactionid: (encode-path-segment $transactionid)} | format pattern "/servers/{serverid}/transactions/{transactionid}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get all users
@@ -1382,10 +1833,21 @@ export def "servers-users get" [
   let base = ($base_url | default $BASE_URL)
   if ($serverid | is-empty) { error make --unspanned { msg: "path parameter 'serverid' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "marker" $marker "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid)} | format pattern "/servers/{serverid}/users/") $qp)
+  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid)} | format pattern "/servers/{serverid}/users/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "search": $search, "limit": $limit, "marker": $marker, "sort": $qp_sort} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"filter": $filter, "search": $search, "limit": $limit, "marker": $marker, "sort": $qp_sort} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Delete a specific user
@@ -1409,10 +1871,21 @@ export def "servers-users delete" [
   let base = ($base_url | default $BASE_URL)
   if ($serverid | is-empty) { error make --unspanned { msg: "path parameter 'serverid' must be non-empty" } }
   if ($userid | is-empty) { error make --unspanned { msg: "path parameter 'userid' must be non-empty" } }
-  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid), userid: (encode-path-segment $userid)} | format pattern "/servers/{serverid}/users/{userid}/"))
+  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid), userid: (encode-path-segment $userid)} | format pattern "/servers/{serverid}/users/{userid}/") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Delete all accounts of a specific user
@@ -1436,10 +1909,21 @@ export def "servers-users-accounts delete" [
   let base = ($base_url | default $BASE_URL)
   if ($serverid | is-empty) { error make --unspanned { msg: "path parameter 'serverid' must be non-empty" } }
   if ($userid | is-empty) { error make --unspanned { msg: "path parameter 'userid' must be non-empty" } }
-  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid), userid: (encode-path-segment $userid)} | format pattern "/servers/{serverid}/users/{userid}/accounts"))
+  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid), userid: (encode-path-segment $userid)} | format pattern "/servers/{serverid}/users/{userid}/accounts") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Get all accounts of a specific user
@@ -1467,10 +1951,21 @@ export def "servers-users-accounts get" [
   if ($serverid | is-empty) { error make --unspanned { msg: "path parameter 'serverid' must be non-empty" } }
   if ($userid | is-empty) { error make --unspanned { msg: "path parameter 'userid' must be non-empty" } }
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "marker" $marker "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid), userid: (encode-path-segment $userid)} | format pattern "/servers/{serverid}/users/{userid}/accounts") $qp)
+  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid), userid: (encode-path-segment $userid)} | format pattern "/servers/{serverid}/users/{userid}/accounts") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"limit": $limit, "marker": $marker, "sort": $qp_sort} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"limit": $limit, "marker": $marker, "sort": $qp_sort} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Delete all attributes of a specific user
@@ -1494,10 +1989,21 @@ export def "servers-users-attributes delete-by-serverid-userid" [
   let base = ($base_url | default $BASE_URL)
   if ($serverid | is-empty) { error make --unspanned { msg: "path parameter 'serverid' must be non-empty" } }
   if ($userid | is-empty) { error make --unspanned { msg: "path parameter 'userid' must be non-empty" } }
-  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid), userid: (encode-path-segment $userid)} | format pattern "/servers/{serverid}/users/{userid}/attributes/"))
+  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid), userid: (encode-path-segment $userid)} | format pattern "/servers/{serverid}/users/{userid}/attributes/") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Get all attributes of a specific user
@@ -1521,10 +2027,21 @@ export def "servers-users-attributes get" [
   let base = ($base_url | default $BASE_URL)
   if ($serverid | is-empty) { error make --unspanned { msg: "path parameter 'serverid' must be non-empty" } }
   if ($userid | is-empty) { error make --unspanned { msg: "path parameter 'userid' must be non-empty" } }
-  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid), userid: (encode-path-segment $userid)} | format pattern "/servers/{serverid}/users/{userid}/attributes/"))
+  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid), userid: (encode-path-segment $userid)} | format pattern "/servers/{serverid}/users/{userid}/attributes/") $auth.query)
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Set all attributes of a specific user
@@ -1550,12 +2067,23 @@ export def "servers-users-attributes update-by-serverid-userid" [
   let base = ($base_url | default $BASE_URL)
   if ($serverid | is-empty) { error make --unspanned { msg: "path parameter 'serverid' must be non-empty" } }
   if ($userid | is-empty) { error make --unspanned { msg: "path parameter 'userid' must be non-empty" } }
-  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid), userid: (encode-path-segment $userid)} | format pattern "/servers/{serverid}/users/{userid}/attributes/"))
+  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid), userid: (encode-path-segment $userid)} | format pattern "/servers/{serverid}/users/{userid}/attributes/") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Update specified attributes of a specific user
@@ -1581,12 +2109,23 @@ export def "servers-users-attributes update-by-serverid-userid-1" [
   let base = ($base_url | default $BASE_URL)
   if ($serverid | is-empty) { error make --unspanned { msg: "path parameter 'serverid' must be non-empty" } }
   if ($userid | is-empty) { error make --unspanned { msg: "path parameter 'userid' must be non-empty" } }
-  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid), userid: (encode-path-segment $userid)} | format pattern "/servers/{serverid}/users/{userid}/attributes/"))
+  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid), userid: (encode-path-segment $userid)} | format pattern "/servers/{serverid}/users/{userid}/attributes/") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Delete specific attribute of a specific user
@@ -1612,10 +2151,21 @@ export def "servers-users-attributes delete-by-serverid-userid-attributekey" [
   if ($serverid | is-empty) { error make --unspanned { msg: "path parameter 'serverid' must be non-empty" } }
   if ($userid | is-empty) { error make --unspanned { msg: "path parameter 'userid' must be non-empty" } }
   if ($attributekey | is-empty) { error make --unspanned { msg: "path parameter 'attributekey' must be non-empty" } }
-  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid), userid: (encode-path-segment $userid), attributekey: (encode-path-segment $attributekey)} | format pattern "/servers/{serverid}/users/{userid}/attributes/{attributekey}"))
+  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid), userid: (encode-path-segment $userid), attributekey: (encode-path-segment $attributekey)} | format pattern "/servers/{serverid}/users/{userid}/attributes/{attributekey}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Push a login confirmation to the user's app
@@ -1645,14 +2195,25 @@ export def "servers-users-provokelogin create-provoke-login" [
   let base = ($base_url | default $BASE_URL)
   if ($serverid | is-empty) { error make --unspanned { msg: "path parameter 'serverid' must be non-empty" } }
   if ($userid | is-empty) { error make --unspanned { msg: "path parameter 'userid' must be non-empty" } }
-  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid), userid: (encode-path-segment $userid)} | format pattern "/servers/{serverid}/users/{userid}/provokelogin"))
+  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid), userid: (encode-path-segment $userid)} | format pattern "/servers/{serverid}/users/{userid}/provokelogin") $auth.query)
   let req_body = {"announceinfo": $announceinfo, "sessioninfo": $sessioninfo} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-nonce": $x_nonce} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get role for a specific user.
@@ -1676,10 +2237,21 @@ export def "servers-users-role get" [
   let base = ($base_url | default $BASE_URL)
   if ($serverid | is-empty) { error make --unspanned { msg: "path parameter 'serverid' must be non-empty" } }
   if ($userid | is-empty) { error make --unspanned { msg: "path parameter 'userid' must be non-empty" } }
-  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid), userid: (encode-path-segment $userid)} | format pattern "/servers/{serverid}/users/{userid}/role/"))
+  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid), userid: (encode-path-segment $userid)} | format pattern "/servers/{serverid}/users/{userid}/role/") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get or create a role for a specific user.
@@ -1703,10 +2275,21 @@ export def "servers-users-role get-or-create" [
   let base = ($base_url | default $BASE_URL)
   if ($serverid | is-empty) { error make --unspanned { msg: "path parameter 'serverid' must be non-empty" } }
   if ($userid | is-empty) { error make --unspanned { msg: "path parameter 'userid' must be non-empty" } }
-  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid), userid: (encode-path-segment $userid)} | format pattern "/servers/{serverid}/users/{userid}/role/"))
+  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid), userid: (encode-path-segment $userid)} | format pattern "/servers/{serverid}/users/{userid}/role/") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Visual hash of this server
@@ -1728,8 +2311,19 @@ export def "servers-vash get" [
   let auth = (build-auth $token ($auth_scheme | default "x-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($serverid | is-empty) { error make --unspanned { msg: "path parameter 'serverid' must be non-empty" } }
-  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid)} | format pattern "/servers/{serverid}/vash"))
+  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid)} | format pattern "/servers/{serverid}/vash") $auth.query)
   let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }

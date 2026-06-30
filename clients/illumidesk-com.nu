@@ -8,7 +8,7 @@ const BASE_URL = "https://api.illumidesk.com"
 # `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
 # where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o ILLUMIDESK_TOKEN | default "" }
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o ILLUMIDESK_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
@@ -41,14 +41,11 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
-# Trick: `url encode --all` over-encodes, then we decode the four unreserved
-# punctuation chars back. Pre-existing %XX sequences in the input survive
-# because `url encode --all` first turns their % into %25.
 def encode-path-segment [v: any]: nothing -> string {
   $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
-# Serialize an array-typed path parameter (issue 49.A). OpenAPI 3 `style: simple`
+# Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
 # (the default for path params) and Swagger 2 `collectionFormat: csv` both join
 # the elements with a literal comma WITHIN the single path segment, each element
 # RFC-3986-encoded individually (so a comma inside an element stays %2C). Without
@@ -59,60 +56,79 @@ def encode-path-array [v: any]: nothing -> string {
   if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
 }
 
-# Build URL from base, path, and optional query string
-def build-url [base: string, path: string, query?: string]: nothing -> string {
+# Build the request URL from base, path, and any number of pre-encoded query
+# fragments (param serializer output and/or the auth query). Each fragment is an
+# `&`-joinable `key=value` string already percent-encoded by its producer; empty
+# fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
+# delimiters are hand-spliced — and any query already on the base URL is merged in.
+def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
   let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
-  let result = ($parsed | upsert path $full_path)
-  if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
+  let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
+  $parsed | upsert path $full_path | upsert query $query | url join
 }
 
-# Build the dry-run record returned by --dry-run. Shape:
-#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
-#    auth: {scheme, location}}
-# `meta` carries logical-form data (the query record by spec name, the pre-serialization
-# body) that do-request itself cannot reconstruct from its wire-format args.
-def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
-  let m = ($meta | default {})
-  {
-    dry_run: true
-    method: $method
-    url: $url
-    query: ($m | get -o query | default {})
-    headers: $auth.headers
-    body: ($m | get -o body)
-    content_type: $content_type
-    timeout: $timeout
-    auth: {scheme: $auth.scheme, location: $auth.location}
-  }
+# Success policy: did this response succeed? Single source of truth, consulted by
+# handle-response and the HEAD header-unwrap. Empty ok_codes means the spec listed
+# none, so fall back to < 400. Otherwise: any 2xx, plus documented success codes.
+def status-ok [status: int, ok_codes: list<int>]: nothing -> bool {
+  if ($ok_codes | is-empty) { $status < 400 } else { ($status >= 200 and $status < 300) or ($status in $ok_codes) }
 }
 
-# Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
-  let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
-  let timeout = ($max_time | default 30min)
-  let ct = ($content_type | default "application/json")
-  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
-  let resp = match $method {
-    "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
-  }
-  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
-  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
+# Unwrap a `--full` HTTP response into the user-facing value. Response arrives
+# via pipeline; ok_codes gates the error throw (see status-ok).
+def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: record -> any {
+  let resp = $in
+  if $allow_errors { return $resp }
+  if not (status-ok $resp.status $ok_codes) { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } }
+  if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
+  if $resp.status == 204 { return null }
+  $resp.body
+}
+
+# GET — bodyless, honours --raw
+def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+}
+
+# HEAD — bodyless; default surfaces just the headers on success
+def send-head [req: record, insecure: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = (http head --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure $req.url)
+  if (not $full) and (not $allow_errors) and (status-ok $resp.status $ok_codes) { return $resp.headers }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# POST — body + content-type
+def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# PUT — body + content-type
+def send-put [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http put --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http put --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# PATCH — body + content-type
+def send-patch [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http patch --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http patch --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# DELETE — body via --data
+def send-delete [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http delete --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url } else { http delete --headers $req.headers --content-type $req.content_type --data $body --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url }
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # Build a `multipart/form-data` envelope per RFC 7578. `file_fields` lists
 # the field names whose value should be read from disk as bytes; every
 # other field is sent as a text part (records/lists JSON-stringified).
-# Returns {content_type, body} ready to pass to `do-request`.
+# Returns {content_type, body}.
 # When `$dry_run` is true, file fields are NOT read from disk — they emit
 # an empty-bytes placeholder so callers can inspect the request shape
-# without the file existing on disk (issue 11.B).
+# without the file existing on disk.
 def build-multipart-body [parts: record, file_fields: list<string>, dry_run: bool = false]: nothing -> record {
   let boundary = $"----nu-(random chars --length 24)"
   let crlf = "\r\n"
@@ -191,12 +207,23 @@ export def "auth-jwt-token-auth create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/auth/jwt-token-auth/")
+  let full_url = (build-url $base "/auth/jwt-token-auth/" $auth.query)
   let req_body = {"password": $password, "username": $username} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Refresh a JSON Web Token (JWT)
@@ -219,12 +246,23 @@ export def "auth-jwt-token-refresh refresh" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/auth/jwt-token-refresh/")
+  let full_url = (build-url $base "/auth/jwt-token-refresh/" $auth.query)
   let req_body = {"token": $body_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Validate JSON Web Token (JWT)
@@ -247,12 +285,23 @@ export def "auth-jwt-token-verify verify" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/auth/jwt-token-verify/")
+  let full_url = (build-url $base "/auth/jwt-token-verify/" $auth.query)
   let req_body = {"token": $body_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # GET /auth/login/{provider}/
@@ -274,10 +323,21 @@ export def "auth-login get-oauth" [
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   if ($provider | is-empty) { error make --unspanned { msg: "path parameter 'provider' must be non-empty" } }
-  let full_url = (build-url $base ({provider: (encode-path-segment $provider)} | format pattern "/auth/login/{provider}/"))
+  let full_url = (build-url $base ({provider: (encode-path-segment $provider)} | format pattern "/auth/login/{provider}/") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [302]
 }
 
 # Register a user
@@ -306,12 +366,23 @@ export def "auth-register create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/auth/register/")
+  let full_url = (build-url $base "/auth/register/" $auth.query)
   let req_body = {"email": $email, "first_name": $first_name, "last_name": $last_name, "password": $password, "profile": $profile, "username": $username} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # A convenience endpoint that is equivalent to GET /v1/users/profiles//
@@ -332,10 +403,21 @@ export def "me get" [
 ]: nothing -> record<email: string, first_name: string, id: string, last_name: string, profile: record<avatar: string, bio: string, company: string, location: string, timezone: string, url: string>, username: string> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v1/me")
+  let full_url = (build-url $base "/v1/me" $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve available server sizes
@@ -360,10 +442,21 @@ export def "servers-options-server-size list" [
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "ordering" $ordering "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v1/servers/options/server-size/" $qp)
+  let full_url = (build-url $base "/v1/servers/options/server-size/" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"limit": $limit, "offset": $offset, "ordering": $ordering} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"limit": $limit, "offset": $offset, "ordering": $ordering} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a new server size item
@@ -389,12 +482,23 @@ export def "servers-options-server-size create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v1/servers/options/server-size/")
+  let full_url = (build-url $base "/v1/servers/options/server-size/" $auth.query)
   let req_body = {"active": $active, "cpu": $cpu, "memory": $memory, "name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Delete a server size by id
@@ -417,10 +521,21 @@ export def "servers-options-server-size delete" [
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   if ($size | is-empty) { error make --unspanned { msg: "path parameter 'size' must be non-empty" } }
-  let full_url = (build-url $base ({size: (encode-path-segment $size)} | format pattern "/v1/servers/options/server-size/{size}/"))
+  let full_url = (build-url $base ({size: (encode-path-segment $size)} | format pattern "/v1/servers/options/server-size/{size}/") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Get a server size by id
@@ -443,10 +558,21 @@ export def "servers-options-server-size get-resources" [
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   if ($size | is-empty) { error make --unspanned { msg: "path parameter 'size' must be non-empty" } }
-  let full_url = (build-url $base ({size: (encode-path-segment $size)} | format pattern "/v1/servers/options/server-size/{size}/"))
+  let full_url = (build-url $base ({size: (encode-path-segment $size)} | format pattern "/v1/servers/options/server-size/{size}/") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update a server size by id
@@ -474,12 +600,23 @@ export def "servers-options-server-size update-by-size" [
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   if ($size | is-empty) { error make --unspanned { msg: "path parameter 'size' must be non-empty" } }
-  let full_url = (build-url $base ({size: (encode-path-segment $size)} | format pattern "/v1/servers/options/server-size/{size}/"))
+  let full_url = (build-url $base ({size: (encode-path-segment $size)} | format pattern "/v1/servers/options/server-size/{size}/") $auth.query)
   let req_body = {"active": $active, "cpu": $cpu, "memory": $memory, "name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Replace a server size by id
@@ -507,12 +644,23 @@ export def "servers-options-server-size update-by-size-1" [
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   if ($size | is-empty) { error make --unspanned { msg: "path parameter 'size' must be non-empty" } }
-  let full_url = (build-url $base ({size: (encode-path-segment $size)} | format pattern "/v1/servers/options/server-size/{size}/"))
+  let full_url = (build-url $base ({size: (encode-path-segment $size)} | format pattern "/v1/servers/options/server-size/{size}/") $auth.query)
   let req_body = {"active": $active, "cpu": $cpu, "memory": $memory, "name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get teams
@@ -536,10 +684,21 @@ export def "teams list" [
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v1/teams/" $qp)
+  let full_url = (build-url $base "/v1/teams/" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"limit": $limit, "offset": $offset} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"limit": $limit, "offset": $offset} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a new team
@@ -567,12 +726,23 @@ export def "teams create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v1/teams/")
+  let full_url = (build-url $base "/v1/teams/" $auth.query)
   let req_body = {"avatar": $avatar, "avatar_url": $avatar_url, "description": $description, "location": $location, "name": $name, "website": $website} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Delete a team
@@ -595,10 +765,21 @@ export def "teams delete" [
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   if ($team | is-empty) { error make --unspanned { msg: "path parameter 'team' must be non-empty" } }
-  let full_url = (build-url $base ({team: (encode-path-segment $team)} | format pattern "/v1/teams/{team}/"))
+  let full_url = (build-url $base ({team: (encode-path-segment $team)} | format pattern "/v1/teams/{team}/") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Get a team
@@ -621,10 +802,21 @@ export def "teams get" [
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   if ($team | is-empty) { error make --unspanned { msg: "path parameter 'team' must be non-empty" } }
-  let full_url = (build-url $base ({team: (encode-path-segment $team)} | format pattern "/v1/teams/{team}/"))
+  let full_url = (build-url $base ({team: (encode-path-segment $team)} | format pattern "/v1/teams/{team}/") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update a team
@@ -654,12 +846,23 @@ export def "teams update-by-team" [
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   if ($team | is-empty) { error make --unspanned { msg: "path parameter 'team' must be non-empty" } }
-  let full_url = (build-url $base ({team: (encode-path-segment $team)} | format pattern "/v1/teams/{team}/"))
+  let full_url = (build-url $base ({team: (encode-path-segment $team)} | format pattern "/v1/teams/{team}/") $auth.query)
   let req_body = {"avatar": $avatar, "avatar_url": $avatar_url, "description": $description, "location": $location, "name": $name, "website": $website} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Replace a team
@@ -689,12 +892,23 @@ export def "teams update-by-team-1" [
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   if ($team | is-empty) { error make --unspanned { msg: "path parameter 'team' must be non-empty" } }
-  let full_url = (build-url $base ({team: (encode-path-segment $team)} | format pattern "/v1/teams/{team}/"))
+  let full_url = (build-url $base ({team: (encode-path-segment $team)} | format pattern "/v1/teams/{team}/") $auth.query)
   let req_body = {"avatar": $avatar, "avatar_url": $avatar_url, "description": $description, "location": $location, "name": $name, "website": $website} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get team invoices
@@ -720,10 +934,21 @@ export def "teams-billing-invoices list" [
   let base = ($base_url | default $BASE_URL)
   if ($team | is-empty) { error make --unspanned { msg: "path parameter 'team' must be non-empty" } }
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({team: (encode-path-segment $team)} | format pattern "/v1/teams/{team}/billing/invoices/") $qp)
+  let full_url = (build-url $base ({team: (encode-path-segment $team)} | format pattern "/v1/teams/{team}/billing/invoices/") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"limit": $limit, "offset": $offset} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"limit": $limit, "offset": $offset} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get an invoice
@@ -748,10 +973,21 @@ export def "teams-billing-invoices get" [
   let base = ($base_url | default $BASE_URL)
   if ($team | is-empty) { error make --unspanned { msg: "path parameter 'team' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({team: (encode-path-segment $team), id: (encode-path-segment $id)} | format pattern "/v1/teams/{team}/billing/invoices/{id}/"))
+  let full_url = (build-url $base ({team: (encode-path-segment $team), id: (encode-path-segment $id)} | format pattern "/v1/teams/{team}/billing/invoices/{id}/") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get team invoice items for a given invoice.
@@ -780,10 +1016,21 @@ export def "teams-billing-invoices-invoice-items list" [
   if ($team | is-empty) { error make --unspanned { msg: "path parameter 'team' must be non-empty" } }
   if ($invoice_id | is-empty) { error make --unspanned { msg: "path parameter 'invoice_id' must be non-empty" } }
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "ordering" $ordering "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({team: (encode-path-segment $team), invoice_id: (encode-path-segment $invoice_id)} | format pattern "/v1/teams/{team}/billing/invoices/{invoice_id}/invoice-items/") $qp)
+  let full_url = (build-url $base ({team: (encode-path-segment $team), invoice_id: (encode-path-segment $invoice_id)} | format pattern "/v1/teams/{team}/billing/invoices/{invoice_id}/invoice-items/") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"limit": $limit, "offset": $offset, "ordering": $ordering} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"limit": $limit, "offset": $offset, "ordering": $ordering} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get a specific team InvoiceItem.
@@ -810,10 +1057,21 @@ export def "teams-billing-invoices-invoice-items get" [
   if ($team | is-empty) { error make --unspanned { msg: "path parameter 'team' must be non-empty" } }
   if ($invoice_id | is-empty) { error make --unspanned { msg: "path parameter 'invoice_id' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({team: (encode-path-segment $team), invoice_id: (encode-path-segment $invoice_id), id: (encode-path-segment $id)} | format pattern "/v1/teams/{team}/billing/invoices/{invoice_id}/invoice-items/{id}"))
+  let full_url = (build-url $base ({team: (encode-path-segment $team), invoice_id: (encode-path-segment $invoice_id), id: (encode-path-segment $id)} | format pattern "/v1/teams/{team}/billing/invoices/{invoice_id}/invoice-items/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get active team subscriptons
@@ -840,10 +1098,21 @@ export def "teams-billing-subscriptions list" [
   let base = ($base_url | default $BASE_URL)
   if ($team | is-empty) { error make --unspanned { msg: "path parameter 'team' must be non-empty" } }
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "ordering" $ordering "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({team: (encode-path-segment $team)} | format pattern "/v1/teams/{team}/billing/subscriptions/") $qp)
+  let full_url = (build-url $base ({team: (encode-path-segment $team)} | format pattern "/v1/teams/{team}/billing/subscriptions/") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"limit": $limit, "offset": $offset, "ordering": $ordering} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"limit": $limit, "offset": $offset, "ordering": $ordering} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a new team subscription
@@ -868,12 +1137,23 @@ export def "teams-billing-subscriptions create" [
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   if ($team | is-empty) { error make --unspanned { msg: "path parameter 'team' must be non-empty" } }
-  let full_url = (build-url $base ({team: (encode-path-segment $team)} | format pattern "/v1/teams/{team}/billing/subscriptions/"))
+  let full_url = (build-url $base ({team: (encode-path-segment $team)} | format pattern "/v1/teams/{team}/billing/subscriptions/") $auth.query)
   let req_body = {"plan": $plan} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Delete a subscription
@@ -898,10 +1178,21 @@ export def "teams-billing-subscriptions delete" [
   let base = ($base_url | default $BASE_URL)
   if ($team | is-empty) { error make --unspanned { msg: "path parameter 'team' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({team: (encode-path-segment $team), id: (encode-path-segment $id)} | format pattern "/v1/teams/{team}/billing/subscriptions/{id}/"))
+  let full_url = (build-url $base ({team: (encode-path-segment $team), id: (encode-path-segment $id)} | format pattern "/v1/teams/{team}/billing/subscriptions/{id}/") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Get team subscriptions
@@ -926,10 +1217,21 @@ export def "teams-billing-subscriptions get" [
   let base = ($base_url | default $BASE_URL)
   if ($team | is-empty) { error make --unspanned { msg: "path parameter 'team' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({team: (encode-path-segment $team), id: (encode-path-segment $id)} | format pattern "/v1/teams/{team}/billing/subscriptions/{id}/"))
+  let full_url = (build-url $base ({team: (encode-path-segment $team), id: (encode-path-segment $id)} | format pattern "/v1/teams/{team}/billing/subscriptions/{id}/") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get team groups
@@ -955,10 +1257,21 @@ export def "teams-groups list" [
   let base = ($base_url | default $BASE_URL)
   if ($team | is-empty) { error make --unspanned { msg: "path parameter 'team' must be non-empty" } }
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({team: (encode-path-segment $team)} | format pattern "/v1/teams/{team}/groups/") $qp)
+  let full_url = (build-url $base ({team: (encode-path-segment $team)} | format pattern "/v1/teams/{team}/groups/") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"limit": $limit, "offset": $offset} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"limit": $limit, "offset": $offset} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Delete team group
@@ -983,10 +1296,21 @@ export def "teams-groups delete" [
   let base = ($base_url | default $BASE_URL)
   if ($team | is-empty) { error make --unspanned { msg: "path parameter 'team' must be non-empty" } }
   if ($group | is-empty) { error make --unspanned { msg: "path parameter 'group' must be non-empty" } }
-  let full_url = (build-url $base ({team: (encode-path-segment $team), group: (encode-path-segment $group)} | format pattern "/v1/teams/{team}/groups/{group}/"))
+  let full_url = (build-url $base ({team: (encode-path-segment $team), group: (encode-path-segment $group)} | format pattern "/v1/teams/{team}/groups/{group}/") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Get team group
@@ -1011,10 +1335,21 @@ export def "teams-groups get" [
   let base = ($base_url | default $BASE_URL)
   if ($team | is-empty) { error make --unspanned { msg: "path parameter 'team' must be non-empty" } }
   if ($group | is-empty) { error make --unspanned { msg: "path parameter 'group' must be non-empty" } }
-  let full_url = (build-url $base ({team: (encode-path-segment $team), group: (encode-path-segment $group)} | format pattern "/v1/teams/{team}/groups/{group}/"))
+  let full_url = (build-url $base ({team: (encode-path-segment $team), group: (encode-path-segment $group)} | format pattern "/v1/teams/{team}/groups/{group}/") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Patch team group
@@ -1044,12 +1379,23 @@ export def "teams-groups update-by-team-group" [
   let base = ($base_url | default $BASE_URL)
   if ($team | is-empty) { error make --unspanned { msg: "path parameter 'team' must be non-empty" } }
   if ($group | is-empty) { error make --unspanned { msg: "path parameter 'group' must be non-empty" } }
-  let full_url = (build-url $base ({team: (encode-path-segment $team), group: (encode-path-segment $group)} | format pattern "/v1/teams/{team}/groups/{group}/"))
+  let full_url = (build-url $base ({team: (encode-path-segment $team), group: (encode-path-segment $group)} | format pattern "/v1/teams/{team}/groups/{group}/") $auth.query)
   let req_body = {"description": $description, "name": $name, "parent": $parent, "private": $private} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Patch team group
@@ -1079,12 +1425,23 @@ export def "teams-groups update-by-team-group-1" [
   let base = ($base_url | default $BASE_URL)
   if ($team | is-empty) { error make --unspanned { msg: "path parameter 'team' must be non-empty" } }
   if ($group | is-empty) { error make --unspanned { msg: "path parameter 'group' must be non-empty" } }
-  let full_url = (build-url $base ({team: (encode-path-segment $team), group: (encode-path-segment $group)} | format pattern "/v1/teams/{team}/groups/{group}/"))
+  let full_url = (build-url $base ({team: (encode-path-segment $team), group: (encode-path-segment $group)} | format pattern "/v1/teams/{team}/groups/{group}/") $auth.query)
   let req_body = {"description": $description, "name": $name, "parent": $parent, "private": $private} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Add user to group
@@ -1109,10 +1466,21 @@ export def "teams-groups-add create" [
   let base = ($base_url | default $BASE_URL)
   if ($team | is-empty) { error make --unspanned { msg: "path parameter 'team' must be non-empty" } }
   if ($group | is-empty) { error make --unspanned { msg: "path parameter 'group' must be non-empty" } }
-  let full_url = (build-url $base ({team: (encode-path-segment $team), group: (encode-path-segment $group)} | format pattern "/v1/teams/{team}/groups/{group}/add/"))
+  let full_url = (build-url $base ({team: (encode-path-segment $team), group: (encode-path-segment $group)} | format pattern "/v1/teams/{team}/groups/{group}/add/") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # User removed from group
@@ -1137,10 +1505,21 @@ export def "teams-groups-remove delete" [
   let base = ($base_url | default $BASE_URL)
   if ($team | is-empty) { error make --unspanned { msg: "path parameter 'team' must be non-empty" } }
   if ($group | is-empty) { error make --unspanned { msg: "path parameter 'group' must be non-empty" } }
-  let full_url = (build-url $base ({team: (encode-path-segment $team), group: (encode-path-segment $group)} | format pattern "/v1/teams/{team}/groups/{group}/remove/"))
+  let full_url = (build-url $base ({team: (encode-path-segment $team), group: (encode-path-segment $group)} | format pattern "/v1/teams/{team}/groups/{group}/remove/") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Get user list
@@ -1167,10 +1546,21 @@ export def "users-profiles list" [
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "username" $username "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "ordering" $ordering "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v1/users/profiles/" $qp)
+  let full_url = (build-url $base "/v1/users/profiles/" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"limit": $limit, "offset": $offset, "username": $username, "email": $email, "ordering": $ordering} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"limit": $limit, "offset": $offset, "username": $username, "email": $email, "ordering": $ordering} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create new user
@@ -1199,12 +1589,23 @@ export def "users-profiles create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v1/users/profiles/")
+  let full_url = (build-url $base "/v1/users/profiles/" $auth.query)
   let req_body = {"email": $email, "first_name": $first_name, "last_name": $last_name, "password": $password, "profile": $profile, "username": $username} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Delete a user
@@ -1227,10 +1628,21 @@ export def "users-profiles delete" [
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   if ($user | is-empty) { error make --unspanned { msg: "path parameter 'user' must be non-empty" } }
-  let full_url = (build-url $base ({user: (encode-path-segment $user)} | format pattern "/v1/users/profiles/{user}/"))
+  let full_url = (build-url $base ({user: (encode-path-segment $user)} | format pattern "/v1/users/profiles/{user}/") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Retrieve a user
@@ -1253,10 +1665,21 @@ export def "users-profiles get" [
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   if ($user | is-empty) { error make --unspanned { msg: "path parameter 'user' must be non-empty" } }
-  let full_url = (build-url $base ({user: (encode-path-segment $user)} | format pattern "/v1/users/profiles/{user}/"))
+  let full_url = (build-url $base ({user: (encode-path-segment $user)} | format pattern "/v1/users/profiles/{user}/") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update a user
@@ -1287,12 +1710,23 @@ export def "users-profiles update" [
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   if ($user | is-empty) { error make --unspanned { msg: "path parameter 'user' must be non-empty" } }
-  let full_url = (build-url $base ({user: (encode-path-segment $user)} | format pattern "/v1/users/profiles/{user}/"))
+  let full_url = (build-url $base ({user: (encode-path-segment $user)} | format pattern "/v1/users/profiles/{user}/") $auth.query)
   let req_body = {"email": $email, "first_name": $first_name, "last_name": $last_name, "password": $password, "profile": $profile, "username": $username} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve account's API key
@@ -1315,10 +1749,21 @@ export def "users-api-key list" [
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   if ($user | is-empty) { error make --unspanned { msg: "path parameter 'user' must be non-empty" } }
-  let full_url = (build-url $base ({user: (encode-path-segment $user)} | format pattern "/v1/users/{user}/api-key/"))
+  let full_url = (build-url $base ({user: (encode-path-segment $user)} | format pattern "/v1/users/{user}/api-key/") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Delete avatar
@@ -1341,10 +1786,21 @@ export def "users-avatar delete" [
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   if ($user | is-empty) { error make --unspanned { msg: "path parameter 'user' must be non-empty" } }
-  let full_url = (build-url $base ({user: (encode-path-segment $user)} | format pattern "/v1/users/{user}/avatar/"))
+  let full_url = (build-url $base ({user: (encode-path-segment $user)} | format pattern "/v1/users/{user}/avatar/") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Retrieve user's avatar
@@ -1367,10 +1823,21 @@ export def "users-avatar get" [
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   if ($user | is-empty) { error make --unspanned { msg: "path parameter 'user' must be non-empty" } }
-  let full_url = (build-url $base ({user: (encode-path-segment $user)} | format pattern "/v1/users/{user}/avatar/"))
+  let full_url = (build-url $base ({user: (encode-path-segment $user)} | format pattern "/v1/users/{user}/avatar/") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update a project file
@@ -1393,10 +1860,21 @@ export def "users-avatar update-by-user" [
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   if ($user | is-empty) { error make --unspanned { msg: "path parameter 'user' must be non-empty" } }
-  let full_url = (build-url $base ({user: (encode-path-segment $user)} | format pattern "/v1/users/{user}/avatar/"))
+  let full_url = (build-url $base ({user: (encode-path-segment $user)} | format pattern "/v1/users/{user}/avatar/") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Add user avatar
@@ -1419,10 +1897,21 @@ export def "users-avatar update-by-user-1" [
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   if ($user | is-empty) { error make --unspanned { msg: "path parameter 'user' must be non-empty" } }
-  let full_url = (build-url $base ({user: (encode-path-segment $user)} | format pattern "/v1/users/{user}/avatar/"))
+  let full_url = (build-url $base ({user: (encode-path-segment $user)} | format pattern "/v1/users/{user}/avatar/") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [201]
 }
 
 # Retrieve account email addresses
@@ -1449,10 +1938,21 @@ export def "users-emails list" [
   let base = ($base_url | default $BASE_URL)
   if ($user | is-empty) { error make --unspanned { msg: "path parameter 'user' must be non-empty" } }
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "ordering" $ordering "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user: (encode-path-segment $user)} | format pattern "/v1/users/{user}/emails/") $qp)
+  let full_url = (build-url $base ({user: (encode-path-segment $user)} | format pattern "/v1/users/{user}/emails/") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"limit": $limit, "offset": $offset, "ordering": $ordering} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"limit": $limit, "offset": $offset, "ordering": $ordering} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create an email address
@@ -1479,12 +1979,23 @@ export def "users-emails create" [
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   if ($user | is-empty) { error make --unspanned { msg: "path parameter 'user' must be non-empty" } }
-  let full_url = (build-url $base ({user: (encode-path-segment $user)} | format pattern "/v1/users/{user}/emails/"))
+  let full_url = (build-url $base ({user: (encode-path-segment $user)} | format pattern "/v1/users/{user}/emails/") $auth.query)
   let req_body = {"address": $address, "public": $public, "unsubscribed": $unsubscribed} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Delete an email address
@@ -1509,10 +2020,21 @@ export def "users-emails delete" [
   let base = ($base_url | default $BASE_URL)
   if ($user | is-empty) { error make --unspanned { msg: "path parameter 'user' must be non-empty" } }
   if ($email_id | is-empty) { error make --unspanned { msg: "path parameter 'email_id' must be non-empty" } }
-  let full_url = (build-url $base ({user: (encode-path-segment $user), email_id: (encode-path-segment $email_id)} | format pattern "/v1/users/{user}/emails/{email_id}/"))
+  let full_url = (build-url $base ({user: (encode-path-segment $user), email_id: (encode-path-segment $email_id)} | format pattern "/v1/users/{user}/emails/{email_id}/") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Retrieve a user's email addresses
@@ -1537,10 +2059,21 @@ export def "users-emails get" [
   let base = ($base_url | default $BASE_URL)
   if ($user | is-empty) { error make --unspanned { msg: "path parameter 'user' must be non-empty" } }
   if ($email_id | is-empty) { error make --unspanned { msg: "path parameter 'email_id' must be non-empty" } }
-  let full_url = (build-url $base ({user: (encode-path-segment $user), email_id: (encode-path-segment $email_id)} | format pattern "/v1/users/{user}/emails/{email_id}/"))
+  let full_url = (build-url $base ({user: (encode-path-segment $user), email_id: (encode-path-segment $email_id)} | format pattern "/v1/users/{user}/emails/{email_id}/") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update an email address
@@ -1569,12 +2102,23 @@ export def "users-emails update-by-user-email-id" [
   let base = ($base_url | default $BASE_URL)
   if ($user | is-empty) { error make --unspanned { msg: "path parameter 'user' must be non-empty" } }
   if ($email_id | is-empty) { error make --unspanned { msg: "path parameter 'email_id' must be non-empty" } }
-  let full_url = (build-url $base ({user: (encode-path-segment $user), email_id: (encode-path-segment $email_id)} | format pattern "/v1/users/{user}/emails/{email_id}/"))
+  let full_url = (build-url $base ({user: (encode-path-segment $user), email_id: (encode-path-segment $email_id)} | format pattern "/v1/users/{user}/emails/{email_id}/") $auth.query)
   let req_body = {"address": $address, "public": $public, "unsubscribed": $unsubscribed} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Replace an email address
@@ -1603,12 +2147,23 @@ export def "users-emails update-by-user-email-id-1" [
   let base = ($base_url | default $BASE_URL)
   if ($user | is-empty) { error make --unspanned { msg: "path parameter 'user' must be non-empty" } }
   if ($email_id | is-empty) { error make --unspanned { msg: "path parameter 'email_id' must be non-empty" } }
-  let full_url = (build-url $base ({user: (encode-path-segment $user), email_id: (encode-path-segment $email_id)} | format pattern "/v1/users/{user}/emails/{email_id}/"))
+  let full_url = (build-url $base ({user: (encode-path-segment $user), email_id: (encode-path-segment $email_id)} | format pattern "/v1/users/{user}/emails/{email_id}/") $auth.query)
   let req_body = {"address": $address, "public": $public, "unsubscribed": $unsubscribed} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve an SSH key
@@ -1631,10 +2186,21 @@ export def "users-ssh-key list" [
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   if ($user | is-empty) { error make --unspanned { msg: "path parameter 'user' must be non-empty" } }
-  let full_url = (build-url $base ({user: (encode-path-segment $user)} | format pattern "/v1/users/{user}/ssh-key/"))
+  let full_url = (build-url $base ({user: (encode-path-segment $user)} | format pattern "/v1/users/{user}/ssh-key/") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Recreate an SSH key
@@ -1657,10 +2223,21 @@ export def "users-ssh-key-reset reset" [
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   if ($user | is-empty) { error make --unspanned { msg: "path parameter 'user' must be non-empty" } }
-  let full_url = (build-url $base ({user: (encode-path-segment $user)} | format pattern "/v1/users/{user}/ssh-key/reset/"))
+  let full_url = (build-url $base ({user: (encode-path-segment $user)} | format pattern "/v1/users/{user}/ssh-key/reset/") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [201]
 }
 
 # Get credit cards
@@ -1687,10 +2264,21 @@ export def "billing-cards list" [
   let base = ($base_url | default $BASE_URL)
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "ordering" $ordering "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace)} | format pattern "/v1/{namespace}/billing/cards/") $qp)
+  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace)} | format pattern "/v1/{namespace}/billing/cards/") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"limit": $limit, "offset": $offset, "ordering": $ordering} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"limit": $limit, "offset": $offset, "ordering": $ordering} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create new credit card
@@ -1724,12 +2312,23 @@ export def "billing-cards create" [
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
-  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace)} | format pattern "/v1/{namespace}/billing/cards/"))
+  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace)} | format pattern "/v1/{namespace}/billing/cards/") $auth.query)
   let req_body = {"address_city": $address_city, "address_country": $address_country, "address_line1": $address_line1, "address_line2": $address_line2, "address_state": $address_state, "address_zip": $address_zip, "exp_month": $exp_month, "exp_year": $exp_year, "name": $name, "token": $body_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Delete a credit card
@@ -1754,10 +2353,21 @@ export def "billing-cards delete" [
   let base = ($base_url | default $BASE_URL)
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), id: (encode-path-segment $id)} | format pattern "/v1/{namespace}/billing/cards/{id}/"))
+  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), id: (encode-path-segment $id)} | format pattern "/v1/{namespace}/billing/cards/{id}/") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Get credit card by id
@@ -1782,10 +2392,21 @@ export def "billing-cards get" [
   let base = ($base_url | default $BASE_URL)
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), id: (encode-path-segment $id)} | format pattern "/v1/{namespace}/billing/cards/{id}/"))
+  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), id: (encode-path-segment $id)} | format pattern "/v1/{namespace}/billing/cards/{id}/") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update a credit card
@@ -1820,12 +2441,23 @@ export def "billing-cards update-by-namespace-id" [
   let base = ($base_url | default $BASE_URL)
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), id: (encode-path-segment $id)} | format pattern "/v1/{namespace}/billing/cards/{id}/"))
+  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), id: (encode-path-segment $id)} | format pattern "/v1/{namespace}/billing/cards/{id}/") $auth.query)
   let req_body = {"address_city": $address_city, "address_country": $address_country, "address_line1": $address_line1, "address_line2": $address_line2, "address_state": $address_state, "address_zip": $address_zip, "exp_month": $exp_month, "exp_year": $exp_year, "name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Replace a credit card
@@ -1860,12 +2492,23 @@ export def "billing-cards update-by-namespace-id-1" [
   let base = ($base_url | default $BASE_URL)
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), id: (encode-path-segment $id)} | format pattern "/v1/{namespace}/billing/cards/{id}/"))
+  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), id: (encode-path-segment $id)} | format pattern "/v1/{namespace}/billing/cards/{id}/") $auth.query)
   let req_body = {"address_city": $address_city, "address_country": $address_country, "address_line1": $address_line1, "address_line2": $address_line2, "address_state": $address_state, "address_zip": $address_zip, "exp_month": $exp_month, "exp_year": $exp_year, "name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get invoices
@@ -1892,10 +2535,21 @@ export def "billing-invoices list" [
   let base = ($base_url | default $BASE_URL)
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "ordering" $ordering "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace)} | format pattern "/v1/{namespace}/billing/invoices/") $qp)
+  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace)} | format pattern "/v1/{namespace}/billing/invoices/") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"limit": $limit, "offset": $offset, "ordering": $ordering} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"limit": $limit, "offset": $offset, "ordering": $ordering} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get an invoice
@@ -1920,10 +2574,21 @@ export def "billing-invoices get" [
   let base = ($base_url | default $BASE_URL)
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), id: (encode-path-segment $id)} | format pattern "/v1/{namespace}/billing/invoices/{id}/"))
+  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), id: (encode-path-segment $id)} | format pattern "/v1/{namespace}/billing/invoices/{id}/") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get invoice items for a given invoice.
@@ -1952,10 +2617,21 @@ export def "billing-invoices-invoice-items list" [
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
   if ($invoice_id | is-empty) { error make --unspanned { msg: "path parameter 'invoice_id' must be non-empty" } }
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "ordering" $ordering "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), invoice_id: (encode-path-segment $invoice_id)} | format pattern "/v1/{namespace}/billing/invoices/{invoice_id}/invoice-items/") $qp)
+  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), invoice_id: (encode-path-segment $invoice_id)} | format pattern "/v1/{namespace}/billing/invoices/{invoice_id}/invoice-items/") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"limit": $limit, "offset": $offset, "ordering": $ordering} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"limit": $limit, "offset": $offset, "ordering": $ordering} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get a specific InvoiceItem.
@@ -1982,10 +2658,21 @@ export def "billing-invoices-invoice-items get" [
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
   if ($invoice_id | is-empty) { error make --unspanned { msg: "path parameter 'invoice_id' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), invoice_id: (encode-path-segment $invoice_id), id: (encode-path-segment $id)} | format pattern "/v1/{namespace}/billing/invoices/{invoice_id}/invoice-items/{id}"))
+  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), invoice_id: (encode-path-segment $invoice_id), id: (encode-path-segment $id)} | format pattern "/v1/{namespace}/billing/invoices/{invoice_id}/invoice-items/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get billing plans
@@ -2012,10 +2699,21 @@ export def "billing-plans list" [
   let base = ($base_url | default $BASE_URL)
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "ordering" $ordering "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace)} | format pattern "/v1/{namespace}/billing/plans/") $qp)
+  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace)} | format pattern "/v1/{namespace}/billing/plans/") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"limit": $limit, "offset": $offset, "ordering": $ordering} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"limit": $limit, "offset": $offset, "ordering": $ordering} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get a billing plan
@@ -2040,10 +2738,21 @@ export def "billing-plans get" [
   let base = ($base_url | default $BASE_URL)
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), id: (encode-path-segment $id)} | format pattern "/v1/{namespace}/billing/plans/{id}/"))
+  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), id: (encode-path-segment $id)} | format pattern "/v1/{namespace}/billing/plans/{id}/") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get active subscriptons
@@ -2070,10 +2779,21 @@ export def "billing-subscriptions list" [
   let base = ($base_url | default $BASE_URL)
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "ordering" $ordering "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace)} | format pattern "/v1/{namespace}/billing/subscriptions/") $qp)
+  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace)} | format pattern "/v1/{namespace}/billing/subscriptions/") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"limit": $limit, "offset": $offset, "ordering": $ordering} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"limit": $limit, "offset": $offset, "ordering": $ordering} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a new subscription
@@ -2098,12 +2818,23 @@ export def "billing-subscriptions create" [
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
-  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace)} | format pattern "/v1/{namespace}/billing/subscriptions/"))
+  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace)} | format pattern "/v1/{namespace}/billing/subscriptions/") $auth.query)
   let req_body = {"plan": $plan} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Delete a subscription
@@ -2128,10 +2859,21 @@ export def "billing-subscriptions delete" [
   let base = ($base_url | default $BASE_URL)
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), id: (encode-path-segment $id)} | format pattern "/v1/{namespace}/billing/subscriptions/{id}/"))
+  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), id: (encode-path-segment $id)} | format pattern "/v1/{namespace}/billing/subscriptions/{id}/") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Get a subscriptions
@@ -2156,10 +2898,21 @@ export def "billing-subscriptions get" [
   let base = ($base_url | default $BASE_URL)
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), id: (encode-path-segment $id)} | format pattern "/v1/{namespace}/billing/subscriptions/{id}/"))
+  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), id: (encode-path-segment $id)} | format pattern "/v1/{namespace}/billing/subscriptions/{id}/") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get notifications of all types and entities for the authenticated user.
@@ -2187,10 +2940,21 @@ export def "notifications list" [
   let base = ($base_url | default $BASE_URL)
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "ordering" $ordering "scalar") (serialize-qp "read" $read "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace)} | format pattern "/v1/{namespace}/notifications/") $qp)
+  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace)} | format pattern "/v1/{namespace}/notifications/") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"limit": $limit, "offset": $offset, "ordering": $ordering, "read": $read} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"limit": $limit, "offset": $offset, "ordering": $ordering, "read": $read} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Mark a list of notifications as either read or unread.
@@ -2216,12 +2980,23 @@ export def "notifications update-list" [
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
-  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace)} | format pattern "/v1/{namespace}/notifications/"))
+  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace)} | format pattern "/v1/{namespace}/notifications/") $auth.query)
   let req_body = {"notifications": $notifications, "read": $read} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get notifications of all types and entities for the authenticated user.
@@ -2251,10 +3026,21 @@ export def "notifications-entity list" [
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
   if ($entity | is-empty) { error make --unspanned { msg: "path parameter 'entity' must be non-empty" } }
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "ordering" $ordering "scalar") (serialize-qp "read" $read "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), entity: (encode-path-segment $entity)} | format pattern "/v1/{namespace}/notifications/entity/{entity}") $qp)
+  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), entity: (encode-path-segment $entity)} | format pattern "/v1/{namespace}/notifications/entity/{entity}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"limit": $limit, "offset": $offset, "ordering": $ordering, "read": $read} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"limit": $limit, "offset": $offset, "ordering": $ordering, "read": $read} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Mark a list of notifications as either read or unread.
@@ -2282,12 +3068,23 @@ export def "notifications-entity update-list" [
   let base = ($base_url | default $BASE_URL)
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
   if ($entity | is-empty) { error make --unspanned { msg: "path parameter 'entity' must be non-empty" } }
-  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), entity: (encode-path-segment $entity)} | format pattern "/v1/{namespace}/notifications/entity/{entity}"))
+  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), entity: (encode-path-segment $entity)} | format pattern "/v1/{namespace}/notifications/entity/{entity}") $auth.query)
   let req_body = {"notifications": $notifications, "read": $read} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve global notification settings for the authenticated user
@@ -2310,10 +3107,21 @@ export def "notifications-settings get" [
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
-  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace)} | format pattern "/v1/{namespace}/notifications/settings/"))
+  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace)} | format pattern "/v1/{namespace}/notifications/settings/") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Modify global notification settings.
@@ -2339,12 +3147,23 @@ export def "notifications-settings update" [
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
-  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace)} | format pattern "/v1/{namespace}/notifications/settings/"))
+  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace)} | format pattern "/v1/{namespace}/notifications/settings/") $auth.query)
   let req_body = {"emails_enabled": $emails_enabled, "enabled": $enabled} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Create global notification settings
@@ -2370,12 +3189,23 @@ export def "notifications-settings create" [
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
-  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace)} | format pattern "/v1/{namespace}/notifications/settings/"))
+  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace)} | format pattern "/v1/{namespace}/notifications/settings/") $auth.query)
   let req_body = {"emails_enabled": $emails_enabled, "enabled": $enabled} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Retrieve global notification settings for the authenticated user
@@ -2400,10 +3230,21 @@ export def "notifications-settings-entity get" [
   let base = ($base_url | default $BASE_URL)
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
   if ($entity | is-empty) { error make --unspanned { msg: "path parameter 'entity' must be non-empty" } }
-  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), entity: (encode-path-segment $entity)} | format pattern "/v1/{namespace}/notifications/settings/entity/{entity}"))
+  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), entity: (encode-path-segment $entity)} | format pattern "/v1/{namespace}/notifications/settings/entity/{entity}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Modify global notification settings.
@@ -2431,12 +3272,23 @@ export def "notifications-settings-entity update" [
   let base = ($base_url | default $BASE_URL)
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
   if ($entity | is-empty) { error make --unspanned { msg: "path parameter 'entity' must be non-empty" } }
-  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), entity: (encode-path-segment $entity)} | format pattern "/v1/{namespace}/notifications/settings/entity/{entity}"))
+  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), entity: (encode-path-segment $entity)} | format pattern "/v1/{namespace}/notifications/settings/entity/{entity}") $auth.query)
   let req_body = {"emails_enabled": $emails_enabled, "enabled": $enabled} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Create global notification settings
@@ -2464,12 +3316,23 @@ export def "notifications-settings-entity create" [
   let base = ($base_url | default $BASE_URL)
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
   if ($entity | is-empty) { error make --unspanned { msg: "path parameter 'entity' must be non-empty" } }
-  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), entity: (encode-path-segment $entity)} | format pattern "/v1/{namespace}/notifications/settings/entity/{entity}"))
+  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), entity: (encode-path-segment $entity)} | format pattern "/v1/{namespace}/notifications/settings/entity/{entity}") $auth.query)
   let req_body = {"emails_enabled": $emails_enabled, "enabled": $enabled} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Retrieve a specific notification.
@@ -2494,10 +3357,21 @@ export def "notifications get" [
   let base = ($base_url | default $BASE_URL)
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
   if ($notification_id | is-empty) { error make --unspanned { msg: "path parameter 'notification_id' must be non-empty" } }
-  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), notification_id: (encode-path-segment $notification_id)} | format pattern "/v1/{namespace}/notifications/{notification_id}"))
+  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), notification_id: (encode-path-segment $notification_id)} | format pattern "/v1/{namespace}/notifications/{notification_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Mark a specific notification as either read or unread.
@@ -2524,12 +3398,23 @@ export def "notifications update" [
   let base = ($base_url | default $BASE_URL)
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
   if ($notification_id | is-empty) { error make --unspanned { msg: "path parameter 'notification_id' must be non-empty" } }
-  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), notification_id: (encode-path-segment $notification_id)} | format pattern "/v1/{namespace}/notifications/{notification_id}"))
+  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), notification_id: (encode-path-segment $notification_id)} | format pattern "/v1/{namespace}/notifications/{notification_id}") $auth.query)
   let req_body = {"read": $read} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve oauth applications
@@ -2556,10 +3441,21 @@ export def "oauth-applications list" [
   let base = ($base_url | default $BASE_URL)
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "ordering" $ordering "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace)} | format pattern "/v1/{namespace}/oauth/applications/") $qp)
+  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace)} | format pattern "/v1/{namespace}/oauth/applications/") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"limit": $limit, "offset": $offset, "ordering": $ordering} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"limit": $limit, "offset": $offset, "ordering": $ordering} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a new OAuth2 application
@@ -2587,12 +3483,23 @@ export def "oauth-applications create" [
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
-  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace)} | format pattern "/v1/{namespace}/oauth/applications/"))
+  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace)} | format pattern "/v1/{namespace}/oauth/applications/") $auth.query)
   let req_body = {"authorization_grant_type": $authorization_grant_type, "client_type": $client_type, "name": $name, "redirect_uris": $redirect_uris} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Delete an application by id
@@ -2617,10 +3524,21 @@ export def "oauth-applications delete" [
   let base = ($base_url | default $BASE_URL)
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
   if ($application | is-empty) { error make --unspanned { msg: "path parameter 'application' must be non-empty" } }
-  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), application: (encode-path-segment $application)} | format pattern "/v1/{namespace}/oauth/applications/{application}/"))
+  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), application: (encode-path-segment $application)} | format pattern "/v1/{namespace}/oauth/applications/{application}/") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Get an application by id
@@ -2645,10 +3563,21 @@ export def "oauth-applications get" [
   let base = ($base_url | default $BASE_URL)
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
   if ($application | is-empty) { error make --unspanned { msg: "path parameter 'application' must be non-empty" } }
-  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), application: (encode-path-segment $application)} | format pattern "/v1/{namespace}/oauth/applications/{application}/"))
+  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), application: (encode-path-segment $application)} | format pattern "/v1/{namespace}/oauth/applications/{application}/") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update an application by id
@@ -2678,12 +3607,23 @@ export def "oauth-applications update-by-namespace-application" [
   let base = ($base_url | default $BASE_URL)
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
   if ($application | is-empty) { error make --unspanned { msg: "path parameter 'application' must be non-empty" } }
-  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), application: (encode-path-segment $application)} | format pattern "/v1/{namespace}/oauth/applications/{application}/"))
+  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), application: (encode-path-segment $application)} | format pattern "/v1/{namespace}/oauth/applications/{application}/") $auth.query)
   let req_body = {"authorization_grant_type": $authorization_grant_type, "client_type": $client_type, "name": $name, "redirect_uris": $redirect_uris} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Replace an application by id
@@ -2713,12 +3653,23 @@ export def "oauth-applications update-by-namespace-application-1" [
   let base = ($base_url | default $BASE_URL)
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
   if ($application | is-empty) { error make --unspanned { msg: "path parameter 'application' must be non-empty" } }
-  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), application: (encode-path-segment $application)} | format pattern "/v1/{namespace}/oauth/applications/{application}/"))
+  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), application: (encode-path-segment $application)} | format pattern "/v1/{namespace}/oauth/applications/{application}/") $auth.query)
   let req_body = {"authorization_grant_type": $authorization_grant_type, "client_type": $client_type, "name": $name, "redirect_uris": $redirect_uris} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get available projects
@@ -2747,10 +3698,21 @@ export def "projects list" [
   let base = ($base_url | default $BASE_URL)
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "private" $private "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "ordering" $ordering "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace)} | format pattern "/v1/{namespace}/projects/") $qp)
+  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace)} | format pattern "/v1/{namespace}/projects/") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"limit": $limit, "offset": $offset, "private": $private, "name": $name, "ordering": $ordering} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"limit": $limit, "offset": $offset, "private": $private, "name": $name, "ordering": $ordering} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a new project
@@ -2777,12 +3739,23 @@ export def "projects create" [
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
-  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace)} | format pattern "/v1/{namespace}/projects/"))
+  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace)} | format pattern "/v1/{namespace}/projects/") $auth.query)
   let req_body = {"description": $description, "name": $name, "private": $private} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Check if you are able to copy a project to your account.
@@ -2801,18 +3774,25 @@ export def "projects-project-copy-check copy" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  project: string # UUID of the project the user wishes to copy.
-]: any -> record {
-  let input = $in
+]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
-  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace)} | format pattern "/v1/{namespace}/projects/project-copy-check/"))
-  let req_body = {"project": $project} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace)} | format pattern "/v1/{namespace}/projects/project-copy-check/") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "head" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "head"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-head $req $insecure $allow_errors $full [200]
 }
 
 # Copy a project to your own account.
@@ -2838,12 +3818,23 @@ export def "projects-project-copy copy" [
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
-  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace)} | format pattern "/v1/{namespace}/projects/project-copy/"))
+  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace)} | format pattern "/v1/{namespace}/projects/project-copy/") $auth.query)
   let req_body = {"name": $name, "project": $project} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Delete a project
@@ -2868,10 +3859,21 @@ export def "projects delete" [
   let base = ($base_url | default $BASE_URL)
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
   if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
-  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), project: (encode-path-segment $project)} | format pattern "/v1/{namespace}/projects/{project}/"))
+  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), project: (encode-path-segment $project)} | format pattern "/v1/{namespace}/projects/{project}/") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Get a project
@@ -2896,10 +3898,21 @@ export def "projects get" [
   let base = ($base_url | default $BASE_URL)
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
   if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
-  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), project: (encode-path-segment $project)} | format pattern "/v1/{namespace}/projects/{project}/"))
+  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), project: (encode-path-segment $project)} | format pattern "/v1/{namespace}/projects/{project}/") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update a project
@@ -2928,12 +3941,23 @@ export def "projects update-by-namespace-project" [
   let base = ($base_url | default $BASE_URL)
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
   if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
-  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), project: (encode-path-segment $project)} | format pattern "/v1/{namespace}/projects/{project}/"))
+  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), project: (encode-path-segment $project)} | format pattern "/v1/{namespace}/projects/{project}/") $auth.query)
   let req_body = {"description": $description, "name": $name, "private": $private} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Replace a project
@@ -2962,12 +3986,23 @@ export def "projects update-by-namespace-project-1" [
   let base = ($base_url | default $BASE_URL)
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
   if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
-  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), project: (encode-path-segment $project)} | format pattern "/v1/{namespace}/projects/{project}/"))
+  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), project: (encode-path-segment $project)} | format pattern "/v1/{namespace}/projects/{project}/") $auth.query)
   let req_body = {"description": $description, "name": $name, "private": $private} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get project collaborators
@@ -2996,10 +4031,21 @@ export def "projects-collaborators list" [
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
   if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "ordering" $ordering "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), project: (encode-path-segment $project)} | format pattern "/v1/{namespace}/projects/{project}/collaborators/") $qp)
+  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), project: (encode-path-segment $project)} | format pattern "/v1/{namespace}/projects/{project}/collaborators/") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"limit": $limit, "offset": $offset, "ordering": $ordering} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"limit": $limit, "offset": $offset, "ordering": $ordering} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create project collaborators
@@ -3028,12 +4074,23 @@ export def "projects-collaborators create" [
   let base = ($base_url | default $BASE_URL)
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
   if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
-  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), project: (encode-path-segment $project)} | format pattern "/v1/{namespace}/projects/{project}/collaborators/"))
+  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), project: (encode-path-segment $project)} | format pattern "/v1/{namespace}/projects/{project}/collaborators/") $auth.query)
   let req_body = {"member": $member, "owner": $owner, "permissions": $permissions} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Delete a project collaborator
@@ -3060,10 +4117,21 @@ export def "projects-collaborators delete" [
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
   if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
   if ($collaborator | is-empty) { error make --unspanned { msg: "path parameter 'collaborator' must be non-empty" } }
-  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), project: (encode-path-segment $project), collaborator: (encode-path-segment $collaborator)} | format pattern "/v1/{namespace}/projects/{project}/collaborators/{collaborator}/"))
+  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), project: (encode-path-segment $project), collaborator: (encode-path-segment $collaborator)} | format pattern "/v1/{namespace}/projects/{project}/collaborators/{collaborator}/") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Get a project collaborator
@@ -3090,10 +4158,21 @@ export def "projects-collaborators get" [
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
   if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
   if ($collaborator | is-empty) { error make --unspanned { msg: "path parameter 'collaborator' must be non-empty" } }
-  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), project: (encode-path-segment $project), collaborator: (encode-path-segment $collaborator)} | format pattern "/v1/{namespace}/projects/{project}/collaborators/{collaborator}/"))
+  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), project: (encode-path-segment $project), collaborator: (encode-path-segment $collaborator)} | format pattern "/v1/{namespace}/projects/{project}/collaborators/{collaborator}/") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update project collaborator
@@ -3124,12 +4203,23 @@ export def "projects-collaborators update" [
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
   if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
   if ($collaborator | is-empty) { error make --unspanned { msg: "path parameter 'collaborator' must be non-empty" } }
-  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), project: (encode-path-segment $project), collaborator: (encode-path-segment $collaborator)} | format pattern "/v1/{namespace}/projects/{project}/collaborators/{collaborator}/"))
+  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), project: (encode-path-segment $project), collaborator: (encode-path-segment $collaborator)} | format pattern "/v1/{namespace}/projects/{project}/collaborators/{collaborator}/") $auth.query)
   let req_body = {"member": $member, "owner": $owner, "permissions": $permissions} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve deployments
@@ -3159,10 +4249,21 @@ export def "projects-deployments list" [
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
   if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "ordering" $ordering "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), project: (encode-path-segment $project)} | format pattern "/v1/{namespace}/projects/{project}/deployments/") $qp)
+  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), project: (encode-path-segment $project)} | format pattern "/v1/{namespace}/projects/{project}/deployments/") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"limit": $limit, "offset": $offset, "name": $name, "ordering": $ordering} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"limit": $limit, "offset": $offset, "name": $name, "ordering": $ordering} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a new deployment
@@ -3193,12 +4294,23 @@ export def "projects-deployments create" [
   let base = ($base_url | default $BASE_URL)
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
   if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
-  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), project: (encode-path-segment $project)} | format pattern "/v1/{namespace}/projects/{project}/deployments/"))
+  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), project: (encode-path-segment $project)} | format pattern "/v1/{namespace}/projects/{project}/deployments/") $auth.query)
   let req_body = {"config": $config, "framework": $framework, "name": $name, "runtime": $runtime} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Delete a deployment
@@ -3225,10 +4337,21 @@ export def "projects-deployments delete" [
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
   if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
   if ($deployment | is-empty) { error make --unspanned { msg: "path parameter 'deployment' must be non-empty" } }
-  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), project: (encode-path-segment $project), deployment: (encode-path-segment $deployment)} | format pattern "/v1/{namespace}/projects/{project}/deployments/{deployment}/"))
+  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), project: (encode-path-segment $project), deployment: (encode-path-segment $deployment)} | format pattern "/v1/{namespace}/projects/{project}/deployments/{deployment}/") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Retrieve a deployment
@@ -3255,10 +4378,21 @@ export def "projects-deployments get" [
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
   if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
   if ($deployment | is-empty) { error make --unspanned { msg: "path parameter 'deployment' must be non-empty" } }
-  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), project: (encode-path-segment $project), deployment: (encode-path-segment $deployment)} | format pattern "/v1/{namespace}/projects/{project}/deployments/{deployment}/"))
+  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), project: (encode-path-segment $project), deployment: (encode-path-segment $deployment)} | format pattern "/v1/{namespace}/projects/{project}/deployments/{deployment}/") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update a deployment
@@ -3291,12 +4425,23 @@ export def "projects-deployments update-by-namespace-project-deployment" [
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
   if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
   if ($deployment | is-empty) { error make --unspanned { msg: "path parameter 'deployment' must be non-empty" } }
-  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), project: (encode-path-segment $project), deployment: (encode-path-segment $deployment)} | format pattern "/v1/{namespace}/projects/{project}/deployments/{deployment}/"))
+  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), project: (encode-path-segment $project), deployment: (encode-path-segment $deployment)} | format pattern "/v1/{namespace}/projects/{project}/deployments/{deployment}/") $auth.query)
   let req_body = {"config": $config, "framework": $framework, "name": $name, "runtime": $runtime} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Replace a deployment
@@ -3329,12 +4474,23 @@ export def "projects-deployments update-by-namespace-project-deployment-1" [
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
   if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
   if ($deployment | is-empty) { error make --unspanned { msg: "path parameter 'deployment' must be non-empty" } }
-  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), project: (encode-path-segment $project), deployment: (encode-path-segment $deployment)} | format pattern "/v1/{namespace}/projects/{project}/deployments/{deployment}/"))
+  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), project: (encode-path-segment $project), deployment: (encode-path-segment $deployment)} | format pattern "/v1/{namespace}/projects/{project}/deployments/{deployment}/") $auth.query)
   let req_body = {"config": $config, "framework": $framework, "name": $name, "runtime": $runtime} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deploy an existing model
@@ -3361,10 +4517,21 @@ export def "projects-deployments-deploy create" [
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
   if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
   if ($deployment | is-empty) { error make --unspanned { msg: "path parameter 'deployment' must be non-empty" } }
-  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), project: (encode-path-segment $project), deployment: (encode-path-segment $deployment)} | format pattern "/v1/{namespace}/projects/{project}/deployments/{deployment}/deploy/"))
+  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), project: (encode-path-segment $project), deployment: (encode-path-segment $deployment)} | format pattern "/v1/{namespace}/projects/{project}/deployments/{deployment}/deploy/") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [201]
 }
 
 # Get project files
@@ -3395,10 +4562,21 @@ export def "projects-project-files list" [
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
   if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "ordering" $ordering "scalar") (serialize-qp "filename" $filename "scalar") (serialize-qp "content" $content "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), project: (encode-path-segment $project)} | format pattern "/v1/{namespace}/projects/{project}/project_files/") $qp)
+  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), project: (encode-path-segment $project)} | format pattern "/v1/{namespace}/projects/{project}/project_files/") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"limit": $limit, "offset": $offset, "ordering": $ordering, "filename": $filename, "content": $content} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"limit": $limit, "offset": $offset, "ordering": $ordering, "filename": $filename, "content": $content} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create project files
@@ -3428,14 +4606,25 @@ export def "projects-project-files create" [
   let base = ($base_url | default $BASE_URL)
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
   if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
-  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), project: (encode-path-segment $project)} | format pattern "/v1/{namespace}/projects/{project}/project_files/"))
+  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), project: (encode-path-segment $project)} | format pattern "/v1/{namespace}/projects/{project}/project_files/") $auth.query)
   let req_body = {"file": $file, "base64_data": $base64_data, "name": $name, "path": $path} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body ["file"] $dry_run)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: $mp.content_type
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $mp.body $insecure $raw $allow_errors $full [201]
 }
 
 # Delete a project file
@@ -3462,10 +4651,21 @@ export def "projects-project-files delete" [
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
   if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), project: (encode-path-segment $project), id: (encode-path-segment $id)} | format pattern "/v1/{namespace}/projects/{project}/project_files/{id}/"))
+  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), project: (encode-path-segment $project), id: (encode-path-segment $id)} | format pattern "/v1/{namespace}/projects/{project}/project_files/{id}/") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Get a project file
@@ -3494,10 +4694,21 @@ export def "projects-project-files get" [
   if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "content" $content "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), project: (encode-path-segment $project), id: (encode-path-segment $id)} | format pattern "/v1/{namespace}/projects/{project}/project_files/{id}/") $qp)
+  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), project: (encode-path-segment $project), id: (encode-path-segment $id)} | format pattern "/v1/{namespace}/projects/{project}/project_files/{id}/") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"content": $content} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"content": $content} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update a project file
@@ -3529,14 +4740,25 @@ export def "projects-project-files update-by-namespace-project-id" [
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
   if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), project: (encode-path-segment $project), id: (encode-path-segment $id)} | format pattern "/v1/{namespace}/projects/{project}/project_files/{id}/"))
+  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), project: (encode-path-segment $project), id: (encode-path-segment $id)} | format pattern "/v1/{namespace}/projects/{project}/project_files/{id}/") $auth.query)
   let req_body = {"file": $file, "base64_data": $base64_data, "name": $name, "path": $path} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body ["file"] $dry_run)
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: {}, body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: $mp.content_type
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $mp.body $insecure $raw $allow_errors $full [200]
 }
 
 # Replace a project file
@@ -3568,14 +4790,25 @@ export def "projects-project-files update-by-namespace-project-id-1" [
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
   if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), project: (encode-path-segment $project), id: (encode-path-segment $id)} | format pattern "/v1/{namespace}/projects/{project}/project_files/{id}/"))
+  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), project: (encode-path-segment $project), id: (encode-path-segment $id)} | format pattern "/v1/{namespace}/projects/{project}/project_files/{id}/") $auth.query)
   let req_body = {"file": $file, "base64_data": $base64_data, "name": $name, "path": $path} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body ["file"] $dry_run)
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: $mp.content_type
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $mp.body $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve servers
@@ -3605,10 +4838,21 @@ export def "projects-servers list" [
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
   if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "ordering" $ordering "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), project: (encode-path-segment $project)} | format pattern "/v1/{namespace}/projects/{project}/servers/") $qp)
+  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), project: (encode-path-segment $project)} | format pattern "/v1/{namespace}/projects/{project}/servers/") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"limit": $limit, "offset": $offset, "name": $name, "ordering": $ordering} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"limit": $limit, "offset": $offset, "name": $name, "ordering": $ordering} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a new server
@@ -3642,12 +4886,23 @@ export def "projects-servers create" [
   let base = ($base_url | default $BASE_URL)
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
   if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
-  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), project: (encode-path-segment $project)} | format pattern "/v1/{namespace}/projects/{project}/servers/"))
+  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), project: (encode-path-segment $project)} | format pattern "/v1/{namespace}/projects/{project}/servers/") $auth.query)
   let req_body = {"config": $config, "connected": $connected, "host": $host, "image_name": $image_name, "name": $name, "server_size": $server_size, "startup_script": $startup_script} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Retrieve server statuses
@@ -3672,10 +4927,21 @@ export def "projects-servers-statuses get" [
   let base = ($base_url | default $BASE_URL)
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
   if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
-  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), project: (encode-path-segment $project)} | format pattern "/v1/{namespace}/projects/{project}/servers/statuses/"))
+  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), project: (encode-path-segment $project)} | format pattern "/v1/{namespace}/projects/{project}/servers/statuses/") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Delete a server
@@ -3702,10 +4968,21 @@ export def "projects-servers delete" [
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
   if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
   if ($server | is-empty) { error make --unspanned { msg: "path parameter 'server' must be non-empty" } }
-  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), project: (encode-path-segment $project), server: (encode-path-segment $server)} | format pattern "/v1/{namespace}/projects/{project}/servers/{server}/"))
+  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), project: (encode-path-segment $project), server: (encode-path-segment $server)} | format pattern "/v1/{namespace}/projects/{project}/servers/{server}/") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Retrieve a server
@@ -3732,10 +5009,21 @@ export def "projects-servers get" [
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
   if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
   if ($server | is-empty) { error make --unspanned { msg: "path parameter 'server' must be non-empty" } }
-  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), project: (encode-path-segment $project), server: (encode-path-segment $server)} | format pattern "/v1/{namespace}/projects/{project}/servers/{server}/"))
+  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), project: (encode-path-segment $project), server: (encode-path-segment $server)} | format pattern "/v1/{namespace}/projects/{project}/servers/{server}/") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update a server
@@ -3771,12 +5059,23 @@ export def "projects-servers update-by-namespace-project-server" [
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
   if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
   if ($server | is-empty) { error make --unspanned { msg: "path parameter 'server' must be non-empty" } }
-  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), project: (encode-path-segment $project), server: (encode-path-segment $server)} | format pattern "/v1/{namespace}/projects/{project}/servers/{server}/"))
+  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), project: (encode-path-segment $project), server: (encode-path-segment $server)} | format pattern "/v1/{namespace}/projects/{project}/servers/{server}/") $auth.query)
   let req_body = {"config": $config, "connected": $connected, "host": $host, "image_name": $image_name, "name": $name, "server_size": $server_size, "startup_script": $startup_script} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Replace a server
@@ -3812,12 +5111,23 @@ export def "projects-servers update-by-namespace-project-server-1" [
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
   if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
   if ($server | is-empty) { error make --unspanned { msg: "path parameter 'server' must be non-empty" } }
-  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), project: (encode-path-segment $project), server: (encode-path-segment $server)} | format pattern "/v1/{namespace}/projects/{project}/servers/{server}/"))
+  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), project: (encode-path-segment $project), server: (encode-path-segment $server)} | format pattern "/v1/{namespace}/projects/{project}/servers/{server}/") $auth.query)
   let req_body = {"config": $config, "connected": $connected, "host": $host, "image_name": $image_name, "name": $name, "server_size": $server_size, "startup_script": $startup_script} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get server API key
@@ -3844,10 +5154,21 @@ export def "projects-servers-api-key get" [
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
   if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
   if ($server | is-empty) { error make --unspanned { msg: "path parameter 'server' must be non-empty" } }
-  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), project: (encode-path-segment $project), server: (encode-path-segment $server)} | format pattern "/v1/{namespace}/projects/{project}/servers/{server}/api-key/"))
+  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), project: (encode-path-segment $project), server: (encode-path-segment $server)} | format pattern "/v1/{namespace}/projects/{project}/servers/{server}/api-key/") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Server api key validation
@@ -3874,10 +5195,21 @@ export def "projects-servers-auth create" [
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
   if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
   if ($server | is-empty) { error make --unspanned { msg: "path parameter 'server' must be non-empty" } }
-  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), project: (encode-path-segment $project), server: (encode-path-segment $server)} | format pattern "/v1/{namespace}/projects/{project}/servers/{server}/auth/"))
+  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), project: (encode-path-segment $project), server: (encode-path-segment $server)} | format pattern "/v1/{namespace}/projects/{project}/servers/{server}/auth/") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Create a new server's run statistics
@@ -3910,12 +5242,23 @@ export def "projects-servers-run-stats create" [
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
   if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
   if ($server | is-empty) { error make --unspanned { msg: "path parameter 'server' must be non-empty" } }
-  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), project: (encode-path-segment $project), server: (encode-path-segment $server)} | format pattern "/v1/{namespace}/projects/{project}/servers/{server}/run-stats/"))
+  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), project: (encode-path-segment $project), server: (encode-path-segment $server)} | format pattern "/v1/{namespace}/projects/{project}/servers/{server}/run-stats/") $auth.query)
   let req_body = {"exit_code": $exit_code, "size": $size, "stacktrace": $stacktrace, "start": $start, "stop": $stop} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Delete a server's statistics
@@ -3944,10 +5287,21 @@ export def "projects-servers-run-stats delete" [
   if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
   if ($server | is-empty) { error make --unspanned { msg: "path parameter 'server' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), project: (encode-path-segment $project), server: (encode-path-segment $server), id: (encode-path-segment $id)} | format pattern "/v1/{namespace}/projects/{project}/servers/{server}/run-stats/{id}/"))
+  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), project: (encode-path-segment $project), server: (encode-path-segment $server), id: (encode-path-segment $id)} | format pattern "/v1/{namespace}/projects/{project}/servers/{server}/run-stats/{id}/") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Retrieve statistics for a server
@@ -3976,10 +5330,21 @@ export def "projects-servers-run-stats get" [
   if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
   if ($server | is-empty) { error make --unspanned { msg: "path parameter 'server' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), project: (encode-path-segment $project), server: (encode-path-segment $server), id: (encode-path-segment $id)} | format pattern "/v1/{namespace}/projects/{project}/servers/{server}/run-stats/{id}/"))
+  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), project: (encode-path-segment $project), server: (encode-path-segment $server), id: (encode-path-segment $id)} | format pattern "/v1/{namespace}/projects/{project}/servers/{server}/run-stats/{id}/") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update a server's statistics
@@ -4014,12 +5379,23 @@ export def "projects-servers-run-stats update-by-namespace-project-server-id" [
   if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
   if ($server | is-empty) { error make --unspanned { msg: "path parameter 'server' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), project: (encode-path-segment $project), server: (encode-path-segment $server), id: (encode-path-segment $id)} | format pattern "/v1/{namespace}/projects/{project}/servers/{server}/run-stats/{id}/"))
+  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), project: (encode-path-segment $project), server: (encode-path-segment $server), id: (encode-path-segment $id)} | format pattern "/v1/{namespace}/projects/{project}/servers/{server}/run-stats/{id}/") $auth.query)
   let req_body = {"exit_code": $exit_code, "size": $size, "stacktrace": $stacktrace, "start": $start, "stop": $stop} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Replace a server's statistics
@@ -4054,12 +5430,23 @@ export def "projects-servers-run-stats update-by-namespace-project-server-id-1" 
   if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
   if ($server | is-empty) { error make --unspanned { msg: "path parameter 'server' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), project: (encode-path-segment $project), server: (encode-path-segment $server), id: (encode-path-segment $id)} | format pattern "/v1/{namespace}/projects/{project}/servers/{server}/run-stats/{id}/"))
+  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), project: (encode-path-segment $project), server: (encode-path-segment $server), id: (encode-path-segment $id)} | format pattern "/v1/{namespace}/projects/{project}/servers/{server}/run-stats/{id}/") $auth.query)
   let req_body = {"exit_code": $exit_code, "size": $size, "stacktrace": $stacktrace, "start": $start, "stop": $stop} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get SSH Tunnels associated to a server
@@ -4090,10 +5477,21 @@ export def "projects-servers-ssh-tunnels list" [
   if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
   if ($server | is-empty) { error make --unspanned { msg: "path parameter 'server' must be non-empty" } }
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "ordering" $ordering "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), project: (encode-path-segment $project), server: (encode-path-segment $server)} | format pattern "/v1/{namespace}/projects/{project}/servers/{server}/ssh-tunnels/") $qp)
+  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), project: (encode-path-segment $project), server: (encode-path-segment $server)} | format pattern "/v1/{namespace}/projects/{project}/servers/{server}/ssh-tunnels/") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"limit": $limit, "offset": $offset, "ordering": $ordering} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"limit": $limit, "offset": $offset, "ordering": $ordering} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create SSH Tunnel associated to a server
@@ -4127,12 +5525,23 @@ export def "projects-servers-ssh-tunnels create" [
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
   if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
   if ($server | is-empty) { error make --unspanned { msg: "path parameter 'server' must be non-empty" } }
-  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), project: (encode-path-segment $project), server: (encode-path-segment $server)} | format pattern "/v1/{namespace}/projects/{project}/servers/{server}/ssh-tunnels/"))
+  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), project: (encode-path-segment $project), server: (encode-path-segment $server)} | format pattern "/v1/{namespace}/projects/{project}/servers/{server}/ssh-tunnels/") $auth.query)
   let req_body = {"endpoint": $endpoint, "host": $host, "local_port": $local_port, "name": $name, "remote_port": $remote_port, "username": $username} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Delete an SSH Tunnel associated to a server
@@ -4161,10 +5570,21 @@ export def "projects-servers-ssh-tunnels delete" [
   if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
   if ($server | is-empty) { error make --unspanned { msg: "path parameter 'server' must be non-empty" } }
   if ($tunnel | is-empty) { error make --unspanned { msg: "path parameter 'tunnel' must be non-empty" } }
-  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), project: (encode-path-segment $project), server: (encode-path-segment $server), tunnel: (encode-path-segment $tunnel)} | format pattern "/v1/{namespace}/projects/{project}/servers/{server}/ssh-tunnels/{tunnel}/"))
+  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), project: (encode-path-segment $project), server: (encode-path-segment $server), tunnel: (encode-path-segment $tunnel)} | format pattern "/v1/{namespace}/projects/{project}/servers/{server}/ssh-tunnels/{tunnel}/") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Get an SSH Tunnel associated to a server
@@ -4193,10 +5613,21 @@ export def "projects-servers-ssh-tunnels get" [
   if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
   if ($server | is-empty) { error make --unspanned { msg: "path parameter 'server' must be non-empty" } }
   if ($tunnel | is-empty) { error make --unspanned { msg: "path parameter 'tunnel' must be non-empty" } }
-  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), project: (encode-path-segment $project), server: (encode-path-segment $server), tunnel: (encode-path-segment $tunnel)} | format pattern "/v1/{namespace}/projects/{project}/servers/{server}/ssh-tunnels/{tunnel}/"))
+  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), project: (encode-path-segment $project), server: (encode-path-segment $server), tunnel: (encode-path-segment $tunnel)} | format pattern "/v1/{namespace}/projects/{project}/servers/{server}/ssh-tunnels/{tunnel}/") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update an SSH Tunnel associated to a server
@@ -4232,12 +5663,23 @@ export def "projects-servers-ssh-tunnels update-by-namespace-project-server-tunn
   if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
   if ($server | is-empty) { error make --unspanned { msg: "path parameter 'server' must be non-empty" } }
   if ($tunnel | is-empty) { error make --unspanned { msg: "path parameter 'tunnel' must be non-empty" } }
-  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), project: (encode-path-segment $project), server: (encode-path-segment $server), tunnel: (encode-path-segment $tunnel)} | format pattern "/v1/{namespace}/projects/{project}/servers/{server}/ssh-tunnels/{tunnel}/"))
+  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), project: (encode-path-segment $project), server: (encode-path-segment $server), tunnel: (encode-path-segment $tunnel)} | format pattern "/v1/{namespace}/projects/{project}/servers/{server}/ssh-tunnels/{tunnel}/") $auth.query)
   let req_body = {"endpoint": $endpoint, "host": $host, "local_port": $local_port, "name": $name, "remote_port": $remote_port, "username": $username} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Replace SSH Tunnel associated to a server
@@ -4273,12 +5715,23 @@ export def "projects-servers-ssh-tunnels update-by-namespace-project-server-tunn
   if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
   if ($server | is-empty) { error make --unspanned { msg: "path parameter 'server' must be non-empty" } }
   if ($tunnel | is-empty) { error make --unspanned { msg: "path parameter 'tunnel' must be non-empty" } }
-  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), project: (encode-path-segment $project), server: (encode-path-segment $server), tunnel: (encode-path-segment $tunnel)} | format pattern "/v1/{namespace}/projects/{project}/servers/{server}/ssh-tunnels/{tunnel}/"))
+  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), project: (encode-path-segment $project), server: (encode-path-segment $server), tunnel: (encode-path-segment $tunnel)} | format pattern "/v1/{namespace}/projects/{project}/servers/{server}/ssh-tunnels/{tunnel}/") $auth.query)
   let req_body = {"endpoint": $endpoint, "host": $host, "local_port": $local_port, "name": $name, "remote_port": $remote_port, "username": $username} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Start a server
@@ -4305,10 +5758,21 @@ export def "projects-servers-start start" [
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
   if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
   if ($server | is-empty) { error make --unspanned { msg: "path parameter 'server' must be non-empty" } }
-  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), project: (encode-path-segment $project), server: (encode-path-segment $server)} | format pattern "/v1/{namespace}/projects/{project}/servers/{server}/start/"))
+  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), project: (encode-path-segment $project), server: (encode-path-segment $server)} | format pattern "/v1/{namespace}/projects/{project}/servers/{server}/start/") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [201]
 }
 
 # Delete a server's statistics
@@ -4337,10 +5801,21 @@ export def "projects-servers-stats delete" [
   if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
   if ($server | is-empty) { error make --unspanned { msg: "path parameter 'server' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), project: (encode-path-segment $project), server: (encode-path-segment $server), id: (encode-path-segment $id)} | format pattern "/v1/{namespace}/projects/{project}/servers/{server}/stats/{id}/"))
+  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), project: (encode-path-segment $project), server: (encode-path-segment $server), id: (encode-path-segment $id)} | format pattern "/v1/{namespace}/projects/{project}/servers/{server}/stats/{id}/") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Retrieve a server's statistics
@@ -4369,10 +5844,21 @@ export def "projects-servers-stats get" [
   if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
   if ($server | is-empty) { error make --unspanned { msg: "path parameter 'server' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), project: (encode-path-segment $project), server: (encode-path-segment $server), id: (encode-path-segment $id)} | format pattern "/v1/{namespace}/projects/{project}/servers/{server}/stats/{id}/"))
+  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), project: (encode-path-segment $project), server: (encode-path-segment $server), id: (encode-path-segment $id)} | format pattern "/v1/{namespace}/projects/{project}/servers/{server}/stats/{id}/") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update a server's statistics
@@ -4407,12 +5893,23 @@ export def "projects-servers-stats update-by-namespace-project-server-id" [
   if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
   if ($server | is-empty) { error make --unspanned { msg: "path parameter 'server' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), project: (encode-path-segment $project), server: (encode-path-segment $server), id: (encode-path-segment $id)} | format pattern "/v1/{namespace}/projects/{project}/servers/{server}/stats/{id}/"))
+  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), project: (encode-path-segment $project), server: (encode-path-segment $server), id: (encode-path-segment $id)} | format pattern "/v1/{namespace}/projects/{project}/servers/{server}/stats/{id}/") $auth.query)
   let req_body = {"id": $body_id, "non_field_errors": $non_field_errors, "size": $size, "start": $start, "stop": $stop} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Replace a server's statistics
@@ -4447,12 +5944,23 @@ export def "projects-servers-stats update-by-namespace-project-server-id-1" [
   if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
   if ($server | is-empty) { error make --unspanned { msg: "path parameter 'server' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), project: (encode-path-segment $project), server: (encode-path-segment $server), id: (encode-path-segment $id)} | format pattern "/v1/{namespace}/projects/{project}/servers/{server}/stats/{id}/"))
+  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), project: (encode-path-segment $project), server: (encode-path-segment $server), id: (encode-path-segment $id)} | format pattern "/v1/{namespace}/projects/{project}/servers/{server}/stats/{id}/") $auth.query)
   let req_body = {"id": $body_id, "non_field_errors": $non_field_errors, "size": $size, "start": $start, "stop": $stop} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Stop a server
@@ -4479,10 +5987,21 @@ export def "projects-servers-stop stop" [
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
   if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
   if ($server | is-empty) { error make --unspanned { msg: "path parameter 'server' must be non-empty" } }
-  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), project: (encode-path-segment $project), server: (encode-path-segment $server)} | format pattern "/v1/{namespace}/projects/{project}/servers/{server}/stop/"))
+  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), project: (encode-path-segment $project), server: (encode-path-segment $server)} | format pattern "/v1/{namespace}/projects/{project}/servers/{server}/stop/") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [201]
 }
 
 # Retrieve server triggers
@@ -4514,10 +6033,21 @@ export def "projects-servers-triggers list-service" [
   if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
   if ($server | is-empty) { error make --unspanned { msg: "path parameter 'server' must be non-empty" } }
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "ordering" $ordering "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), project: (encode-path-segment $project), server: (encode-path-segment $server)} | format pattern "/v1/{namespace}/projects/{project}/servers/{server}/triggers/") $qp)
+  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), project: (encode-path-segment $project), server: (encode-path-segment $server)} | format pattern "/v1/{namespace}/projects/{project}/servers/{server}/triggers/") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"name": $name, "limit": $limit, "offset": $offset, "ordering": $ordering} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"name": $name, "limit": $limit, "offset": $offset, "ordering": $ordering} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a new server trigger
@@ -4549,12 +6079,23 @@ export def "projects-servers-triggers create-service" [
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
   if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
   if ($server | is-empty) { error make --unspanned { msg: "path parameter 'server' must be non-empty" } }
-  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), project: (encode-path-segment $project), server: (encode-path-segment $server)} | format pattern "/v1/{namespace}/projects/{project}/servers/{server}/triggers/"))
+  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), project: (encode-path-segment $project), server: (encode-path-segment $server)} | format pattern "/v1/{namespace}/projects/{project}/servers/{server}/triggers/") $auth.query)
   let req_body = {"name": $name, "operation": $operation, "webhook": $webhook} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Delete a server trigger
@@ -4583,10 +6124,21 @@ export def "projects-servers-triggers delete-service" [
   if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
   if ($server | is-empty) { error make --unspanned { msg: "path parameter 'server' must be non-empty" } }
   if ($trigger | is-empty) { error make --unspanned { msg: "path parameter 'trigger' must be non-empty" } }
-  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), project: (encode-path-segment $project), server: (encode-path-segment $server), trigger: (encode-path-segment $trigger)} | format pattern "/v1/{namespace}/projects/{project}/servers/{server}/triggers/{trigger}/"))
+  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), project: (encode-path-segment $project), server: (encode-path-segment $server), trigger: (encode-path-segment $trigger)} | format pattern "/v1/{namespace}/projects/{project}/servers/{server}/triggers/{trigger}/") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Get a server trigger
@@ -4615,10 +6167,21 @@ export def "projects-servers-triggers get-service" [
   if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
   if ($server | is-empty) { error make --unspanned { msg: "path parameter 'server' must be non-empty" } }
   if ($trigger | is-empty) { error make --unspanned { msg: "path parameter 'trigger' must be non-empty" } }
-  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), project: (encode-path-segment $project), server: (encode-path-segment $server), trigger: (encode-path-segment $trigger)} | format pattern "/v1/{namespace}/projects/{project}/servers/{server}/triggers/{trigger}/"))
+  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), project: (encode-path-segment $project), server: (encode-path-segment $server), trigger: (encode-path-segment $trigger)} | format pattern "/v1/{namespace}/projects/{project}/servers/{server}/triggers/{trigger}/") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update a server trigger
@@ -4652,12 +6215,23 @@ export def "projects-servers-triggers update-service-by-namespace-project-server
   if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
   if ($server | is-empty) { error make --unspanned { msg: "path parameter 'server' must be non-empty" } }
   if ($trigger | is-empty) { error make --unspanned { msg: "path parameter 'trigger' must be non-empty" } }
-  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), project: (encode-path-segment $project), server: (encode-path-segment $server), trigger: (encode-path-segment $trigger)} | format pattern "/v1/{namespace}/projects/{project}/servers/{server}/triggers/{trigger}/"))
+  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), project: (encode-path-segment $project), server: (encode-path-segment $server), trigger: (encode-path-segment $trigger)} | format pattern "/v1/{namespace}/projects/{project}/servers/{server}/triggers/{trigger}/") $auth.query)
   let req_body = {"name": $name, "operation": $operation, "webhook": $webhook} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Replace a server trigger
@@ -4691,12 +6265,23 @@ export def "projects-servers-triggers update-service-by-namespace-project-server
   if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
   if ($server | is-empty) { error make --unspanned { msg: "path parameter 'server' must be non-empty" } }
   if ($trigger | is-empty) { error make --unspanned { msg: "path parameter 'trigger' must be non-empty" } }
-  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), project: (encode-path-segment $project), server: (encode-path-segment $server), trigger: (encode-path-segment $trigger)} | format pattern "/v1/{namespace}/projects/{project}/servers/{server}/triggers/{trigger}/"))
+  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), project: (encode-path-segment $project), server: (encode-path-segment $server), trigger: (encode-path-segment $trigger)} | format pattern "/v1/{namespace}/projects/{project}/servers/{server}/triggers/{trigger}/") $auth.query)
   let req_body = {"name": $name, "operation": $operation, "webhook": $webhook} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get a search results
@@ -4724,8 +6309,19 @@ export def "search list" [
   let base = ($base_url | default $BASE_URL)
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace)} | format pattern "/v1/{namespace}/search/") $qp)
+  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace)} | format pattern "/v1/{namespace}/search/") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"q": $q, "type": $type, "limit": $limit, "offset": $offset} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"q": $q, "type": $type, "limit": $limit, "offset": $offset} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }

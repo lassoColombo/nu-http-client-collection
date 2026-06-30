@@ -8,7 +8,7 @@ const BASE_URL = "http://localhost/api"
 # `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
 # where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o DRACOON_API_TOKEN | default "" }
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o DRACOON_API_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
@@ -41,14 +41,11 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
-# Trick: `url encode --all` over-encodes, then we decode the four unreserved
-# punctuation chars back. Pre-existing %XX sequences in the input survive
-# because `url encode --all` first turns their % into %25.
 def encode-path-segment [v: any]: nothing -> string {
   $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
-# Serialize an array-typed path parameter (issue 49.A). OpenAPI 3 `style: simple`
+# Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
 # (the default for path params) and Swagger 2 `collectionFormat: csv` both join
 # the elements with a literal comma WITHIN the single path segment, each element
 # RFC-3986-encoded individually (so a comma inside an element stays %2C). Without
@@ -59,60 +56,73 @@ def encode-path-array [v: any]: nothing -> string {
   if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
 }
 
-# Build URL from base, path, and optional query string
-def build-url [base: string, path: string, query?: string]: nothing -> string {
+# Build the request URL from base, path, and any number of pre-encoded query
+# fragments (param serializer output and/or the auth query). Each fragment is an
+# `&`-joinable `key=value` string already percent-encoded by its producer; empty
+# fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
+# delimiters are hand-spliced — and any query already on the base URL is merged in.
+def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
   let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
-  let result = ($parsed | upsert path $full_path)
-  if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
+  let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
+  $parsed | upsert path $full_path | upsert query $query | url join
 }
 
-# Build the dry-run record returned by --dry-run. Shape:
-#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
-#    auth: {scheme, location}}
-# `meta` carries logical-form data (the query record by spec name, the pre-serialization
-# body) that do-request itself cannot reconstruct from its wire-format args.
-def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
-  let m = ($meta | default {})
-  {
-    dry_run: true
-    method: $method
-    url: $url
-    query: ($m | get -o query | default {})
-    headers: $auth.headers
-    body: ($m | get -o body)
-    content_type: $content_type
-    timeout: $timeout
-    auth: {scheme: $auth.scheme, location: $auth.location}
-  }
+# Success policy: did this response succeed? Single source of truth, consulted by
+# handle-response and the HEAD header-unwrap. Empty ok_codes means the spec listed
+# none, so fall back to < 400. Otherwise: any 2xx, plus documented success codes.
+def status-ok [status: int, ok_codes: list<int>]: nothing -> bool {
+  if ($ok_codes | is-empty) { $status < 400 } else { ($status >= 200 and $status < 300) or ($status in $ok_codes) }
 }
 
-# Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
-  let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
-  let timeout = ($max_time | default 30min)
-  let ct = ($content_type | default "application/json")
-  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
-  let resp = match $method {
-    "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
-  }
-  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
-  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
+# Unwrap a `--full` HTTP response into the user-facing value. Response arrives
+# via pipeline; ok_codes gates the error throw (see status-ok).
+def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: record -> any {
+  let resp = $in
+  if $allow_errors { return $resp }
+  if not (status-ok $resp.status $ok_codes) { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } }
+  if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
+  if $resp.status == 204 { return null }
+  $resp.body
+}
+
+# GET — bodyless, honours --raw
+def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+}
+
+# HEAD — bodyless; default surfaces just the headers on success
+def send-head [req: record, insecure: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = (http head --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure $req.url)
+  if (not $full) and (not $allow_errors) and (status-ok $resp.status $ok_codes) { return $resp.headers }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# POST — body + content-type
+def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# PUT — body + content-type
+def send-put [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http put --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http put --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# DELETE — body via --data
+def send-delete [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http delete --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url } else { http delete --headers $req.headers --content-type $req.content_type --data $body --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url }
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # Build a `multipart/form-data` envelope per RFC 7578. `file_fields` lists
 # the field names whose value should be read from disk as bytes; every
 # other field is sent as a text part (records/lists JSON-stringified).
-# Returns {content_type, body} ready to pass to `do-request`.
+# Returns {content_type, body}.
 # When `$dry_run` is true, file fields are NOT read from disk — they emit
 # an empty-bytes placeholder so callers can inspect the request shape
-# without the file existing on disk (issue 11.B).
+# without the file existing on disk.
 def build-multipart-body [parts: record, file_fields: list<string>, dry_run: bool = false]: nothing -> record {
   let boundary = $"----nu-(random chars --length 24)"
   let crlf = "\r\n"
@@ -205,12 +215,23 @@ export def "auth-login create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v4/auth/login")
+  let full_url = (build-url $base "/v4/auth/login" $auth.query)
   let req_body = {"authType": $auth_type, "language": $language, "login": $login, "password": $password, "state": $state, "token": $body_token, "userName": $user_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Initiate OpenID Connect authentication
@@ -239,10 +260,21 @@ export def "auth-openid-login open-initiate" [
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "issuer" $issuer "scalar") (serialize-qp "redirect_uri" $redirect_uri "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "test" $test "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v4/auth/openid/login" $qp)
+  let full_url = (build-url $base "/v4/auth/openid/login" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"issuer": $issuer, "redirect_uri": $redirect_uri, "language": $language, "test": $test} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"issuer": $issuer, "redirect_uri": $redirect_uri, "language": $language, "test": $test} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [204 302]
 }
 
 # Complete OpenID Connect authentication
@@ -269,10 +301,21 @@ export def "auth-openid-login complete-open" [
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "code" $code "scalar") (serialize-qp "id_token" $id_token "scalar") (serialize-qp "state" $state "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v4/auth/openid/login" $qp)
+  let full_url = (build-url $base "/v4/auth/openid/login" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"code": $code, "id_token": $id_token, "state": $state} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"code": $code, "id_token": $id_token, "state": $state} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Ping
@@ -292,10 +335,21 @@ export def "auth-ping ping" [
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v4/auth/ping")
+  let full_url = (build-url $base "/v4/auth/ping" $auth.query)
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Recover username
@@ -318,12 +372,23 @@ export def "auth-recover-username create-user-name" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v4/auth/recover_username")
+  let full_url = (build-url $base "/v4/auth/recover_username" $auth.query)
   let req_body = {"creatorLanguage": $creator_language, "email": $email} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Request password reset
@@ -350,12 +415,23 @@ export def "auth-reset-password request" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v4/auth/reset_password")
+  let full_url = (build-url $base "/v4/auth/reset_password" $auth.query)
   let req_body = {"creatorLanguage": $creator_language, "language": $language, "login": $login, "userName": $user_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Validate information for password reset
@@ -377,10 +453,21 @@ export def "auth-reset-password validate" [
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($token_arg | is-empty) { error make --unspanned { msg: "path parameter 'token' must be non-empty" } }
-  let full_url = (build-url $base ({token_arg: (encode-path-segment $token_arg)} | format pattern "/v4/auth/reset_password/{token_arg}"))
+  let full_url = (build-url $base ({token_arg: (encode-path-segment $token_arg)} | format pattern "/v4/auth/reset_password/{token_arg}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Reset password
@@ -404,12 +491,23 @@ export def "auth-reset-password reset" [
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($token_arg | is-empty) { error make --unspanned { msg: "path parameter 'token' must be non-empty" } }
-  let full_url = (build-url $base ({token_arg: (encode-path-segment $token_arg)} | format pattern "/v4/auth/reset_password/{token_arg}"))
+  let full_url = (build-url $base ({token_arg: (encode-path-segment $token_arg)} | format pattern "/v4/auth/reset_password/{token_arg}") $auth.query)
   let req_body = {"password": $password} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Request default values
@@ -431,12 +529,23 @@ export def "config-info-defaults request-system" [
 ]: nothing -> record<downloadShareDefaultExpirationPeriod: int, fileDefaultExpirationPeriod: int, hideLoginInputFields: bool, languageDefault: string, nonmemberViewerDefault: bool, uploadShareDefaultExpirationPeriod: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v4/config/info/defaults")
+  let full_url = (build-url $base "/v4/config/info/defaults" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Request general settings
@@ -457,12 +566,23 @@ export def "config-info-general request-settings" [
 ]: nothing -> record<authTokenRestrictions: record<accessTokenValidity: int, refreshTokenValidity: int, restrictionEnabled: bool>, cryptoEnabled: bool, emailNotificationButtonEnabled: bool, eulaEnabled: bool, hideLoginInputFields: bool, homeRoomParentId: int, homeRoomsActive: bool, mediaServerEnabled: bool, s3TagsEnabled: bool, sharePasswordSmsEnabled: bool, subscriptionPlan: int, useS3Storage: bool, weakPasswordEnabled: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v4/config/info/general")
+  let full_url = (build-url $base "/v4/config/info/general" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Request infrastructure properties
@@ -483,12 +603,23 @@ export def "config-info-infrastructure request-properties" [
 ]: nothing -> record<isDracoonCloud: bool, mediaServerConfigEnabled: bool, s3DefaultRegion: string, s3EnforceDirectUpload: bool, smsConfigEnabled: bool, tenantUuid: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v4/config/info/infrastructure")
+  let full_url = (build-url $base "/v4/config/info/infrastructure" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Request list of notification channels
@@ -509,12 +640,23 @@ export def "config-info-notifications-channels request" [
 ]: nothing -> record<items: table<frequency: int, id: int, isEnabled: bool, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v4/config/info/notifications/channels")
+  let full_url = (build-url $base "/v4/config/info/notifications/channels" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Request algorithms
@@ -535,12 +677,23 @@ export def "config-info-policies-algorithms request" [
 ]: nothing -> record<fileKeyAlgorithms: table<description: string, status: string, version: string>, keyPairAlgorithms: table<description: string, status: string, version: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v4/config/info/policies/algorithms")
+  let full_url = (build-url $base "/v4/config/info/policies/algorithms" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Request classification policies
@@ -561,12 +714,23 @@ export def "config-info-policies-classifications request" [
 ]: nothing -> record<shareClassificationPolicies: record<classificationRequiresSharePassword: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v4/config/info/policies/classifications")
+  let full_url = (build-url $base "/v4/config/info/policies/classifications" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Request guest users policies
@@ -587,12 +751,23 @@ export def "config-info-policies-guest-users request" [
 ]: nothing -> record<isInviteUsersEnabled: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v4/config/info/policies/guest_users")
+  let full_url = (build-url $base "/v4/config/info/policies/guest_users" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Request password policies
@@ -613,12 +788,23 @@ export def "config-info-policies-passwords request" [
 ]: nothing -> record<encryptionPasswordPolicies: record<characterRules: record<mustContainCharacters: list, numberOfCharacteristicsToEnforce: int>, minLength: int, rejectKeyboardPatterns: bool, rejectUserInfo: bool, updatedAt: string, updatedBy: record<avatarUuid: string, displayName: string, email: string, firstName: string, id: int, lastName: string, title: string, userName: string, userType: string>>, loginPasswordPolicies: record<characterRules: record<mustContainCharacters: list, numberOfCharacteristicsToEnforce: int>, minLength: int, numberOfArchivedPasswords: int, passwordExpiration: record<enabled: bool, maxPasswordAge: int>, rejectDictionaryWords: bool, rejectKeyboardPatterns: bool, rejectUserInfo: bool, updatedAt: string, updatedBy: record<avatarUuid: string, displayName: string, email: string, firstName: string, id: int, lastName: string, title: string, userName: string, userType: string>, userLockout: record<enabled: bool, lockoutPeriod: int, maxNumberOfLoginFailures: int>>, sharesPasswordPolicies: record<characterRules: record<mustContainCharacters: list, numberOfCharacteristicsToEnforce: int>, minLength: int, rejectDictionaryWords: bool, rejectKeyboardPatterns: bool, rejectUserInfo: bool, updatedAt: string, updatedBy: record<avatarUuid: string, displayName: string, email: string, firstName: string, id: int, lastName: string, title: string, userName: string, userType: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v4/config/info/policies/passwords")
+  let full_url = (build-url $base "/v4/config/info/policies/passwords" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Request list of product packages
@@ -639,12 +825,23 @@ export def "config-info-product-packages request" [
 ]: nothing -> record<packages: table<clients: list, features: list, productPackageId: int, productPackageName: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v4/config/info/product_packages")
+  let full_url = (build-url $base "/v4/config/info/product_packages" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Request list of currently enabled product packages
@@ -665,12 +862,23 @@ export def "config-info-product-packages-current request" [
 ]: nothing -> record<packages: table<clients: list, features: list, productPackageId: int, productPackageName: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v4/config/info/product_packages/current")
+  let full_url = (build-url $base "/v4/config/info/product_packages/current" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Request list of configured S3 tags
@@ -691,12 +899,23 @@ export def "config-info-s3-tags request" [
 ]: nothing -> record<items: table<id: int, isMandatory: bool, key: string, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v4/config/info/s3_tags")
+  let full_url = (build-url $base "/v4/config/info/s3_tags" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Request system settings
@@ -719,12 +938,23 @@ export def "config-settings request-system" [
 ]: nothing -> record<items: table<key: string, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v4/config/settings")
+  let full_url = (build-url $base "/v4/config/settings" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update system settings
@@ -750,14 +980,25 @@ export def "config-settings update-system" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v4/config/settings")
+  let full_url = (build-url $base "/v4/config/settings" $auth.query)
   let req_body = {"items": $items} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Download avatar
@@ -781,10 +1022,21 @@ export def "downloads-avatar download" [
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
   if ($uuid | is-empty) { error make --unspanned { msg: "path parameter 'uuid' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), uuid: (encode-path-segment $uuid)} | format pattern "/v4/downloads/avatar/{user_id}/{uuid}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), uuid: (encode-path-segment $uuid)} | format pattern "/v4/downloads/avatar/{user_id}/{uuid}") $auth.query)
   let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Download ZIP archive
@@ -806,10 +1058,21 @@ export def "downloads-zip archive-via" [
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($token_arg | is-empty) { error make --unspanned { msg: "path parameter 'token' must be non-empty" } }
-  let full_url = (build-url $base ({token_arg: (encode-path-segment $token_arg)} | format pattern "/v4/downloads/zip/{token_arg}"))
+  let full_url = (build-url $base ({token_arg: (encode-path-segment $token_arg)} | format pattern "/v4/downloads/zip/{token_arg}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Download file
@@ -836,12 +1099,23 @@ export def "downloads download-file-via" [
   let base = ($base_url | default $BASE_URL)
   if ($token_arg | is-empty) { error make --unspanned { msg: "path parameter 'token' must be non-empty" } }
   let qp = [(serialize-qp "generic_mimetype" $generic_mimetype "scalar") (serialize-qp "inline" $inline "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({token_arg: (encode-path-segment $token_arg)} | format pattern "/v4/downloads/{token_arg}") $qp)
+  let full_url = (build-url $base ({token_arg: (encode-path-segment $token_arg)} | format pattern "/v4/downloads/{token_arg}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Range": $range} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"generic_mimetype": $generic_mimetype, "inline": $inline} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"generic_mimetype": $generic_mimetype, "inline": $inline} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 206]
 }
 
 # Download file
@@ -868,12 +1142,23 @@ export def "downloads download-file-via-by-token" [
   let base = ($base_url | default $BASE_URL)
   if ($token_arg | is-empty) { error make --unspanned { msg: "path parameter 'token' must be non-empty" } }
   let qp = [(serialize-qp "generic_mimetype" $generic_mimetype "scalar") (serialize-qp "inline" $inline "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({token_arg: (encode-path-segment $token_arg)} | format pattern "/v4/downloads/{token_arg}") $qp)
+  let full_url = (build-url $base ({token_arg: (encode-path-segment $token_arg)} | format pattern "/v4/downloads/{token_arg}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Range": $range} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "head" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"generic_mimetype": $generic_mimetype, "inline": $inline} | compact), body: null}
+  let req = {
+    method: "head"
+    url: $full_url
+    query: ({"generic_mimetype": $generic_mimetype, "inline": $inline} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-head $req $insecure $allow_errors $full [200 206]
 }
 
 # Request nodes
@@ -900,12 +1185,23 @@ export def "eventlog-audits-node-info request" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "parent_id" $parent_id "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v4/eventlog/audits/node_info" $qp)
+  let full_url = (build-url $base "/v4/eventlog/audits/node_info" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"parent_id": $parent_id, "offset": $offset, "limit": $limit, "filter": $filter, "sort": $qp_sort} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"parent_id": $parent_id, "offset": $offset, "limit": $limit, "filter": $filter, "sort": $qp_sort} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Request node assigned users with permissions
@@ -934,12 +1230,23 @@ export def "eventlog-audits-nodes request-user-data" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v4/eventlog/audits/nodes" $qp)
+  let full_url = (build-url $base "/v4/eventlog/audits/nodes" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"offset": $offset, "limit": $limit, "filter": $filter, "sort": $qp_sort} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"offset": $offset, "limit": $limit, "filter": $filter, "sort": $qp_sort} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Request system events
@@ -971,12 +1278,23 @@ export def "eventlog-events request-log-as-json" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "sort" $qp_sort "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "date_start" $date_start "scalar") (serialize-qp "date_end" $date_end "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "user_id" $user_id "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "user_client" $user_client "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v4/eventlog/events" $qp)
+  let full_url = (build-url $base "/v4/eventlog/events" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"sort": $qp_sort, "offset": $offset, "limit": $limit, "date_start": $date_start, "date_end": $date_end, "type": $type, "user_id": $user_id, "status": $status, "user_client": $user_client} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"sort": $qp_sort, "offset": $offset, "limit": $limit, "date_start": $date_start, "date_end": $date_end, "type": $type, "user_id": $user_id, "status": $status, "user_client": $user_client} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Request allowed Log Operations
@@ -999,12 +1317,23 @@ export def "eventlog-operations request-log" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "is_deprecated" $is_deprecated "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v4/eventlog/operations" $qp)
+  let full_url = (build-url $base "/v4/eventlog/operations" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"is_deprecated": $is_deprecated} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"is_deprecated": $is_deprecated} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Request list of user groups
@@ -1031,12 +1360,23 @@ export def "groups list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v4/groups" $qp)
+  let full_url = (build-url $base "/v4/groups" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"offset": $offset, "limit": $limit, "filter": $filter, "sort": $qp_sort} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"offset": $offset, "limit": $limit, "filter": $filter, "sort": $qp_sort} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create new user group
@@ -1062,14 +1402,25 @@ export def "groups create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v4/groups")
+  let full_url = (build-url $base "/v4/groups" $auth.query)
   let req_body = {"expiration": $expiration, "name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Remove user group
@@ -1092,12 +1443,23 @@ export def "groups delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'group_id' must be non-empty" } }
-  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/v4/groups/{group_id}"))
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/v4/groups/{group_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Request user group
@@ -1121,12 +1483,23 @@ export def "groups request" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'group_id' must be non-empty" } }
-  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/v4/groups/{group_id}"))
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/v4/groups/{group_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update user group's metadata
@@ -1154,14 +1527,25 @@ export def "groups update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'group_id' must be non-empty" } }
-  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/v4/groups/{group_id}"))
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/v4/groups/{group_id}") $auth.query)
   let req_body = {"expiration": $expiration, "name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Request rooms where the group is defined as last admin group
@@ -1184,12 +1568,23 @@ export def "groups-last-admin-rooms request" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'group_id' must be non-empty" } }
-  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/v4/groups/{group_id}/last_admin_rooms"))
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/v4/groups/{group_id}/last_admin_rooms") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Request list of roles assigned to the group
@@ -1212,12 +1607,23 @@ export def "groups-roles request" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'group_id' must be non-empty" } }
-  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/v4/groups/{group_id}/roles"))
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/v4/groups/{group_id}/roles") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Request rooms granted to the group or / and rooms that can be granted
@@ -1247,12 +1653,23 @@ export def "groups-rooms request" [
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'group_id' must be non-empty" } }
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/v4/groups/{group_id}/rooms") $qp)
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/v4/groups/{group_id}/rooms") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"offset": $offset, "limit": $limit, "filter": $filter} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"offset": $offset, "limit": $limit, "filter": $filter} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Remove group members
@@ -1278,14 +1695,25 @@ export def "groups-users delete-members" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'group_id' must be non-empty" } }
-  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/v4/groups/{group_id}/users"))
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/v4/groups/{group_id}/users") $auth.query)
   let req_body = {"ids": $ids} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Request group member users or / and users who can become a member
@@ -1312,12 +1740,23 @@ export def "groups-users request-members" [
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'group_id' must be non-empty" } }
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/v4/groups/{group_id}/users") $qp)
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/v4/groups/{group_id}/users") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"offset": $offset, "limit": $limit, "filter": $filter} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"offset": $offset, "limit": $limit, "filter": $filter} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Add group members
@@ -1343,14 +1782,25 @@ export def "groups-users create-members" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'group_id' must be non-empty" } }
-  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/v4/groups/{group_id}/users"))
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/v4/groups/{group_id}/users") $auth.query)
   let req_body = {"ids": $ids} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Request subscription plan
@@ -1371,12 +1821,23 @@ export def "internal-tenant-subscription-plan request" [
 ]: nothing -> record<subscriptionPlanId: int> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v4/internal/tenant/subscription_plan")
+  let full_url = (build-url $base "/v4/internal/tenant/subscription_plan" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Service-Token": $x_sds_service_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Set subscription plan
@@ -1399,14 +1860,25 @@ export def "internal-tenant-subscription-plan update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v4/internal/tenant/subscription_plan")
+  let full_url = (build-url $base "/v4/internal/tenant/subscription_plan" $auth.query)
   let req_body = {"subscriptionPlanId": $subscription_plan_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Service-Token": $x_sds_service_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Remove nodes
@@ -1429,14 +1901,25 @@ export def "nodes delete" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v4/nodes")
+  let full_url = (build-url $base "/v4/nodes" $auth.query)
   let req_body = {"nodeIds": $node_ids} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Request list of nodes
@@ -1467,12 +1950,23 @@ export def "nodes list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "depth_level" $depth_level "scalar") (serialize-qp "parent_id" $parent_id "scalar") (serialize-qp "room_manager" $room_manager "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v4/nodes" $qp)
+  let full_url = (build-url $base "/v4/nodes" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"depth_level": $depth_level, "parent_id": $parent_id, "room_manager": $room_manager, "filter": $filter, "sort": $qp_sort, "offset": $offset, "limit": $limit} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"depth_level": $depth_level, "parent_id": $parent_id, "room_manager": $room_manager, "filter": $filter, "sort": $qp_sort, "offset": $offset, "limit": $limit} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Remove node comment
@@ -1495,12 +1989,23 @@ export def "nodes-comments delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($comment_id | is-empty) { error make --unspanned { msg: "path parameter 'comment_id' must be non-empty" } }
-  let full_url = (build-url $base ({comment_id: (encode-path-segment $comment_id)} | format pattern "/v4/nodes/comments/{comment_id}"))
+  let full_url = (build-url $base ({comment_id: (encode-path-segment $comment_id)} | format pattern "/v4/nodes/comments/{comment_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Edit node comment
@@ -1526,14 +2031,25 @@ export def "nodes-comments update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($comment_id | is-empty) { error make --unspanned { msg: "path parameter 'comment_id' must be non-empty" } }
-  let full_url = (build-url $base ({comment_id: (encode-path-segment $comment_id)} | format pattern "/v4/nodes/comments/{comment_id}"))
+  let full_url = (build-url $base ({comment_id: (encode-path-segment $comment_id)} | format pattern "/v4/nodes/comments/{comment_id}") $auth.query)
   let req_body = {"text": $text} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Remove nodes from recycle bin
@@ -1556,14 +2072,25 @@ export def "nodes-deleted-nodes delete" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v4/nodes/deleted_nodes")
+  let full_url = (build-url $base "/v4/nodes/deleted_nodes" $auth.query)
   let req_body = {"deletedNodeIds": $deleted_node_ids} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Restore deleted nodes
@@ -1589,14 +2116,25 @@ export def "nodes-deleted-nodes-actions-restore create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v4/nodes/deleted_nodes/actions/restore")
+  let full_url = (build-url $base "/v4/nodes/deleted_nodes/actions/restore" $auth.query)
   let req_body = {"deletedNodeIds": $deleted_node_ids, "keepShareLinks": $keep_share_links, "parentId": $parent_id, "resolutionStrategy": $resolution_strategy} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Request deleted node
@@ -1620,12 +2158,23 @@ export def "nodes-deleted-nodes request" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($deleted_node_id | is-empty) { error make --unspanned { msg: "path parameter 'deleted_node_id' must be non-empty" } }
-  let full_url = (build-url $base ({deleted_node_id: (encode-path-segment $deleted_node_id)} | format pattern "/v4/nodes/deleted_nodes/{deleted_node_id}"))
+  let full_url = (build-url $base ({deleted_node_id: (encode-path-segment $deleted_node_id)} | format pattern "/v4/nodes/deleted_nodes/{deleted_node_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Mark or unmark a list of nodes (room, folder or file) as favorite
@@ -1649,14 +2198,25 @@ export def "nodes-favorites update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v4/nodes/favorites")
+  let full_url = (build-url $base "/v4/nodes/favorites" $auth.query)
   let req_body = {"isFavorite": $is_favorite, "objectIds": $object_ids} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Updates a list of file’s metadata
@@ -1682,14 +2242,25 @@ export def "nodes-files update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v4/nodes/files")
+  let full_url = (build-url $base "/v4/nodes/files" $auth.query)
   let req_body = {"classification": $classification, "expiration": $expiration, "objectIds": $object_ids} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Set file keys for a list of users and files
@@ -1713,14 +2284,25 @@ export def "nodes-files-keys update-user" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v4/nodes/files/keys")
+  let full_url = (build-url $base "/v4/nodes/files/keys" $auth.query)
   let req_body = {"items": $items} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Create new file upload channel
@@ -1752,14 +2334,25 @@ export def "nodes-files-uploads create-channel" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v4/nodes/files/uploads")
+  let full_url = (build-url $base "/v4/nodes/files/uploads" $auth.query)
   let req_body = {"classification": $classification, "directS3Upload": $direct_s3_upload, "expiration": $expiration, "name": $name, "notes": $notes, "parentId": $parent_id, "size": $size, "timestampCreation": $timestamp_creation, "timestampModification": $timestamp_modification} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Cancel file upload
@@ -1782,12 +2375,23 @@ export def "nodes-files-uploads cancel" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($upload_id | is-empty) { error make --unspanned { msg: "path parameter 'upload_id' must be non-empty" } }
-  let full_url = (build-url $base ({upload_id: (encode-path-segment $upload_id)} | format pattern "/v4/nodes/files/uploads/{upload_id}"))
+  let full_url = (build-url $base ({upload_id: (encode-path-segment $upload_id)} | format pattern "/v4/nodes/files/uploads/{upload_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Request status of S3 file upload
@@ -1811,12 +2415,23 @@ export def "nodes-files-uploads request-status" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($upload_id | is-empty) { error make --unspanned { msg: "path parameter 'upload_id' must be non-empty" } }
-  let full_url = (build-url $base ({upload_id: (encode-path-segment $upload_id)} | format pattern "/v4/nodes/files/uploads/{upload_id}"))
+  let full_url = (build-url $base ({upload_id: (encode-path-segment $upload_id)} | format pattern "/v4/nodes/files/uploads/{upload_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Upload file
@@ -1845,7 +2460,7 @@ export def "nodes-files-uploads upload-as-multipart" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($upload_id | is-empty) { error make --unspanned { msg: "path parameter 'upload_id' must be non-empty" } }
-  let full_url = (build-url $base ({upload_id: (encode-path-segment $upload_id)} | format pattern "/v4/nodes/files/uploads/{upload_id}"))
+  let full_url = (build-url $base ({upload_id: (encode-path-segment $upload_id)} | format pattern "/v4/nodes/files/uploads/{upload_id}") $auth.query)
   let req_body = {"file": $file} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
@@ -1854,7 +2469,18 @@ export def "nodes-files-uploads upload-as-multipart" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body ["file"] $dry_run)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: $mp.content_type
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $mp.body $insecure $raw $allow_errors $full [201]
 }
 
 # Complete file upload
@@ -1889,14 +2515,25 @@ export def "nodes-files-uploads complete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($upload_id | is-empty) { error make --unspanned { msg: "path parameter 'upload_id' must be non-empty" } }
-  let full_url = (build-url $base ({upload_id: (encode-path-segment $upload_id)} | format pattern "/v4/nodes/files/uploads/{upload_id}"))
+  let full_url = (build-url $base ({upload_id: (encode-path-segment $upload_id)} | format pattern "/v4/nodes/files/uploads/{upload_id}") $auth.query)
   let req_body = {"fileKey": $file_key, "fileName": $file_name, "keepShareLinks": $keep_share_links, "resolutionStrategy": $resolution_strategy, "userFileKeyList": $user_file_key_list} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [201 202]
 }
 
 # Complete S3 file upload
@@ -1927,14 +2564,25 @@ export def "nodes-files-uploads-s3 complete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($upload_id | is-empty) { error make --unspanned { msg: "path parameter 'upload_id' must be non-empty" } }
-  let full_url = (build-url $base ({upload_id: (encode-path-segment $upload_id)} | format pattern "/v4/nodes/files/uploads/{upload_id}/s3"))
+  let full_url = (build-url $base ({upload_id: (encode-path-segment $upload_id)} | format pattern "/v4/nodes/files/uploads/{upload_id}/s3") $auth.query)
   let req_body = {"fileKey": $file_key, "fileName": $file_name, "keepShareLinks": $keep_share_links, "parts": $parts, "resolutionStrategy": $resolution_strategy} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [202]
 }
 
 # Generate presigned URLs for S3 file upload
@@ -1961,14 +2609,25 @@ export def "nodes-files-uploads-s3-urls generate-presigned" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($upload_id | is-empty) { error make --unspanned { msg: "path parameter 'upload_id' must be non-empty" } }
-  let full_url = (build-url $base ({upload_id: (encode-path-segment $upload_id)} | format pattern "/v4/nodes/files/uploads/{upload_id}/s3_urls"))
+  let full_url = (build-url $base ({upload_id: (encode-path-segment $upload_id)} | format pattern "/v4/nodes/files/uploads/{upload_id}/s3_urls") $auth.query)
   let req_body = {"firstPartNumber": $first_part_number, "lastPartNumber": $last_part_number, "size": $size} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Request list of file versions
@@ -1995,12 +2654,23 @@ export def "nodes-files-versions request-list" [
   let base = ($base_url | default $BASE_URL)
   if ($reference_id | is-empty) { error make --unspanned { msg: "path parameter 'reference_id' must be non-empty" } }
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({reference_id: (encode-path-segment $reference_id)} | format pattern "/v4/nodes/files/versions/{reference_id}") $qp)
+  let full_url = (build-url $base ({reference_id: (encode-path-segment $reference_id)} | format pattern "/v4/nodes/files/versions/{reference_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"offset": $offset, "limit": $limit} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"offset": $offset, "limit": $limit} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates a file’s metadata
@@ -2032,14 +2702,25 @@ export def "nodes-files update-by-file-id" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($file_id | is-empty) { error make --unspanned { msg: "path parameter 'file_id' must be non-empty" } }
-  let full_url = (build-url $base ({file_id: (encode-path-segment $file_id)} | format pattern "/v4/nodes/files/{file_id}"))
+  let full_url = (build-url $base ({file_id: (encode-path-segment $file_id)} | format pattern "/v4/nodes/files/{file_id}") $auth.query)
   let req_body = {"classification": $classification, "expiration": $expiration, "name": $name, "notes": $notes, "timestampCreation": $timestamp_creation, "timestampModification": $timestamp_modification} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Request room rescue key
@@ -2066,12 +2747,23 @@ export def "nodes-files-data-room-file-key request-rescue" [
   let base = ($base_url | default $BASE_URL)
   if ($file_id | is-empty) { error make --unspanned { msg: "path parameter 'file_id' must be non-empty" } }
   let qp = [(serialize-qp "version" $version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({file_id: (encode-path-segment $file_id)} | format pattern "/v4/nodes/files/{file_id}/data_room_file_key") $qp)
+  let full_url = (build-url $base ({file_id: (encode-path-segment $file_id)} | format pattern "/v4/nodes/files/{file_id}/data_room_file_key") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"version": $version} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"version": $version} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Request system rescue key
@@ -2098,12 +2790,23 @@ export def "nodes-files-data-space-file-key request-system-rescue" [
   let base = ($base_url | default $BASE_URL)
   if ($file_id | is-empty) { error make --unspanned { msg: "path parameter 'file_id' must be non-empty" } }
   let qp = [(serialize-qp "version" $version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({file_id: (encode-path-segment $file_id)} | format pattern "/v4/nodes/files/{file_id}/data_space_file_key") $qp)
+  let full_url = (build-url $base ({file_id: (encode-path-segment $file_id)} | format pattern "/v4/nodes/files/{file_id}/data_space_file_key") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"version": $version} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"version": $version} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Generate download URL
@@ -2126,12 +2829,23 @@ export def "nodes-files-downloads generate-url" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($file_id | is-empty) { error make --unspanned { msg: "path parameter 'file_id' must be non-empty" } }
-  let full_url = (build-url $base ({file_id: (encode-path-segment $file_id)} | format pattern "/v4/nodes/files/{file_id}/downloads"))
+  let full_url = (build-url $base ({file_id: (encode-path-segment $file_id)} | format pattern "/v4/nodes/files/{file_id}/downloads") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Request user's file key
@@ -2156,12 +2870,23 @@ export def "nodes-files-user-file-key request" [
   let base = ($base_url | default $BASE_URL)
   if ($file_id | is-empty) { error make --unspanned { msg: "path parameter 'file_id' must be non-empty" } }
   let qp = [(serialize-qp "version" $version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({file_id: (encode-path-segment $file_id)} | format pattern "/v4/nodes/files/{file_id}/user_file_key") $qp)
+  let full_url = (build-url $base ({file_id: (encode-path-segment $file_id)} | format pattern "/v4/nodes/files/{file_id}/user_file_key") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"version": $version} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"version": $version} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create new folder
@@ -2190,14 +2915,25 @@ export def "nodes-folders create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v4/nodes/folders")
+  let full_url = (build-url $base "/v4/nodes/folders" $auth.query)
   let req_body = {"classification": $classification, "name": $name, "notes": $notes, "parentId": $parent_id, "timestampCreation": $timestamp_creation, "timestampModification": $timestamp_modification} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Updates folder’s metadata
@@ -2227,14 +2963,25 @@ export def "nodes-folders update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($folder_id | is-empty) { error make --unspanned { msg: "path parameter 'folder_id' must be non-empty" } }
-  let full_url = (build-url $base ({folder_id: (encode-path-segment $folder_id)} | format pattern "/v4/nodes/folders/{folder_id}"))
+  let full_url = (build-url $base ({folder_id: (encode-path-segment $folder_id)} | format pattern "/v4/nodes/folders/{folder_id}") $auth.query)
   let req_body = {"classification": $classification, "name": $name, "notes": $notes, "timestampCreation": $timestamp_creation, "timestampModification": $timestamp_modification} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Request files without user's file key
@@ -2262,12 +3009,23 @@ export def "nodes-missing-file-keys request" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "room_id" $room_id "scalar") (serialize-qp "file_id" $file_id "scalar") (serialize-qp "user_id" $user_id "scalar") (serialize-qp "use_key" $use_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v4/nodes/missingFileKeys" $qp)
+  let full_url = (build-url $base "/v4/nodes/missingFileKeys" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"offset": $offset, "limit": $limit, "room_id": $room_id, "file_id": $file_id, "user_id": $user_id, "use_key": $use_key} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"offset": $offset, "limit": $limit, "room_id": $room_id, "file_id": $file_id, "user_id": $user_id, "use_key": $use_key} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create new room
@@ -2305,14 +3063,25 @@ export def "nodes-rooms create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v4/nodes/rooms")
+  let full_url = (build-url $base "/v4/nodes/rooms" $auth.query)
   let req_body = {"adminGroupIds": $admin_group_ids, "adminIds": $admin_ids, "classification": $classification, "hasActivitiesLog": $has_activities_log, "hasRecycleBin": $has_recycle_bin, "inheritPermissions": $inherit_permissions, "name": $name, "newGroupMemberAcceptance": $new_group_member_acceptance, "notes": $notes, "parentId": $parent_id, "quota": $quota, "recycleBinRetentionPeriod": $recycle_bin_retention_period, "timestampCreation": $timestamp_creation, "timestampModification": $timestamp_modification} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Request user-room assignments per group
@@ -2338,12 +3107,23 @@ export def "nodes-rooms-pending request-assignments" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v4/nodes/rooms/pending" $qp)
+  let full_url = (build-url $base "/v4/nodes/rooms/pending" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"offset": $offset, "limit": $limit, "filter": $filter, "sort": $qp_sort} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"offset": $offset, "limit": $limit, "filter": $filter, "sort": $qp_sort} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Handle user-room assignments per group
@@ -2367,14 +3147,25 @@ export def "nodes-rooms-pending update-change-assignments" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v4/nodes/rooms/pending")
+  let full_url = (build-url $base "/v4/nodes/rooms/pending" $auth.query)
   let req_body = {"items": $items} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Updates room’s metadata
@@ -2404,14 +3195,25 @@ export def "nodes-rooms update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($room_id | is-empty) { error make --unspanned { msg: "path parameter 'room_id' must be non-empty" } }
-  let full_url = (build-url $base ({room_id: (encode-path-segment $room_id)} | format pattern "/v4/nodes/rooms/{room_id}"))
+  let full_url = (build-url $base ({room_id: (encode-path-segment $room_id)} | format pattern "/v4/nodes/rooms/{room_id}") $auth.query)
   let req_body = {"name": $name, "notes": $notes, "quota": $quota, "timestampCreation": $timestamp_creation, "timestampModification": $timestamp_modification} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Configure room
@@ -2444,14 +3246,25 @@ export def "nodes-rooms-config update-configure" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($room_id | is-empty) { error make --unspanned { msg: "path parameter 'room_id' must be non-empty" } }
-  let full_url = (build-url $base ({room_id: (encode-path-segment $room_id)} | format pattern "/v4/nodes/rooms/{room_id}/config"))
+  let full_url = (build-url $base ({room_id: (encode-path-segment $room_id)} | format pattern "/v4/nodes/rooms/{room_id}/config") $auth.query)
   let req_body = {"adminGroupIds": $admin_group_ids, "adminIds": $admin_ids, "classification": $classification, "hasActivitiesLog": $has_activities_log, "inheritPermissions": $inherit_permissions, "newGroupMemberAcceptance": $new_group_member_acceptance, "recycleBinRetentionPeriod": $recycle_bin_retention_period, "takeOverPermissions": $take_over_permissions} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Encrypt room
@@ -2480,14 +3293,25 @@ export def "nodes-rooms-encrypt update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($room_id | is-empty) { error make --unspanned { msg: "path parameter 'room_id' must be non-empty" } }
-  let full_url = (build-url $base ({room_id: (encode-path-segment $room_id)} | format pattern "/v4/nodes/rooms/{room_id}/encrypt"))
+  let full_url = (build-url $base ({room_id: (encode-path-segment $room_id)} | format pattern "/v4/nodes/rooms/{room_id}/encrypt") $auth.query)
   let req_body = {"dataRoomRescueKey": $data_room_rescue_key, "isEncrypted": $is_encrypted, "useDataSpaceRescueKey": $use_data_space_rescue_key} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Request events of a room
@@ -2520,12 +3344,23 @@ export def "nodes-rooms-events request-activities-log-as-json" [
   let base = ($base_url | default $BASE_URL)
   if ($room_id | is-empty) { error make --unspanned { msg: "path parameter 'room_id' must be non-empty" } }
   let qp = [(serialize-qp "sort" $qp_sort "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "date_start" $date_start "scalar") (serialize-qp "date_end" $date_end "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "user_id" $user_id "scalar") (serialize-qp "status" $status "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({room_id: (encode-path-segment $room_id)} | format pattern "/v4/nodes/rooms/{room_id}/events") $qp)
+  let full_url = (build-url $base ({room_id: (encode-path-segment $room_id)} | format pattern "/v4/nodes/rooms/{room_id}/events") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"sort": $qp_sort, "offset": $offset, "limit": $limit, "date_start": $date_start, "date_end": $date_end, "type": $type, "user_id": $user_id, "status": $status} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"sort": $qp_sort, "offset": $offset, "limit": $limit, "date_start": $date_start, "date_end": $date_end, "type": $type, "user_id": $user_id, "status": $status} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Revoke granted group(s) from room
@@ -2551,14 +3386,25 @@ export def "nodes-rooms-groups delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($room_id | is-empty) { error make --unspanned { msg: "path parameter 'room_id' must be non-empty" } }
-  let full_url = (build-url $base ({room_id: (encode-path-segment $room_id)} | format pattern "/v4/nodes/rooms/{room_id}/groups"))
+  let full_url = (build-url $base ({room_id: (encode-path-segment $room_id)} | format pattern "/v4/nodes/rooms/{room_id}/groups") $auth.query)
   let req_body = {"ids": $ids} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Request room granted group(s) or / and group(s) that can be granted
@@ -2586,12 +3432,23 @@ export def "nodes-rooms-groups request" [
   let base = ($base_url | default $BASE_URL)
   if ($room_id | is-empty) { error make --unspanned { msg: "path parameter 'room_id' must be non-empty" } }
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({room_id: (encode-path-segment $room_id)} | format pattern "/v4/nodes/rooms/{room_id}/groups") $qp)
+  let full_url = (build-url $base ({room_id: (encode-path-segment $room_id)} | format pattern "/v4/nodes/rooms/{room_id}/groups") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"offset": $offset, "limit": $limit, "filter": $filter, "sort": $qp_sort} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"offset": $offset, "limit": $limit, "filter": $filter, "sort": $qp_sort} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Add or change room granted group(s)
@@ -2617,14 +3474,25 @@ export def "nodes-rooms-groups update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($room_id | is-empty) { error make --unspanned { msg: "path parameter 'room_id' must be non-empty" } }
-  let full_url = (build-url $base ({room_id: (encode-path-segment $room_id)} | format pattern "/v4/nodes/rooms/{room_id}/groups"))
+  let full_url = (build-url $base ({room_id: (encode-path-segment $room_id)} | format pattern "/v4/nodes/rooms/{room_id}/groups") $auth.query)
   let req_body = {"items": $items} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Add guest users to a room
@@ -2650,14 +3518,25 @@ export def "nodes-rooms-guest-users create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($room_id | is-empty) { error make --unspanned { msg: "path parameter 'room_id' must be non-empty" } }
-  let full_url = (build-url $base ({room_id: (encode-path-segment $room_id)} | format pattern "/v4/nodes/rooms/{room_id}/guest_users"))
+  let full_url = (build-url $base ({room_id: (encode-path-segment $room_id)} | format pattern "/v4/nodes/rooms/{room_id}/guest_users") $auth.query)
   let req_body = {"roomGuestInvitations": $room_guest_invitations} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Remove rooms's rescue key pair
@@ -2682,12 +3561,23 @@ export def "nodes-rooms-keypair delete-rescue-key-pair" [
   let base = ($base_url | default $BASE_URL)
   if ($room_id | is-empty) { error make --unspanned { msg: "path parameter 'room_id' must be non-empty" } }
   let qp = [(serialize-qp "version" $version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({room_id: (encode-path-segment $room_id)} | format pattern "/v4/nodes/rooms/{room_id}/keypair") $qp)
+  let full_url = (build-url $base ({room_id: (encode-path-segment $room_id)} | format pattern "/v4/nodes/rooms/{room_id}/keypair") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"version": $version} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"version": $version} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Request room rescue key
@@ -2713,12 +3603,23 @@ export def "nodes-rooms-keypair request-rescue-key-pair" [
   let base = ($base_url | default $BASE_URL)
   if ($room_id | is-empty) { error make --unspanned { msg: "path parameter 'room_id' must be non-empty" } }
   let qp = [(serialize-qp "version" $version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({room_id: (encode-path-segment $room_id)} | format pattern "/v4/nodes/rooms/{room_id}/keypair") $qp)
+  let full_url = (build-url $base ({room_id: (encode-path-segment $room_id)} | format pattern "/v4/nodes/rooms/{room_id}/keypair") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"version": $version} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"version": $version} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Set room's rescue key pair
@@ -2746,14 +3647,25 @@ export def "nodes-rooms-keypair update-rescue-key-pair" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($room_id | is-empty) { error make --unspanned { msg: "path parameter 'room_id' must be non-empty" } }
-  let full_url = (build-url $base ({room_id: (encode-path-segment $room_id)} | format pattern "/v4/nodes/rooms/{room_id}/keypair"))
+  let full_url = (build-url $base ({room_id: (encode-path-segment $room_id)} | format pattern "/v4/nodes/rooms/{room_id}/keypair") $auth.query)
   let req_body = {"privateKeyContainer": $private_key_container, "publicKeyContainer": $public_key_container} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Request all room rescue key pairs
@@ -2777,12 +3689,23 @@ export def "nodes-rooms-keypairs request-rescue-key-pairs" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($room_id | is-empty) { error make --unspanned { msg: "path parameter 'room_id' must be non-empty" } }
-  let full_url = (build-url $base ({room_id: (encode-path-segment $room_id)} | format pattern "/v4/nodes/rooms/{room_id}/keypairs"))
+  let full_url = (build-url $base ({room_id: (encode-path-segment $room_id)} | format pattern "/v4/nodes/rooms/{room_id}/keypairs") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 204]
 }
 
 # Create key pair and preserve copy of old private key
@@ -2812,14 +3735,25 @@ export def "nodes-rooms-keypairs create-and-preserve-rescue-key-pair" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($room_id | is-empty) { error make --unspanned { msg: "path parameter 'room_id' must be non-empty" } }
-  let full_url = (build-url $base ({room_id: (encode-path-segment $room_id)} | format pattern "/v4/nodes/rooms/{room_id}/keypairs"))
+  let full_url = (build-url $base ({room_id: (encode-path-segment $room_id)} | format pattern "/v4/nodes/rooms/{room_id}/keypairs") $auth.query)
   let req_body = {"previousPrivateKey": $previous_private_key, "privateKeyContainer": $private_key_container, "publicKeyContainer": $public_key_container} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Request Room Policies
@@ -2842,12 +3776,23 @@ export def "nodes-rooms-policies request" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($room_id | is-empty) { error make --unspanned { msg: "path parameter 'room_id' must be non-empty" } }
-  let full_url = (build-url $base ({room_id: (encode-path-segment $room_id)} | format pattern "/v4/nodes/rooms/{room_id}/policies"))
+  let full_url = (build-url $base ({room_id: (encode-path-segment $room_id)} | format pattern "/v4/nodes/rooms/{room_id}/policies") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Set room policies
@@ -2872,14 +3817,25 @@ export def "nodes-rooms-policies update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($room_id | is-empty) { error make --unspanned { msg: "path parameter 'room_id' must be non-empty" } }
-  let full_url = (build-url $base ({room_id: (encode-path-segment $room_id)} | format pattern "/v4/nodes/rooms/{room_id}/policies"))
+  let full_url = (build-url $base ({room_id: (encode-path-segment $room_id)} | format pattern "/v4/nodes/rooms/{room_id}/policies") $auth.query)
   let req_body = {"defaultExpirationPeriod": $default_expiration_period} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Request list of all assigned S3 tags to the room
@@ -2902,12 +3858,23 @@ export def "nodes-rooms-s3-tags request" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($room_id | is-empty) { error make --unspanned { msg: "path parameter 'room_id' must be non-empty" } }
-  let full_url = (build-url $base ({room_id: (encode-path-segment $room_id)} | format pattern "/v4/nodes/rooms/{room_id}/s3_tags"))
+  let full_url = (build-url $base ({room_id: (encode-path-segment $room_id)} | format pattern "/v4/nodes/rooms/{room_id}/s3_tags") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Set S3 tags for a room
@@ -2932,14 +3899,25 @@ export def "nodes-rooms-s3-tags update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($room_id | is-empty) { error make --unspanned { msg: "path parameter 'room_id' must be non-empty" } }
-  let full_url = (build-url $base ({room_id: (encode-path-segment $room_id)} | format pattern "/v4/nodes/rooms/{room_id}/s3_tags"))
+  let full_url = (build-url $base ({room_id: (encode-path-segment $room_id)} | format pattern "/v4/nodes/rooms/{room_id}/s3_tags") $auth.query)
   let req_body = {"ids": $ids} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Revoke granted user(s) from room
@@ -2964,14 +3942,25 @@ export def "nodes-rooms-users delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($room_id | is-empty) { error make --unspanned { msg: "path parameter 'room_id' must be non-empty" } }
-  let full_url = (build-url $base ({room_id: (encode-path-segment $room_id)} | format pattern "/v4/nodes/rooms/{room_id}/users"))
+  let full_url = (build-url $base ({room_id: (encode-path-segment $room_id)} | format pattern "/v4/nodes/rooms/{room_id}/users") $auth.query)
   let req_body = {"ids": $ids} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Request room granted user(s) or / and user(s) that can be granted
@@ -2999,12 +3988,23 @@ export def "nodes-rooms-users request" [
   let base = ($base_url | default $BASE_URL)
   if ($room_id | is-empty) { error make --unspanned { msg: "path parameter 'room_id' must be non-empty" } }
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({room_id: (encode-path-segment $room_id)} | format pattern "/v4/nodes/rooms/{room_id}/users") $qp)
+  let full_url = (build-url $base ({room_id: (encode-path-segment $room_id)} | format pattern "/v4/nodes/rooms/{room_id}/users") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"offset": $offset, "limit": $limit, "filter": $filter, "sort": $qp_sort} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"offset": $offset, "limit": $limit, "filter": $filter, "sort": $qp_sort} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Add or change room granted user(s)
@@ -3030,14 +4030,25 @@ export def "nodes-rooms-users update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($room_id | is-empty) { error make --unspanned { msg: "path parameter 'room_id' must be non-empty" } }
-  let full_url = (build-url $base ({room_id: (encode-path-segment $room_id)} | format pattern "/v4/nodes/rooms/{room_id}/users"))
+  let full_url = (build-url $base ({room_id: (encode-path-segment $room_id)} | format pattern "/v4/nodes/rooms/{room_id}/users") $auth.query)
   let req_body = {"items": $items} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Request list of webhooks that are assigned or can be assigned to this room
@@ -3065,12 +4076,23 @@ export def "nodes-rooms-webhooks request-list-of" [
   let base = ($base_url | default $BASE_URL)
   if ($room_id | is-empty) { error make --unspanned { msg: "path parameter 'room_id' must be non-empty" } }
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({room_id: (encode-path-segment $room_id)} | format pattern "/v4/nodes/rooms/{room_id}/webhooks") $qp)
+  let full_url = (build-url $base ({room_id: (encode-path-segment $room_id)} | format pattern "/v4/nodes/rooms/{room_id}/webhooks") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"offset": $offset, "limit": $limit, "filter": $filter} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"offset": $offset, "limit": $limit, "filter": $filter} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Assign or unassign webhooks to room
@@ -3097,14 +4119,25 @@ export def "nodes-rooms-webhooks update-handle-assignments" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($room_id | is-empty) { error make --unspanned { msg: "path parameter 'room_id' must be non-empty" } }
-  let full_url = (build-url $base ({room_id: (encode-path-segment $room_id)} | format pattern "/v4/nodes/rooms/{room_id}/webhooks"))
+  let full_url = (build-url $base ({room_id: (encode-path-segment $room_id)} | format pattern "/v4/nodes/rooms/{room_id}/webhooks") $auth.query)
   let req_body = {"items": $items} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Search nodes
@@ -3134,12 +4167,23 @@ export def "nodes-search list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "search_string" $search_string "scalar") (serialize-qp "depth_level" $depth_level "scalar") (serialize-qp "parent_id" $parent_id "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v4/nodes/search" $qp)
+  let full_url = (build-url $base "/v4/nodes/search" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"search_string": $search_string, "depth_level": $depth_level, "parent_id": $parent_id, "filter": $filter, "sort": $qp_sort, "offset": $offset, "limit": $limit} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"search_string": $search_string, "depth_level": $depth_level, "parent_id": $parent_id, "filter": $filter, "sort": $qp_sort, "offset": $offset, "limit": $limit} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Generate download URL for ZIP download
@@ -3162,14 +4206,25 @@ export def "nodes-zip generate-download-url-for-archive" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v4/nodes/zip")
+  let full_url = (build-url $base "/v4/nodes/zip" $auth.query)
   let req_body = {"nodeIds": $node_ids} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Download files / folders as ZIP archive
@@ -3192,14 +4247,25 @@ export def "nodes-zip-download archive" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v4/nodes/zip/download")
+  let full_url = (build-url $base "/v4/nodes/zip/download" $auth.query)
   let req_body = {"nodeIds": $node_ids} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Remove node
@@ -3222,12 +4288,23 @@ export def "nodes delete-by-node-id" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($node_id | is-empty) { error make --unspanned { msg: "path parameter 'node_id' must be non-empty" } }
-  let full_url = (build-url $base ({node_id: (encode-path-segment $node_id)} | format pattern "/v4/nodes/{node_id}"))
+  let full_url = (build-url $base ({node_id: (encode-path-segment $node_id)} | format pattern "/v4/nodes/{node_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Request node
@@ -3251,12 +4328,23 @@ export def "nodes request" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($node_id | is-empty) { error make --unspanned { msg: "path parameter 'node_id' must be non-empty" } }
-  let full_url = (build-url $base ({node_id: (encode-path-segment $node_id)} | format pattern "/v4/nodes/{node_id}"))
+  let full_url = (build-url $base ({node_id: (encode-path-segment $node_id)} | format pattern "/v4/nodes/{node_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Request list of node comments
@@ -3284,12 +4372,23 @@ export def "nodes-comments request" [
   let base = ($base_url | default $BASE_URL)
   if ($node_id | is-empty) { error make --unspanned { msg: "path parameter 'node_id' must be non-empty" } }
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "hide_deleted" $hide_deleted "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({node_id: (encode-path-segment $node_id)} | format pattern "/v4/nodes/{node_id}/comments") $qp)
+  let full_url = (build-url $base ({node_id: (encode-path-segment $node_id)} | format pattern "/v4/nodes/{node_id}/comments") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"offset": $offset, "limit": $limit, "hide_deleted": $hide_deleted} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"offset": $offset, "limit": $limit, "hide_deleted": $hide_deleted} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create node comment
@@ -3315,14 +4414,25 @@ export def "nodes-comments create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($node_id | is-empty) { error make --unspanned { msg: "path parameter 'node_id' must be non-empty" } }
-  let full_url = (build-url $base ({node_id: (encode-path-segment $node_id)} | format pattern "/v4/nodes/{node_id}/comments"))
+  let full_url = (build-url $base ({node_id: (encode-path-segment $node_id)} | format pattern "/v4/nodes/{node_id}/comments") $auth.query)
   let req_body = {"text": $text} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Copy node(s)
@@ -3353,14 +4463,25 @@ export def "nodes-copy-to copy" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($node_id | is-empty) { error make --unspanned { msg: "path parameter 'node_id' must be non-empty" } }
-  let full_url = (build-url $base ({node_id: (encode-path-segment $node_id)} | format pattern "/v4/nodes/{node_id}/copy_to"))
+  let full_url = (build-url $base ({node_id: (encode-path-segment $node_id)} | format pattern "/v4/nodes/{node_id}/copy_to") $auth.query)
   let req_body = {"items": $items, "keepShareLinks": $keep_share_links, "nodeIds": $node_ids, "resolutionStrategy": $resolution_strategy} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201 204]
 }
 
 # Empty recycle bin
@@ -3383,12 +4504,23 @@ export def "nodes-deleted-nodes delete-empty" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($node_id | is-empty) { error make --unspanned { msg: "path parameter 'node_id' must be non-empty" } }
-  let full_url = (build-url $base ({node_id: (encode-path-segment $node_id)} | format pattern "/v4/nodes/{node_id}/deleted_nodes"))
+  let full_url = (build-url $base ({node_id: (encode-path-segment $node_id)} | format pattern "/v4/nodes/{node_id}/deleted_nodes") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Request list of deleted nodes
@@ -3417,12 +4549,23 @@ export def "nodes-deleted-nodes request-summary" [
   let base = ($base_url | default $BASE_URL)
   if ($node_id | is-empty) { error make --unspanned { msg: "path parameter 'node_id' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({node_id: (encode-path-segment $node_id)} | format pattern "/v4/nodes/{node_id}/deleted_nodes") $qp)
+  let full_url = (build-url $base ({node_id: (encode-path-segment $node_id)} | format pattern "/v4/nodes/{node_id}/deleted_nodes") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "sort": $qp_sort, "offset": $offset, "limit": $limit} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"filter": $filter, "sort": $qp_sort, "offset": $offset, "limit": $limit} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Request deleted versions of nodes
@@ -3452,12 +4595,23 @@ export def "nodes-deleted-nodes-versions request" [
   let base = ($base_url | default $BASE_URL)
   if ($node_id | is-empty) { error make --unspanned { msg: "path parameter 'node_id' must be non-empty" } }
   let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({node_id: (encode-path-segment $node_id)} | format pattern "/v4/nodes/{node_id}/deleted_nodes/versions") $qp)
+  let full_url = (build-url $base ({node_id: (encode-path-segment $node_id)} | format pattern "/v4/nodes/{node_id}/deleted_nodes/versions") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"type": $type, "name": $name, "sort": $qp_sort, "offset": $offset, "limit": $limit} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"type": $type, "name": $name, "sort": $qp_sort, "offset": $offset, "limit": $limit} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Unmark a node (room, folder or file) as favorite
@@ -3480,12 +4634,23 @@ export def "nodes-favorite delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($node_id | is-empty) { error make --unspanned { msg: "path parameter 'node_id' must be non-empty" } }
-  let full_url = (build-url $base ({node_id: (encode-path-segment $node_id)} | format pattern "/v4/nodes/{node_id}/favorite"))
+  let full_url = (build-url $base ({node_id: (encode-path-segment $node_id)} | format pattern "/v4/nodes/{node_id}/favorite") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Mark a node (room, folder or file) as favorite
@@ -3509,12 +4674,23 @@ export def "nodes-favorite create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($node_id | is-empty) { error make --unspanned { msg: "path parameter 'node_id' must be non-empty" } }
-  let full_url = (build-url $base ({node_id: (encode-path-segment $node_id)} | format pattern "/v4/nodes/{node_id}/favorite"))
+  let full_url = (build-url $base ({node_id: (encode-path-segment $node_id)} | format pattern "/v4/nodes/{node_id}/favorite") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [201]
 }
 
 # Move node(s)
@@ -3545,14 +4721,25 @@ export def "nodes-move-to move" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($node_id | is-empty) { error make --unspanned { msg: "path parameter 'node_id' must be non-empty" } }
-  let full_url = (build-url $base ({node_id: (encode-path-segment $node_id)} | format pattern "/v4/nodes/{node_id}/move_to"))
+  let full_url = (build-url $base ({node_id: (encode-path-segment $node_id)} | format pattern "/v4/nodes/{node_id}/move_to") $auth.query)
   let req_body = {"items": $items, "keepShareLinks": $keep_share_links, "nodeIds": $node_ids, "resolutionStrategy": $resolution_strategy} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200 204]
 }
 
 # Request list of parent nodes
@@ -3575,12 +4762,23 @@ export def "nodes-parents request" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($node_id | is-empty) { error make --unspanned { msg: "path parameter 'node_id' must be non-empty" } }
-  let full_url = (build-url $base ({node_id: (encode-path-segment $node_id)} | format pattern "/v4/nodes/{node_id}/parents"))
+  let full_url = (build-url $base ({node_id: (encode-path-segment $node_id)} | format pattern "/v4/nodes/{node_id}/parents") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Request list of customers
@@ -3608,12 +4806,23 @@ export def "provisioning-customers list" [
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "include_attributes" $include_attributes "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v4/provisioning/customers" $qp)
+  let full_url = (build-url $base "/v4/provisioning/customers" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Service-Token": $x_sds_service_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"offset": $offset, "limit": $limit, "filter": $filter, "sort": $qp_sort, "include_attributes": $include_attributes} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"offset": $offset, "limit": $limit, "filter": $filter, "sort": $qp_sort, "include_attributes": $include_attributes} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create customer
@@ -3652,14 +4861,25 @@ export def "provisioning-customers create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v4/provisioning/customers")
+  let full_url = (build-url $base "/v4/provisioning/customers" $auth.query)
   let req_body = {"activationCode": $activation_code, "companyName": $company_name, "customerAttributes": $customer_attributes, "customerContractType": $customer_contract_type, "firstAdminUser": $first_admin_user, "isLocked": $is_locked, "lockStatus": $lock_status, "providerCustomerId": $provider_customer_id, "quotaMax": $quota_max, "trialDays": $trial_days, "userMax": $user_max, "webhooksMax": $webhooks_max} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Service-Token": $x_sds_service_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Remove customer
@@ -3682,12 +4902,23 @@ export def "provisioning-customers delete" [
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($customer_id | is-empty) { error make --unspanned { msg: "path parameter 'customer_id' must be non-empty" } }
-  let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id)} | format pattern "/v4/provisioning/customers/{customer_id}"))
+  let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id)} | format pattern "/v4/provisioning/customers/{customer_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Service-Token": $x_sds_service_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Get customer
@@ -3713,12 +4944,23 @@ export def "provisioning-customers request" [
   let base = ($base_url | default $BASE_URL)
   if ($customer_id | is-empty) { error make --unspanned { msg: "path parameter 'customer_id' must be non-empty" } }
   let qp = [(serialize-qp "include_attributes" $include_attributes "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id)} | format pattern "/v4/provisioning/customers/{customer_id}") $qp)
+  let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id)} | format pattern "/v4/provisioning/customers/{customer_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Service-Token": $x_sds_service_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"include_attributes": $include_attributes} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"include_attributes": $include_attributes} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update customer
@@ -3752,14 +4994,25 @@ export def "provisioning-customers update" [
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($customer_id | is-empty) { error make --unspanned { msg: "path parameter 'customer_id' must be non-empty" } }
-  let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id)} | format pattern "/v4/provisioning/customers/{customer_id}"))
+  let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id)} | format pattern "/v4/provisioning/customers/{customer_id}") $auth.query)
   let req_body = {"companyName": $company_name, "customerContractType": $customer_contract_type, "isLocked": $is_locked, "lockStatus": $lock_status, "providerCustomerId": $provider_customer_id, "quotaMax": $quota_max, "userMax": $user_max, "webhooksMax": $webhooks_max} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Service-Token": $x_sds_service_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Request customer attributes
@@ -3787,12 +5040,23 @@ export def "provisioning-customers-customer-attributes request" [
   let base = ($base_url | default $BASE_URL)
   if ($customer_id | is-empty) { error make --unspanned { msg: "path parameter 'customer_id' must be non-empty" } }
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id)} | format pattern "/v4/provisioning/customers/{customer_id}/customerAttributes") $qp)
+  let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id)} | format pattern "/v4/provisioning/customers/{customer_id}/customerAttributes") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Service-Token": $x_sds_service_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"offset": $offset, "limit": $limit, "filter": $filter, "sort": $qp_sort} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"offset": $offset, "limit": $limit, "filter": $filter, "sort": $qp_sort} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Set customer attributes
@@ -3821,14 +5085,25 @@ export def "provisioning-customers-customer-attributes update-by-customer-id" [
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($customer_id | is-empty) { error make --unspanned { msg: "path parameter 'customer_id' must be non-empty" } }
-  let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id)} | format pattern "/v4/provisioning/customers/{customer_id}/customerAttributes"))
+  let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id)} | format pattern "/v4/provisioning/customers/{customer_id}/customerAttributes") $auth.query)
   let req_body = {"items": $items} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Service-Token": $x_sds_service_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Add or edit customer attributes
@@ -3855,14 +5130,25 @@ export def "provisioning-customers-customer-attributes update-by-customer-id-1" 
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($customer_id | is-empty) { error make --unspanned { msg: "path parameter 'customer_id' must be non-empty" } }
-  let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id)} | format pattern "/v4/provisioning/customers/{customer_id}/customerAttributes"))
+  let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id)} | format pattern "/v4/provisioning/customers/{customer_id}/customerAttributes") $auth.query)
   let req_body = {"items": $items} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Service-Token": $x_sds_service_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Remove customer attribute
@@ -3887,12 +5173,23 @@ export def "provisioning-customers-customer-attributes delete" [
   let base = ($base_url | default $BASE_URL)
   if ($customer_id | is-empty) { error make --unspanned { msg: "path parameter 'customer_id' must be non-empty" } }
   if ($key | is-empty) { error make --unspanned { msg: "path parameter 'key' must be non-empty" } }
-  let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id), key: (encode-path-segment $key)} | format pattern "/v4/provisioning/customers/{customer_id}/customerAttributes/{key}"))
+  let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id), key: (encode-path-segment $key)} | format pattern "/v4/provisioning/customers/{customer_id}/customerAttributes/{key}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Service-Token": $x_sds_service_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Request list of customer users
@@ -3924,12 +5221,23 @@ export def "provisioning-customers-users request" [
   let base = ($base_url | default $BASE_URL)
   if ($customer_id | is-empty) { error make --unspanned { msg: "path parameter 'customer_id' must be non-empty" } }
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "include_attributes" $include_attributes "scalar") (serialize-qp "include_roles" $include_roles "scalar") (serialize-qp "include_manageable_rooms" $include_manageable_rooms "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id)} | format pattern "/v4/provisioning/customers/{customer_id}/users") $qp)
+  let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id)} | format pattern "/v4/provisioning/customers/{customer_id}/users") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Service-Token": $x_sds_service_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"offset": $offset, "limit": $limit, "filter": $filter, "sort": $qp_sort, "include_attributes": $include_attributes, "include_roles": $include_roles, "include_manageable_rooms": $include_manageable_rooms} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"offset": $offset, "limit": $limit, "filter": $filter, "sort": $qp_sort, "include_attributes": $include_attributes, "include_roles": $include_roles, "include_manageable_rooms": $include_manageable_rooms} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Request list of tenant webhooks
@@ -3956,12 +5264,23 @@ export def "provisioning-webhooks request-list-of-tenant" [
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v4/provisioning/webhooks" $qp)
+  let full_url = (build-url $base "/v4/provisioning/webhooks" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Service-Token": $x_sds_service_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"offset": $offset, "limit": $limit, "filter": $filter, "sort": $qp_sort} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"offset": $offset, "limit": $limit, "filter": $filter, "sort": $qp_sort} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create tenant webhook
@@ -3990,14 +5309,25 @@ export def "provisioning-webhooks create-tenant" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v4/provisioning/webhooks")
+  let full_url = (build-url $base "/v4/provisioning/webhooks" $auth.query)
   let req_body = {"eventTypeNames": $event_type_names, "isEnabled": $is_enabled, "name": $name, "secret": $secret, "triggerExampleEvent": $trigger_example_event, "url": $url} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Service-Token": $x_sds_service_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Request list of event types
@@ -4018,12 +5348,23 @@ export def "provisioning-webhooks-event-types request-list-of-for-tenant" [
 ]: nothing -> record<items: table<id: int, name: string, usableCustomerAdminWebhook: bool, usableNodeWebhook: bool, usablePushNotification: bool, usableTenantWebhook: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v4/provisioning/webhooks/event_types")
+  let full_url = (build-url $base "/v4/provisioning/webhooks/event_types" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Service-Token": $x_sds_service_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Remove tenant webhook
@@ -4046,12 +5387,23 @@ export def "provisioning-webhooks delete-tenant" [
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($webhook_id | is-empty) { error make --unspanned { msg: "path parameter 'webhook_id' must be non-empty" } }
-  let full_url = (build-url $base ({webhook_id: (encode-path-segment $webhook_id)} | format pattern "/v4/provisioning/webhooks/{webhook_id}"))
+  let full_url = (build-url $base ({webhook_id: (encode-path-segment $webhook_id)} | format pattern "/v4/provisioning/webhooks/{webhook_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Service-Token": $x_sds_service_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Request tenant webhook
@@ -4075,12 +5427,23 @@ export def "provisioning-webhooks request-tenant" [
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($webhook_id | is-empty) { error make --unspanned { msg: "path parameter 'webhook_id' must be non-empty" } }
-  let full_url = (build-url $base ({webhook_id: (encode-path-segment $webhook_id)} | format pattern "/v4/provisioning/webhooks/{webhook_id}"))
+  let full_url = (build-url $base ({webhook_id: (encode-path-segment $webhook_id)} | format pattern "/v4/provisioning/webhooks/{webhook_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Service-Token": $x_sds_service_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update tenant webhook
@@ -4111,14 +5474,25 @@ export def "provisioning-webhooks update-tenant" [
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($webhook_id | is-empty) { error make --unspanned { msg: "path parameter 'webhook_id' must be non-empty" } }
-  let full_url = (build-url $base ({webhook_id: (encode-path-segment $webhook_id)} | format pattern "/v4/provisioning/webhooks/{webhook_id}"))
+  let full_url = (build-url $base ({webhook_id: (encode-path-segment $webhook_id)} | format pattern "/v4/provisioning/webhooks/{webhook_id}") $auth.query)
   let req_body = {"eventTypeNames": $event_type_names, "isEnabled": $is_enabled, "name": $name, "secret": $secret, "triggerExampleEvent": $trigger_example_event, "url": $url} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Service-Token": $x_sds_service_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Reset tenant webhook lifetime
@@ -4142,12 +5516,23 @@ export def "provisioning-webhooks-reset-lifetime reset-tenant" [
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($webhook_id | is-empty) { error make --unspanned { msg: "path parameter 'webhook_id' must be non-empty" } }
-  let full_url = (build-url $base ({webhook_id: (encode-path-segment $webhook_id)} | format pattern "/v4/provisioning/webhooks/{webhook_id}/reset_lifetime"))
+  let full_url = (build-url $base ({webhook_id: (encode-path-segment $webhook_id)} | format pattern "/v4/provisioning/webhooks/{webhook_id}/reset_lifetime") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Service-Token": $x_sds_service_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Request public Download Share information
@@ -4170,12 +5555,23 @@ export def "public-shares-downloads request-get" [
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($access_key | is-empty) { error make --unspanned { msg: "path parameter 'access_key' must be non-empty" } }
-  let full_url = (build-url $base ({access_key: (encode-path-segment $access_key)} | format pattern "/v4/public/shares/downloads/{access_key}"))
+  let full_url = (build-url $base ({access_key: (encode-path-segment $access_key)} | format pattern "/v4/public/shares/downloads/{access_key}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Check public Download Share password
@@ -4199,10 +5595,21 @@ export def "public-shares-downloads check-password" [
   let base = ($base_url | default $BASE_URL)
   if ($access_key | is-empty) { error make --unspanned { msg: "path parameter 'access_key' must be non-empty" } }
   let qp = [(serialize-qp "password" $password "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({access_key: (encode-path-segment $access_key)} | format pattern "/v4/public/shares/downloads/{access_key}") $qp)
+  let full_url = (build-url $base ({access_key: (encode-path-segment $access_key)} | format pattern "/v4/public/shares/downloads/{access_key}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "head" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"password": $password} | compact), body: null}
+  let req = {
+    method: "head"
+    url: $full_url
+    query: ({"password": $password} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-head $req $insecure $allow_errors $full [200]
 }
 
 # Generate download URL
@@ -4226,12 +5633,23 @@ export def "public-shares-downloads generate-url" [
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($access_key | is-empty) { error make --unspanned { msg: "path parameter 'access_key' must be non-empty" } }
-  let full_url = (build-url $base ({access_key: (encode-path-segment $access_key)} | format pattern "/v4/public/shares/downloads/{access_key}"))
+  let full_url = (build-url $base ({access_key: (encode-path-segment $access_key)} | format pattern "/v4/public/shares/downloads/{access_key}") $auth.query)
   let req_body = {"password": $password} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Download file with token
@@ -4260,12 +5678,23 @@ export def "public-shares-downloads download-file-via" [
   if ($access_key | is-empty) { error make --unspanned { msg: "path parameter 'access_key' must be non-empty" } }
   if ($token_arg | is-empty) { error make --unspanned { msg: "path parameter 'token' must be non-empty" } }
   let qp = [(serialize-qp "generic_mimetype" $generic_mimetype "scalar") (serialize-qp "inline" $inline "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({access_key: (encode-path-segment $access_key), token_arg: (encode-path-segment $token_arg)} | format pattern "/v4/public/shares/downloads/{access_key}/{token_arg}") $qp)
+  let full_url = (build-url $base ({access_key: (encode-path-segment $access_key), token_arg: (encode-path-segment $token_arg)} | format pattern "/v4/public/shares/downloads/{access_key}/{token_arg}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Range": $range} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"generic_mimetype": $generic_mimetype, "inline": $inline} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"generic_mimetype": $generic_mimetype, "inline": $inline} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 206]
 }
 
 # Download file with token
@@ -4294,12 +5723,23 @@ export def "public-shares-downloads download-file-via-by-access-key-token" [
   if ($access_key | is-empty) { error make --unspanned { msg: "path parameter 'access_key' must be non-empty" } }
   if ($token_arg | is-empty) { error make --unspanned { msg: "path parameter 'token' must be non-empty" } }
   let qp = [(serialize-qp "generic_mimetype" $generic_mimetype "scalar") (serialize-qp "inline" $inline "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({access_key: (encode-path-segment $access_key), token_arg: (encode-path-segment $token_arg)} | format pattern "/v4/public/shares/downloads/{access_key}/{token_arg}") $qp)
+  let full_url = (build-url $base ({access_key: (encode-path-segment $access_key), token_arg: (encode-path-segment $token_arg)} | format pattern "/v4/public/shares/downloads/{access_key}/{token_arg}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Range": $range} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "head" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"generic_mimetype": $generic_mimetype, "inline": $inline} | compact), body: null}
+  let req = {
+    method: "head"
+    url: $full_url
+    query: ({"generic_mimetype": $generic_mimetype, "inline": $inline} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-head $req $insecure $allow_errors $full [200 206]
 }
 
 # Request public Upload Share information
@@ -4323,12 +5763,23 @@ export def "public-shares-uploads request-get" [
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($access_key | is-empty) { error make --unspanned { msg: "path parameter 'access_key' must be non-empty" } }
-  let full_url = (build-url $base ({access_key: (encode-path-segment $access_key)} | format pattern "/v4/public/shares/uploads/{access_key}"))
+  let full_url = (build-url $base ({access_key: (encode-path-segment $access_key)} | format pattern "/v4/public/shares/uploads/{access_key}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Share-Password": $x_sds_share_password, "X-Sds-Date-Format": $x_sds_date_format} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create new file upload channel
@@ -4357,12 +5808,23 @@ export def "public-shares-uploads create-channel" [
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($access_key | is-empty) { error make --unspanned { msg: "path parameter 'access_key' must be non-empty" } }
-  let full_url = (build-url $base ({access_key: (encode-path-segment $access_key)} | format pattern "/v4/public/shares/uploads/{access_key}"))
+  let full_url = (build-url $base ({access_key: (encode-path-segment $access_key)} | format pattern "/v4/public/shares/uploads/{access_key}") $auth.query)
   let req_body = {"directS3Upload": $direct_s3_upload, "name": $name, "password": $password, "size": $size, "timestampCreation": $timestamp_creation, "timestampModification": $timestamp_modification} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Cancel file upload
@@ -4386,10 +5848,21 @@ export def "public-shares-uploads cancel-file-via" [
   let base = ($base_url | default $BASE_URL)
   if ($access_key | is-empty) { error make --unspanned { msg: "path parameter 'access_key' must be non-empty" } }
   if ($upload_id | is-empty) { error make --unspanned { msg: "path parameter 'upload_id' must be non-empty" } }
-  let full_url = (build-url $base ({access_key: (encode-path-segment $access_key), upload_id: (encode-path-segment $upload_id)} | format pattern "/v4/public/shares/uploads/{access_key}/{upload_id}"))
+  let full_url = (build-url $base ({access_key: (encode-path-segment $access_key), upload_id: (encode-path-segment $upload_id)} | format pattern "/v4/public/shares/uploads/{access_key}/{upload_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Request status of S3 file upload
@@ -4413,10 +5886,21 @@ export def "public-shares-uploads request-status" [
   let base = ($base_url | default $BASE_URL)
   if ($access_key | is-empty) { error make --unspanned { msg: "path parameter 'access_key' must be non-empty" } }
   if ($upload_id | is-empty) { error make --unspanned { msg: "path parameter 'upload_id' must be non-empty" } }
-  let full_url = (build-url $base ({access_key: (encode-path-segment $access_key), upload_id: (encode-path-segment $upload_id)} | format pattern "/v4/public/shares/uploads/{access_key}/{upload_id}"))
+  let full_url = (build-url $base ({access_key: (encode-path-segment $access_key), upload_id: (encode-path-segment $upload_id)} | format pattern "/v4/public/shares/uploads/{access_key}/{upload_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Upload file
@@ -4445,7 +5929,7 @@ export def "public-shares-uploads upload-file-as-multipart-by-access-key-upload-
   let base = ($base_url | default $BASE_URL)
   if ($access_key | is-empty) { error make --unspanned { msg: "path parameter 'access_key' must be non-empty" } }
   if ($upload_id | is-empty) { error make --unspanned { msg: "path parameter 'upload_id' must be non-empty" } }
-  let full_url = (build-url $base ({access_key: (encode-path-segment $access_key), upload_id: (encode-path-segment $upload_id)} | format pattern "/v4/public/shares/uploads/{access_key}/{upload_id}"))
+  let full_url = (build-url $base ({access_key: (encode-path-segment $access_key), upload_id: (encode-path-segment $upload_id)} | format pattern "/v4/public/shares/uploads/{access_key}/{upload_id}") $auth.query)
   let req_body = {"file": $file} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
@@ -4454,7 +5938,18 @@ export def "public-shares-uploads upload-file-as-multipart-by-access-key-upload-
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body ["file"] $dry_run)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: $mp.content_type
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $mp.body $insecure $raw $allow_errors $full [200 201]
 }
 
 # Complete file upload
@@ -4483,14 +5978,25 @@ export def "public-shares-uploads complete-file-via" [
   let base = ($base_url | default $BASE_URL)
   if ($access_key | is-empty) { error make --unspanned { msg: "path parameter 'access_key' must be non-empty" } }
   if ($upload_id | is-empty) { error make --unspanned { msg: "path parameter 'upload_id' must be non-empty" } }
-  let full_url = (build-url $base ({access_key: (encode-path-segment $access_key), upload_id: (encode-path-segment $upload_id)} | format pattern "/v4/public/shares/uploads/{access_key}/{upload_id}"))
+  let full_url = (build-url $base ({access_key: (encode-path-segment $access_key), upload_id: (encode-path-segment $upload_id)} | format pattern "/v4/public/shares/uploads/{access_key}/{upload_id}") $auth.query)
   let req_body = {"items": $items} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [201 202]
 }
 
 # Complete S3 file upload
@@ -4519,12 +6025,23 @@ export def "public-shares-uploads-s3 complete-file-via" [
   let base = ($base_url | default $BASE_URL)
   if ($access_key | is-empty) { error make --unspanned { msg: "path parameter 'access_key' must be non-empty" } }
   if ($upload_id | is-empty) { error make --unspanned { msg: "path parameter 'upload_id' must be non-empty" } }
-  let full_url = (build-url $base ({access_key: (encode-path-segment $access_key), upload_id: (encode-path-segment $upload_id)} | format pattern "/v4/public/shares/uploads/{access_key}/{upload_id}/s3"))
+  let full_url = (build-url $base ({access_key: (encode-path-segment $access_key), upload_id: (encode-path-segment $upload_id)} | format pattern "/v4/public/shares/uploads/{access_key}/{upload_id}/s3") $auth.query)
   let req_body = {"parts": $parts, "userFileKeyList": $user_file_key_list} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [202]
 }
 
 # Generate presigned URLs for S3 file upload
@@ -4553,14 +6070,25 @@ export def "public-shares-uploads-s3-urls generate-presigned" [
   let base = ($base_url | default $BASE_URL)
   if ($access_key | is-empty) { error make --unspanned { msg: "path parameter 'access_key' must be non-empty" } }
   if ($upload_id | is-empty) { error make --unspanned { msg: "path parameter 'upload_id' must be non-empty" } }
-  let full_url = (build-url $base ({access_key: (encode-path-segment $access_key), upload_id: (encode-path-segment $upload_id)} | format pattern "/v4/public/shares/uploads/{access_key}/{upload_id}/s3_urls"))
+  let full_url = (build-url $base ({access_key: (encode-path-segment $access_key), upload_id: (encode-path-segment $upload_id)} | format pattern "/v4/public/shares/uploads/{access_key}/{upload_id}/s3_urls") $auth.query)
   let req_body = {"firstPartNumber": $first_part_number, "lastPartNumber": $last_part_number, "size": $size} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Request third-party software dependencies
@@ -4580,10 +6108,21 @@ export def "public-software-third-party-dependencies request" [
 ]: nothing -> table<artifactId: string, description: string, groupId: string, id: string, licenses: list<string>, name: string, type: string, url: string, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v4/public/software/third_party_dependencies")
+  let full_url = (build-url $base "/v4/public/software/third_party_dependencies" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Request software version information
@@ -4604,12 +6143,23 @@ export def "public-software-version request" [
 ]: nothing -> record<buildDate: string, isDracoonCloud: bool, restApiVersion: string, scmRevisionNumber: string, sdsServerVersion: string> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v4/public/software/version")
+  let full_url = (build-url $base "/v4/public/software/version" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Request system information
@@ -4632,10 +6182,21 @@ export def "public-system-info request" [
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "is_enabled" $is_enabled "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v4/public/system/info" $qp)
+  let full_url = (build-url $base "/v4/public/system/info" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"is_enabled": $is_enabled} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"is_enabled": $is_enabled} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Request Active Directory authentication information
@@ -4657,10 +6218,21 @@ export def "public-system-info-auth-ad request-active-directory" [
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "is_global_available" $is_global_available "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v4/public/system/info/auth/ad" $qp)
+  let full_url = (build-url $base "/v4/public/system/info/auth/ad" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"is_global_available": $is_global_available} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"is_global_available": $is_global_available} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Request OpenID Connect provider authentication information
@@ -4682,10 +6254,21 @@ export def "public-system-info-auth-openid request-open" [
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "is_global_available" $is_global_available "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v4/public/system/info/auth/openid" $qp)
+  let full_url = (build-url $base "/v4/public/system/info/auth/openid" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"is_global_available": $is_global_available} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"is_global_available": $is_global_available} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Request system time
@@ -4706,12 +6289,23 @@ export def "public-time request-system" [
 ]: nothing -> record<time: string> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v4/public/time")
+  let full_url = (build-url $base "/v4/public/time" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Request list of subscription scopes
@@ -4731,10 +6325,21 @@ export def "resources-user-notifications-scopes request-subscription" [
 ]: nothing -> record<items: table<id: int, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v4/resources/user/notifications/scopes")
+  let full_url = (build-url $base "/v4/resources/user/notifications/scopes" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Request user avatar
@@ -4758,10 +6363,21 @@ export def "resources-users-avatar request" [
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
   if ($uuid | is-empty) { error make --unspanned { msg: "path parameter 'uuid' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), uuid: (encode-path-segment $uuid)} | format pattern "/v4/resources/users/{user_id}/avatar/{uuid}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), uuid: (encode-path-segment $uuid)} | format pattern "/v4/resources/users/{user_id}/avatar/{uuid}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Request all roles with assigned rights
@@ -4782,12 +6398,23 @@ export def "roles request" [
 ]: nothing -> record<items: table<description: string, id: int, items: list, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v4/roles")
+  let full_url = (build-url $base "/v4/roles" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Revoke granted role from group(s)
@@ -4812,14 +6439,25 @@ export def "roles-groups delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($role_id | is-empty) { error make --unspanned { msg: "path parameter 'role_id' must be non-empty" } }
-  let full_url = (build-url $base ({role_id: (encode-path-segment $role_id)} | format pattern "/v4/roles/{role_id}/groups"))
+  let full_url = (build-url $base ({role_id: (encode-path-segment $role_id)} | format pattern "/v4/roles/{role_id}/groups") $auth.query)
   let req_body = {"ids": $ids} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Request groups with specific role
@@ -4846,12 +6484,23 @@ export def "roles-groups request" [
   let base = ($base_url | default $BASE_URL)
   if ($role_id | is-empty) { error make --unspanned { msg: "path parameter 'role_id' must be non-empty" } }
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({role_id: (encode-path-segment $role_id)} | format pattern "/v4/roles/{role_id}/groups") $qp)
+  let full_url = (build-url $base ({role_id: (encode-path-segment $role_id)} | format pattern "/v4/roles/{role_id}/groups") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"offset": $offset, "limit": $limit, "filter": $filter} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"offset": $offset, "limit": $limit, "filter": $filter} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Assign group(s) to the role
@@ -4876,14 +6525,25 @@ export def "roles-groups create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($role_id | is-empty) { error make --unspanned { msg: "path parameter 'role_id' must be non-empty" } }
-  let full_url = (build-url $base ({role_id: (encode-path-segment $role_id)} | format pattern "/v4/roles/{role_id}/groups"))
+  let full_url = (build-url $base ({role_id: (encode-path-segment $role_id)} | format pattern "/v4/roles/{role_id}/groups") $auth.query)
   let req_body = {"ids": $ids} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Revoke granted role from user(s)
@@ -4908,14 +6568,25 @@ export def "roles-users delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($role_id | is-empty) { error make --unspanned { msg: "path parameter 'role_id' must be non-empty" } }
-  let full_url = (build-url $base ({role_id: (encode-path-segment $role_id)} | format pattern "/v4/roles/{role_id}/users"))
+  let full_url = (build-url $base ({role_id: (encode-path-segment $role_id)} | format pattern "/v4/roles/{role_id}/users") $auth.query)
   let req_body = {"ids": $ids} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Request users with specific role
@@ -4942,12 +6613,23 @@ export def "roles-users request" [
   let base = ($base_url | default $BASE_URL)
   if ($role_id | is-empty) { error make --unspanned { msg: "path parameter 'role_id' must be non-empty" } }
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({role_id: (encode-path-segment $role_id)} | format pattern "/v4/roles/{role_id}/users") $qp)
+  let full_url = (build-url $base ({role_id: (encode-path-segment $role_id)} | format pattern "/v4/roles/{role_id}/users") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"offset": $offset, "limit": $limit, "filter": $filter} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"offset": $offset, "limit": $limit, "filter": $filter} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Assign user(s) to the role
@@ -4972,14 +6654,25 @@ export def "roles-users create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($role_id | is-empty) { error make --unspanned { msg: "path parameter 'role_id' must be non-empty" } }
-  let full_url = (build-url $base ({role_id: (encode-path-segment $role_id)} | format pattern "/v4/roles/{role_id}/users"))
+  let full_url = (build-url $base ({role_id: (encode-path-segment $role_id)} | format pattern "/v4/roles/{role_id}/users") $auth.query)
   let req_body = {"ids": $ids} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Request customer settings
@@ -5000,12 +6693,23 @@ export def "settings request" [
 ]: nothing -> record<homeRoomParentId: int, homeRoomParentName: string, homeRoomQuota: int, homeRoomsActive: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v4/settings")
+  let full_url = (build-url $base "/v4/settings" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Set customer settings
@@ -5030,14 +6734,25 @@ export def "settings update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v4/settings")
+  let full_url = (build-url $base "/v4/settings" $auth.query)
   let req_body = {"homeRoomParentName": $home_room_parent_name, "homeRoomQuota": $home_room_quota, "homeRoomsActive": $home_rooms_active} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Remove system rescue key pair
@@ -5060,12 +6775,23 @@ export def "settings-keypair delete-system-rescue-key-pair" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "version" $version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v4/settings/keypair" $qp)
+  let full_url = (build-url $base "/v4/settings/keypair" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"version": $version} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"version": $version} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Request system rescue key pair
@@ -5089,12 +6815,23 @@ export def "settings-keypair request-system-rescue-key-pair" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "version" $version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v4/settings/keypair" $qp)
+  let full_url = (build-url $base "/v4/settings/keypair" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"version": $version} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"version": $version} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Activate client-side encryption for customer
@@ -5120,14 +6857,25 @@ export def "settings-keypair update-system-rescue-key-pair" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v4/settings/keypair")
+  let full_url = (build-url $base "/v4/settings/keypair" $auth.query)
   let req_body = {"privateKeyContainer": $private_key_container, "publicKeyContainer": $public_key_container} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Request all system rescue key pairs
@@ -5149,12 +6897,23 @@ export def "settings-keypairs request-list-system-rescue-key-pairs" [
 ]: nothing -> table<privateKeyContainer: record<createdAt: string, createdBy: int, privateKey: string, version: string>, publicKeyContainer: record<createdAt: string, createdBy: int, publicKey: string, version: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v4/settings/keypairs")
+  let full_url = (build-url $base "/v4/settings/keypairs" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create system rescue key pair and preserve copy of old private key
@@ -5182,14 +6941,25 @@ export def "settings-keypairs create-and-preserve-key-pair" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v4/settings/keypairs")
+  let full_url = (build-url $base "/v4/settings/keypairs" $auth.query)
   let req_body = {"previousPrivateKey": $previous_private_key, "privateKeyContainer": $private_key_container, "publicKeyContainer": $public_key_container} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Request list of notification channels
@@ -5210,12 +6980,23 @@ export def "settings-notifications-channels request" [
 ]: nothing -> record<items: table<frequency: int, id: int, isEnabled: bool, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v4/settings/notifications/channels")
+  let full_url = (build-url $base "/v4/settings/notifications/channels" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Toggle notification channels
@@ -5239,14 +7020,25 @@ export def "settings-notifications-channels update-toggle" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v4/settings/notifications/channels")
+  let full_url = (build-url $base "/v4/settings/notifications/channels" $auth.query)
   let req_body = {"channelId": $channel_id, "isEnabled": $is_enabled} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Request list of webhooks
@@ -5273,12 +7065,23 @@ export def "settings-webhooks request-list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v4/settings/webhooks" $qp)
+  let full_url = (build-url $base "/v4/settings/webhooks" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"offset": $offset, "limit": $limit, "filter": $filter, "sort": $qp_sort} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"offset": $offset, "limit": $limit, "filter": $filter, "sort": $qp_sort} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create webhook
@@ -5307,14 +7110,25 @@ export def "settings-webhooks create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v4/settings/webhooks")
+  let full_url = (build-url $base "/v4/settings/webhooks" $auth.query)
   let req_body = {"eventTypeNames": $event_type_names, "isEnabled": $is_enabled, "name": $name, "secret": $secret, "triggerExampleEvent": $trigger_example_event, "url": $url} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Request list of event types
@@ -5335,12 +7149,23 @@ export def "settings-webhooks-event-types request-list-of-for-config-manager" [
 ]: nothing -> record<items: table<id: int, name: string, usableCustomerAdminWebhook: bool, usableNodeWebhook: bool, usablePushNotification: bool, usableTenantWebhook: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v4/settings/webhooks/event_types")
+  let full_url = (build-url $base "/v4/settings/webhooks/event_types" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Remove webhook
@@ -5363,12 +7188,23 @@ export def "settings-webhooks delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($webhook_id | is-empty) { error make --unspanned { msg: "path parameter 'webhook_id' must be non-empty" } }
-  let full_url = (build-url $base ({webhook_id: (encode-path-segment $webhook_id)} | format pattern "/v4/settings/webhooks/{webhook_id}"))
+  let full_url = (build-url $base ({webhook_id: (encode-path-segment $webhook_id)} | format pattern "/v4/settings/webhooks/{webhook_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Request webhook
@@ -5392,12 +7228,23 @@ export def "settings-webhooks request" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($webhook_id | is-empty) { error make --unspanned { msg: "path parameter 'webhook_id' must be non-empty" } }
-  let full_url = (build-url $base ({webhook_id: (encode-path-segment $webhook_id)} | format pattern "/v4/settings/webhooks/{webhook_id}"))
+  let full_url = (build-url $base ({webhook_id: (encode-path-segment $webhook_id)} | format pattern "/v4/settings/webhooks/{webhook_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update webhook
@@ -5428,14 +7275,25 @@ export def "settings-webhooks update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($webhook_id | is-empty) { error make --unspanned { msg: "path parameter 'webhook_id' must be non-empty" } }
-  let full_url = (build-url $base ({webhook_id: (encode-path-segment $webhook_id)} | format pattern "/v4/settings/webhooks/{webhook_id}"))
+  let full_url = (build-url $base ({webhook_id: (encode-path-segment $webhook_id)} | format pattern "/v4/settings/webhooks/{webhook_id}") $auth.query)
   let req_body = {"eventTypeNames": $event_type_names, "isEnabled": $is_enabled, "name": $name, "secret": $secret, "triggerExampleEvent": $trigger_example_event, "url": $url} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Reset webhook lifetime
@@ -5459,12 +7317,23 @@ export def "settings-webhooks-reset-lifetime reset" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($webhook_id | is-empty) { error make --unspanned { msg: "path parameter 'webhook_id' must be non-empty" } }
-  let full_url = (build-url $base ({webhook_id: (encode-path-segment $webhook_id)} | format pattern "/v4/settings/webhooks/{webhook_id}/reset_lifetime"))
+  let full_url = (build-url $base ({webhook_id: (encode-path-segment $webhook_id)} | format pattern "/v4/settings/webhooks/{webhook_id}/reset_lifetime") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Remove Download Shares
@@ -5487,14 +7356,25 @@ export def "shares-downloads delete" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v4/shares/downloads")
+  let full_url = (build-url $base "/v4/shares/downloads" $auth.query)
   let req_body = {"shareIds": $share_ids} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Request list of Download Shares
@@ -5521,12 +7401,23 @@ export def "shares-downloads list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v4/shares/downloads" $qp)
+  let full_url = (build-url $base "/v4/shares/downloads" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "sort": $qp_sort, "offset": $offset, "limit": $limit} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"filter": $filter, "sort": $qp_sort, "offset": $offset, "limit": $limit} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create new Download Share
@@ -5581,14 +7472,25 @@ export def "shares-downloads create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v4/shares/downloads")
+  let full_url = (build-url $base "/v4/shares/downloads" $auth.query)
   let req_body = {"creatorLanguage": $creator_language, "expiration": $expiration, "fileKey": $file_key, "internalNotes": $internal_notes, "keyPair": $key_pair, "mailBody": $mail_body, "mailRecipients": $mail_recipients, "mailSubject": $mail_subject, "maxDownloads": $max_downloads, "name": $name, "nodeId": $node_id, "notes": $notes, "notifyCreator": $notify_creator, "password": $password, "receiverLanguage": $receiver_language, "sendMail": $send_mail, "sendSms": $send_sms, "showCreatorName": $show_creator_name, "showCreatorUsername": $show_creator_username, "smsRecipients": $sms_recipients, "textMessageRecipients": $text_message_recipients} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Update a list of Download Shares
@@ -5617,14 +7519,25 @@ export def "shares-downloads update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v4/shares/downloads")
+  let full_url = (build-url $base "/v4/shares/downloads" $auth.query)
   let req_body = {"expiration": $expiration, "maxDownloads": $max_downloads, "objectIds": $object_ids, "resetMaxDownloads": $reset_max_downloads, "showCreatorName": $show_creator_name, "showCreatorUsername": $show_creator_username} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200 204]
 }
 
 # Remove Download Share
@@ -5647,12 +7560,23 @@ export def "shares-downloads delete-by-share-id" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($share_id | is-empty) { error make --unspanned { msg: "path parameter 'share_id' must be non-empty" } }
-  let full_url = (build-url $base ({share_id: (encode-path-segment $share_id)} | format pattern "/v4/shares/downloads/{share_id}"))
+  let full_url = (build-url $base ({share_id: (encode-path-segment $share_id)} | format pattern "/v4/shares/downloads/{share_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Request Download Share
@@ -5676,12 +7600,23 @@ export def "shares-downloads request" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($share_id | is-empty) { error make --unspanned { msg: "path parameter 'share_id' must be non-empty" } }
-  let full_url = (build-url $base ({share_id: (encode-path-segment $share_id)} | format pattern "/v4/shares/downloads/{share_id}"))
+  let full_url = (build-url $base ({share_id: (encode-path-segment $share_id)} | format pattern "/v4/shares/downloads/{share_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update Download Share
@@ -5722,14 +7657,25 @@ export def "shares-downloads update-by-share-id" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($share_id | is-empty) { error make --unspanned { msg: "path parameter 'share_id' must be non-empty" } }
-  let full_url = (build-url $base ({share_id: (encode-path-segment $share_id)} | format pattern "/v4/shares/downloads/{share_id}"))
+  let full_url = (build-url $base ({share_id: (encode-path-segment $share_id)} | format pattern "/v4/shares/downloads/{share_id}") $auth.query)
   let req_body = {"defaultCountry": $default_country, "expiration": $expiration, "internalNotes": $internal_notes, "maxDownloads": $max_downloads, "name": $name, "notes": $notes, "notifyCreator": $notify_creator, "password": $password, "receiverLanguage": $receiver_language, "resetMaxDownloads": $reset_max_downloads, "resetPassword": $reset_password, "showCreatorName": $show_creator_name, "showCreatorUsername": $show_creator_username, "textMessageRecipients": $text_message_recipients} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Send an existing Download Share link via email
@@ -5756,14 +7702,25 @@ export def "shares-downloads-email send-link-via" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($share_id | is-empty) { error make --unspanned { msg: "path parameter 'share_id' must be non-empty" } }
-  let full_url = (build-url $base ({share_id: (encode-path-segment $share_id)} | format pattern "/v4/shares/downloads/{share_id}/email"))
+  let full_url = (build-url $base ({share_id: (encode-path-segment $share_id)} | format pattern "/v4/shares/downloads/{share_id}/email") $auth.query)
   let req_body = {"body": $body, "receiverLanguage": $receiver_language, "recipients": $recipients} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Request Download Share via QR Code
@@ -5787,12 +7744,23 @@ export def "shares-downloads-qr request" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($share_id | is-empty) { error make --unspanned { msg: "path parameter 'share_id' must be non-empty" } }
-  let full_url = (build-url $base ({share_id: (encode-path-segment $share_id)} | format pattern "/v4/shares/downloads/{share_id}/qr"))
+  let full_url = (build-url $base ({share_id: (encode-path-segment $share_id)} | format pattern "/v4/shares/downloads/{share_id}/qr") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Remove Upload Shares
@@ -5815,14 +7783,25 @@ export def "shares-uploads delete" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v4/shares/uploads")
+  let full_url = (build-url $base "/v4/shares/uploads" $auth.query)
   let req_body = {"shareIds": $share_ids} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Request list of Upload Shares
@@ -5849,12 +7828,23 @@ export def "shares-uploads list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v4/shares/uploads" $qp)
+  let full_url = (build-url $base "/v4/shares/uploads" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "sort": $qp_sort, "offset": $offset, "limit": $limit} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"filter": $filter, "sort": $qp_sort, "offset": $offset, "limit": $limit} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create new Upload Share
@@ -5908,14 +7898,25 @@ export def "shares-uploads create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v4/shares/uploads")
+  let full_url = (build-url $base "/v4/shares/uploads" $auth.query)
   let req_body = {"creatorLanguage": $creator_language, "expiration": $expiration, "filesExpiryPeriod": $files_expiry_period, "internalNotes": $internal_notes, "mailBody": $mail_body, "mailRecipients": $mail_recipients, "mailSubject": $mail_subject, "maxSize": $max_size, "maxSlots": $max_slots, "name": $name, "notes": $notes, "notifyCreator": $notify_creator, "password": $password, "receiverLanguage": $receiver_language, "sendMail": $send_mail, "sendSms": $send_sms, "showCreatorName": $show_creator_name, "showCreatorUsername": $show_creator_username, "showUploadedFiles": $show_uploaded_files, "smsRecipients": $sms_recipients, "targetId": $target_id, "textMessageRecipients": $text_message_recipients} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Update List of Upload Shares
@@ -5950,14 +7951,25 @@ export def "shares-uploads update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v4/shares/uploads")
+  let full_url = (build-url $base "/v4/shares/uploads" $auth.query)
   let req_body = {"expiration": $expiration, "filesExpiryPeriod": $files_expiry_period, "maxSize": $max_size, "maxSlots": $max_slots, "objectIds": $object_ids, "resetFilesExpiryPeriod": $reset_files_expiry_period, "resetMaxSize": $reset_max_size, "resetMaxSlots": $reset_max_slots, "showCreatorName": $show_creator_name, "showCreatorUsername": $show_creator_username, "showUploadedFiles": $show_uploaded_files} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Remove Upload Share
@@ -5980,12 +7992,23 @@ export def "shares-uploads delete-by-share-id" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($share_id | is-empty) { error make --unspanned { msg: "path parameter 'share_id' must be non-empty" } }
-  let full_url = (build-url $base ({share_id: (encode-path-segment $share_id)} | format pattern "/v4/shares/uploads/{share_id}"))
+  let full_url = (build-url $base ({share_id: (encode-path-segment $share_id)} | format pattern "/v4/shares/uploads/{share_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Request Upload Share
@@ -6009,12 +8032,23 @@ export def "shares-uploads request" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($share_id | is-empty) { error make --unspanned { msg: "path parameter 'share_id' must be non-empty" } }
-  let full_url = (build-url $base ({share_id: (encode-path-segment $share_id)} | format pattern "/v4/shares/uploads/{share_id}"))
+  let full_url = (build-url $base ({share_id: (encode-path-segment $share_id)} | format pattern "/v4/shares/uploads/{share_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update Upload Share
@@ -6060,14 +8094,25 @@ export def "shares-uploads update-by-share-id" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($share_id | is-empty) { error make --unspanned { msg: "path parameter 'share_id' must be non-empty" } }
-  let full_url = (build-url $base ({share_id: (encode-path-segment $share_id)} | format pattern "/v4/shares/uploads/{share_id}"))
+  let full_url = (build-url $base ({share_id: (encode-path-segment $share_id)} | format pattern "/v4/shares/uploads/{share_id}") $auth.query)
   let req_body = {"defaultCountry": $default_country, "expiration": $expiration, "filesExpiryPeriod": $files_expiry_period, "internalNotes": $internal_notes, "maxSize": $max_size, "maxSlots": $max_slots, "name": $name, "notes": $notes, "notifyCreator": $notify_creator, "password": $password, "receiverLanguage": $receiver_language, "resetFilesExpiryPeriod": $reset_files_expiry_period, "resetMaxSize": $reset_max_size, "resetMaxSlots": $reset_max_slots, "resetPassword": $reset_password, "showCreatorName": $show_creator_name, "showCreatorUsername": $show_creator_username, "showUploadedFiles": $show_uploaded_files, "textMessageRecipients": $text_message_recipients} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Send an existing Upload Share link via email
@@ -6094,14 +8139,25 @@ export def "shares-uploads-email send-link-via" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($share_id | is-empty) { error make --unspanned { msg: "path parameter 'share_id' must be non-empty" } }
-  let full_url = (build-url $base ({share_id: (encode-path-segment $share_id)} | format pattern "/v4/shares/uploads/{share_id}/email"))
+  let full_url = (build-url $base ({share_id: (encode-path-segment $share_id)} | format pattern "/v4/shares/uploads/{share_id}/email") $auth.query)
   let req_body = {"body": $body, "receiverLanguage": $receiver_language, "recipients": $recipients} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Request Upload Share via QR Code
@@ -6125,12 +8181,23 @@ export def "shares-uploads-qr request" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($share_id | is-empty) { error make --unspanned { msg: "path parameter 'share_id' must be non-empty" } }
-  let full_url = (build-url $base ({share_id: (encode-path-segment $share_id)} | format pattern "/v4/shares/uploads/{share_id}/qr"))
+  let full_url = (build-url $base ({share_id: (encode-path-segment $share_id)} | format pattern "/v4/shares/uploads/{share_id}/qr") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Test Active Directory configuration
@@ -6159,14 +8226,25 @@ export def "system-config-actions-test-ad test" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v4/system/config/actions/test/ad")
+  let full_url = (build-url $base "/v4/system/config/actions/test/ad" $auth.query)
   let req_body = {"ldapUsersDomain": $ldap_users_domain, "serverAdminName": $server_admin_name, "serverAdminPassword": $server_admin_password, "serverIp": $server_ip, "serverPort": $server_port, "sslFingerPrint": $ssl_finger_print, "useLdaps": $use_ldaps} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Test RADIUS server availability
@@ -6187,12 +8265,23 @@ export def "system-config-actions-test-radius test" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v4/system/config/actions/test/radius")
+  let full_url = (build-url $base "/v4/system/config/actions/test/radius" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Request list of Active Directory configurations
@@ -6213,12 +8302,23 @@ export def "system-config-auth-ads list" [
 ]: nothing -> record<items: table<adExportGroup: string, alias: string, createHomeFolder: bool, homeFolderParent: int, id: int, ldapUsersDomain: string, sdsImportGroup: int, serverAdminName: string, serverIp: string, serverPort: int, sslFingerPrint: string, useLdaps: bool, userFilter: string, userImport: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v4/system/config/auth/ads")
+  let full_url = (build-url $base "/v4/system/config/auth/ads" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create Active Directory configuration
@@ -6254,14 +8354,25 @@ export def "system-config-auth-ads create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v4/system/config/auth/ads")
+  let full_url = (build-url $base "/v4/system/config/auth/ads" $auth.query)
   let req_body = {"adExportGroup": $ad_export_group, "alias": $alias, "createHomeFolder": $create_home_folder, "homeFolderParent": $home_folder_parent, "ldapUsersDomain": $ldap_users_domain, "sdsImportGroup": $sds_import_group, "serverAdminName": $server_admin_name, "serverAdminPassword": $server_admin_password, "serverIp": $server_ip, "serverPort": $server_port, "sslFingerPrint": $ssl_finger_print, "useLdaps": $use_ldaps, "userFilter": $user_filter, "userImport": $user_import} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Remove Active Directory configuration
@@ -6284,12 +8395,23 @@ export def "system-config-auth-ads delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($ad_id | is-empty) { error make --unspanned { msg: "path parameter 'ad_id' must be non-empty" } }
-  let full_url = (build-url $base ({ad_id: (encode-path-segment $ad_id)} | format pattern "/v4/system/config/auth/ads/{ad_id}"))
+  let full_url = (build-url $base ({ad_id: (encode-path-segment $ad_id)} | format pattern "/v4/system/config/auth/ads/{ad_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Request Active Directory configuration
@@ -6312,12 +8434,23 @@ export def "system-config-auth-ads request" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($ad_id | is-empty) { error make --unspanned { msg: "path parameter 'ad_id' must be non-empty" } }
-  let full_url = (build-url $base ({ad_id: (encode-path-segment $ad_id)} | format pattern "/v4/system/config/auth/ads/{ad_id}"))
+  let full_url = (build-url $base ({ad_id: (encode-path-segment $ad_id)} | format pattern "/v4/system/config/auth/ads/{ad_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update Active Directory configuration
@@ -6355,14 +8488,25 @@ export def "system-config-auth-ads update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($ad_id | is-empty) { error make --unspanned { msg: "path parameter 'ad_id' must be non-empty" } }
-  let full_url = (build-url $base ({ad_id: (encode-path-segment $ad_id)} | format pattern "/v4/system/config/auth/ads/{ad_id}"))
+  let full_url = (build-url $base ({ad_id: (encode-path-segment $ad_id)} | format pattern "/v4/system/config/auth/ads/{ad_id}") $auth.query)
   let req_body = {"adExportGroup": $ad_export_group, "alias": $alias, "createHomeFolder": $create_home_folder, "homeFolderParent": $home_folder_parent, "ldapUsersDomain": $ldap_users_domain, "sdsImportGroup": $sds_import_group, "serverAdminName": $server_admin_name, "serverAdminPassword": $server_admin_password, "serverIp": $server_ip, "serverPort": $server_port, "sslFingerPrint": $ssl_finger_print, "useLdaps": $use_ldaps, "userFilter": $user_filter, "userImport": $user_import} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Request list of OpenID Connect IDP configurations
@@ -6384,12 +8528,23 @@ export def "system-config-auth-openid-idps list" [
 ]: nothing -> table<authorizationEndPointUrl: string, clientId: string, clientSecret: string, fallbackMappingClaim: string, flow: string, id: int, issuer: string, jwksEndPointUrl: string, mappingClaim: string, name: string, pkceChallengeMethod: string, pkceEnabled: bool, redirectUris: list<string>, scopes: list<string>, tokenEndPointUrl: string, userImportEnabled: bool, userImportGroup: int, userInfoEndPointUrl: string, userInfoSource: string, userManagementUrl: string, userUpdateEnabled: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v4/system/config/auth/openid/idps")
+  let full_url = (build-url $base "/v4/system/config/auth/openid/idps" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create OpenID Connect IDP configuration
@@ -6432,14 +8587,25 @@ export def "system-config-auth-openid-idps create-open" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v4/system/config/auth/openid/idps")
+  let full_url = (build-url $base "/v4/system/config/auth/openid/idps" $auth.query)
   let req_body = {"authorizationEndPointUrl": $authorization_end_point_url, "clientId": $client_id, "clientSecret": $client_secret, "fallbackMappingClaim": $fallback_mapping_claim, "flow": $flow, "issuer": $issuer, "jwksEndPointUrl": $jwks_end_point_url, "mappingClaim": $mapping_claim, "name": $name, "pkceChallengeMethod": $pkce_challenge_method, "pkceEnabled": $pkce_enabled, "redirectUris": $redirect_uris, "scopes": $scopes, "tokenEndPointUrl": $token_end_point_url, "userImportEnabled": $user_import_enabled, "userImportGroup": $user_import_group, "userInfoEndPointUrl": $user_info_end_point_url, "userInfoSource": $user_info_source, "userManagementUrl": $user_management_url, "userUpdateEnabled": $user_update_enabled} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Remove OpenID Connect IDP configuration
@@ -6463,12 +8629,23 @@ export def "system-config-auth-openid-idps delete-open" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($idp_id | is-empty) { error make --unspanned { msg: "path parameter 'idp_id' must be non-empty" } }
-  let full_url = (build-url $base ({idp_id: (encode-path-segment $idp_id)} | format pattern "/v4/system/config/auth/openid/idps/{idp_id}"))
+  let full_url = (build-url $base ({idp_id: (encode-path-segment $idp_id)} | format pattern "/v4/system/config/auth/openid/idps/{idp_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Request OpenID Connect IDP configuration
@@ -6492,12 +8669,23 @@ export def "system-config-auth-openid-idps request-open" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($idp_id | is-empty) { error make --unspanned { msg: "path parameter 'idp_id' must be non-empty" } }
-  let full_url = (build-url $base ({idp_id: (encode-path-segment $idp_id)} | format pattern "/v4/system/config/auth/openid/idps/{idp_id}"))
+  let full_url = (build-url $base ({idp_id: (encode-path-segment $idp_id)} | format pattern "/v4/system/config/auth/openid/idps/{idp_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update OpenID Connect IDP configuration
@@ -6543,14 +8731,25 @@ export def "system-config-auth-openid-idps update-open" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($idp_id | is-empty) { error make --unspanned { msg: "path parameter 'idp_id' must be non-empty" } }
-  let full_url = (build-url $base ({idp_id: (encode-path-segment $idp_id)} | format pattern "/v4/system/config/auth/openid/idps/{idp_id}"))
+  let full_url = (build-url $base ({idp_id: (encode-path-segment $idp_id)} | format pattern "/v4/system/config/auth/openid/idps/{idp_id}") $auth.query)
   let req_body = {"authorizationEndPointUrl": $authorization_end_point_url, "clientId": $client_id, "clientSecret": $client_secret, "fallbackMappingClaim": $fallback_mapping_claim, "flow": $flow, "issuer": $issuer, "jwksEndPointUrl": $jwks_end_point_url, "mappingClaim": $mapping_claim, "name": $name, "pkceChallengeMethod": $pkce_challenge_method, "pkceEnabled": $pkce_enabled, "redirectUris": $redirect_uris, "resetFallbackMappingClaim": $reset_fallback_mapping_claim, "scopes": $scopes, "tokenEndPointUrl": $token_end_point_url, "userImportEnabled": $user_import_enabled, "userImportGroup": $user_import_group, "userInfoEndPointUrl": $user_info_end_point_url, "userInfoSource": $user_info_source, "userManagementUrl": $user_management_url, "userUpdateEnabled": $user_update_enabled} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Remove RADIUS configuration
@@ -6571,12 +8770,23 @@ export def "system-config-auth-radius delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v4/system/config/auth/radius")
+  let full_url = (build-url $base "/v4/system/config/auth/radius" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Request RADIUS configuration
@@ -6597,12 +8807,23 @@ export def "system-config-auth-radius request" [
 ]: nothing -> record<failoverServer: record<failoverEnabled: bool, failoverIpAddress: string, failoverPort: int>, ipAddress: string, otpPinFirst: bool, port: int, sharedSecret: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v4/system/config/auth/radius")
+  let full_url = (build-url $base "/v4/system/config/auth/radius" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create RADIUS configuration
@@ -6630,14 +8851,25 @@ export def "system-config-auth-radius create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v4/system/config/auth/radius")
+  let full_url = (build-url $base "/v4/system/config/auth/radius" $auth.query)
   let req_body = {"failoverServer": $failover_server, "ipAddress": $ip_address, "otpPinFirst": $otp_pin_first, "port": $port, "sharedSecret": $shared_secret} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Update RADIUS configuration
@@ -6665,14 +8897,25 @@ export def "system-config-auth-radius update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v4/system/config/auth/radius")
+  let full_url = (build-url $base "/v4/system/config/auth/radius" $auth.query)
   let req_body = {"failoverServer": $failover_server, "ipAddress": $ip_address, "otpPinFirst": $otp_pin_first, "port": $port, "sharedSecret": $shared_secret} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Request list of OAuth clients
@@ -6696,12 +8939,23 @@ export def "system-config-oauth-clients list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v4/system/config/oauth/clients" $qp)
+  let full_url = (build-url $base "/v4/system/config/oauth/clients" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "sort": $qp_sort} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"filter": $filter, "sort": $qp_sort} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create OAuth client
@@ -6732,14 +8986,25 @@ export def "system-config-oauth-clients create-o-auth" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v4/system/config/oauth/clients")
+  let full_url = (build-url $base "/v4/system/config/oauth/clients" $auth.query)
   let req_body = {"accessTokenValidity": $access_token_validity, "approvalValidity": $approval_validity, "clientId": $client_id, "clientName": $client_name, "clientSecret": $client_secret, "clientType": $client_type, "grantTypes": $grant_types, "redirectUris": $redirect_uris, "refreshTokenValidity": $refresh_token_validity} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Remove OAuth client
@@ -6762,12 +9027,23 @@ export def "system-config-oauth-clients delete-o-auth" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($client_id | is-empty) { error make --unspanned { msg: "path parameter 'client_id' must be non-empty" } }
-  let full_url = (build-url $base ({client_id: (encode-path-segment $client_id)} | format pattern "/v4/system/config/oauth/clients/{client_id}"))
+  let full_url = (build-url $base ({client_id: (encode-path-segment $client_id)} | format pattern "/v4/system/config/oauth/clients/{client_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Request OAuth client
@@ -6790,12 +9066,23 @@ export def "system-config-oauth-clients request-o-auth" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($client_id | is-empty) { error make --unspanned { msg: "path parameter 'client_id' must be non-empty" } }
-  let full_url = (build-url $base ({client_id: (encode-path-segment $client_id)} | format pattern "/v4/system/config/oauth/clients/{client_id}"))
+  let full_url = (build-url $base ({client_id: (encode-path-segment $client_id)} | format pattern "/v4/system/config/oauth/clients/{client_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update OAuth client
@@ -6828,14 +9115,25 @@ export def "system-config-oauth-clients update-o-auth" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($client_id | is-empty) { error make --unspanned { msg: "path parameter 'client_id' must be non-empty" } }
-  let full_url = (build-url $base ({client_id: (encode-path-segment $client_id)} | format pattern "/v4/system/config/oauth/clients/{client_id}"))
+  let full_url = (build-url $base ({client_id: (encode-path-segment $client_id)} | format pattern "/v4/system/config/oauth/clients/{client_id}") $auth.query)
   let req_body = {"accessTokenValidity": $access_token_validity, "approvalValidity": $approval_validity, "clientName": $client_name, "clientSecret": $client_secret, "clientType": $client_type, "grantTypes": $grant_types, "isEnabled": $is_enabled, "redirectUris": $redirect_uris, "refreshTokenValidity": $refresh_token_validity} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Request classification policies
@@ -6856,12 +9154,23 @@ export def "system-config-policies-classifications request" [
 ]: nothing -> record<shareClassificationPolicies: record<classificationRequiresSharePassword: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v4/system/config/policies/classifications")
+  let full_url = (build-url $base "/v4/system/config/policies/classifications" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Change classification policies
@@ -6885,14 +9194,25 @@ export def "system-config-policies-classifications update-change" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v4/system/config/policies/classifications")
+  let full_url = (build-url $base "/v4/system/config/policies/classifications" $auth.query)
   let req_body = {"shareClassificationPolicies": $share_classification_policies} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Request guest user policies
@@ -6913,12 +9233,23 @@ export def "system-config-policies-guest-users request" [
 ]: nothing -> record<isInviteUsersEnabled: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v4/system/config/policies/guest_users")
+  let full_url = (build-url $base "/v4/system/config/policies/guest_users" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Change guest user policies
@@ -6941,14 +9272,25 @@ export def "system-config-policies-guest-users update-change" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v4/system/config/policies/guest_users")
+  let full_url = (build-url $base "/v4/system/config/policies/guest_users" $auth.query)
   let req_body = {"isInviteUsersEnabled": $is_invite_users_enabled} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Request MFA policies
@@ -6969,12 +9311,23 @@ export def "system-config-policies-mfa request" [
 ]: nothing -> record<isMfaEnforced: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v4/system/config/policies/mfa")
+  let full_url = (build-url $base "/v4/system/config/policies/mfa" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Change MFA policies
@@ -6997,14 +9350,25 @@ export def "system-config-policies-mfa update-change" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v4/system/config/policies/mfa")
+  let full_url = (build-url $base "/v4/system/config/policies/mfa" $auth.query)
   let req_body = {"isMfaEnforced": $is_mfa_enforced} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Request password policies
@@ -7025,12 +9389,23 @@ export def "system-config-policies-passwords list" [
 ]: nothing -> record<encryptionPasswordPolicies: record<characterRules: record<mustContainCharacters: list, numberOfCharacteristicsToEnforce: int>, minLength: int, rejectKeyboardPatterns: bool, rejectUserInfo: bool, updatedAt: string, updatedBy: record<avatarUuid: string, displayName: string, email: string, firstName: string, id: int, lastName: string, title: string, userName: string, userType: string>>, loginPasswordPolicies: record<characterRules: record<mustContainCharacters: list, numberOfCharacteristicsToEnforce: int>, minLength: int, numberOfArchivedPasswords: int, passwordExpiration: record<enabled: bool, maxPasswordAge: int>, rejectDictionaryWords: bool, rejectKeyboardPatterns: bool, rejectUserInfo: bool, updatedAt: string, updatedBy: record<avatarUuid: string, displayName: string, email: string, firstName: string, id: int, lastName: string, title: string, userName: string, userType: string>, userLockout: record<enabled: bool, lockoutPeriod: int, maxNumberOfLoginFailures: int>>, sharesPasswordPolicies: record<characterRules: record<mustContainCharacters: list, numberOfCharacteristicsToEnforce: int>, minLength: int, rejectDictionaryWords: bool, rejectKeyboardPatterns: bool, rejectUserInfo: bool, updatedAt: string, updatedBy: record<avatarUuid: string, displayName: string, email: string, firstName: string, id: int, lastName: string, title: string, userName: string, userType: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v4/system/config/policies/passwords")
+  let full_url = (build-url $base "/v4/system/config/policies/passwords" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Change password policies
@@ -7058,14 +9433,25 @@ export def "system-config-policies-passwords update-change" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v4/system/config/policies/passwords")
+  let full_url = (build-url $base "/v4/system/config/policies/passwords" $auth.query)
   let req_body = {"encryptionPasswordPolicies": $encryption_password_policies, "loginPasswordPolicies": $login_password_policies, "sharesPasswordPolicies": $shares_password_policies} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Enforce login password change for all users
@@ -7086,12 +9472,23 @@ export def "system-config-policies-passwords-enforce-change create-login" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v4/system/config/policies/passwords/enforce_change")
+  let full_url = (build-url $base "/v4/system/config/policies/passwords/enforce_change" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200 204]
 }
 
 # Request password policies for a certain password type
@@ -7114,12 +9511,23 @@ export def "system-config-policies-passwords request" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($password_type | is-empty) { error make --unspanned { msg: "path parameter 'password_type' must be non-empty" } }
-  let full_url = (build-url $base ({password_type: (encode-path-segment $password_type)} | format pattern "/v4/system/config/policies/passwords/{password_type}"))
+  let full_url = (build-url $base ({password_type: (encode-path-segment $password_type)} | format pattern "/v4/system/config/policies/passwords/{password_type}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Request authentication settings
@@ -7140,12 +9548,23 @@ export def "system-config-settings-auth request" [
 ]: nothing -> record<authMethods: table<isEnabled: bool, name: string, priority: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v4/system/config/settings/auth")
+  let full_url = (build-url $base "/v4/system/config/settings/auth" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update authentication settings
@@ -7169,14 +9588,25 @@ export def "system-config-settings-auth update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v4/system/config/settings/auth")
+  let full_url = (build-url $base "/v4/system/config/settings/auth" $auth.query)
   let req_body = {"authMethods": $auth_methods} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Request system defaults
@@ -7198,12 +9628,23 @@ export def "system-config-settings-defaults request" [
 ]: nothing -> record<downloadShareDefaultExpirationPeriod: int, fileDefaultExpirationPeriod: int, hideLoginInputFields: bool, languageDefault: string, nonmemberViewerDefault: bool, uploadShareDefaultExpirationPeriod: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v4/system/config/settings/defaults")
+  let full_url = (build-url $base "/v4/system/config/settings/defaults" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update system defaults
@@ -7231,14 +9672,25 @@ export def "system-config-settings-defaults update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v4/system/config/settings/defaults")
+  let full_url = (build-url $base "/v4/system/config/settings/defaults" $auth.query)
   let req_body = {"downloadShareDefaultExpirationPeriod": $download_share_default_expiration_period, "fileDefaultExpirationPeriod": $file_default_expiration_period, "languageDefault": $language_default, "nonmemberViewerDefault": $nonmember_viewer_default, "uploadShareDefaultExpirationPeriod": $upload_share_default_expiration_period} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Request eventlog settings
@@ -7259,12 +9711,23 @@ export def "system-config-settings-eventlog request" [
 ]: nothing -> record<enabled: bool, logIpEnabled: bool, retentionPeriod: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v4/system/config/settings/eventlog")
+  let full_url = (build-url $base "/v4/system/config/settings/eventlog" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update eventlog settings
@@ -7289,14 +9752,25 @@ export def "system-config-settings-eventlog update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v4/system/config/settings/eventlog")
+  let full_url = (build-url $base "/v4/system/config/settings/eventlog" $auth.query)
   let req_body = {"enabled": $enabled, "logIpEnabled": $log_ip_enabled, "retentionPeriod": $retention_period} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Request general settings
@@ -7317,12 +9791,23 @@ export def "system-config-settings-general request" [
 ]: nothing -> record<authTokenRestrictions: record<accessTokenValidity: int, refreshTokenValidity: int, restrictionEnabled: bool>, cryptoEnabled: bool, emailNotificationButtonEnabled: bool, eulaEnabled: bool, hideLoginInputFields: bool, mediaServerEnabled: bool, s3TagsEnabled: bool, sharePasswordSmsEnabled: bool, useS3Storage: bool, weakPasswordEnabled: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v4/system/config/settings/general")
+  let full_url = (build-url $base "/v4/system/config/settings/general" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update general settings
@@ -7357,14 +9842,25 @@ export def "system-config-settings-general update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v4/system/config/settings/general")
+  let full_url = (build-url $base "/v4/system/config/settings/general" $auth.query)
   let req_body = {"authTokenRestrictions": $auth_token_restrictions, "cryptoEnabled": $crypto_enabled, "emailNotificationButtonEnabled": $email_notification_button_enabled, "eulaEnabled": $eula_enabled, "hideLoginInputFields": $hide_login_input_fields, "mediaServerEnabled": $media_server_enabled, "s3TagsEnabled": $s3_tags_enabled, "sharePasswordSmsEnabled": $share_password_sms_enabled, "weakPasswordEnabled": $weak_password_enabled} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Request infrastructure properties
@@ -7385,12 +9881,23 @@ export def "system-config-settings-infrastructure request-properties" [
 ]: nothing -> record<isDracoonCloud: bool, mediaServerConfigEnabled: bool, s3DefaultRegion: string, s3EnforceDirectUpload: bool, smsConfigEnabled: bool, tenantUuid: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v4/system/config/settings/infrastructure")
+  let full_url = (build-url $base "/v4/system/config/settings/infrastructure" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Request syslog settings
@@ -7411,12 +9918,23 @@ export def "system-config-settings-syslog request" [
 ]: nothing -> record<enabled: bool, host: string, logIpEnabled: bool, port: int, protocol: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v4/system/config/settings/syslog")
+  let full_url = (build-url $base "/v4/system/config/settings/syslog" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update syslog settings
@@ -7443,14 +9961,25 @@ export def "system-config-settings-syslog update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v4/system/config/settings/syslog")
+  let full_url = (build-url $base "/v4/system/config/settings/syslog" $auth.query)
   let req_body = {"enabled": $enabled, "host": $host, "logIpEnabled": $log_ip_enabled, "port": $port, "protocol": $protocol} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Request S3 storage configuration
@@ -7471,12 +10000,23 @@ export def "system-config-storage-s3 get-request3" [
 ]: nothing -> record<accessKeyDefined: bool, bucketName: string, bucketUrl: string, endpointUrl: string, region: string, secretKeyDefined: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v4/system/config/storage/s3")
+  let full_url = (build-url $base "/v4/system/config/storage/s3" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create S3 storage configuration
@@ -7506,14 +10046,25 @@ export def "system-config-storage-s3 create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v4/system/config/storage/s3")
+  let full_url = (build-url $base "/v4/system/config/storage/s3" $auth.query)
   let req_body = {"accessKey": $access_key, "bucketName": $bucket_name, "bucketUrl": $bucket_url, "endpointUrl": $endpoint_url, "region": $region, "secretKey": $secret_key} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Update S3 storage configuration
@@ -7543,14 +10094,25 @@ export def "system-config-storage-s3 update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v4/system/config/storage/s3")
+  let full_url = (build-url $base "/v4/system/config/storage/s3" $auth.query)
   let req_body = {"accessKey": $access_key, "bucketName": $bucket_name, "bucketUrl": $bucket_url, "endpointUrl": $endpoint_url, "region": $region, "secretKey": $secret_key} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Request list of configured S3 tags
@@ -7571,12 +10133,23 @@ export def "system-config-storage-s3-tags request-list" [
 ]: nothing -> record<items: table<id: int, isMandatory: bool, key: string, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v4/system/config/storage/s3/tags")
+  let full_url = (build-url $base "/v4/system/config/storage/s3/tags" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create S3 tag
@@ -7601,14 +10174,25 @@ export def "system-config-storage-s3-tags create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v4/system/config/storage/s3/tags")
+  let full_url = (build-url $base "/v4/system/config/storage/s3/tags" $auth.query)
   let req_body = {"isMandatory": $is_mandatory, "key": $key, "value": $value} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Remove S3 tag
@@ -7631,12 +10215,23 @@ export def "system-config-storage-s3-tags delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v4/system/config/storage/s3/tags/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v4/system/config/storage/s3/tags/{id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Request S3 tag
@@ -7659,12 +10254,23 @@ export def "system-config-storage-s3-tags request" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v4/system/config/storage/s3/tags/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v4/system/config/storage/s3/tags/{id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Cancel file upload
@@ -7686,10 +10292,21 @@ export def "uploads cancel-file" [
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($token_arg | is-empty) { error make --unspanned { msg: "path parameter 'token' must be non-empty" } }
-  let full_url = (build-url $base ({token_arg: (encode-path-segment $token_arg)} | format pattern "/v4/uploads/{token_arg}"))
+  let full_url = (build-url $base ({token_arg: (encode-path-segment $token_arg)} | format pattern "/v4/uploads/{token_arg}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Upload file
@@ -7715,7 +10332,7 @@ export def "uploads upload-file-by-as-multipart-by-token" [
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($token_arg | is-empty) { error make --unspanned { msg: "path parameter 'token' must be non-empty" } }
-  let full_url = (build-url $base ({token_arg: (encode-path-segment $token_arg)} | format pattern "/v4/uploads/{token_arg}"))
+  let full_url = (build-url $base ({token_arg: (encode-path-segment $token_arg)} | format pattern "/v4/uploads/{token_arg}") $auth.query)
   let req_body = {"file": $file} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
@@ -7724,7 +10341,18 @@ export def "uploads upload-file-by-as-multipart-by-token" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body ["file"] $dry_run)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: $mp.content_type
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $mp.body $insecure $raw $allow_errors $full [200 201]
 }
 
 # Complete file upload
@@ -7756,14 +10384,25 @@ export def "uploads complete-file" [
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($token_arg | is-empty) { error make --unspanned { msg: "path parameter 'token' must be non-empty" } }
-  let full_url = (build-url $base ({token_arg: (encode-path-segment $token_arg)} | format pattern "/v4/uploads/{token_arg}"))
+  let full_url = (build-url $base ({token_arg: (encode-path-segment $token_arg)} | format pattern "/v4/uploads/{token_arg}") $auth.query)
   let req_body = {"fileKey": $file_key, "fileName": $file_name, "keepShareLinks": $keep_share_links, "resolutionStrategy": $resolution_strategy, "userFileKeyList": $user_file_key_list} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [201 202]
 }
 
 # Request user account information
@@ -7787,12 +10426,23 @@ export def "user-account request-get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "more_info" $more_info "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v4/user/account" $qp)
+  let full_url = (build-url $base "/v4/user/account" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"more_info": $more_info} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"more_info": $more_info} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update user account
@@ -7828,14 +10478,25 @@ export def "user-account update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v4/user/account")
+  let full_url = (build-url $base "/v4/user/account" $auth.query)
   let req_body = {"acceptEULA": $accept_eula, "email": $email, "firstName": $first_name, "gender": $gender, "language": $language, "lastName": $last_name, "login": $login, "phone": $phone, "title": $title, "userName": $user_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Reset avatar
@@ -7856,12 +10517,23 @@ export def "user-account-avatar reset" [
 ]: nothing -> record<avatarUri: string, avatarUuid: string, isCustomAvatar: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v4/user/account/avatar")
+  let full_url = (build-url $base "/v4/user/account/avatar" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Request avatar
@@ -7882,12 +10554,23 @@ export def "user-account-avatar request" [
 ]: nothing -> record<avatarUri: string, avatarUuid: string, isCustomAvatar: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v4/user/account/avatar")
+  let full_url = (build-url $base "/v4/user/account/avatar" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Change avatar
@@ -7910,7 +10593,7 @@ export def "user-account-avatar upload-as-multipart" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v4/user/account/avatar")
+  let full_url = (build-url $base "/v4/user/account/avatar" $auth.query)
   let req_body = {"file": $file} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
@@ -7919,7 +10602,18 @@ export def "user-account-avatar upload-as-multipart" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body ["file"] $dry_run)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: $mp.content_type
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $mp.body $insecure $raw $allow_errors $full [201]
 }
 
 # Request customer information for user
@@ -7940,12 +10634,23 @@ export def "user-account-customer request-get" [
 ]: nothing -> record<accountsLimit: int, accountsUsed: int, cntGuestUser: int, cntInternalUser: int, customerEncryptionEnabled: bool, id: int, isProviderCustomer: bool, name: string, spaceLimit: int, spaceUsed: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v4/user/account/customer")
+  let full_url = (build-url $base "/v4/user/account/customer" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Activate client-side encryption for customer
@@ -7972,14 +10677,25 @@ export def "user-account-customer enable-encryption" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v4/user/account/customer")
+  let full_url = (build-url $base "/v4/user/account/customer" $auth.query)
   let req_body = {"dataSpaceRescueKey": $data_space_rescue_key, "enableCustomerEncryption": $enable_customer_encryption} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Request customer's key pair
@@ -8002,12 +10718,23 @@ export def "user-account-customer-keypair request-key-pair" [
 ]: nothing -> record<privateKeyContainer: record<createdAt: string, createdBy: int, privateKey: string, version: string>, publicKeyContainer: record<createdAt: string, createdBy: int, publicKey: string, version: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v4/user/account/customer/keypair")
+  let full_url = (build-url $base "/v4/user/account/customer/keypair" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Remove user's key pair
@@ -8030,12 +10757,23 @@ export def "user-account-keypair delete-key-pair" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "version" $version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v4/user/account/keypair" $qp)
+  let full_url = (build-url $base "/v4/user/account/keypair" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"version": $version} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"version": $version} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Request user's key pair
@@ -8059,12 +10797,23 @@ export def "user-account-keypair request-key-pair" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "version" $version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v4/user/account/keypair" $qp)
+  let full_url = (build-url $base "/v4/user/account/keypair" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"version": $version} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"version": $version} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Set user's key pair
@@ -8090,14 +10839,25 @@ export def "user-account-keypair update-key-pair" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v4/user/account/keypair")
+  let full_url = (build-url $base "/v4/user/account/keypair" $auth.query)
   let req_body = {"privateKeyContainer": $private_key_container, "publicKeyContainer": $public_key_container} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Request all user key pairs
@@ -8119,12 +10879,23 @@ export def "user-account-keypairs request-key-pairs" [
 ]: nothing -> table<privateKeyContainer: record<createdAt: string, createdBy: int, privateKey: string, version: string>, publicKeyContainer: record<createdAt: string, createdBy: int, publicKey: string, version: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v4/user/account/keypairs")
+  let full_url = (build-url $base "/v4/user/account/keypairs" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create key pair and preserve copy of old private key
@@ -8152,14 +10923,25 @@ export def "user-account-keypairs create-and-preserve-key-pair" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v4/user/account/keypairs")
+  let full_url = (build-url $base "/v4/user/account/keypairs" $auth.query)
   let req_body = {"previousPrivateKey": $previous_private_key, "privateKeyContainer": $private_key_container, "publicKeyContainer": $public_key_container} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Using emergency-code
@@ -8182,12 +10964,23 @@ export def "user-account-mfa delete-use-emergency-code" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "emergency_code" $emergency_code "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v4/user/account/mfa" $qp)
+  let full_url = (build-url $base "/v4/user/account/mfa" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"emergency_code": $emergency_code} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"emergency_code": $emergency_code} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200 204]
 }
 
 # Request information about the user's mfa status
@@ -8208,12 +11001,23 @@ export def "user-account-mfa get-status" [
 ]: nothing -> record<mfaEnforced: bool, mfaSetups: table<createdAt: string, id: int, mfaType: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v4/user/account/mfa")
+  let full_url = (build-url $base "/v4/user/account/mfa" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Request information to setup TOTP as second authentication factor
@@ -8234,12 +11038,23 @@ export def "user-account-mfa-totp get-setup-information" [
 ]: nothing -> record<id: int, otpUri: string, qrCode: string, secret: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v4/user/account/mfa/totp")
+  let full_url = (build-url $base "/v4/user/account/mfa/totp" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [201]
 }
 
 # Confirm second factor TOTP setup with a generated OTP
@@ -8263,14 +11078,25 @@ export def "user-account-mfa-totp confirm-setup" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v4/user/account/mfa/totp")
+  let full_url = (build-url $base "/v4/user/account/mfa/totp" $auth.query)
   let req_body = {"id": $id, "otp": $otp} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Disable a MFA TOTP setup with generated OTP
@@ -8295,12 +11121,23 @@ export def "user-account-mfa-totp delete-setup" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "valid_otp" $valid_otp "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v4/user/account/mfa/totp/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v4/user/account/mfa/totp/{id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"valid_otp": $valid_otp} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"valid_otp": $valid_otp} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Change user's password
@@ -8324,14 +11161,25 @@ export def "user-account-password update-change" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v4/user/account/password")
+  let full_url = (build-url $base "/v4/user/account/password" $auth.query)
   let req_body = {"newPassword": $new_password, "oldPassword": $old_password} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Invalidate authentication token
@@ -8356,12 +11204,23 @@ export def "user-logout create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "everywhere" $everywhere "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v4/user/logout" $qp)
+  let full_url = (build-url $base "/v4/user/logout" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"everywhere": $everywhere} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"everywhere": $everywhere} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Request list of notification configurations
@@ -8382,12 +11241,23 @@ export def "user-notifications-config request-list" [
 ]: nothing -> record<items: table<channelIds: list, eventTypeName: string, id: int, scopeId: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v4/user/notifications/config")
+  let full_url = (build-url $base "/v4/user/notifications/config" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update notification configuration
@@ -8412,14 +11282,25 @@ export def "user-notifications-config update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v4/user/notifications/config/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v4/user/notifications/config/{id}") $auth.query)
   let req_body = {"channelIds": $channel_ids} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Request list of OAuth client approvals
@@ -8443,12 +11324,23 @@ export def "user-oauth-approvals request-o-auth" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v4/user/oauth/approvals" $qp)
+  let full_url = (build-url $base "/v4/user/oauth/approvals" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"sort": $qp_sort} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"sort": $qp_sort} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Remove OAuth client approval
@@ -8471,12 +11363,23 @@ export def "user-oauth-approvals delete-o-auth" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($client_id | is-empty) { error make --unspanned { msg: "path parameter 'client_id' must be non-empty" } }
-  let full_url = (build-url $base ({client_id: (encode-path-segment $client_id)} | format pattern "/v4/user/oauth/approvals/{client_id}"))
+  let full_url = (build-url $base ({client_id: (encode-path-segment $client_id)} | format pattern "/v4/user/oauth/approvals/{client_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Request list of OAuth client authorizations
@@ -8501,12 +11404,23 @@ export def "user-oauth-authorizations request-o-auth" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v4/user/oauth/authorizations" $qp)
+  let full_url = (build-url $base "/v4/user/oauth/authorizations" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "sort": $qp_sort} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"filter": $filter, "sort": $qp_sort} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Remove all OAuth authorizations of a client
@@ -8529,12 +11443,23 @@ export def "user-oauth-authorizations delete-o-auth-by-client-id" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($client_id | is-empty) { error make --unspanned { msg: "path parameter 'client_id' must be non-empty" } }
-  let full_url = (build-url $base ({client_id: (encode-path-segment $client_id)} | format pattern "/v4/user/oauth/authorizations/{client_id}"))
+  let full_url = (build-url $base ({client_id: (encode-path-segment $client_id)} | format pattern "/v4/user/oauth/authorizations/{client_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Remove a OAuth authorization
@@ -8559,12 +11484,23 @@ export def "user-oauth-authorizations delete-o-auth-by-client-id-authorization-i
   let base = ($base_url | default $BASE_URL)
   if ($client_id | is-empty) { error make --unspanned { msg: "path parameter 'client_id' must be non-empty" } }
   if ($authorization_id | is-empty) { error make --unspanned { msg: "path parameter 'authorization_id' must be non-empty" } }
-  let full_url = (build-url $base ({client_id: (encode-path-segment $client_id), authorization_id: (encode-path-segment $authorization_id)} | format pattern "/v4/user/oauth/authorizations/{client_id}/{authorization_id}"))
+  let full_url = (build-url $base ({client_id: (encode-path-segment $client_id), authorization_id: (encode-path-segment $authorization_id)} | format pattern "/v4/user/oauth/authorizations/{client_id}/{authorization_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # (authenticated) Ping
@@ -8585,12 +11521,23 @@ export def "user-ping ping" [
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v4/user/ping")
+  let full_url = (build-url $base "/v4/user/ping" $auth.query)
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Request user profile attributes
@@ -8616,12 +11563,23 @@ export def "user-profile-attributes request" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v4/user/profileAttributes" $qp)
+  let full_url = (build-url $base "/v4/user/profileAttributes" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"offset": $offset, "limit": $limit, "filter": $filter, "sort": $qp_sort} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"offset": $offset, "limit": $limit, "filter": $filter, "sort": $qp_sort} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Set user profile attributes
@@ -8647,14 +11605,25 @@ export def "user-profile-attributes update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v4/user/profileAttributes")
+  let full_url = (build-url $base "/v4/user/profileAttributes" $auth.query)
   let req_body = {"items": $items} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Add or edit user profile attributes
@@ -8678,14 +11647,25 @@ export def "user-profile-attributes update-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v4/user/profileAttributes")
+  let full_url = (build-url $base "/v4/user/profileAttributes" $auth.query)
   let req_body = {"items": $items} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Remove user profile attribute
@@ -8708,12 +11688,23 @@ export def "user-profile-attributes delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($key | is-empty) { error make --unspanned { msg: "path parameter 'key' must be non-empty" } }
-  let full_url = (build-url $base ({key: (encode-path-segment $key)} | format pattern "/v4/user/profileAttributes/{key}"))
+  let full_url = (build-url $base ({key: (encode-path-segment $key)} | format pattern "/v4/user/profileAttributes/{key}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # List Download Share subscriptions
@@ -8739,12 +11730,23 @@ export def "user-subscriptions-download-shares list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v4/user/subscriptions/download_shares" $qp)
+  let full_url = (build-url $base "/v4/user/subscriptions/download_shares" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "limit": $limit, "offset": $offset, "sort": $qp_sort} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"filter": $filter, "limit": $limit, "offset": $offset, "sort": $qp_sort} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Subscribe or Unsubscribe a List of Download Shares for notifications
@@ -8768,14 +11770,25 @@ export def "user-subscriptions-download-shares subscribe" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v4/user/subscriptions/download_shares")
+  let full_url = (build-url $base "/v4/user/subscriptions/download_shares" $auth.query)
   let req_body = {"isSubscribed": $is_subscribed, "objectIds": $object_ids} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [201 204]
 }
 
 # Unsubscribe Download Share from notifications
@@ -8798,12 +11811,23 @@ export def "user-subscriptions-download-shares unsubscribe" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($share_id | is-empty) { error make --unspanned { msg: "path parameter 'share_id' must be non-empty" } }
-  let full_url = (build-url $base ({share_id: (encode-path-segment $share_id)} | format pattern "/v4/user/subscriptions/download_shares/{share_id}"))
+  let full_url = (build-url $base ({share_id: (encode-path-segment $share_id)} | format pattern "/v4/user/subscriptions/download_shares/{share_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Subscribe Download Share for notifications
@@ -8826,12 +11850,23 @@ export def "user-subscriptions-download-shares subscribe-by-share-id" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($share_id | is-empty) { error make --unspanned { msg: "path parameter 'share_id' must be non-empty" } }
-  let full_url = (build-url $base ({share_id: (encode-path-segment $share_id)} | format pattern "/v4/user/subscriptions/download_shares/{share_id}"))
+  let full_url = (build-url $base ({share_id: (encode-path-segment $share_id)} | format pattern "/v4/user/subscriptions/download_shares/{share_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [201]
 }
 
 # List node subscriptions
@@ -8857,12 +11892,23 @@ export def "user-subscriptions-nodes list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v4/user/subscriptions/nodes" $qp)
+  let full_url = (build-url $base "/v4/user/subscriptions/nodes" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "limit": $limit, "offset": $offset, "sort": $qp_sort} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"filter": $filter, "limit": $limit, "offset": $offset, "sort": $qp_sort} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Subscribe or Unsubscribe a List of nodes for notifications
@@ -8886,14 +11932,25 @@ export def "user-subscriptions-nodes update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v4/user/subscriptions/nodes")
+  let full_url = (build-url $base "/v4/user/subscriptions/nodes" $auth.query)
   let req_body = {"isSubscribed": $is_subscribed, "objectIds": $object_ids} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [201 204]
 }
 
 # Unsubscribe node from notifications
@@ -8916,12 +11973,23 @@ export def "user-subscriptions-nodes unsubscribe" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($node_id | is-empty) { error make --unspanned { msg: "path parameter 'node_id' must be non-empty" } }
-  let full_url = (build-url $base ({node_id: (encode-path-segment $node_id)} | format pattern "/v4/user/subscriptions/nodes/{node_id}"))
+  let full_url = (build-url $base ({node_id: (encode-path-segment $node_id)} | format pattern "/v4/user/subscriptions/nodes/{node_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Subscribe node for notifications
@@ -8944,12 +12012,23 @@ export def "user-subscriptions-nodes subscribe" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($node_id | is-empty) { error make --unspanned { msg: "path parameter 'node_id' must be non-empty" } }
-  let full_url = (build-url $base ({node_id: (encode-path-segment $node_id)} | format pattern "/v4/user/subscriptions/nodes/{node_id}"))
+  let full_url = (build-url $base ({node_id: (encode-path-segment $node_id)} | format pattern "/v4/user/subscriptions/nodes/{node_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [201]
 }
 
 # List Upload Share subscriptions
@@ -8975,12 +12054,23 @@ export def "user-subscriptions-upload-shares list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v4/user/subscriptions/upload_shares" $qp)
+  let full_url = (build-url $base "/v4/user/subscriptions/upload_shares" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "limit": $limit, "offset": $offset, "sort": $qp_sort} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"filter": $filter, "limit": $limit, "offset": $offset, "sort": $qp_sort} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Subscribe or Unsubscribe a List of Upload Shares for notifications
@@ -9004,14 +12094,25 @@ export def "user-subscriptions-upload-shares subscribe" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v4/user/subscriptions/upload_shares")
+  let full_url = (build-url $base "/v4/user/subscriptions/upload_shares" $auth.query)
   let req_body = {"isSubscribed": $is_subscribed, "objectIds": $object_ids} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [201 204]
 }
 
 # Unsubscribe Upload Share from notifications
@@ -9034,12 +12135,23 @@ export def "user-subscriptions-upload-shares unsubscribe" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($share_id | is-empty) { error make --unspanned { msg: "path parameter 'share_id' must be non-empty" } }
-  let full_url = (build-url $base ({share_id: (encode-path-segment $share_id)} | format pattern "/v4/user/subscriptions/upload_shares/{share_id}"))
+  let full_url = (build-url $base ({share_id: (encode-path-segment $share_id)} | format pattern "/v4/user/subscriptions/upload_shares/{share_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Subscribe Upload Share for notifications
@@ -9062,12 +12174,23 @@ export def "user-subscriptions-upload-shares subscribe-by-share-id" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($share_id | is-empty) { error make --unspanned { msg: "path parameter 'share_id' must be non-empty" } }
-  let full_url = (build-url $base ({share_id: (encode-path-segment $share_id)} | format pattern "/v4/user/subscriptions/upload_shares/{share_id}"))
+  let full_url = (build-url $base ({share_id: (encode-path-segment $share_id)} | format pattern "/v4/user/subscriptions/upload_shares/{share_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [201]
 }
 
 # Request users
@@ -9097,12 +12220,23 @@ export def "users list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "include_attributes" $include_attributes "scalar") (serialize-qp "include_roles" $include_roles "scalar") (serialize-qp "include_manageable_rooms" $include_manageable_rooms "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v4/users" $qp)
+  let full_url = (build-url $base "/v4/users" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"offset": $offset, "limit": $limit, "filter": $filter, "sort": $qp_sort, "include_attributes": $include_attributes, "include_roles": $include_roles, "include_manageable_rooms": $include_manageable_rooms} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"offset": $offset, "limit": $limit, "filter": $filter, "sort": $qp_sort, "include_attributes": $include_attributes, "include_roles": $include_roles, "include_manageable_rooms": $include_manageable_rooms} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create new user
@@ -9152,14 +12286,25 @@ export def "users create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v4/users")
+  let full_url = (build-url $base "/v4/users" $auth.query)
   let req_body = {"authData": $auth_data, "authMethods": $auth_methods, "email": $email, "expiration": $expiration, "firstName": $first_name, "gender": $gender, "isNonmemberViewer": $is_nonmember_viewer, "lastName": $last_name, "login": $login, "mfaConfig": $mfa_config, "needsToChangePassword": $needs_to_change_password, "notifyUser": $notify_user, "password": $password, "phone": $phone, "receiverLanguage": $receiver_language, "title": $title, "userName": $user_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Remove user
@@ -9182,12 +12327,23 @@ export def "users delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/v4/users/{user_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/v4/users/{user_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Request user
@@ -9213,12 +12369,23 @@ export def "users request" [
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
   let qp = [(serialize-qp "effective_roles" $effective_roles "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/v4/users/{user_id}") $qp)
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/v4/users/{user_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"effective_roles": $effective_roles} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"effective_roles": $effective_roles} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update user's metadata
@@ -9265,14 +12432,25 @@ export def "users update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/v4/users/{user_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/v4/users/{user_id}") $auth.query)
   let req_body = {"authData": $auth_data, "authMethods": $auth_methods, "email": $email, "expiration": $expiration, "firstName": $first_name, "gender": $gender, "isLocked": $is_locked, "lastName": $last_name, "lockStatus": $lock_status, "mfaConfig": $mfa_config, "phone": $phone, "receiverLanguage": $receiver_language, "title": $title, "userName": $user_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Request groups that user is a member of or / and can become a member
@@ -9299,12 +12477,23 @@ export def "users-groups request" [
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/v4/users/{user_id}/groups") $qp)
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/v4/users/{user_id}/groups") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"offset": $offset, "limit": $limit, "filter": $filter} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"offset": $offset, "limit": $limit, "filter": $filter} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Request rooms where the user is last admin
@@ -9327,12 +12516,23 @@ export def "users-last-admin-rooms request" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/v4/users/{user_id}/last_admin_rooms"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/v4/users/{user_id}/last_admin_rooms") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Request emergency MFA code
@@ -9355,12 +12555,23 @@ export def "users-mfa-emergency-code request" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/v4/users/{user_id}/mfa/emergency_code"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/v4/users/{user_id}/mfa/emergency_code") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Request user's granted roles
@@ -9383,12 +12594,23 @@ export def "users-roles request" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/v4/users/{user_id}/roles"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/v4/users/{user_id}/roles") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Request rooms granted to the user or / and rooms that can be granted
@@ -9418,12 +12640,23 @@ export def "users-rooms request" [
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/v4/users/{user_id}/rooms") $qp)
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/v4/users/{user_id}/rooms") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"offset": $offset, "limit": $limit, "filter": $filter} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"offset": $offset, "limit": $limit, "filter": $filter} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Request custom user attributes
@@ -9451,12 +12684,23 @@ export def "users-user-attributes request" [
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/v4/users/{user_id}/userAttributes") $qp)
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/v4/users/{user_id}/userAttributes") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"offset": $offset, "limit": $limit, "filter": $filter, "sort": $qp_sort} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"offset": $offset, "limit": $limit, "filter": $filter, "sort": $qp_sort} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Set custom user attributes
@@ -9485,14 +12729,25 @@ export def "users-user-attributes update-by-user-id" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/v4/users/{user_id}/userAttributes"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/v4/users/{user_id}/userAttributes") $auth.query)
   let req_body = {"items": $items} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Add or edit custom user attributes
@@ -9519,14 +12774,25 @@ export def "users-user-attributes update-by-user-id-1" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/v4/users/{user_id}/userAttributes"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/v4/users/{user_id}/userAttributes") $auth.query)
   let req_body = {"items": $items} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Remove custom user attribute
@@ -9551,10 +12817,21 @@ export def "users-user-attributes delete" [
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
   if ($key | is-empty) { error make --unspanned { msg: "path parameter 'key' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), key: (encode-path-segment $key)} | format pattern "/v4/users/{user_id}/userAttributes/{key}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), key: (encode-path-segment $key)} | format pattern "/v4/users/{user_id}/userAttributes/{key}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200 204]
 }

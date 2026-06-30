@@ -8,7 +8,7 @@ const BASE_URL = "https://vtex.local"
 # `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
 # where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o PROMOTIONS_TAXES_API_TOKEN | default "" }
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o PROMOTIONS_TAXES_API_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
@@ -52,14 +52,11 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
-# Trick: `url encode --all` over-encodes, then we decode the four unreserved
-# punctuation chars back. Pre-existing %XX sequences in the input survive
-# because `url encode --all` first turns their % into %25.
 def encode-path-segment [v: any]: nothing -> string {
   $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
-# Serialize an array-typed path parameter (issue 49.A). OpenAPI 3 `style: simple`
+# Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
 # (the default for path params) and Swagger 2 `collectionFormat: csv` both join
 # the elements with a literal comma WITHIN the single path segment, each element
 # RFC-3986-encoded individually (so a comma inside an element stays %2C). Without
@@ -70,51 +67,57 @@ def encode-path-array [v: any]: nothing -> string {
   if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
 }
 
-# Build URL from base, path, and optional query string
-def build-url [base: string, path: string, query?: string]: nothing -> string {
+# Build the request URL from base, path, and any number of pre-encoded query
+# fragments (param serializer output and/or the auth query). Each fragment is an
+# `&`-joinable `key=value` string already percent-encoded by its producer; empty
+# fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
+# delimiters are hand-spliced — and any query already on the base URL is merged in.
+def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
   let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
-  let result = ($parsed | upsert path $full_path)
-  if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
+  let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
+  $parsed | upsert path $full_path | upsert query $query | url join
 }
 
-# Build the dry-run record returned by --dry-run. Shape:
-#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
-#    auth: {scheme, location}}
-# `meta` carries logical-form data (the query record by spec name, the pre-serialization
-# body) that do-request itself cannot reconstruct from its wire-format args.
-def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
-  let m = ($meta | default {})
-  {
-    dry_run: true
-    method: $method
-    url: $url
-    query: ($m | get -o query | default {})
-    headers: $auth.headers
-    body: ($m | get -o body)
-    content_type: $content_type
-    timeout: $timeout
-    auth: {scheme: $auth.scheme, location: $auth.location}
-  }
+# Success policy: did this response succeed? Single source of truth, consulted by
+# handle-response and the HEAD header-unwrap. Empty ok_codes means the spec listed
+# none, so fall back to < 400. Otherwise: any 2xx, plus documented success codes.
+def status-ok [status: int, ok_codes: list<int>]: nothing -> bool {
+  if ($ok_codes | is-empty) { $status < 400 } else { ($status >= 200 and $status < 300) or ($status in $ok_codes) }
 }
 
-# Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
-  let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
-  let timeout = ($max_time | default 30min)
-  let ct = ($content_type | default "application/json")
-  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
-  let resp = match $method {
-    "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
-  }
-  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
-  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
+# Unwrap a `--full` HTTP response into the user-facing value. Response arrives
+# via pipeline; ok_codes gates the error throw (see status-ok).
+def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: record -> any {
+  let resp = $in
+  if $allow_errors { return $resp }
+  if not (status-ok $resp.status $ok_codes) { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } }
+  if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
+  if $resp.status == 204 { return null }
+  $resp.body
+}
+
+# GET — bodyless, honours --raw
+def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+}
+
+# POST — body + content-type
+def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# PUT — body + content-type
+def send-put [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http put --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http put --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# DELETE — body via --data
+def send-delete [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http delete --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url } else { http delete --headers $req.headers --content-type $req.content_type --data $body --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url }
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 def base-url-completer [] { ["https://vtex.local" "https://{accountName}.{environment}.com.br" "http://example.com/.exampleParameterValue.com.br/api/rnb" "https://rnb.vtexcommercestable.com.br/api/pricing/pvt" "https://rnb.exampleParameterValue.com.br/api/pricing/pvt" "http://example.com/.vtexcommercestable.com.br/api/rnb"] }
@@ -173,7 +176,7 @@ export def "rnb-pub-notifications create-usagenotification" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PROMOTIONS_TAXES_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PROMOTIONS_TAXES_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default "http://example.com/.exampleParameterValue.com.br/api/rnb")
-  let full_url = (build-url $base "/api/rnb/pub/notifications")
+  let full_url = (build-url $base "/api/rnb/pub/notifications" $auth.query)
   let req_body = {"accountId": $account_id, "calculatorIds": $calculator_ids, "coupon": $coupon, "itemsCount": $items_count, "orderId": $order_id, "profileId": $profile_id, "used": $used} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
@@ -182,7 +185,18 @@ export def "rnb-pub-notifications create-usagenotification" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let effective_ct = ($content_type | default "application/json")
   let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $effective_ct $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: $effective_ct
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # List Archived Promotions
@@ -204,12 +218,23 @@ export def "rnb-pvt-archive-benefits-calculator-configuration get-archived-promo
 ]: nothing -> record<items: table<Campaigns: list, activateGiftsMultiplier: bool, areSalesChannelIdsExclusive: bool, beginDate: string, description: string, endDate: string, hasMaxPricePerItem: bool, idCalculatorConfiguration: string, idsSalesChannel: list, isActive: bool, isArchived: bool, isTax: bool, lastModifiedUtc: string, maxUsage: float, name: string, percentualTax: float, scope: record, status: string, type: string, utmCampain: string, utmSource: string, utmiCampaign: string>> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PROMOTIONS_TAXES_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PROMOTIONS_TAXES_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/rnb/pvt/archive/benefits/calculatorConfiguration")
+  let full_url = (build-url $base "/api/rnb/pvt/archive/benefits/calculatorConfiguration" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Archive Promotion or Tax
@@ -233,12 +258,23 @@ export def "rnb-pvt-archive-calculator-configuration archive-promotion" [
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PROMOTIONS_TAXES_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PROMOTIONS_TAXES_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($id_calculator_configuration | is-empty) { error make --unspanned { msg: "path parameter 'idCalculatorConfiguration' must be non-empty" } }
-  let full_url = (build-url $base ({id_calculator_configuration: (encode-path-segment $id_calculator_configuration)} | format pattern "/api/rnb/pvt/archive/calculatorConfiguration/{id_calculator_configuration}"))
+  let full_url = (build-url $base ({id_calculator_configuration: (encode-path-segment $id_calculator_configuration)} | format pattern "/api/rnb/pvt/archive/calculatorConfiguration/{id_calculator_configuration}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Get archived coupon by coupon code
@@ -262,12 +298,23 @@ export def "rnb-pvt-archive-coupon get-archivedbycouponcode" [
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PROMOTIONS_TAXES_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PROMOTIONS_TAXES_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($coupon_code | is-empty) { error make --unspanned { msg: "path parameter 'couponCode' must be non-empty" } }
-  let full_url = (build-url $base ({coupon_code: (encode-path-segment $coupon_code)} | format pattern "/api/rnb/pvt/archive/coupon/{coupon_code}"))
+  let full_url = (build-url $base ({coupon_code: (encode-path-segment $coupon_code)} | format pattern "/api/rnb/pvt/archive/coupon/{coupon_code}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Archive coupon by coupon code
@@ -291,12 +338,23 @@ export def "rnb-pvt-archive-coupon create-archivebycouponcode" [
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PROMOTIONS_TAXES_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PROMOTIONS_TAXES_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($coupon_code | is-empty) { error make --unspanned { msg: "path parameter 'couponCode' must be non-empty" } }
-  let full_url = (build-url $base ({coupon_code: (encode-path-segment $coupon_code)} | format pattern "/api/rnb/pvt/archive/coupon/{coupon_code}"))
+  let full_url = (build-url $base ({coupon_code: (encode-path-segment $coupon_code)} | format pattern "/api/rnb/pvt/archive/coupon/{coupon_code}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # List Archived Taxes
@@ -318,12 +376,23 @@ export def "rnb-pvt-archive-taxes-calculator-configuration get-archived" [
 ]: nothing -> record<items: table<Campaigns: list, activateGiftsMultiplier: bool, areSalesChannelIdsExclusive: bool, beginDate: string, description: string, endDate: string, hasMaxPricePerItem: bool, idCalculatorConfiguration: string, idsSalesChannel: list, isActive: bool, isArchived: bool, isTax: bool, lastModifiedUtc: string, maxUsage: float, name: string, percentualTax: float, scope: record, status: string, type: string, utmCampain: string, utmSource: string, utmiCampaign: string>> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PROMOTIONS_TAXES_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PROMOTIONS_TAXES_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/rnb/pvt/archive/taxes/calculatorConfiguration")
+  let full_url = (build-url $base "/api/rnb/pvt/archive/taxes/calculatorConfiguration" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get All Promotions
@@ -345,12 +414,23 @@ export def "rnb-pvt-benefits-calculatorconfiguration get-list" [
 ]: nothing -> record<archivedItems: list<string>, disabledItems: list<any>, items: table<Campaigns: list, activateGiftsMultiplier: bool, areSalesChannelIdsExclusive: bool, beginDate: string, description: string, endDate: string, hasMaxPricePerItem: bool, idCalculatorConfiguration: string, idsSalesChannel: list, isActive: bool, isArchived: bool, isTax: bool, lastModifiedUtc: string, maxUsage: float, name: string, percentualTax: float, scope: record, status: string, type: string, utmCampain: string, utmSource: string, utmiCampaign: string>, limitConfiguration: record<activesCount: int, limit: int>, limitConfigurationMaxPrice: record<activesCount: int, limit: int>> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PROMOTIONS_TAXES_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PROMOTIONS_TAXES_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/rnb/pvt/benefits/calculatorconfiguration")
+  let full_url = (build-url $base "/api/rnb/pvt/benefits/calculatorconfiguration" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create or Update Promotion or Tax
@@ -497,7 +577,7 @@ export def "rnb-pvt-calculatorconfiguration create-or-update-calculator-configur
   let input = $in
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PROMOTIONS_TAXES_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PROMOTIONS_TAXES_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/rnb/pvt/calculatorconfiguration")
+  let full_url = (build-url $base "/api/rnb/pvt/calculatorconfiguration" $auth.query)
   let req_body = {"absoluteShippingDiscountValue": $absolute_shipping_discount_value, "accumulateWithManualPrice": $accumulate_with_manual_price, "activateGiftsMultiplier": $activate_gifts_multiplier, "activeDaysOfWeek": $active_days_of_week, "affiliates": $affiliates, "applyToAllShippings": $apply_to_all_shippings, "areSalesChannelIdsExclusive": $are_sales_channel_ids_exclusive, "beginDateUtc": $begin_date_utc, "brands": $brands, "brandsAreInclusive": $brands_are_inclusive, "campaigns": $campaigns, "cardIssuers": $card_issuers, "categories": $categories, "categoriesAreInclusive": $categories_are_inclusive, "clusterExpressions": $cluster_expressions, "collections": $collections, "collections1BuyTogether": $collections1_buy_together, "collections2BuyTogether": $collections2_buy_together, "collectionsIsInclusive": $collections_is_inclusive, "compareListPriceAndPrice": $compare_list_price_and_price, "conditionsIds": $conditions_ids, "coupon": $coupon, "cumulative": $cumulative, "daysAgoOfPurchases": $days_ago_of_purchases, "description": $description, "disableDeal": $disable_deal, "discountType": $discount_type, "enableBuyTogetherPerSku": $enable_buy_together_per_sku, "endDateUtc": $end_date_utc, "firstBuyIsProfileOptimistic": $first_buy_is_profile_optimistic, "giftListTypes": $gift_list_types, "idCalculatorConfiguration": $id_calculator_configuration, "idSeller": $id_seller, "idSellerIsInclusive": $id_seller_is_inclusive, "idsSalesChannel": $ids_sales_channel, "installment": $installment, "isActive": $is_active, "isArchived": $is_archived, "isDifferentListPriceAndPrice": $is_different_list_price_and_price, "isFeatured": $is_featured, "isFirstBuy": $is_first_buy, "isMinMaxInstallments": $is_min_max_installments, "isSlaSelected": $is_sla_selected, "itemMaxPrice": $item_max_price, "itemMinPrice": $item_min_price, "lastModified": $last_modified, "listSku1BuyTogether": $list_sku1_buy_together, "listSku2BuyTogether": $list_sku2_buy_together, "marketingTags": $marketing_tags, "marketingTagsAreNotInclusive": $marketing_tags_are_not_inclusive, "maxInstallment": $max_installment, "maxNumberOfAffectedItems": $max_number_of_affected_items, "maxNumberOfAffectedItemsGroupKey": $max_number_of_affected_items_group_key, "maxPricesPerItems": $max_prices_per_items, "maxUsage": $max_usage, "maxUsagePerClient": $max_usage_per_client, "maximumUnitPriceDiscount": $maximum_unit_price_discount, "merchants": $merchants, "minInstallment": $min_installment, "minimumQuantityBuyTogether": $minimum_quantity_buy_together, "multipleUsePerClient": $multiple_use_per_client, "name": $name, "newOffset": $new_offset, "nominalDiscountValue": $nominal_discount_value, "nominalRewardValue": $nominal_reward_value, "nominalShippingDiscountValue": $nominal_shipping_discount_value, "nominalTax": $nominal_tax, "offset": $offset, "orderStatusRewardValue": $order_status_reward_value, "origin": $origin, "paymentsMethods": $payments_methods, "paymentsRules": $payments_rules, "percentualDiscountValue": $percentual_discount_value, "percentualDiscountValueList": $percentual_discount_value_list, "percentualDiscountValueList1": $percentual_discount_value_list1, "percentualDiscountValueList2": $percentual_discount_value_list2, "percentualRewardValue": $percentual_reward_value, "percentualShippingDiscountValue": $percentual_shipping_discount_value, "percentualTax": $percentual_tax, "products": $products, "productsAreInclusive": $products_are_inclusive, "productsSpecifications": $products_specifications, "quantityToAffectBuyTogether": $quantity_to_affect_buy_together, "rebatePercentualDiscountValue": $rebate_percentual_discount_value, "restrictionsBins": $restrictions_bins, "shippingPercentualTax": $shipping_percentual_tax, "shouldDistributeDiscountAmongMatchedItems": $should_distribute_discount_among_matched_items, "skus": $skus, "skusAreInclusive": $skus_are_inclusive, "skusGift": $skus_gift, "slasIds": $slas_ids, "stores": $stores, "storesAreInclusive": $stores_are_inclusive, "totalValueCeling": $total_value_celing, "totalValueFloor": $total_value_floor, "totalValueIncludeAllItems": $total_value_include_all_items, "totalValueMode": $total_value_mode, "totalValuePurchase": $total_value_purchase, "type": $type, "useNewProgressiveAlgorithm": $use_new_progressive_algorithm, "utmCampaign": $utm_campaign, "utmSource": $utm_source, "zipCodeRanges": $zip_code_ranges} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
@@ -506,7 +586,18 @@ export def "rnb-pvt-calculatorconfiguration create-or-update-calculator-configur
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let effective_ct = ($content_type | default "application/json")
   let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $effective_ct $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: $effective_ct
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Get Promotion or Tax by ID
@@ -531,12 +622,23 @@ export def "rnb-pvt-calculatorconfiguration get-calculator-configuration" [
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PROMOTIONS_TAXES_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PROMOTIONS_TAXES_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($id_calculator_configuration | is-empty) { error make --unspanned { msg: "path parameter 'idCalculatorConfiguration' must be non-empty" } }
-  let full_url = (build-url $base ({id_calculator_configuration: (encode-path-segment $id_calculator_configuration)} | format pattern "/api/rnb/pvt/calculatorconfiguration/{id_calculator_configuration}"))
+  let full_url = (build-url $base ({id_calculator_configuration: (encode-path-segment $id_calculator_configuration)} | format pattern "/api/rnb/pvt/calculatorconfiguration/{id_calculator_configuration}") $auth.query)
   let accept_val = ($accept | default "Promotion")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get all campaign audiences
@@ -558,12 +660,23 @@ export def "rnb-pvt-campaign-configuration get-campaignaudiences" [
 ]: nothing -> table<beginDateUtc: string, endDateUtc: string, id: string, isActive: bool, isAndOperator: bool, isArchived: bool, lastModified: record<dateUtc: string, user: string>, name: string, targetConfigurations: list<record>> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PROMOTIONS_TAXES_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PROMOTIONS_TAXES_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/rnb/pvt/campaignConfiguration")
+  let full_url = (build-url $base "/api/rnb/pvt/campaignConfiguration" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create campaign audience
@@ -597,7 +710,7 @@ export def "rnb-pvt-campaign-configuration create-setcampaignconfiguration" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PROMOTIONS_TAXES_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PROMOTIONS_TAXES_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/rnb/pvt/campaignConfiguration")
+  let full_url = (build-url $base "/api/rnb/pvt/campaignConfiguration" $auth.query)
   let req_body = {"beginDateUtc": $begin_date_utc, "endDateUtc": $end_date_utc, "id": $id, "isActive": $is_active, "isAndOperator": $is_and_operator, "isArchived": $is_archived, "lastModified": $last_modified, "name": $name, "targetConfigurations": $target_configurations} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
@@ -606,7 +719,18 @@ export def "rnb-pvt-campaign-configuration create-setcampaignconfiguration" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let effective_ct = ($content_type | default "application/json")
   let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $effective_ct $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: $effective_ct
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Get campaign audience configuration
@@ -630,12 +754,23 @@ export def "rnb-pvt-campaign-configuration get-campaignconfiguration" [
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PROMOTIONS_TAXES_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PROMOTIONS_TAXES_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($campaign_id | is-empty) { error make --unspanned { msg: "path parameter 'campaignId' must be non-empty" } }
-  let full_url = (build-url $base ({campaign_id: (encode-path-segment $campaign_id)} | format pattern "/api/rnb/pvt/campaignConfiguration/{campaign_id}"))
+  let full_url = (build-url $base ({campaign_id: (encode-path-segment $campaign_id)} | format pattern "/api/rnb/pvt/campaignConfiguration/{campaign_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get all coupons
@@ -657,12 +792,23 @@ export def "rnb-pvt-coupon get" [
 ]: nothing -> table<couponCode: string, expirationIntervalPerUse: string, isArchived: bool, lastModifiedUtc: string, maxItemsPerClient: int, utmCampaign: string, utmSource: string> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PROMOTIONS_TAXES_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PROMOTIONS_TAXES_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/rnb/pvt/coupon")
+  let full_url = (build-url $base "/api/rnb/pvt/coupon" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update coupon
@@ -691,7 +837,7 @@ export def "rnb-pvt-coupon update" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PROMOTIONS_TAXES_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PROMOTIONS_TAXES_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/rnb/pvt/coupon")
+  let full_url = (build-url $base "/api/rnb/pvt/coupon" $auth.query)
   let req_body = {"couponCode": $coupon_code, "expirationIntervalPerUse": $expiration_interval_per_use, "isArchived": $is_archived, "maxItemsPerClient": $max_items_per_client, "utmCampaign": $utm_campaign, "utmSource": $utm_source} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
@@ -700,7 +846,18 @@ export def "rnb-pvt-coupon update" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let effective_ct = ($content_type | default "application/json")
   let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $effective_ct $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: $effective_ct
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Create coupon
@@ -727,7 +884,7 @@ export def "rnb-pvt-coupon create" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PROMOTIONS_TAXES_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PROMOTIONS_TAXES_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/rnb/pvt/coupon/")
+  let full_url = (build-url $base "/api/rnb/pvt/coupon/" $auth.query)
   let req_body = {"couponCode": $coupon_code, "expirationIntervalPerUse": $expiration_interval_per_use, "maxItemsPerClient": $max_items_per_client, "utmCampaign": $utm_campaign, "utmSource": $utm_source} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
@@ -736,7 +893,18 @@ export def "rnb-pvt-coupon create" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let effective_ct = ($content_type | default "application/json")
   let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $effective_ct $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: $effective_ct
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [201]
 }
 
 # Get coupon usage
@@ -760,12 +928,23 @@ export def "rnb-pvt-coupon-usage get" [
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PROMOTIONS_TAXES_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PROMOTIONS_TAXES_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($coupon_code | is-empty) { error make --unspanned { msg: "path parameter 'couponCode' must be non-empty" } }
-  let full_url = (build-url $base ({coupon_code: (encode-path-segment $coupon_code)} | format pattern "/api/rnb/pvt/coupon/usage/{coupon_code}"))
+  let full_url = (build-url $base ({coupon_code: (encode-path-segment $coupon_code)} | format pattern "/api/rnb/pvt/coupon/usage/{coupon_code}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get coupon by coupon code
@@ -789,12 +968,23 @@ export def "rnb-pvt-coupon get-bycouponcode" [
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PROMOTIONS_TAXES_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PROMOTIONS_TAXES_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($coupon_code | is-empty) { error make --unspanned { msg: "path parameter 'couponCode' must be non-empty" } }
-  let full_url = (build-url $base ({coupon_code: (encode-path-segment $coupon_code)} | format pattern "/api/rnb/pvt/coupon/{coupon_code}"))
+  let full_url = (build-url $base ({coupon_code: (encode-path-segment $coupon_code)} | format pattern "/api/rnb/pvt/coupon/{coupon_code}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Coupon Massive Generation
@@ -824,7 +1014,7 @@ export def "rnb-pvt-coupons create-massive-generation" [
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PROMOTIONS_TAXES_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PROMOTIONS_TAXES_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "quantity" $quantity "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/rnb/pvt/coupons" $qp)
+  let full_url = (build-url $base "/api/rnb/pvt/coupons" $qp $auth.query)
   let req_body = {"couponCode": $coupon_code, "expirationIntervalPerUse": $expiration_interval_per_use, "maxItemsPerClient": $max_items_per_client, "utmCampaign": $utm_campaign, "utmSource": $utm_source} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
@@ -833,7 +1023,18 @@ export def "rnb-pvt-coupons create-massive-generation" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let effective_ct = ($content_type | default "application/json")
   let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $effective_ct $req_body_wire {query: ({"quantity": $quantity} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"quantity": $quantity} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: $effective_ct
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Create Multiple SKU Promotion
@@ -863,7 +1064,7 @@ export def "rnb-pvt-import-calculator-configuration create" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PROMOTIONS_TAXES_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PROMOTIONS_TAXES_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/rnb/pvt/import/calculatorConfiguration")
+  let full_url = (build-url $base "/api/rnb/pvt/import/calculatorConfiguration" $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
@@ -872,7 +1073,18 @@ export def "rnb-pvt-import-calculator-configuration create" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let effective_ct = ($content_type | default "text/csv")
   let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $effective_ct $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: $effective_ct
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Update Multiple SKU Promotion
@@ -904,7 +1116,7 @@ export def "rnb-pvt-import-calculator-configuration update" [
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PROMOTIONS_TAXES_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PROMOTIONS_TAXES_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($promotion_id | is-empty) { error make --unspanned { msg: "path parameter 'promotionId' must be non-empty" } }
-  let full_url = (build-url $base ({promotion_id: (encode-path-segment $promotion_id)} | format pattern "/api/rnb/pvt/import/calculatorConfiguration/{promotion_id}"))
+  let full_url = (build-url $base ({promotion_id: (encode-path-segment $promotion_id)} | format pattern "/api/rnb/pvt/import/calculatorConfiguration/{promotion_id}") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
@@ -913,7 +1125,18 @@ export def "rnb-pvt-import-calculator-configuration update" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let effective_ct = ($content_type | default "text/csv")
   let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $effective_ct $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: $effective_ct
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body_wire $insecure $raw $allow_errors $full [202]
 }
 
 # Create multiple coupons
@@ -936,7 +1159,7 @@ export def "rnb-pvt-multiple-coupons create" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PROMOTIONS_TAXES_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PROMOTIONS_TAXES_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/rnb/pvt/multiple-coupons")
+  let full_url = (build-url $base "/api/rnb/pvt/multiple-coupons" $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
@@ -945,7 +1168,18 @@ export def "rnb-pvt-multiple-coupons create" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let effective_ct = ($content_type | default "application/json")
   let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $effective_ct $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: $effective_ct
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Get All Taxes
@@ -967,12 +1201,23 @@ export def "rnb-pvt-taxes-calculatorconfiguration get-list" [
 ]: nothing -> record<archivedItems: list<string>, disabledItems: list<string>, items: table<Campaigns: list, activateGiftsMultiplier: bool, areSalesChannelIdsExclusive: bool, beginDate: string, description: string, endDate: string, hasMaxPricePerItem: bool, idCalculatorConfiguration: string, idsSalesChannel: list, isActive: bool, isArchived: bool, isTax: bool, lastModifiedUtc: string, maxUsage: float, name: string, percentualTax: float, scope: record, status: string, type: string, utmCampain: string, utmSource: string, utmiCampaign: string>, limitConfiguration: record<activesCount: int, limit: int>> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PROMOTIONS_TAXES_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PROMOTIONS_TAXES_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/rnb/pvt/taxes/calculatorconfiguration")
+  let full_url = (build-url $base "/api/rnb/pvt/taxes/calculatorconfiguration" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Unarchive Promotion or Tax
@@ -996,12 +1241,23 @@ export def "rnb-pvt-unarchive-calculator-configuration unarchive-promotion" [
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PROMOTIONS_TAXES_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PROMOTIONS_TAXES_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($id_calculator_configuration | is-empty) { error make --unspanned { msg: "path parameter 'idCalculatorConfiguration' must be non-empty" } }
-  let full_url = (build-url $base ({id_calculator_configuration: (encode-path-segment $id_calculator_configuration)} | format pattern "/api/rnb/pvt/unarchive/calculatorConfiguration/{id_calculator_configuration}"))
+  let full_url = (build-url $base ({id_calculator_configuration: (encode-path-segment $id_calculator_configuration)} | format pattern "/api/rnb/pvt/unarchive/calculatorConfiguration/{id_calculator_configuration}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Unarchive coupon by coupon code
@@ -1025,12 +1281,23 @@ export def "rnb-pvt-unarchive-coupon create-unarchivebycouponcode" [
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PROMOTIONS_TAXES_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PROMOTIONS_TAXES_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($coupon_code | is-empty) { error make --unspanned { msg: "path parameter 'couponCode' must be non-empty" } }
-  let full_url = (build-url $base ({coupon_code: (encode-path-segment $coupon_code)} | format pattern "/api/rnb/pvt/unarchive/coupon/{coupon_code}"))
+  let full_url = (build-url $base ({coupon_code: (encode-path-segment $coupon_code)} | format pattern "/api/rnb/pvt/unarchive/coupon/{coupon_code}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Save Price
@@ -1056,7 +1323,7 @@ export def "price-sheet create-saveprice" [
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PROMOTIONS_TAXES_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PROMOTIONS_TAXES_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default "https://rnb.vtexcommercestable.com.br/api/pricing/pvt")
   let qp = [(serialize-qp "an" $an "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/price-sheet" $qp)
+  let full_url = (build-url $base "/price-sheet" $qp $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
@@ -1065,7 +1332,18 @@ export def "price-sheet create-saveprice" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let effective_ct = ($content_type | default "application/json")
   let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $effective_ct $req_body_wire {query: ({"an": $an} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"an": $an} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: $effective_ct
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Get all paged prices
@@ -1093,12 +1371,23 @@ export def "price-sheet-all get-allpaged" [
   if ($page | is-empty) { error make --unspanned { msg: "path parameter 'page' must be non-empty" } }
   if ($page_size | is-empty) { error make --unspanned { msg: "path parameter 'pageSize' must be non-empty" } }
   let qp = [(serialize-qp "an" $an "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({page: (encode-path-segment $page), page_size: (encode-path-segment $page_size)} | format pattern "/price-sheet/all/{page}/{page_size}") $qp)
+  let full_url = (build-url $base ({page: (encode-path-segment $page), page_size: (encode-path-segment $page_size)} | format pattern "/price-sheet/all/{page}/{page_size}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"an": $an} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"an": $an} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get Price by context
@@ -1129,7 +1418,7 @@ export def "price-sheet-context create-pricebycontext" [
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PROMOTIONS_TAXES_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PROMOTIONS_TAXES_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default "https://rnb.vtexcommercestable.com.br/api/pricing/pvt")
   let qp = [(serialize-qp "an" $an "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/price-sheet/context" $qp)
+  let full_url = (build-url $base "/price-sheet/context" $qp $auth.query)
   let req_body = {"id": $id, "itemId": $item_id, "salesChannel": $sales_channel, "sellerId": $seller_id, "validFrom": $valid_from, "validTo": $valid_to} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
@@ -1138,7 +1427,18 @@ export def "price-sheet-context create-pricebycontext" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let effective_ct = ($content_type | default "application/json")
   let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $effective_ct $req_body_wire {query: ({"an": $an} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"an": $an} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: $effective_ct
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Delete Price by SKU Id
@@ -1164,12 +1464,23 @@ export def "price-sheet delete-bysku" [
   let base = ($base_url | default "https://rnb.exampleParameterValue.com.br/api/pricing/pvt")
   if ($sku_id | is-empty) { error make --unspanned { msg: "path parameter 'skuId' must be non-empty" } }
   let qp = [(serialize-qp "an" $an "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({sku_id: (encode-path-segment $sku_id)} | format pattern "/price-sheet/{sku_id}") $qp)
+  let full_url = (build-url $base ({sku_id: (encode-path-segment $sku_id)} | format pattern "/price-sheet/{sku_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"an": $an} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"an": $an} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Get Price by SKU ID
@@ -1195,12 +1506,23 @@ export def "price-sheet get-pricebysku" [
   let base = ($base_url | default "https://rnb.vtexcommercestable.com.br/api/pricing/pvt")
   if ($sku_id | is-empty) { error make --unspanned { msg: "path parameter 'skuId' must be non-empty" } }
   let qp = [(serialize-qp "an" $an "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({sku_id: (encode-path-segment $sku_id)} | format pattern "/price-sheet/{sku_id}") $qp)
+  let full_url = (build-url $base ({sku_id: (encode-path-segment $sku_id)} | format pattern "/price-sheet/{sku_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"an": $an} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"an": $an} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get Price by SKU ID and Trade Policy
@@ -1228,12 +1550,23 @@ export def "price-sheet get-pricebysku-idandtrade-policy" [
   if ($sku_id | is-empty) { error make --unspanned { msg: "path parameter 'skuId' must be non-empty" } }
   if ($trade_policy | is-empty) { error make --unspanned { msg: "path parameter 'tradePolicy' must be non-empty" } }
   let qp = [(serialize-qp "an" $an "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({sku_id: (encode-path-segment $sku_id), trade_policy: (encode-path-segment $trade_policy)} | format pattern "/price-sheet/{sku_id}/{trade_policy}") $qp)
+  let full_url = (build-url $base ({sku_id: (encode-path-segment $sku_id), trade_policy: (encode-path-segment $trade_policy)} | format pattern "/price-sheet/{sku_id}/{trade_policy}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"an": $an} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"an": $an} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Calculate discounts and taxes (Bundles)
@@ -1264,7 +1597,7 @@ export def "pub-bundles create-calculatediscountsandtaxesbundles" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PROMOTIONS_TAXES_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PROMOTIONS_TAXES_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default "http://example.com/.vtexcommercestable.com.br/api/rnb")
-  let full_url = (build-url $base "/pub/bundles")
+  let full_url = (build-url $base "/pub/bundles" $auth.query)
   let req_body = {"isShoppingCart": $is_shopping_cart, "items": $items, "origin": $origin, "params": $params, "profileId": $profile_id, "salesChannel": $sales_channel} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
@@ -1273,5 +1606,16 @@ export def "pub-bundles create-calculatediscountsandtaxesbundles" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let effective_ct = ($content_type | default "application/json")
   let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $effective_ct $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: $effective_ct
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }

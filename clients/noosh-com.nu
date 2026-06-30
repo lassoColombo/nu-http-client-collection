@@ -8,7 +8,7 @@ const BASE_URL = "http://example.com:80/v1"
 # `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
 # where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o NOOSH_API_APPLICATION_TOKEN | default "" }
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o NOOSH_API_APPLICATION_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
@@ -42,14 +42,11 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
-# Trick: `url encode --all` over-encodes, then we decode the four unreserved
-# punctuation chars back. Pre-existing %XX sequences in the input survive
-# because `url encode --all` first turns their % into %25.
 def encode-path-segment [v: any]: nothing -> string {
   $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
-# Serialize an array-typed path parameter (issue 49.A). OpenAPI 3 `style: simple`
+# Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
 # (the default for path params) and Swagger 2 `collectionFormat: csv` both join
 # the elements with a literal comma WITHIN the single path segment, each element
 # RFC-3986-encoded individually (so a comma inside an element stays %2C). Without
@@ -60,60 +57,72 @@ def encode-path-array [v: any]: nothing -> string {
   if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
 }
 
-# Build URL from base, path, and optional query string
-def build-url [base: string, path: string, query?: string]: nothing -> string {
+# Build the request URL from base, path, and any number of pre-encoded query
+# fragments (param serializer output and/or the auth query). Each fragment is an
+# `&`-joinable `key=value` string already percent-encoded by its producer; empty
+# fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
+# delimiters are hand-spliced — and any query already on the base URL is merged in.
+def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
   let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
-  let result = ($parsed | upsert path $full_path)
-  if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
+  let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
+  $parsed | upsert path $full_path | upsert query $query | url join
 }
 
-# Build the dry-run record returned by --dry-run. Shape:
-#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
-#    auth: {scheme, location}}
-# `meta` carries logical-form data (the query record by spec name, the pre-serialization
-# body) that do-request itself cannot reconstruct from its wire-format args.
-def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
-  let m = ($meta | default {})
-  {
-    dry_run: true
-    method: $method
-    url: $url
-    query: ($m | get -o query | default {})
-    headers: $auth.headers
-    body: ($m | get -o body)
-    content_type: $content_type
-    timeout: $timeout
-    auth: {scheme: $auth.scheme, location: $auth.location}
-  }
+# Success policy: did this response succeed? Single source of truth, consulted by
+# handle-response and the HEAD header-unwrap. Empty ok_codes means the spec listed
+# none, so fall back to < 400. Otherwise: any 2xx, plus documented success codes.
+def status-ok [status: int, ok_codes: list<int>]: nothing -> bool {
+  if ($ok_codes | is-empty) { $status < 400 } else { ($status >= 200 and $status < 300) or ($status in $ok_codes) }
 }
 
-# Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
-  let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
-  let timeout = ($max_time | default 30min)
-  let ct = ($content_type | default "application/json")
-  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
-  let resp = match $method {
-    "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
-  }
-  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
-  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
+# Unwrap a `--full` HTTP response into the user-facing value. Response arrives
+# via pipeline; ok_codes gates the error throw (see status-ok).
+def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: record -> any {
+  let resp = $in
+  if $allow_errors { return $resp }
+  if not (status-ok $resp.status $ok_codes) { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } }
+  if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
+  if $resp.status == 204 { return null }
+  $resp.body
+}
+
+# GET — bodyless, honours --raw
+def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+}
+
+# POST — body + content-type
+def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# PUT — body + content-type
+def send-put [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http put --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http put --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# PATCH — body + content-type
+def send-patch [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http patch --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http patch --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# DELETE — body via --data
+def send-delete [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http delete --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url } else { http delete --headers $req.headers --content-type $req.content_type --data $body --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url }
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # Build a `multipart/form-data` envelope per RFC 7578. `file_fields` lists
 # the field names whose value should be read from disk as bytes; every
 # other field is sent as a text part (records/lists JSON-stringified).
-# Returns {content_type, body} ready to pass to `do-request`.
+# Returns {content_type, body}.
 # When `$dry_run` is true, file fields are NOT read from disk — they emit
 # an empty-bytes placeholder so callers can inspect the request shape
-# without the file existing on disk (issue 11.B).
+# without the file existing on disk.
 def build-multipart-body [parts: record, file_fields: list<string>, dry_run: bool = false]: nothing -> record {
   let boundary = $"----nu-(random chars --length 24)"
   let crlf = "\r\n"
@@ -186,10 +195,21 @@ export def "1-1-workgroups-projects-file-tags get" [
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
-  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id)} | format pattern "/1.1/workgroups/{workgroup_id}/projects/{project_id}/fileTags"))
+  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id)} | format pattern "/1.1/workgroups/{workgroup_id}/projects/{project_id}/fileTags") $auth.query)
   let accept_val = ($accept | default "*/*")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List Files from Project. Works for Regular and Remote Files
@@ -214,10 +234,21 @@ export def "1-1-workgroups-projects-files list" [
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
-  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id)} | format pattern "/1.1/workgroups/{workgroup_id}/projects/{project_id}/files"))
+  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id)} | format pattern "/1.1/workgroups/{workgroup_id}/projects/{project_id}/files") $auth.query)
   let accept_val = ($accept | default "*/*")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Upload File to Project. A multipart/form-data request with a name "file"
@@ -244,14 +275,25 @@ export def "1-1-workgroups-projects-files upload" [
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
-  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id)} | format pattern "/1.1/workgroups/{workgroup_id}/projects/{project_id}/files"))
+  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id)} | format pattern "/1.1/workgroups/{workgroup_id}/projects/{project_id}/files") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = ($accept | default "*/*")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body [] $dry_run)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: $mp.content_type
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $mp.body $insecure $raw $allow_errors $full [200]
 }
 
 # Get File from Project. Works for Regular and Remote Files
@@ -278,10 +320,21 @@ export def "1-1-workgroups-projects-files get" [
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
   if ($file_id | is-empty) { error make --unspanned { msg: "path parameter 'file_id' must be non-empty" } }
-  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id), file_id: (encode-path-segment $file_id)} | format pattern "/1.1/workgroups/{workgroup_id}/projects/{project_id}/files/{file_id}"))
+  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id), file_id: (encode-path-segment $file_id)} | format pattern "/1.1/workgroups/{workgroup_id}/projects/{project_id}/files/{file_id}") $auth.query)
   let accept_val = ($accept | default "*/*")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List a specific spec of project Level
@@ -308,10 +361,21 @@ export def "1-1-workgroups-projects-specs get" [
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
   if ($spec_id | is-empty) { error make --unspanned { msg: "path parameter 'spec_id' must be non-empty" } }
-  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id), spec_id: (encode-path-segment $spec_id)} | format pattern "/1.1/workgroups/{workgroup_id}/projects/{project_id}/specs/{spec_id}"))
+  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id), spec_id: (encode-path-segment $spec_id)} | format pattern "/1.1/workgroups/{workgroup_id}/projects/{project_id}/specs/{spec_id}") $auth.query)
   let accept_val = ($accept | default "*/*")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update a specific Spec
@@ -356,12 +420,23 @@ export def "1-1-workgroups-projects-specs update" [
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
   if ($spec_id | is-empty) { error make --unspanned { msg: "path parameter 'spec_id' must be non-empty" } }
-  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id), spec_id: (encode-path-segment $spec_id)} | format pattern "/1.1/workgroups/{workgroup_id}/projects/{project_id}/specs/{spec_id}"))
+  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id), spec_id: (encode-path-segment $spec_id)} | format pattern "/1.1/workgroups/{workgroup_id}/projects/{project_id}/specs/{spec_id}") $auth.query)
   let req_body = {"first_level_custom_fields": $first_level_custom_fields, "header_custom_fields": $header_custom_fields, "product_type_id": $product_type_id, "quantity_1": $quantity_1, "quantity_2": $quantity_2, "quantity_3": $quantity_3, "quantity_4": $quantity_4, "quantity_5": $quantity_5, "second_level_custom_fields": $second_level_custom_fields, "sku": $sku, "spec_name": $spec_name, "spec_type_id": $spec_type_id, "versions": $versions} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "*/*")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Invite a team member or all the members of team template for the specific project.
@@ -390,12 +465,23 @@ export def "1-1-workgroups-projects-teammembers create-team-member" [
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
-  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id)} | format pattern "/1.1/workgroups/{workgroup_id}/projects/{project_id}/teammembers"))
+  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id)} | format pattern "/1.1/workgroups/{workgroup_id}/projects/{project_id}/teammembers") $auth.query)
   let req_body = {"role_id": $role_id, "team_template_id": $team_template_id, "user_id": $user_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "*/*")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get Spec Type Fields
@@ -420,10 +506,21 @@ export def "1-1-workgroups-spec-types-spec-type-fields get" [
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
   if ($spec_type_id | is-empty) { error make --unspanned { msg: "path parameter 'spec_type_id' must be non-empty" } }
-  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), spec_type_id: (encode-path-segment $spec_type_id)} | format pattern "/1.1/workgroups/{workgroup_id}/specTypes/{spec_type_id}/specTypeFields"))
+  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), spec_type_id: (encode-path-segment $spec_type_id)} | format pattern "/1.1/workgroups/{workgroup_id}/specTypes/{spec_type_id}/specTypeFields") $auth.query)
   let accept_val = ($accept | default "*/*")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List all countries
@@ -444,10 +541,21 @@ export def "countries get-country-list" [
 ]: nothing -> record<result: table<constant_token: string, country: string, country_id: int>, status_code: int, status_reason: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v1/countries")
+  let full_url = (build-url $base "/v1/countries" $auth.query)
   let accept_val = ($accept | default "*/*")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List the workgroups
@@ -471,10 +579,21 @@ export def "workgroups get-list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "workgroup_name" $workgroup_name "scalar") (serialize-qp "workgroup_types" $workgroup_types "csv")] | flatten | str join "&"
-  let full_url = (build-url $base "/v1/workgroups" $qp)
+  let full_url = (build-url $base "/v1/workgroups" $qp $auth.query)
   let accept_val = ($accept | default "*/*")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"workgroup_name": $workgroup_name, "workgroup_types": $workgroup_types} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"workgroup_name": $workgroup_name, "workgroup_types": $workgroup_types} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List current user's automatic invitations info
@@ -497,10 +616,21 @@ export def "workgroups-automatic-invitations get-list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
-  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id)} | format pattern "/v1/workgroups/{workgroup_id}/automaticInvitations"))
+  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id)} | format pattern "/v1/workgroups/{workgroup_id}/automaticInvitations") $auth.query)
   let accept_val = ($accept | default "*/*")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List Billing Recipients
@@ -523,10 +653,21 @@ export def "workgroups-billing-recipients get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
-  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id)} | format pattern "/v1/workgroups/{workgroup_id}/billingRecipients"))
+  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id)} | format pattern "/v1/workgroups/{workgroup_id}/billingRecipients") $auth.query)
   let accept_val = ($accept | default "*/*")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List the buy orders of workgroup
@@ -549,10 +690,21 @@ export def "workgroups-buy-orders get-list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
-  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id)} | format pattern "/v1/workgroups/{workgroup_id}/buyOrders"))
+  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id)} | format pattern "/v1/workgroups/{workgroup_id}/buyOrders") $auth.query)
   let accept_val = ($accept | default "*/*")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get a specific buy order of workgroup
@@ -577,10 +729,21 @@ export def "workgroups-buy-orders get" [
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
   if ($order_id | is-empty) { error make --unspanned { msg: "path parameter 'order_id' must be non-empty" } }
-  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), order_id: (encode-path-segment $order_id)} | format pattern "/v1/workgroups/{workgroup_id}/buyOrders/{order_id}"))
+  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), order_id: (encode-path-segment $order_id)} | format pattern "/v1/workgroups/{workgroup_id}/buyOrders/{order_id}") $auth.query)
   let accept_val = ($accept | default "*/*")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List client workgroups
@@ -603,10 +766,21 @@ export def "workgroups-client-workgroups get-list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
-  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id)} | format pattern "/v1/workgroups/{workgroup_id}/clientWorkgroups"))
+  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id)} | format pattern "/v1/workgroups/{workgroup_id}/clientWorkgroups") $auth.query)
   let accept_val = ($accept | default "*/*")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get a specific client workgroups
@@ -631,10 +805,21 @@ export def "workgroups-client-workgroups get-specific" [
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
   if ($client_workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'client_workgroup_id' must be non-empty" } }
-  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), client_workgroup_id: (encode-path-segment $client_workgroup_id)} | format pattern "/v1/workgroups/{workgroup_id}/clientWorkgroups/{client_workgroup_id}"))
+  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), client_workgroup_id: (encode-path-segment $client_workgroup_id)} | format pattern "/v1/workgroups/{workgroup_id}/clientWorkgroups/{client_workgroup_id}") $auth.query)
   let accept_val = ($accept | default "*/*")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List the project categories of client side
@@ -659,10 +844,21 @@ export def "workgroups-client-workgroups-project-category get-list" [
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
   if ($client_workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'client_workgroup_id' must be non-empty" } }
-  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), client_workgroup_id: (encode-path-segment $client_workgroup_id)} | format pattern "/v1/workgroups/{workgroup_id}/clientWorkgroups/{client_workgroup_id}/projectCategory"))
+  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), client_workgroup_id: (encode-path-segment $client_workgroup_id)} | format pattern "/v1/workgroups/{workgroup_id}/clientWorkgroups/{client_workgroup_id}/projectCategory") $auth.query)
   let accept_val = ($accept | default "*/*")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List projec home user fields of client workgroup
@@ -687,10 +883,21 @@ export def "workgroups-client-workgroups-project-home-user-fields get-list" [
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
   if ($client_workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'client_workgroup_id' must be non-empty" } }
-  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), client_workgroup_id: (encode-path-segment $client_workgroup_id)} | format pattern "/v1/workgroups/{workgroup_id}/clientWorkgroups/{client_workgroup_id}/projectHomeUserFields"))
+  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), client_workgroup_id: (encode-path-segment $client_workgroup_id)} | format pattern "/v1/workgroups/{workgroup_id}/clientWorkgroups/{client_workgroup_id}/projectHomeUserFields") $auth.query)
   let accept_val = ($accept | default "*/*")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List the project status of client
@@ -715,10 +922,21 @@ export def "workgroups-client-workgroups-project-status get" [
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
   if ($client_workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'client_workgroup_id' must be non-empty" } }
-  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), client_workgroup_id: (encode-path-segment $client_workgroup_id)} | format pattern "/v1/workgroups/{workgroup_id}/clientWorkgroups/{client_workgroup_id}/projectStatus"))
+  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), client_workgroup_id: (encode-path-segment $client_workgroup_id)} | format pattern "/v1/workgroups/{workgroup_id}/clientWorkgroups/{client_workgroup_id}/projectStatus") $auth.query)
   let accept_val = ($accept | default "*/*")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List the contacts
@@ -741,10 +959,21 @@ export def "workgroups-contacts get-list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
-  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id)} | format pattern "/v1/workgroups/{workgroup_id}/contacts"))
+  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id)} | format pattern "/v1/workgroups/{workgroup_id}/contacts") $auth.query)
   let accept_val = ($accept | default "*/*")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Contact Info
@@ -769,10 +998,21 @@ export def "workgroups-contacts get" [
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
-  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), user_id: (encode-path-segment $user_id)} | format pattern "/v1/workgroups/{workgroup_id}/contacts/{user_id}"))
+  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), user_id: (encode-path-segment $user_id)} | format pattern "/v1/workgroups/{workgroup_id}/contacts/{user_id}") $auth.query)
   let accept_val = ($accept | default "*/*")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get custom task status of workgroup level
@@ -795,10 +1035,21 @@ export def "workgroups-custom-task-status get-wg-list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
-  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id)} | format pattern "/v1/workgroups/{workgroup_id}/customTaskStatus"))
+  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id)} | format pattern "/v1/workgroups/{workgroup_id}/customTaskStatus") $auth.query)
   let accept_val = ($accept | default "*/*")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get custom task types of workgroup level
@@ -821,10 +1072,21 @@ export def "workgroups-custom-task-types get-of-wg" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
-  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id)} | format pattern "/v1/workgroups/{workgroup_id}/customTaskTypes"))
+  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id)} | format pattern "/v1/workgroups/{workgroup_id}/customTaskTypes") $auth.query)
   let accept_val = ($accept | default "*/*")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List all deactivation reasons
@@ -847,10 +1109,21 @@ export def "workgroups-deactivation-reasons get-list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
-  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id)} | format pattern "/v1/workgroups/{workgroup_id}/deactivationReasons"))
+  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id)} | format pattern "/v1/workgroups/{workgroup_id}/deactivationReasons") $auth.query)
   let accept_val = ($accept | default "*/*")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get default task priority list
@@ -873,10 +1146,21 @@ export def "workgroups-default-task-priority list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
-  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id)} | format pattern "/v1/workgroups/{workgroup_id}/defaultTaskPriority"))
+  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id)} | format pattern "/v1/workgroups/{workgroup_id}/defaultTaskPriority") $auth.query)
   let accept_val = ($accept | default "*/*")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get default task status list
@@ -899,10 +1183,21 @@ export def "workgroups-default-task-status get-list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
-  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id)} | format pattern "/v1/workgroups/{workgroup_id}/defaultTaskStatus"))
+  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id)} | format pattern "/v1/workgroups/{workgroup_id}/defaultTaskStatus") $auth.query)
   let accept_val = ($accept | default "*/*")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Detail workgroup info
@@ -925,10 +1220,21 @@ export def "workgroups-detail get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
-  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id)} | format pattern "/v1/workgroups/{workgroup_id}/detail"))
+  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id)} | format pattern "/v1/workgroups/{workgroup_id}/detail") $auth.query)
   let accept_val = ($accept | default "*/*")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update a specific Workgroup
@@ -963,12 +1269,23 @@ export def "workgroups-detail update" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
-  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id)} | format pattern "/v1/workgroups/{workgroup_id}/detail"))
+  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id)} | format pattern "/v1/workgroups/{workgroup_id}/detail") $auth.query)
   let req_body = {"address_line1": $address_line1, "address_line2": $address_line2, "address_line3": $address_line3, "city": $city, "country": $country, "custom_fields": $custom_fields, "decimal_places": $decimal_places, "postal": $postal, "state": $state, "workgroup_name": $workgroup_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "*/*")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get Exchange Rate List
@@ -991,10 +1308,21 @@ export def "workgroups-exchange-rate get-list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
-  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id)} | format pattern "/v1/workgroups/{workgroup_id}/exchangeRate"))
+  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id)} | format pattern "/v1/workgroups/{workgroup_id}/exchangeRate") $auth.query)
   let accept_val = ($accept | default "*/*")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create Exchange Rates
@@ -1020,12 +1348,23 @@ export def "workgroups-exchange-rate create" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
-  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id)} | format pattern "/v1/workgroups/{workgroup_id}/exchangeRate"))
+  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id)} | format pattern "/v1/workgroups/{workgroup_id}/exchangeRate") $auth.query)
   let req_body = {"exchange_rates": $exchange_rates} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "*/*")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # List my time cards
@@ -1048,10 +1387,21 @@ export def "workgroups-my-time-cards get-list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
-  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id)} | format pattern "/v1/workgroups/{workgroup_id}/myTimeCards"))
+  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id)} | format pattern "/v1/workgroups/{workgroup_id}/myTimeCards") $auth.query)
   let accept_val = ($accept | default "*/*")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get a specific my time cards
@@ -1076,10 +1426,21 @@ export def "workgroups-my-time-cards get" [
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
   if ($time_card_id | is-empty) { error make --unspanned { msg: "path parameter 'timeCard_id' must be non-empty" } }
-  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), time_card_id: (encode-path-segment $time_card_id)} | format pattern "/v1/workgroups/{workgroup_id}/myTimeCards/{time_card_id}"))
+  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), time_card_id: (encode-path-segment $time_card_id)} | format pattern "/v1/workgroups/{workgroup_id}/myTimeCards/{time_card_id}") $auth.query)
   let accept_val = ($accept | default "*/*")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get product type of workgroup level
@@ -1102,10 +1463,21 @@ export def "workgroups-product-types get-list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
-  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id)} | format pattern "/v1/workgroups/{workgroup_id}/productTypes"))
+  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id)} | format pattern "/v1/workgroups/{workgroup_id}/productTypes") $auth.query)
   let accept_val = ($accept | default "*/*")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get product type of spec level by workgroupId
@@ -1128,10 +1500,21 @@ export def "workgroups-product-types-of-spec-types get-list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
-  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id)} | format pattern "/v1/workgroups/{workgroup_id}/productTypesOfSpecTypes"))
+  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id)} | format pattern "/v1/workgroups/{workgroup_id}/productTypesOfSpecTypes") $auth.query)
   let accept_val = ($accept | default "*/*")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Register product types for spec types
@@ -1158,12 +1541,23 @@ export def "workgroups-product-types-of-spec-types create-list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
-  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id)} | format pattern "/v1/workgroups/{workgroup_id}/productTypesOfSpecTypes"))
+  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id)} | format pattern "/v1/workgroups/{workgroup_id}/productTypesOfSpecTypes") $auth.query)
   let req_body = {"enableDifferentiatePrdTypePreference": $enable_differentiate_prd_type_preference, "spec_prdType_list": $spec_prd_type_list} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "*/*")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Upload Profile Image. A multipart/form-data request with a name "file"
@@ -1188,12 +1582,23 @@ export def "workgroups-profile-image upload" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
-  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id)} | format pattern "/v1/workgroups/{workgroup_id}/profileImage"))
+  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id)} | format pattern "/v1/workgroups/{workgroup_id}/profileImage") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = ($accept | default "*/*")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # List the project categories
@@ -1216,10 +1621,21 @@ export def "workgroups-project-category get-list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
-  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id)} | format pattern "/v1/workgroups/{workgroup_id}/projectCategory"))
+  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id)} | format pattern "/v1/workgroups/{workgroup_id}/projectCategory") $auth.query)
   let accept_val = ($accept | default "*/*")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List projec home user fields
@@ -1242,10 +1658,21 @@ export def "workgroups-project-home-user-fields get-list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
-  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id)} | format pattern "/v1/workgroups/{workgroup_id}/projectHomeUserFields"))
+  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id)} | format pattern "/v1/workgroups/{workgroup_id}/projectHomeUserFields") $auth.query)
   let accept_val = ($accept | default "*/*")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List the project status
@@ -1268,10 +1695,21 @@ export def "workgroups-project-status get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
-  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id)} | format pattern "/v1/workgroups/{workgroup_id}/projectStatus"))
+  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id)} | format pattern "/v1/workgroups/{workgroup_id}/projectStatus") $auth.query)
   let accept_val = ($accept | default "*/*")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List the projects
@@ -1294,10 +1732,21 @@ export def "workgroups-projects get-list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
-  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects"))
+  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects") $auth.query)
   let accept_val = ($accept | default "*/*")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a Project
@@ -1338,12 +1787,23 @@ export def "workgroups-projects create" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
-  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects"))
+  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects") $auth.query)
   let req_body = {"client_account": $client_account, "client_user_id": $client_user_id, "client_workgroup_id": $client_workgroup_id, "comments": $comments, "completion_date": $completion_date, "custom_fields": $custom_fields, "deactivation_reason_id": $deactivation_reason_id, "is_active": $is_active, "is_hot": $is_hot, "is_paper_direct": $is_paper_direct, "project_category_id": $project_category_id, "project_description": $project_description, "project_name": $project_name, "project_number": $project_number, "project_owner_user_id": $project_owner_user_id, "project_status_id": $project_status_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "*/*")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Archieve a specific Project
@@ -1368,10 +1828,21 @@ export def "workgroups-projects delete" [
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
-  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects/{project_id}"))
+  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects/{project_id}") $auth.query)
   let accept_val = ($accept | default "*/*")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Get a specific Project
@@ -1396,10 +1867,21 @@ export def "workgroups-projects get" [
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
-  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects/{project_id}"))
+  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects/{project_id}") $auth.query)
   let accept_val = ($accept | default "*/*")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Patch a specific Project
@@ -1439,12 +1921,23 @@ export def "workgroups-projects update-by-workgroup-id-project-id" [
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
-  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects/{project_id}"))
+  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects/{project_id}") $auth.query)
   let req_body = {"client_user_id": $client_user_id, "client_workgroup_id": $client_workgroup_id, "comments": $comments, "completion_date": $completion_date, "custom_fields": $custom_fields, "deactivation_reason_id": $deactivation_reason_id, "is_active": $is_active, "is_hot": $is_hot, "project_category_id": $project_category_id, "project_description": $project_description, "project_name": $project_name, "project_number": $project_number, "project_status_id": $project_status_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "*/*")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Update a specific Project
@@ -1487,12 +1980,23 @@ export def "workgroups-projects update-by-workgroup-id-project-id-1" [
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
-  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects/{project_id}"))
+  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects/{project_id}") $auth.query)
   let req_body = {"client_account": $client_account, "client_user_id": $client_user_id, "client_workgroup_id": $client_workgroup_id, "comments": $comments, "completion_date": $completion_date, "custom_fields": $custom_fields, "deactivation_reason_id": $deactivation_reason_id, "is_active": $is_active, "is_hot": $is_hot, "is_paper_direct": $is_paper_direct, "project_category_id": $project_category_id, "project_description": $project_description, "project_name": $project_name, "project_number": $project_number, "project_owner_user_id": $project_owner_user_id, "project_status_id": $project_status_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "*/*")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # List the buy orders
@@ -1517,10 +2021,21 @@ export def "workgroups-projects-buy-orders get-list" [
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
-  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects/{project_id}/buyOrders"))
+  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects/{project_id}/buyOrders") $auth.query)
   let accept_val = ($accept | default "*/*")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a quick buy order
@@ -1564,12 +2079,23 @@ export def "workgroups-projects-buy-orders create" [
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
-  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects/{project_id}/buyOrders"))
+  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects/{project_id}/buyOrders") $auth.query)
   let req_body = {"buyer_user_id": $buyer_user_id, "comments": $comments, "custom_fields": $custom_fields, "invoice_or_billing_recipient": $invoice_or_billing_recipient, "order_completion_date": $order_completion_date, "order_items": $order_items, "other_selection_reason": $other_selection_reason, "payment_method_id": $payment_method_id, "payment_reference_no": $payment_reference_no, "sellOrder": $sell_order, "shipping": $shipping, "supplier_reference": $supplier_reference, "supplier_selection_reason_id": $supplier_selection_reason_id, "supplier_user_id": $supplier_user_id, "tax": $tax, "title": $title} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "*/*")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get a specific buy order
@@ -1596,10 +2122,21 @@ export def "workgroups-projects-buy-orders get" [
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
   if ($order_id | is-empty) { error make --unspanned { msg: "path parameter 'order_id' must be non-empty" } }
-  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id), order_id: (encode-path-segment $order_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects/{project_id}/buyOrders/{order_id}"))
+  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id), order_id: (encode-path-segment $order_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects/{project_id}/buyOrders/{order_id}") $auth.query)
   let accept_val = ($accept | default "*/*")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update a specific buy order
@@ -1641,12 +2178,23 @@ export def "workgroups-projects-buy-orders update" [
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
   if ($order_id | is-empty) { error make --unspanned { msg: "path parameter 'order_id' must be non-empty" } }
-  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id), order_id: (encode-path-segment $order_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects/{project_id}/buyOrders/{order_id}"))
+  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id), order_id: (encode-path-segment $order_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects/{project_id}/buyOrders/{order_id}") $auth.query)
   let req_body = {"action": $action, "budget_type_field_id": $budget_type_field_id, "comments": $comments, "custom_fields": $custom_fields, "order_completion_date": $order_completion_date, "order_id": $body_order_id, "other_selection_reason": $other_selection_reason, "overs_percent": $overs_percent, "payment_method_id": $payment_method_id, "payment_reference_no": $payment_reference_no, "reject_reason": $reject_reason, "supplier_selection_reason_id": $supplier_selection_reason_id, "unders_percent": $unders_percent} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "*/*")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Attach children projects to specific Project
@@ -1673,12 +2221,23 @@ export def "workgroups-projects-children attach" [
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
-  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects/{project_id}/children"))
+  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects/{project_id}/children") $auth.query)
   let req_body = {"childProjectIds": $child_project_ids} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "*/*")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # List the Estimates
@@ -1703,10 +2262,21 @@ export def "workgroups-projects-estimates get-list" [
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
-  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects/{project_id}/estimates"))
+  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects/{project_id}/estimates") $auth.query)
   let accept_val = ($accept | default "*/*")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a Estimate
@@ -1740,12 +2310,23 @@ export def "workgroups-projects-estimates create" [
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
-  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects/{project_id}/estimates"))
+  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects/{project_id}/estimates") $auth.query)
   let req_body = {"comments": $comments, "description": $description, "estimate_items": $estimate_items, "estimate_title": $estimate_title, "expiration_date": $expiration_date, "owner_reference": $owner_reference, "rfe_id": $rfe_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "*/*")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get a specific estimate of project
@@ -1772,10 +2353,21 @@ export def "workgroups-projects-estimates get" [
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
   if ($estimate_id | is-empty) { error make --unspanned { msg: "path parameter 'estimate_id' must be non-empty" } }
-  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id), estimate_id: (encode-path-segment $estimate_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects/{project_id}/estimates/{estimate_id}"))
+  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id), estimate_id: (encode-path-segment $estimate_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects/{project_id}/estimates/{estimate_id}") $auth.query)
   let accept_val = ($accept | default "*/*")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List invoices by a specific order
@@ -1802,10 +2394,21 @@ export def "workgroups-projects-invoices-orders get" [
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
   if ($order_id | is-empty) { error make --unspanned { msg: "path parameter 'order_id' must be non-empty" } }
-  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id), order_id: (encode-path-segment $order_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects/{project_id}/invoices/orders/{order_id}"))
+  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id), order_id: (encode-path-segment $order_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects/{project_id}/invoices/orders/{order_id}") $auth.query)
   let accept_val = ($accept | default "*/*")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List a specific invoice of project Level
@@ -1832,10 +2435,21 @@ export def "workgroups-projects-invoices get" [
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
   if ($invoice_id | is-empty) { error make --unspanned { msg: "path parameter 'invoice_id' must be non-empty" } }
-  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id), invoice_id: (encode-path-segment $invoice_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects/{project_id}/invoices/{invoice_id}"))
+  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id), invoice_id: (encode-path-segment $invoice_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects/{project_id}/invoices/{invoice_id}") $auth.query)
   let accept_val = ($accept | default "*/*")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List files of invoice Level
@@ -1862,10 +2476,21 @@ export def "workgroups-projects-invoices-files get" [
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
   if ($invoice_id | is-empty) { error make --unspanned { msg: "path parameter 'invoice_id' must be non-empty" } }
-  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id), invoice_id: (encode-path-segment $invoice_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects/{project_id}/invoices/{invoice_id}/files"))
+  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id), invoice_id: (encode-path-segment $invoice_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects/{project_id}/invoices/{invoice_id}/files") $auth.query)
   let accept_val = ($accept | default "*/*")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List all the role options for the user
@@ -1892,10 +2517,21 @@ export def "workgroups-projects-memberroles get-member-roles" [
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
-  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id), user_id: (encode-path-segment $user_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects/{project_id}/memberroles/{user_id}"))
+  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id), user_id: (encode-path-segment $user_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects/{project_id}/memberroles/{user_id}") $auth.query)
   let accept_val = ($accept | default "*/*")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get a specific buy/sell order
@@ -1922,10 +2558,21 @@ export def "workgroups-projects-orders get" [
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
   if ($order_id | is-empty) { error make --unspanned { msg: "path parameter 'order_id' must be non-empty" } }
-  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id), order_id: (encode-path-segment $order_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects/{project_id}/orders/{order_id}"))
+  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id), order_id: (encode-path-segment $order_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects/{project_id}/orders/{order_id}") $auth.query)
   let accept_val = ($accept | default "*/*")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List the quotes
@@ -1952,10 +2599,21 @@ export def "workgroups-projects-quotes get-list" [
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
   let qp = [(serialize-qp "quote_state_id, use filters={"quote_state_id":111111}" $quote_state_id_use_filters_quote_state_id_111111 "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects/{project_id}/quotes") $qp)
+  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects/{project_id}/quotes") $qp $auth.query)
   let accept_val = ($accept | default "*/*")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"quote_state_id, use filters={\"quote_state_id\":111111}": $quote_state_id_use_filters_quote_state_id_111111} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"quote_state_id, use filters={\"quote_state_id\":111111}": $quote_state_id_use_filters_quote_state_id_111111} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get a specific quote of project
@@ -1982,10 +2640,21 @@ export def "workgroups-projects-quotes get" [
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
   if ($quote_id | is-empty) { error make --unspanned { msg: "path parameter 'quote_id' must be non-empty" } }
-  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id), quote_id: (encode-path-segment $quote_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects/{project_id}/quotes/{quote_id}"))
+  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id), quote_id: (encode-path-segment $quote_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects/{project_id}/quotes/{quote_id}") $auth.query)
   let accept_val = ($accept | default "*/*")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Accept / Reject a Quote
@@ -2017,12 +2686,23 @@ export def "workgroups-projects-quotes update" [
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
   if ($quote_id | is-empty) { error make --unspanned { msg: "path parameter 'quote_id' must be non-empty" } }
-  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id), quote_id: (encode-path-segment $quote_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects/{project_id}/quotes/{quote_id}"))
+  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id), quote_id: (encode-path-segment $quote_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects/{project_id}/quotes/{quote_id}") $auth.query)
   let req_body = {"action": $action, "po_number": $po_number, "quote_id": $body_quote_id, "state_change_comments": $state_change_comments} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "*/*")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # List the RFES
@@ -2047,10 +2727,21 @@ export def "workgroups-projects-rfes get-list" [
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
-  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects/{project_id}/rfes"))
+  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects/{project_id}/rfes") $auth.query)
   let accept_val = ($accept | default "*/*")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a RFE
@@ -2085,12 +2776,23 @@ export def "workgroups-projects-rfes create" [
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
-  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects/{project_id}/rfes"))
+  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects/{project_id}/rfes") $auth.query)
   let req_body = {"description": $description, "details": $details, "estimate_due_date": $estimate_due_date, "proposed_order_completion_date": $proposed_order_completion_date, "rfe_number": $rfe_number, "rfe_title": $rfe_title, "specs": $specs, "supplier_user_ids": $supplier_user_ids} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "*/*")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get a specific Rfe
@@ -2117,10 +2819,21 @@ export def "workgroups-projects-rfes get" [
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
   if ($rfe_id | is-empty) { error make --unspanned { msg: "path parameter 'rfe_id' must be non-empty" } }
-  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id), rfe_id: (encode-path-segment $rfe_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects/{project_id}/rfes/{rfe_id}"))
+  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id), rfe_id: (encode-path-segment $rfe_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects/{project_id}/rfes/{rfe_id}") $auth.query)
   let accept_val = ($accept | default "*/*")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List the rfqs
@@ -2145,10 +2858,21 @@ export def "workgroups-projects-rfqs get-list" [
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
-  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects/{project_id}/rfqs"))
+  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects/{project_id}/rfqs") $auth.query)
   let accept_val = ($accept | default "*/*")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get a specific Rfq
@@ -2175,10 +2899,21 @@ export def "workgroups-projects-rfqs get" [
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
   if ($rfq_id | is-empty) { error make --unspanned { msg: "path parameter 'rfq_id' must be non-empty" } }
-  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id), rfq_id: (encode-path-segment $rfq_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects/{project_id}/rfqs/{rfq_id}"))
+  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id), rfq_id: (encode-path-segment $rfq_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects/{project_id}/rfqs/{rfq_id}") $auth.query)
   let accept_val = ($accept | default "*/*")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List the sell orders
@@ -2203,10 +2938,21 @@ export def "workgroups-projects-sell-orders get-list" [
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
-  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects/{project_id}/sellOrders"))
+  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects/{project_id}/sellOrders") $auth.query)
   let accept_val = ($accept | default "*/*")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get a specific sell order
@@ -2233,10 +2979,21 @@ export def "workgroups-projects-sell-orders get" [
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
   if ($order_id | is-empty) { error make --unspanned { msg: "path parameter 'order_id' must be non-empty" } }
-  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id), order_id: (encode-path-segment $order_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects/{project_id}/sellOrders/{order_id}"))
+  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id), order_id: (encode-path-segment $order_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects/{project_id}/sellOrders/{order_id}") $auth.query)
   let accept_val = ($accept | default "*/*")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update / Accept or Reject a specific sell order
@@ -2278,12 +3035,23 @@ export def "workgroups-projects-sell-orders update" [
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
   if ($order_id | is-empty) { error make --unspanned { msg: "path parameter 'order_id' must be non-empty" } }
-  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id), order_id: (encode-path-segment $order_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects/{project_id}/sellOrders/{order_id}"))
+  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id), order_id: (encode-path-segment $order_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects/{project_id}/sellOrders/{order_id}") $auth.query)
   let req_body = {"action": $action, "budget_type_field_id": $budget_type_field_id, "comments": $comments, "custom_fields": $custom_fields, "order_completion_date": $order_completion_date, "order_id": $body_order_id, "other_selection_reason": $other_selection_reason, "overs_percent": $overs_percent, "payment_method_id": $payment_method_id, "payment_reference_no": $payment_reference_no, "reject_reason": $reject_reason, "supplier_selection_reason_id": $supplier_selection_reason_id, "unders_percent": $unders_percent} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "*/*")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # List shipments of project
@@ -2308,10 +3076,21 @@ export def "workgroups-projects-shipments get-list" [
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
-  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects/{project_id}/shipments"))
+  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects/{project_id}/shipments") $auth.query)
   let accept_val = ($accept | default "*/*")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a shipment
@@ -2368,12 +3147,23 @@ export def "workgroups-projects-shipments create" [
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
-  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects/{project_id}/shipments"))
+  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects/{project_id}/shipments") $auth.query)
   let req_body = {"address_line1": $address_line1, "address_line2": $address_line2, "address_line3": $address_line3, "batch_label": $batch_label, "city": $city, "company_name": $company_name, "country_iso_code": $country_iso_code, "delivery_date": $delivery_date, "description_or_title": $description_or_title, "email": $email, "first_name": $first_name, "inner_carton_label": $inner_carton_label, "last_name": $last_name, "middle_name": $middle_name, "outer_carton_label": $outer_carton_label, "pallet_lablel": $pallet_lablel, "poof_type": $poof_type, "postal_code": $postal_code, "request_type": $request_type, "requested_quantity": $requested_quantity, "shipment_custom_fields": $shipment_custom_fields, "shipment_request_custom_fields": $shipment_request_custom_fields, "shipping_carrier": $shipping_carrier, "shipping_instruction": $shipping_instruction, "shpping_method": $shpping_method, "spec_ids": $spec_ids, "state": $state, "work_phone_number": $work_phone_number, "workgroup_name": $workgroup_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "*/*")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get a specific shipment.
@@ -2400,10 +3190,21 @@ export def "workgroups-projects-shipments get" [
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
   if ($shipment_id | is-empty) { error make --unspanned { msg: "path parameter 'shipment_id' must be non-empty" } }
-  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id), shipment_id: (encode-path-segment $shipment_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects/{project_id}/shipments/{shipment_id}"))
+  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id), shipment_id: (encode-path-segment $shipment_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects/{project_id}/shipments/{shipment_id}") $auth.query)
   let accept_val = ($accept | default "*/*")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update a specific shipment location
@@ -2441,12 +3242,23 @@ export def "workgroups-projects-shipments-locations update" [
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
   if ($shipment_id | is-empty) { error make --unspanned { msg: "path parameter 'shipment_id' must be non-empty" } }
   if ($location_id | is-empty) { error make --unspanned { msg: "path parameter 'location_id' must be non-empty" } }
-  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id), shipment_id: (encode-path-segment $shipment_id), location_id: (encode-path-segment $location_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects/{project_id}/shipments/{shipment_id}/locations/{location_id}"))
+  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id), shipment_id: (encode-path-segment $shipment_id), location_id: (encode-path-segment $location_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects/{project_id}/shipments/{shipment_id}/locations/{location_id}") $auth.query)
   let req_body = {"due_date": $due_date, "qty_received": $qty_received, "qty_requested": $qty_requested, "qty_shipped": $qty_shipped, "received_date": $received_date, "shipped_date": $shipped_date, "shipping_cost": $shipping_cost, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "*/*")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # List specs of project Level
@@ -2471,10 +3283,21 @@ export def "workgroups-projects-specs get-list" [
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
-  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects/{project_id}/specs"))
+  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects/{project_id}/specs") $auth.query)
   let accept_val = ($accept | default "*/*")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a Spec
@@ -2513,12 +3336,23 @@ export def "workgroups-projects-specs create" [
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
-  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects/{project_id}/specs"))
+  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects/{project_id}/specs") $auth.query)
   let req_body = {"jsonBody": $json_body, "product_type_id": $product_type_id, "quantity_1": $quantity_1, "quantity_2": $quantity_2, "quantity_3": $quantity_3, "quantity_4": $quantity_4, "quantity_5": $quantity_5, "sku": $sku, "spec_name": $spec_name, "spec_template_id": $spec_template_id, "spec_type_id": $spec_type_id, "versions": $versions} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "*/*")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # List a specific spec of project Level
@@ -2544,10 +3378,21 @@ export def "workgroups-projects-specs get" [
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
   if ($spec_id | is-empty) { error make --unspanned { msg: "path parameter 'spec_id' must be non-empty" } }
-  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id), spec_id: (encode-path-segment $spec_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects/{project_id}/specs/{spec_id}"))
+  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id), spec_id: (encode-path-segment $spec_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects/{project_id}/specs/{spec_id}") $auth.query)
   let accept_val = ($accept | default "*/*")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update a specific Spec
@@ -2584,12 +3429,23 @@ export def "workgroups-projects-specs update" [
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
   if ($spec_id | is-empty) { error make --unspanned { msg: "path parameter 'spec_id' must be non-empty" } }
-  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id), spec_id: (encode-path-segment $spec_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects/{project_id}/specs/{spec_id}"))
+  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id), spec_id: (encode-path-segment $spec_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects/{project_id}/specs/{spec_id}") $auth.query)
   let req_body = {"inks_and_paper": $inks_and_paper, "product_type_id": $product_type_id, "quantity_1": $quantity_1, "quantity_2": $quantity_2, "quantity_3": $quantity_3, "quantity_4": $quantity_4, "quantity_5": $quantity_5, "sku": $sku, "spec_name": $spec_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "*/*")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get task list of project level
@@ -2614,10 +3470,21 @@ export def "workgroups-projects-tasks get-list" [
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
-  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects/{project_id}/tasks"))
+  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects/{project_id}/tasks") $auth.query)
   let accept_val = ($accept | default "*/*")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a new task
@@ -2662,12 +3529,23 @@ export def "workgroups-projects-tasks create" [
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
-  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects/{project_id}/tasks"))
+  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects/{project_id}/tasks") $auth.query)
   let req_body = {"actual_duration": $actual_duration, "actual_duration_hour": $actual_duration_hour, "actual_end_date": $actual_end_date, "actual_start_date": $actual_start_date, "assign_to_user_id": $assign_to_user_id, "comments": $comments, "contributors": $contributors, "custom_status_id": $custom_status_id, "description": $description, "name": $name, "percentage_complete": $percentage_complete, "priority": $priority, "revised_duration": $revised_duration, "revised_duration_hour": $revised_duration_hour, "revised_end_date": $revised_end_date, "revised_start_date": $revised_start_date, "status_id": $status_id, "task_id": $task_id, "task_type_id": $task_type_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "*/*")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get a sepcific task of project level
@@ -2694,10 +3572,21 @@ export def "workgroups-projects-tasks get" [
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
   if ($task_id | is-empty) { error make --unspanned { msg: "path parameter 'task_id' must be non-empty" } }
-  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id), task_id: (encode-path-segment $task_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects/{project_id}/tasks/{task_id}"))
+  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id), task_id: (encode-path-segment $task_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects/{project_id}/tasks/{task_id}") $auth.query)
   let accept_val = ($accept | default "*/*")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List team member of client project side.
@@ -2722,10 +3611,21 @@ export def "workgroups-projects-team-members-of-client-project get-list" [
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
-  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects/{project_id}/teamMembersOfClientProject"))
+  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects/{project_id}/teamMembersOfClientProject") $auth.query)
   let accept_val = ($accept | default "*/*")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List team member of project.
@@ -2750,10 +3650,21 @@ export def "workgroups-projects-teammembers get-team-member-list" [
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
-  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects/{project_id}/teammembers"))
+  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects/{project_id}/teammembers") $auth.query)
   let accept_val = ($accept | default "*/*")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Deprecated, please use 1.1 Version
@@ -2780,12 +3691,23 @@ export def "workgroups-projects-teammembers create" [
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
-  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects/{project_id}/teammembers"))
+  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects/{project_id}/teammembers") $auth.query)
   let req_body = {"role_id": $role_id, "user_id": $user_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "*/*")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Delete a team member for the specific project.
@@ -2812,10 +3734,21 @@ export def "workgroups-projects-teammembers delete-team-member" [
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
   if ($teammember_id | is-empty) { error make --unspanned { msg: "path parameter 'teammember_id' must be non-empty" } }
-  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id), teammember_id: (encode-path-segment $teammember_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects/{project_id}/teammembers/{teammember_id}"))
+  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id), teammember_id: (encode-path-segment $teammember_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects/{project_id}/teammembers/{teammember_id}") $auth.query)
   let accept_val = ($accept | default "*/*")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # List the quote states
@@ -2838,10 +3771,21 @@ export def "workgroups-quote-states get-list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
-  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id)} | format pattern "/v1/workgroups/{workgroup_id}/quoteStates"))
+  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id)} | format pattern "/v1/workgroups/{workgroup_id}/quoteStates") $auth.query)
   let accept_val = ($accept | default "*/*")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List the quotes of workgroup level
@@ -2865,10 +3809,21 @@ export def "workgroups-quotes get" [
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
   let qp = [(serialize-qp "quote_state_id, use filters={"quote_state_id":111111}" $quote_state_id_use_filters_quote_state_id_111111 "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id)} | format pattern "/v1/workgroups/{workgroup_id}/quotes") $qp)
+  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id)} | format pattern "/v1/workgroups/{workgroup_id}/quotes") $qp $auth.query)
   let accept_val = ($accept | default "*/*")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"quote_state_id, use filters={\"quote_state_id\":111111}": $quote_state_id_use_filters_quote_state_id_111111} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"quote_state_id, use filters={\"quote_state_id\":111111}": $quote_state_id_use_filters_quote_state_id_111111} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List received time cards
@@ -2891,10 +3846,21 @@ export def "workgroups-received-time-cards get-list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
-  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id)} | format pattern "/v1/workgroups/{workgroup_id}/receivedTimeCards"))
+  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id)} | format pattern "/v1/workgroups/{workgroup_id}/receivedTimeCards") $auth.query)
   let accept_val = ($accept | default "*/*")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List a specific received time cards
@@ -2919,10 +3885,21 @@ export def "workgroups-received-time-cards get" [
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
   if ($time_card_id | is-empty) { error make --unspanned { msg: "path parameter 'timeCard_id' must be non-empty" } }
-  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), time_card_id: (encode-path-segment $time_card_id)} | format pattern "/v1/workgroups/{workgroup_id}/receivedTimeCards/{time_card_id}"))
+  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), time_card_id: (encode-path-segment $time_card_id)} | format pattern "/v1/workgroups/{workgroup_id}/receivedTimeCards/{time_card_id}") $auth.query)
   let accept_val = ($accept | default "*/*")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List the sell orders of workgrop
@@ -2945,10 +3922,21 @@ export def "workgroups-sell-orders get-list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
-  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id)} | format pattern "/v1/workgroups/{workgroup_id}/sellOrders"))
+  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id)} | format pattern "/v1/workgroups/{workgroup_id}/sellOrders") $auth.query)
   let accept_val = ($accept | default "*/*")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get a specific sell order
@@ -2973,10 +3961,21 @@ export def "workgroups-sell-orders get" [
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
   if ($order_id | is-empty) { error make --unspanned { msg: "path parameter 'order_id' must be non-empty" } }
-  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), order_id: (encode-path-segment $order_id)} | format pattern "/v1/workgroups/{workgroup_id}/sellOrders/{order_id}"))
+  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), order_id: (encode-path-segment $order_id)} | format pattern "/v1/workgroups/{workgroup_id}/sellOrders/{order_id}") $auth.query)
   let accept_val = ($accept | default "*/*")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List Spec Templates of Workgroup Level
@@ -2999,10 +3998,21 @@ export def "workgroups-spec-templates get-list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
-  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id)} | format pattern "/v1/workgroups/{workgroup_id}/specTemplates"))
+  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id)} | format pattern "/v1/workgroups/{workgroup_id}/specTemplates") $auth.query)
   let accept_val = ($accept | default "*/*")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get a specific Spec Template
@@ -3027,10 +4037,21 @@ export def "workgroups-spec-templates get" [
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
   if ($spec_template_id | is-empty) { error make --unspanned { msg: "path parameter 'spec_template_id' must be non-empty" } }
-  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), spec_template_id: (encode-path-segment $spec_template_id)} | format pattern "/v1/workgroups/{workgroup_id}/specTemplates/{spec_template_id}"))
+  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), spec_template_id: (encode-path-segment $spec_template_id)} | format pattern "/v1/workgroups/{workgroup_id}/specTemplates/{spec_template_id}") $auth.query)
   let accept_val = ($accept | default "*/*")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get Spec Type Fields
@@ -3054,10 +4075,21 @@ export def "workgroups-spec-types-spec-type-fields get" [
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
   if ($spec_type_id | is-empty) { error make --unspanned { msg: "path parameter 'spec_type_id' must be non-empty" } }
-  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), spec_type_id: (encode-path-segment $spec_type_id)} | format pattern "/v1/workgroups/{workgroup_id}/specTypes/{spec_type_id}/specTypeFields"))
+  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), spec_type_id: (encode-path-segment $spec_type_id)} | format pattern "/v1/workgroups/{workgroup_id}/specTypes/{spec_type_id}/specTypeFields") $auth.query)
   let accept_val = ($accept | default "*/*")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List supplier workgroups
@@ -3080,10 +4112,21 @@ export def "workgroups-supplier-workgroups get-list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
-  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id)} | format pattern "/v1/workgroups/{workgroup_id}/supplierWorkgroups"))
+  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id)} | format pattern "/v1/workgroups/{workgroup_id}/supplierWorkgroups") $auth.query)
   let accept_val = ($accept | default "*/*")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get the specific supplier of My Group
@@ -3108,10 +4151,21 @@ export def "workgroups-supplier-workgroups get-detail" [
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
   if ($bu_supplier_workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'bu_supplier_workgroup_id' must be non-empty" } }
-  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), bu_supplier_workgroup_id: (encode-path-segment $bu_supplier_workgroup_id)} | format pattern "/v1/workgroups/{workgroup_id}/supplierWorkgroups/{bu_supplier_workgroup_id}"))
+  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), bu_supplier_workgroup_id: (encode-path-segment $bu_supplier_workgroup_id)} | format pattern "/v1/workgroups/{workgroup_id}/supplierWorkgroups/{bu_supplier_workgroup_id}") $auth.query)
   let accept_val = ($accept | default "*/*")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get task types of workgroup level
@@ -3134,10 +4188,21 @@ export def "workgroups-task-types get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
-  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id)} | format pattern "/v1/workgroups/{workgroup_id}/taskTypes"))
+  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id)} | format pattern "/v1/workgroups/{workgroup_id}/taskTypes") $auth.query)
   let accept_val = ($accept | default "*/*")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get task list of workgroup level
@@ -3160,10 +4225,21 @@ export def "workgroups-tasks get-list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
-  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id)} | format pattern "/v1/workgroups/{workgroup_id}/tasks"))
+  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id)} | format pattern "/v1/workgroups/{workgroup_id}/tasks") $auth.query)
   let accept_val = ($accept | default "*/*")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get a sepcific task of workgroup level
@@ -3188,10 +4264,21 @@ export def "workgroups-tasks get" [
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
   if ($task_id | is-empty) { error make --unspanned { msg: "path parameter 'task_id' must be non-empty" } }
-  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), task_id: (encode-path-segment $task_id)} | format pattern "/v1/workgroups/{workgroup_id}/tasks/{task_id}"))
+  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), task_id: (encode-path-segment $task_id)} | format pattern "/v1/workgroups/{workgroup_id}/tasks/{task_id}") $auth.query)
   let accept_val = ($accept | default "*/*")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List current user's team templates info
@@ -3214,10 +4301,21 @@ export def "workgroups-team-templates get-list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
-  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id)} | format pattern "/v1/workgroups/{workgroup_id}/teamTemplates"))
+  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id)} | format pattern "/v1/workgroups/{workgroup_id}/teamTemplates") $auth.query)
   let accept_val = ($accept | default "*/*")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get current user's team template detal info
@@ -3242,10 +4340,21 @@ export def "workgroups-team-templates get-detail" [
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
   if ($team_template_id | is-empty) { error make --unspanned { msg: "path parameter 'team_template_id' must be non-empty" } }
-  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), team_template_id: (encode-path-segment $team_template_id)} | format pattern "/v1/workgroups/{workgroup_id}/teamTemplates/{team_template_id}"))
+  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), team_template_id: (encode-path-segment $team_template_id)} | format pattern "/v1/workgroups/{workgroup_id}/teamTemplates/{team_template_id}") $auth.query)
   let accept_val = ($accept | default "*/*")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List the workgroup members
@@ -3268,10 +4377,21 @@ export def "workgroups-workgroup-members get-list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
-  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id)} | format pattern "/v1/workgroups/{workgroup_id}/workgroupMembers"))
+  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id)} | format pattern "/v1/workgroups/{workgroup_id}/workgroupMembers") $auth.query)
   let accept_val = ($accept | default "*/*")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Workgroup Member Info
@@ -3296,8 +4416,19 @@ export def "workgroups-workgroup-members get" [
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
-  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), user_id: (encode-path-segment $user_id)} | format pattern "/v1/workgroups/{workgroup_id}/workgroupMembers/{user_id}"))
+  let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), user_id: (encode-path-segment $user_id)} | format pattern "/v1/workgroups/{workgroup_id}/workgroupMembers/{user_id}") $auth.query)
   let accept_val = ($accept | default "*/*")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }

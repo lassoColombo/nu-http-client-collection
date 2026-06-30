@@ -8,7 +8,7 @@ const BASE_URL = "{Endpoint}/luis/authoring/v3.0-preview"
 # `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
 # where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o LUIS_AUTHORING_CLIENT_TOKEN | default "" }
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o LUIS_AUTHORING_CLIENT_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
@@ -41,14 +41,11 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
-# Trick: `url encode --all` over-encodes, then we decode the four unreserved
-# punctuation chars back. Pre-existing %XX sequences in the input survive
-# because `url encode --all` first turns their % into %25.
 def encode-path-segment [v: any]: nothing -> string {
   $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
-# Serialize an array-typed path parameter (issue 49.A). OpenAPI 3 `style: simple`
+# Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
 # (the default for path params) and Swagger 2 `collectionFormat: csv` both join
 # the elements with a literal comma WITHIN the single path segment, each element
 # RFC-3986-encoded individually (so a comma inside an element stays %2C). Without
@@ -59,51 +56,63 @@ def encode-path-array [v: any]: nothing -> string {
   if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
 }
 
-# Build URL from base, path, and optional query string
-def build-url [base: string, path: string, query?: string]: nothing -> string {
+# Build the request URL from base, path, and any number of pre-encoded query
+# fragments (param serializer output and/or the auth query). Each fragment is an
+# `&`-joinable `key=value` string already percent-encoded by its producer; empty
+# fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
+# delimiters are hand-spliced — and any query already on the base URL is merged in.
+def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
   let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
-  let result = ($parsed | upsert path $full_path)
-  if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
+  let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
+  $parsed | upsert path $full_path | upsert query $query | url join
 }
 
-# Build the dry-run record returned by --dry-run. Shape:
-#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
-#    auth: {scheme, location}}
-# `meta` carries logical-form data (the query record by spec name, the pre-serialization
-# body) that do-request itself cannot reconstruct from its wire-format args.
-def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
-  let m = ($meta | default {})
-  {
-    dry_run: true
-    method: $method
-    url: $url
-    query: ($m | get -o query | default {})
-    headers: $auth.headers
-    body: ($m | get -o body)
-    content_type: $content_type
-    timeout: $timeout
-    auth: {scheme: $auth.scheme, location: $auth.location}
-  }
+# Success policy: did this response succeed? Single source of truth, consulted by
+# handle-response and the HEAD header-unwrap. Empty ok_codes means the spec listed
+# none, so fall back to < 400. Otherwise: any 2xx, plus documented success codes.
+def status-ok [status: int, ok_codes: list<int>]: nothing -> bool {
+  if ($ok_codes | is-empty) { $status < 400 } else { ($status >= 200 and $status < 300) or ($status in $ok_codes) }
 }
 
-# Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
-  let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
-  let timeout = ($max_time | default 30min)
-  let ct = ($content_type | default "application/json")
-  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
-  let resp = match $method {
-    "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
-  }
-  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
-  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
+# Unwrap a `--full` HTTP response into the user-facing value. Response arrives
+# via pipeline; ok_codes gates the error throw (see status-ok).
+def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: record -> any {
+  let resp = $in
+  if $allow_errors { return $resp }
+  if not (status-ok $resp.status $ok_codes) { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } }
+  if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
+  if $resp.status == 204 { return null }
+  $resp.body
+}
+
+# GET — bodyless, honours --raw
+def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+}
+
+# POST — body + content-type
+def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# PUT — body + content-type
+def send-put [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http put --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http put --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# PATCH — body + content-type
+def send-patch [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http patch --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http patch --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# DELETE — body via --data
+def send-delete [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http delete --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url } else { http delete --headers $req.headers --content-type $req.content_type --data $body --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url }
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 def base-url-completer [] { ["{Endpoint}/luis/authoring/v3.0-preview"] }
@@ -156,10 +165,21 @@ export def "apps list" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "skip" $skip "scalar") (serialize-qp "take" $take "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/apps/" $qp)
+  let full_url = (build-url $base "/apps/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"skip": $skip, "take": $take} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"skip": $skip, "take": $take} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Creates a new LUIS app.
@@ -186,12 +206,23 @@ export def "apps create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/apps/")
+  let full_url = (build-url $base "/apps/" $auth.query)
   let req_body = {"culture": $culture, "description": $description, "domain": $domain, "initialVersionId": $initial_version_id, "name": $name, "usageScenario": $usage_scenario} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Gets the endpoint URLs for the prebuilt Cortana applications.
@@ -211,10 +242,21 @@ export def "apps-assistants list-cortana-endpoints" [
 ]: nothing -> record<endpointKeys: list<string>, endpointUrls: record> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/apps/assistants")
+  let full_url = (build-url $base "/apps/assistants" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets a list of supported cultures. Cultures are equivalent to the written language and locale. For example,"en-us" represents the U.S. variation of English.
@@ -234,10 +276,21 @@ export def "apps-cultures list-supported" [
 ]: nothing -> table<code: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/apps/cultures")
+  let full_url = (build-url $base "/apps/cultures" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets all the available custom prebuilt domains for all cultures.
@@ -257,10 +310,21 @@ export def "apps-customprebuiltdomains list" [
 ]: nothing -> table<culture: string, description: string, entities: list<record>, examples: string, intents: list<record>, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/apps/customprebuiltdomains")
+  let full_url = (build-url $base "/apps/customprebuiltdomains" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Adds a prebuilt domain along with its intent and entity models as a new application.
@@ -283,12 +347,23 @@ export def "apps-customprebuiltdomains create-custom-prebuilt-domain" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/apps/customprebuiltdomains")
+  let full_url = (build-url $base "/apps/customprebuiltdomains" $auth.query)
   let req_body = {"culture": $culture, "domainName": $domain_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Gets all the available prebuilt domains for a specific culture.
@@ -310,10 +385,21 @@ export def "apps-customprebuiltdomains list-available-custom-prebuilt-domains" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($culture | is-empty) { error make --unspanned { msg: "path parameter 'culture' must be non-empty" } }
-  let full_url = (build-url $base ({culture: (encode-path-segment $culture)} | format pattern "/apps/customprebuiltdomains/{culture}"))
+  let full_url = (build-url $base ({culture: (encode-path-segment $culture)} | format pattern "/apps/customprebuiltdomains/{culture}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the available application domains.
@@ -333,10 +419,21 @@ export def "apps-domains list" [
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/apps/domains")
+  let full_url = (build-url $base "/apps/domains" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Imports an application to LUIS, the application's structure is included in the request body.
@@ -387,12 +484,23 @@ export def "apps-import import" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "appName" $app_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/apps/import" $qp)
+  let full_url = (build-url $base "/apps/import" $qp $auth.query)
   let req_body = {"closedLists": $closed_lists, "composites": $composites, "culture": $culture, "desc": $desc, "entities": $entities, "hierarchicals": $hierarchicals, "intents": $intents, "name": $name, "patternAnyEntities": $pattern_any_entities, "patterns": $patterns, "phraselists": $phraselists, "prebuiltEntities": $prebuilt_entities, "regex_entities": $regex_entities, "regex_features": $regex_features, "utterances": $utterances, "versionId": $version_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"appName": $app_name} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"appName": $app_name} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Gets the application available usage scenarios.
@@ -412,10 +520,21 @@ export def "apps-usagescenarios list-usage-scenarios" [
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/apps/usagescenarios")
+  let full_url = (build-url $base "/apps/usagescenarios" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes an application.
@@ -439,10 +558,21 @@ export def "apps delete" [
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let qp = [(serialize-qp "force" $force "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"force": $force} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"force": $force} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the application info.
@@ -464,10 +594,21 @@ export def "apps get" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates the name or description of the application.
@@ -492,12 +633,23 @@ export def "apps update" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}") $auth.query)
   let req_body = {"description": $description, "name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # apps - Removes an assigned LUIS Azure account from an application
@@ -524,14 +676,25 @@ export def "apps-azureaccounts delete-azure-accounts" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/azureaccounts"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/azureaccounts") $auth.query)
   let req_body = {"accountName": $account_name, "azureSubscriptionId": $azure_subscription_id, "resourceGroup": $resource_group} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # apps - Get LUIS Azure accounts assigned to the application
@@ -554,12 +717,23 @@ export def "apps-azureaccounts get-azure-accounts-assigned" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/azureaccounts"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/azureaccounts") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # apps - Assign a LUIS Azure account to an application
@@ -586,14 +760,25 @@ export def "apps-azureaccounts assign-azure-accounts" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/azureaccounts"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/azureaccounts") $auth.query)
   let req_body = {"accountName": $account_name, "azureSubscriptionId": $azure_subscription_id, "resourceGroup": $resource_group} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Returns the available endpoint deployment regions and URLs.
@@ -615,10 +800,21 @@ export def "apps-endpoints list" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/endpoints"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/endpoints") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Removes a user from the allowed list of users to access this LUIS application. Users are removed using their email address.
@@ -642,12 +838,23 @@ export def "apps-permissions delete" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/permissions"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/permissions") $auth.query)
   let req_body = {"email": $email} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the list of user emails that have permissions to access your application.
@@ -669,10 +876,21 @@ export def "apps-permissions list" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/permissions"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/permissions") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Adds a user to the allowed list of users to access this LUIS application. Users are added using their email address.
@@ -696,12 +914,23 @@ export def "apps-permissions create" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/permissions"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/permissions") $auth.query)
   let req_body = {"email": $email} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Replaces the current user access list with the new list sent in the body. If an empty list is sent, all access to other users will be removed.
@@ -725,12 +954,23 @@ export def "apps-permissions update" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/permissions"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/permissions") $auth.query)
   let req_body = {"emails": $emails} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Publishes a specific version of the application.
@@ -755,12 +995,23 @@ export def "apps-publish publish" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/publish"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/publish") $auth.query)
   let req_body = {"isStaging": $is_staging, "versionId": $version_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201 207]
 }
 
 # Get the application publish settings including 'UseAllTrainingData'.
@@ -782,10 +1033,21 @@ export def "apps-publishsettings get-publish-settings" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/publishsettings"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/publishsettings") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates the application publish settings including 'UseAllTrainingData'.
@@ -811,12 +1073,23 @@ export def "apps-publishsettings update-publish-settings" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/publishsettings"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/publishsettings") $auth.query)
   let req_body = {"sentimentAnalysis": $sentiment_analysis, "speech": $speech, "spellChecker": $spell_checker} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the logs of the past month's endpoint queries for the application.
@@ -838,10 +1111,21 @@ export def "apps-querylogs download-list-logs" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/querylogs"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/querylogs") $auth.query)
   let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get the application settings including 'UseAllTrainingData'.
@@ -863,10 +1147,21 @@ export def "apps-settings get" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/settings"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/settings") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates the application settings including 'UseAllTrainingData'.
@@ -890,12 +1185,23 @@ export def "apps-settings update" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/settings"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/settings") $auth.query)
   let req_body = {"public": $public} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Gets a list of versions for this application ID.
@@ -920,10 +1226,21 @@ export def "apps-versions list" [
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let qp = [(serialize-qp "skip" $skip "scalar") (serialize-qp "take" $take "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/versions") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/versions") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"skip": $skip, "take": $take} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"skip": $skip, "take": $take} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Imports a new version into a LUIS application.
@@ -976,12 +1293,23 @@ export def "apps-versions-import import" [
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let qp = [(serialize-qp "versionId" $version_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/versions/import") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/versions/import") $qp $auth.query)
   let req_body = {"closedLists": $closed_lists, "composites": $composites, "culture": $culture, "desc": $desc, "entities": $entities, "hierarchicals": $hierarchicals, "intents": $intents, "name": $name, "patternAnyEntities": $pattern_any_entities, "patterns": $patterns, "phraselists": $phraselists, "prebuiltEntities": $prebuilt_entities, "regex_entities": $regex_entities, "regex_features": $regex_features, "utterances": $utterances, "versionId": $version_id_body} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"versionId": $version_id} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"versionId": $version_id} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Deletes an application version.
@@ -1005,10 +1333,21 @@ export def "apps-versions delete" [
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id)} | format pattern "/apps/{app_id}/versions/{version_id}/"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id)} | format pattern "/apps/{app_id}/versions/{version_id}/") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the version information such as date created, last modified date, endpoint URL, count of intents and entities, training and publishing status.
@@ -1032,10 +1371,21 @@ export def "apps-versions get" [
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id)} | format pattern "/apps/{app_id}/versions/{version_id}/"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id)} | format pattern "/apps/{app_id}/versions/{version_id}/") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates the name or description of the application version.
@@ -1061,12 +1411,23 @@ export def "apps-versions update" [
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id)} | format pattern "/apps/{app_id}/versions/{version_id}/"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id)} | format pattern "/apps/{app_id}/versions/{version_id}/") $auth.query)
   let req_body = {"version": $version} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Creates a new version from the selected version.
@@ -1092,12 +1453,23 @@ export def "apps-versions-clone clone" [
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id)} | format pattern "/apps/{app_id}/versions/{version_id}/clone"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id)} | format pattern "/apps/{app_id}/versions/{version_id}/clone") $auth.query)
   let req_body = {"version": $version} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Gets information about all the list entity models in a version of the application.
@@ -1124,10 +1496,21 @@ export def "apps-versions-closedlists list-model-closed-lists" [
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
   let qp = [(serialize-qp "skip" $skip "scalar") (serialize-qp "take" $take "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id)} | format pattern "/apps/{app_id}/versions/{version_id}/closedlists") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id)} | format pattern "/apps/{app_id}/versions/{version_id}/closedlists") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"skip": $skip, "take": $take} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"skip": $skip, "take": $take} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Adds a list entity model to a version of the application.
@@ -1155,12 +1538,23 @@ export def "apps-versions-closedlists create-model-closed-list" [
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id)} | format pattern "/apps/{app_id}/versions/{version_id}/closedlists"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id)} | format pattern "/apps/{app_id}/versions/{version_id}/closedlists") $auth.query)
   let req_body = {"name": $name, "subLists": $sub_lists} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Deletes a list entity model from a version of the application.
@@ -1186,10 +1580,21 @@ export def "apps-versions-closedlists delete-model-closed-list" [
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
   if ($cl_entity_id | is-empty) { error make --unspanned { msg: "path parameter 'clEntityId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), cl_entity_id: (encode-path-segment $cl_entity_id)} | format pattern "/apps/{app_id}/versions/{version_id}/closedlists/{cl_entity_id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), cl_entity_id: (encode-path-segment $cl_entity_id)} | format pattern "/apps/{app_id}/versions/{version_id}/closedlists/{cl_entity_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Gets information about a list entity in a version of the application.
@@ -1215,10 +1620,21 @@ export def "apps-versions-closedlists get-model-closed-list" [
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
   if ($cl_entity_id | is-empty) { error make --unspanned { msg: "path parameter 'clEntityId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), cl_entity_id: (encode-path-segment $cl_entity_id)} | format pattern "/apps/{app_id}/versions/{version_id}/closedlists/{cl_entity_id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), cl_entity_id: (encode-path-segment $cl_entity_id)} | format pattern "/apps/{app_id}/versions/{version_id}/closedlists/{cl_entity_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Adds a batch of sublists to an existing list entity in a version of the application.
@@ -1247,12 +1663,23 @@ export def "apps-versions-closedlists update-model-closed-list-by-app-id-version
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
   if ($cl_entity_id | is-empty) { error make --unspanned { msg: "path parameter 'clEntityId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), cl_entity_id: (encode-path-segment $cl_entity_id)} | format pattern "/apps/{app_id}/versions/{version_id}/closedlists/{cl_entity_id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), cl_entity_id: (encode-path-segment $cl_entity_id)} | format pattern "/apps/{app_id}/versions/{version_id}/closedlists/{cl_entity_id}") $auth.query)
   let req_body = {"subLists": $sub_lists} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Updates the list entity in a version of the application.
@@ -1282,12 +1709,23 @@ export def "apps-versions-closedlists update-model-closed-list-by-app-id-version
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
   if ($cl_entity_id | is-empty) { error make --unspanned { msg: "path parameter 'clEntityId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), cl_entity_id: (encode-path-segment $cl_entity_id)} | format pattern "/apps/{app_id}/versions/{version_id}/closedlists/{cl_entity_id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), cl_entity_id: (encode-path-segment $cl_entity_id)} | format pattern "/apps/{app_id}/versions/{version_id}/closedlists/{cl_entity_id}") $auth.query)
   let req_body = {"name": $name, "subLists": $sub_lists} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Adds a sublist to an existing list entity in a version of the application.
@@ -1316,12 +1754,23 @@ export def "apps-versions-closedlists-sublists create-model-sub-list" [
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
   if ($cl_entity_id | is-empty) { error make --unspanned { msg: "path parameter 'clEntityId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), cl_entity_id: (encode-path-segment $cl_entity_id)} | format pattern "/apps/{app_id}/versions/{version_id}/closedlists/{cl_entity_id}/sublists"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), cl_entity_id: (encode-path-segment $cl_entity_id)} | format pattern "/apps/{app_id}/versions/{version_id}/closedlists/{cl_entity_id}/sublists") $auth.query)
   let req_body = {"canonicalForm": $canonical_form, "list": $list} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Deletes a sublist of a specific list entity model from a version of the application.
@@ -1349,10 +1798,21 @@ export def "apps-versions-closedlists-sublists delete-model-sub-list" [
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
   if ($cl_entity_id | is-empty) { error make --unspanned { msg: "path parameter 'clEntityId' must be non-empty" } }
   if ($sub_list_id | is-empty) { error make --unspanned { msg: "path parameter 'subListId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), cl_entity_id: (encode-path-segment $cl_entity_id), sub_list_id: (encode-path-segment $sub_list_id)} | format pattern "/apps/{app_id}/versions/{version_id}/closedlists/{cl_entity_id}/sublists/{sub_list_id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), cl_entity_id: (encode-path-segment $cl_entity_id), sub_list_id: (encode-path-segment $sub_list_id)} | format pattern "/apps/{app_id}/versions/{version_id}/closedlists/{cl_entity_id}/sublists/{sub_list_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Updates one of the list entity's sublists in a version of the application.
@@ -1383,12 +1843,23 @@ export def "apps-versions-closedlists-sublists update-model-sub-list" [
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
   if ($cl_entity_id | is-empty) { error make --unspanned { msg: "path parameter 'clEntityId' must be non-empty" } }
   if ($sub_list_id | is-empty) { error make --unspanned { msg: "path parameter 'subListId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), cl_entity_id: (encode-path-segment $cl_entity_id), sub_list_id: (encode-path-segment $sub_list_id)} | format pattern "/apps/{app_id}/versions/{version_id}/closedlists/{cl_entity_id}/sublists/{sub_list_id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), cl_entity_id: (encode-path-segment $cl_entity_id), sub_list_id: (encode-path-segment $sub_list_id)} | format pattern "/apps/{app_id}/versions/{version_id}/closedlists/{cl_entity_id}/sublists/{sub_list_id}") $auth.query)
   let req_body = {"canonicalForm": $canonical_form, "list": $list} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get all roles for a list entity in a version of the application.
@@ -1414,10 +1885,21 @@ export def "apps-versions-closedlists-roles list-model-closed-entity" [
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
   if ($entity_id | is-empty) { error make --unspanned { msg: "path parameter 'entityId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), entity_id: (encode-path-segment $entity_id)} | format pattern "/apps/{app_id}/versions/{version_id}/closedlists/{entity_id}/roles"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), entity_id: (encode-path-segment $entity_id)} | format pattern "/apps/{app_id}/versions/{version_id}/closedlists/{entity_id}/roles") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a role for a list entity in a version of the application.
@@ -1445,12 +1927,23 @@ export def "apps-versions-closedlists-roles create-model-closed-list-entity" [
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
   if ($entity_id | is-empty) { error make --unspanned { msg: "path parameter 'entityId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), entity_id: (encode-path-segment $entity_id)} | format pattern "/apps/{app_id}/versions/{version_id}/closedlists/{entity_id}/roles"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), entity_id: (encode-path-segment $entity_id)} | format pattern "/apps/{app_id}/versions/{version_id}/closedlists/{entity_id}/roles") $auth.query)
   let req_body = {"name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Delete a role for a given list entity in a version of the application.
@@ -1478,10 +1971,21 @@ export def "apps-versions-closedlists-roles delete-model-closed-list-entity" [
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
   if ($entity_id | is-empty) { error make --unspanned { msg: "path parameter 'entityId' must be non-empty" } }
   if ($role_id | is-empty) { error make --unspanned { msg: "path parameter 'roleId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), entity_id: (encode-path-segment $entity_id), role_id: (encode-path-segment $role_id)} | format pattern "/apps/{app_id}/versions/{version_id}/closedlists/{entity_id}/roles/{role_id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), entity_id: (encode-path-segment $entity_id), role_id: (encode-path-segment $role_id)} | format pattern "/apps/{app_id}/versions/{version_id}/closedlists/{entity_id}/roles/{role_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Get one role for a given list entity in a version of the application.
@@ -1509,10 +2013,21 @@ export def "apps-versions-closedlists-roles get-model-closed-list-entity" [
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
   if ($entity_id | is-empty) { error make --unspanned { msg: "path parameter 'entityId' must be non-empty" } }
   if ($role_id | is-empty) { error make --unspanned { msg: "path parameter 'roleId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), entity_id: (encode-path-segment $entity_id), role_id: (encode-path-segment $role_id)} | format pattern "/apps/{app_id}/versions/{version_id}/closedlists/{entity_id}/roles/{role_id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), entity_id: (encode-path-segment $entity_id), role_id: (encode-path-segment $role_id)} | format pattern "/apps/{app_id}/versions/{version_id}/closedlists/{entity_id}/roles/{role_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update a role for a given list entity in a version of the application.
@@ -1542,12 +2057,23 @@ export def "apps-versions-closedlists-roles update-model-closed-list-entity" [
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
   if ($entity_id | is-empty) { error make --unspanned { msg: "path parameter 'entityId' must be non-empty" } }
   if ($role_id | is-empty) { error make --unspanned { msg: "path parameter 'roleId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), entity_id: (encode-path-segment $entity_id), role_id: (encode-path-segment $role_id)} | format pattern "/apps/{app_id}/versions/{version_id}/closedlists/{entity_id}/roles/{role_id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), entity_id: (encode-path-segment $entity_id), role_id: (encode-path-segment $role_id)} | format pattern "/apps/{app_id}/versions/{version_id}/closedlists/{entity_id}/roles/{role_id}") $auth.query)
   let req_body = {"name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Gets information about all the composite entity models in a version of the application.
@@ -1574,10 +2100,21 @@ export def "apps-versions-compositeentities list-model-composite-entities" [
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
   let qp = [(serialize-qp "skip" $skip "scalar") (serialize-qp "take" $take "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id)} | format pattern "/apps/{app_id}/versions/{version_id}/compositeentities") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id)} | format pattern "/apps/{app_id}/versions/{version_id}/compositeentities") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"skip": $skip, "take": $take} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"skip": $skip, "take": $take} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes a composite entity from a version of the application.
@@ -1603,10 +2140,21 @@ export def "apps-versions-compositeentities delete-model-composite-entity" [
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
   if ($c_entity_id | is-empty) { error make --unspanned { msg: "path parameter 'cEntityId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), c_entity_id: (encode-path-segment $c_entity_id)} | format pattern "/apps/{app_id}/versions/{version_id}/compositeentities/{c_entity_id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), c_entity_id: (encode-path-segment $c_entity_id)} | format pattern "/apps/{app_id}/versions/{version_id}/compositeentities/{c_entity_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Gets information about a composite entity in a version of the application.
@@ -1632,10 +2180,21 @@ export def "apps-versions-compositeentities get-model-composite-entity" [
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
   if ($c_entity_id | is-empty) { error make --unspanned { msg: "path parameter 'cEntityId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), c_entity_id: (encode-path-segment $c_entity_id)} | format pattern "/apps/{app_id}/versions/{version_id}/compositeentities/{c_entity_id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), c_entity_id: (encode-path-segment $c_entity_id)} | format pattern "/apps/{app_id}/versions/{version_id}/compositeentities/{c_entity_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates a composite entity in a version of the application.
@@ -1664,12 +2223,23 @@ export def "apps-versions-compositeentities update-model-composite-entity" [
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
   if ($c_entity_id | is-empty) { error make --unspanned { msg: "path parameter 'cEntityId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), c_entity_id: (encode-path-segment $c_entity_id)} | format pattern "/apps/{app_id}/versions/{version_id}/compositeentities/{c_entity_id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), c_entity_id: (encode-path-segment $c_entity_id)} | format pattern "/apps/{app_id}/versions/{version_id}/compositeentities/{c_entity_id}") $auth.query)
   let req_body = {"children": $children, "name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Creates a single child in an existing composite entity model in a version of the application.
@@ -1697,12 +2267,23 @@ export def "apps-versions-compositeentities-children create-model-composite-enti
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
   if ($c_entity_id | is-empty) { error make --unspanned { msg: "path parameter 'cEntityId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), c_entity_id: (encode-path-segment $c_entity_id)} | format pattern "/apps/{app_id}/versions/{version_id}/compositeentities/{c_entity_id}/children"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), c_entity_id: (encode-path-segment $c_entity_id)} | format pattern "/apps/{app_id}/versions/{version_id}/compositeentities/{c_entity_id}/children") $auth.query)
   let req_body = {"name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Deletes a composite entity extractor child from a version of the application.
@@ -1730,10 +2311,21 @@ export def "apps-versions-compositeentities-children delete-model-composite-enti
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
   if ($c_entity_id | is-empty) { error make --unspanned { msg: "path parameter 'cEntityId' must be non-empty" } }
   if ($c_child_id | is-empty) { error make --unspanned { msg: "path parameter 'cChildId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), c_entity_id: (encode-path-segment $c_entity_id), c_child_id: (encode-path-segment $c_child_id)} | format pattern "/apps/{app_id}/versions/{version_id}/compositeentities/{c_entity_id}/children/{c_child_id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), c_entity_id: (encode-path-segment $c_entity_id), c_child_id: (encode-path-segment $c_child_id)} | format pattern "/apps/{app_id}/versions/{version_id}/compositeentities/{c_entity_id}/children/{c_child_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Get all roles for a composite entity in a version of the application
@@ -1759,10 +2351,21 @@ export def "apps-versions-compositeentities-roles list-model-composite-entity" [
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
   if ($c_entity_id | is-empty) { error make --unspanned { msg: "path parameter 'cEntityId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), c_entity_id: (encode-path-segment $c_entity_id)} | format pattern "/apps/{app_id}/versions/{version_id}/compositeentities/{c_entity_id}/roles"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), c_entity_id: (encode-path-segment $c_entity_id)} | format pattern "/apps/{app_id}/versions/{version_id}/compositeentities/{c_entity_id}/roles") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a role for a composite entity in a version of the application.
@@ -1790,12 +2393,23 @@ export def "apps-versions-compositeentities-roles create-model-composite-entity"
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
   if ($c_entity_id | is-empty) { error make --unspanned { msg: "path parameter 'cEntityId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), c_entity_id: (encode-path-segment $c_entity_id)} | format pattern "/apps/{app_id}/versions/{version_id}/compositeentities/{c_entity_id}/roles"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), c_entity_id: (encode-path-segment $c_entity_id)} | format pattern "/apps/{app_id}/versions/{version_id}/compositeentities/{c_entity_id}/roles") $auth.query)
   let req_body = {"name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Delete a role for a given composite entity in a version of the application.
@@ -1823,10 +2437,21 @@ export def "apps-versions-compositeentities-roles delete-model-composite-entity"
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
   if ($c_entity_id | is-empty) { error make --unspanned { msg: "path parameter 'cEntityId' must be non-empty" } }
   if ($role_id | is-empty) { error make --unspanned { msg: "path parameter 'roleId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), c_entity_id: (encode-path-segment $c_entity_id), role_id: (encode-path-segment $role_id)} | format pattern "/apps/{app_id}/versions/{version_id}/compositeentities/{c_entity_id}/roles/{role_id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), c_entity_id: (encode-path-segment $c_entity_id), role_id: (encode-path-segment $role_id)} | format pattern "/apps/{app_id}/versions/{version_id}/compositeentities/{c_entity_id}/roles/{role_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Get one role for a given composite entity in a version of the application
@@ -1854,10 +2479,21 @@ export def "apps-versions-compositeentities-roles get-model-composite-entity" [
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
   if ($c_entity_id | is-empty) { error make --unspanned { msg: "path parameter 'cEntityId' must be non-empty" } }
   if ($role_id | is-empty) { error make --unspanned { msg: "path parameter 'roleId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), c_entity_id: (encode-path-segment $c_entity_id), role_id: (encode-path-segment $role_id)} | format pattern "/apps/{app_id}/versions/{version_id}/compositeentities/{c_entity_id}/roles/{role_id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), c_entity_id: (encode-path-segment $c_entity_id), role_id: (encode-path-segment $role_id)} | format pattern "/apps/{app_id}/versions/{version_id}/compositeentities/{c_entity_id}/roles/{role_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update a role for a given composite entity in a version of the application
@@ -1887,12 +2523,23 @@ export def "apps-versions-compositeentities-roles update-model-composite-entity"
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
   if ($c_entity_id | is-empty) { error make --unspanned { msg: "path parameter 'cEntityId' must be non-empty" } }
   if ($role_id | is-empty) { error make --unspanned { msg: "path parameter 'roleId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), c_entity_id: (encode-path-segment $c_entity_id), role_id: (encode-path-segment $role_id)} | format pattern "/apps/{app_id}/versions/{version_id}/compositeentities/{c_entity_id}/roles/{role_id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), c_entity_id: (encode-path-segment $c_entity_id), role_id: (encode-path-segment $role_id)} | format pattern "/apps/{app_id}/versions/{version_id}/compositeentities/{c_entity_id}/roles/{role_id}") $auth.query)
   let req_body = {"name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Adds a customizable prebuilt domain along with all of its intent and entity models in a version of the application.
@@ -1918,12 +2565,23 @@ export def "apps-versions-customprebuiltdomains create-model-custom-prebuilt-dom
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id)} | format pattern "/apps/{app_id}/versions/{version_id}/customprebuiltdomains"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id)} | format pattern "/apps/{app_id}/versions/{version_id}/customprebuiltdomains") $auth.query)
   let req_body = {"domainName": $domain_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Deletes a prebuilt domain's models in a version of the application.
@@ -1949,10 +2607,21 @@ export def "apps-versions-customprebuiltdomains delete-model-custom-prebuilt-dom
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'domainName' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), domain_name: (encode-path-segment $domain_name)} | format pattern "/apps/{app_id}/versions/{version_id}/customprebuiltdomains/{domain_name}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), domain_name: (encode-path-segment $domain_name)} | format pattern "/apps/{app_id}/versions/{version_id}/customprebuiltdomains/{domain_name}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Gets all prebuilt entities used in a version of the application.
@@ -1976,10 +2645,21 @@ export def "apps-versions-customprebuiltentities list-model-custom-prebuilt-enti
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id)} | format pattern "/apps/{app_id}/versions/{version_id}/customprebuiltentities"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id)} | format pattern "/apps/{app_id}/versions/{version_id}/customprebuiltentities") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Adds a prebuilt entity model to a version of the application.
@@ -2006,12 +2686,23 @@ export def "apps-versions-customprebuiltentities create-model-custom-prebuilt-en
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id)} | format pattern "/apps/{app_id}/versions/{version_id}/customprebuiltentities"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id)} | format pattern "/apps/{app_id}/versions/{version_id}/customprebuiltentities") $auth.query)
   let req_body = {"domainName": $domain_name, "modelName": $model_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Get all roles for a prebuilt entity in a version of the application
@@ -2037,10 +2728,21 @@ export def "apps-versions-customprebuiltentities-roles list-model-custom-prebuil
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
   if ($entity_id | is-empty) { error make --unspanned { msg: "path parameter 'entityId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), entity_id: (encode-path-segment $entity_id)} | format pattern "/apps/{app_id}/versions/{version_id}/customprebuiltentities/{entity_id}/roles"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), entity_id: (encode-path-segment $entity_id)} | format pattern "/apps/{app_id}/versions/{version_id}/customprebuiltentities/{entity_id}/roles") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a role for a prebuilt entity in a version of the application.
@@ -2068,12 +2770,23 @@ export def "apps-versions-customprebuiltentities-roles create-model-custom-prebu
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
   if ($entity_id | is-empty) { error make --unspanned { msg: "path parameter 'entityId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), entity_id: (encode-path-segment $entity_id)} | format pattern "/apps/{app_id}/versions/{version_id}/customprebuiltentities/{entity_id}/roles"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), entity_id: (encode-path-segment $entity_id)} | format pattern "/apps/{app_id}/versions/{version_id}/customprebuiltentities/{entity_id}/roles") $auth.query)
   let req_body = {"name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Delete a role for a given prebuilt entity in a version of the application.
@@ -2101,10 +2814,21 @@ export def "apps-versions-customprebuiltentities-roles delete-model-custom-entit
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
   if ($entity_id | is-empty) { error make --unspanned { msg: "path parameter 'entityId' must be non-empty" } }
   if ($role_id | is-empty) { error make --unspanned { msg: "path parameter 'roleId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), entity_id: (encode-path-segment $entity_id), role_id: (encode-path-segment $role_id)} | format pattern "/apps/{app_id}/versions/{version_id}/customprebuiltentities/{entity_id}/roles/{role_id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), entity_id: (encode-path-segment $entity_id), role_id: (encode-path-segment $role_id)} | format pattern "/apps/{app_id}/versions/{version_id}/customprebuiltentities/{entity_id}/roles/{role_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Get one role for a given prebuilt entity in a version of the application.
@@ -2132,10 +2856,21 @@ export def "apps-versions-customprebuiltentities-roles get-model-custom-entity" 
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
   if ($entity_id | is-empty) { error make --unspanned { msg: "path parameter 'entityId' must be non-empty" } }
   if ($role_id | is-empty) { error make --unspanned { msg: "path parameter 'roleId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), entity_id: (encode-path-segment $entity_id), role_id: (encode-path-segment $role_id)} | format pattern "/apps/{app_id}/versions/{version_id}/customprebuiltentities/{entity_id}/roles/{role_id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), entity_id: (encode-path-segment $entity_id), role_id: (encode-path-segment $role_id)} | format pattern "/apps/{app_id}/versions/{version_id}/customprebuiltentities/{entity_id}/roles/{role_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update a role for a given prebuilt entity in a version of the application.
@@ -2165,12 +2900,23 @@ export def "apps-versions-customprebuiltentities-roles update-model-custom-prebu
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
   if ($entity_id | is-empty) { error make --unspanned { msg: "path parameter 'entityId' must be non-empty" } }
   if ($role_id | is-empty) { error make --unspanned { msg: "path parameter 'roleId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), entity_id: (encode-path-segment $entity_id), role_id: (encode-path-segment $role_id)} | format pattern "/apps/{app_id}/versions/{version_id}/customprebuiltentities/{entity_id}/roles/{role_id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), entity_id: (encode-path-segment $entity_id), role_id: (encode-path-segment $role_id)} | format pattern "/apps/{app_id}/versions/{version_id}/customprebuiltentities/{entity_id}/roles/{role_id}") $auth.query)
   let req_body = {"name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Gets information about customizable prebuilt intents added to a version of the application.
@@ -2194,10 +2940,21 @@ export def "apps-versions-customprebuiltintents list-model-custom-prebuilt-inten
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id)} | format pattern "/apps/{app_id}/versions/{version_id}/customprebuiltintents"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id)} | format pattern "/apps/{app_id}/versions/{version_id}/customprebuiltintents") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Adds a customizable prebuilt intent model to a version of the application.
@@ -2224,12 +2981,23 @@ export def "apps-versions-customprebuiltintents create-model-custom-prebuilt-int
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id)} | format pattern "/apps/{app_id}/versions/{version_id}/customprebuiltintents"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id)} | format pattern "/apps/{app_id}/versions/{version_id}/customprebuiltintents") $auth.query)
   let req_body = {"domainName": $domain_name, "modelName": $model_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Gets all prebuilt intent and entity model information used in a version of this application.
@@ -2253,10 +3021,21 @@ export def "apps-versions-customprebuiltmodels list-model-custom-prebuilt-models
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id)} | format pattern "/apps/{app_id}/versions/{version_id}/customprebuiltmodels"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id)} | format pattern "/apps/{app_id}/versions/{version_id}/customprebuiltmodels") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets information about all the simple entity models in a version of the application.
@@ -2283,10 +3062,21 @@ export def "apps-versions-entities list-model" [
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
   let qp = [(serialize-qp "skip" $skip "scalar") (serialize-qp "take" $take "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id)} | format pattern "/apps/{app_id}/versions/{version_id}/entities") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id)} | format pattern "/apps/{app_id}/versions/{version_id}/entities") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"skip": $skip, "take": $take} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"skip": $skip, "take": $take} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Adds an entity extractor to a version of the application.
@@ -2314,12 +3104,23 @@ export def "apps-versions-entities create-model-entity" [
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id)} | format pattern "/apps/{app_id}/versions/{version_id}/entities"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id)} | format pattern "/apps/{app_id}/versions/{version_id}/entities") $auth.query)
   let req_body = {"children": $children, "name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Deletes an entity or a child from a version of the application.
@@ -2345,10 +3146,21 @@ export def "apps-versions-entities delete-model-entity" [
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
   if ($entity_id | is-empty) { error make --unspanned { msg: "path parameter 'entityId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), entity_id: (encode-path-segment $entity_id)} | format pattern "/apps/{app_id}/versions/{version_id}/entities/{entity_id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), entity_id: (encode-path-segment $entity_id)} | format pattern "/apps/{app_id}/versions/{version_id}/entities/{entity_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Gets information about an entity model in a version of the application.
@@ -2374,10 +3186,21 @@ export def "apps-versions-entities get-model-entity" [
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
   if ($entity_id | is-empty) { error make --unspanned { msg: "path parameter 'entityId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), entity_id: (encode-path-segment $entity_id)} | format pattern "/apps/{app_id}/versions/{version_id}/entities/{entity_id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), entity_id: (encode-path-segment $entity_id)} | format pattern "/apps/{app_id}/versions/{version_id}/entities/{entity_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates the name of an entity extractor or the name and instanceOf model of a child entity extractor.
@@ -2406,12 +3229,23 @@ export def "apps-versions-entities update-model-entity-child" [
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
   if ($entity_id | is-empty) { error make --unspanned { msg: "path parameter 'entityId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), entity_id: (encode-path-segment $entity_id)} | format pattern "/apps/{app_id}/versions/{version_id}/entities/{entity_id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), entity_id: (encode-path-segment $entity_id)} | format pattern "/apps/{app_id}/versions/{version_id}/entities/{entity_id}") $auth.query)
   let req_body = {"instanceOf": $instance_of, "name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Creates a single child in an existing entity model hierarchy in a version of the application.
@@ -2442,12 +3276,23 @@ export def "apps-versions-entities-children create-model-entity-child" [
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
   if ($entity_id | is-empty) { error make --unspanned { msg: "path parameter 'entityId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), entity_id: (encode-path-segment $entity_id)} | format pattern "/apps/{app_id}/versions/{version_id}/entities/{entity_id}/children"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), entity_id: (encode-path-segment $entity_id)} | format pattern "/apps/{app_id}/versions/{version_id}/entities/{entity_id}/children") $auth.query)
   let req_body = {"children": $children, "instanceOf": $instance_of, "name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Deletes a relation from the feature relations used by the entity in a version of the application.
@@ -2476,12 +3321,23 @@ export def "apps-versions-entities-features delete-model-entity" [
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
   if ($entity_id | is-empty) { error make --unspanned { msg: "path parameter 'entityId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), entity_id: (encode-path-segment $entity_id)} | format pattern "/apps/{app_id}/versions/{version_id}/entities/{entity_id}/features"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), entity_id: (encode-path-segment $entity_id)} | format pattern "/apps/{app_id}/versions/{version_id}/entities/{entity_id}/features") $auth.query)
   let req_body = {"featureName": $feature_name, "modelName": $model_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the information of the features used by the entity in a version of the application.
@@ -2507,10 +3363,21 @@ export def "apps-versions-entities-features get-model-entity" [
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
   if ($entity_id | is-empty) { error make --unspanned { msg: "path parameter 'entityId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), entity_id: (encode-path-segment $entity_id)} | format pattern "/apps/{app_id}/versions/{version_id}/entities/{entity_id}/features"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), entity_id: (encode-path-segment $entity_id)} | format pattern "/apps/{app_id}/versions/{version_id}/entities/{entity_id}/features") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Adds a new feature relation to be used by the entity in a version of the application.
@@ -2539,12 +3406,23 @@ export def "apps-versions-entities-features create-entity" [
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
   if ($entity_id | is-empty) { error make --unspanned { msg: "path parameter 'entityId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), entity_id: (encode-path-segment $entity_id)} | format pattern "/apps/{app_id}/versions/{version_id}/entities/{entity_id}/features"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), entity_id: (encode-path-segment $entity_id)} | format pattern "/apps/{app_id}/versions/{version_id}/entities/{entity_id}/features") $auth.query)
   let req_body = {"featureName": $feature_name, "modelName": $model_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Updates the information of the features used by the entity in a version of the application.
@@ -2572,12 +3450,23 @@ export def "apps-versions-entities-features update-model-entity" [
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
   if ($entity_id | is-empty) { error make --unspanned { msg: "path parameter 'entityId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), entity_id: (encode-path-segment $entity_id)} | format pattern "/apps/{app_id}/versions/{version_id}/entities/{entity_id}/features"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), entity_id: (encode-path-segment $entity_id)} | format pattern "/apps/{app_id}/versions/{version_id}/entities/{entity_id}/features") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get all roles for an entity in a version of the application
@@ -2603,10 +3492,21 @@ export def "apps-versions-entities-roles list-model-entity" [
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
   if ($entity_id | is-empty) { error make --unspanned { msg: "path parameter 'entityId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), entity_id: (encode-path-segment $entity_id)} | format pattern "/apps/{app_id}/versions/{version_id}/entities/{entity_id}/roles"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), entity_id: (encode-path-segment $entity_id)} | format pattern "/apps/{app_id}/versions/{version_id}/entities/{entity_id}/roles") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create an entity role in a version of the application.
@@ -2634,12 +3534,23 @@ export def "apps-versions-entities-roles create-model-entity" [
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
   if ($entity_id | is-empty) { error make --unspanned { msg: "path parameter 'entityId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), entity_id: (encode-path-segment $entity_id)} | format pattern "/apps/{app_id}/versions/{version_id}/entities/{entity_id}/roles"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), entity_id: (encode-path-segment $entity_id)} | format pattern "/apps/{app_id}/versions/{version_id}/entities/{entity_id}/roles") $auth.query)
   let req_body = {"name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Delete an entity role in a version of the application.
@@ -2667,10 +3578,21 @@ export def "apps-versions-entities-roles delete-model-entity" [
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
   if ($entity_id | is-empty) { error make --unspanned { msg: "path parameter 'entityId' must be non-empty" } }
   if ($role_id | is-empty) { error make --unspanned { msg: "path parameter 'roleId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), entity_id: (encode-path-segment $entity_id), role_id: (encode-path-segment $role_id)} | format pattern "/apps/{app_id}/versions/{version_id}/entities/{entity_id}/roles/{role_id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), entity_id: (encode-path-segment $entity_id), role_id: (encode-path-segment $role_id)} | format pattern "/apps/{app_id}/versions/{version_id}/entities/{entity_id}/roles/{role_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Get one role for a given entity in a version of the application
@@ -2698,10 +3620,21 @@ export def "apps-versions-entities-roles get-model-entity" [
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
   if ($entity_id | is-empty) { error make --unspanned { msg: "path parameter 'entityId' must be non-empty" } }
   if ($role_id | is-empty) { error make --unspanned { msg: "path parameter 'roleId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), entity_id: (encode-path-segment $entity_id), role_id: (encode-path-segment $role_id)} | format pattern "/apps/{app_id}/versions/{version_id}/entities/{entity_id}/roles/{role_id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), entity_id: (encode-path-segment $entity_id), role_id: (encode-path-segment $role_id)} | format pattern "/apps/{app_id}/versions/{version_id}/entities/{entity_id}/roles/{role_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update a role for a given entity in a version of the application.
@@ -2731,12 +3664,23 @@ export def "apps-versions-entities-roles update-model-entity" [
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
   if ($entity_id | is-empty) { error make --unspanned { msg: "path parameter 'entityId' must be non-empty" } }
   if ($role_id | is-empty) { error make --unspanned { msg: "path parameter 'roleId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), entity_id: (encode-path-segment $entity_id), role_id: (encode-path-segment $role_id)} | format pattern "/apps/{app_id}/versions/{version_id}/entities/{entity_id}/roles/{role_id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), entity_id: (encode-path-segment $entity_id), role_id: (encode-path-segment $role_id)} | format pattern "/apps/{app_id}/versions/{version_id}/entities/{entity_id}/roles/{role_id}") $auth.query)
   let req_body = {"name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get suggested example utterances that would improve the accuracy of the entity model in a version of the application.
@@ -2764,10 +3708,21 @@ export def "apps-versions-entities-suggest list-model-entity-suggestions" [
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
   if ($entity_id | is-empty) { error make --unspanned { msg: "path parameter 'entityId' must be non-empty" } }
   let qp = [(serialize-qp "take" $take "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), entity_id: (encode-path-segment $entity_id)} | format pattern "/apps/{app_id}/versions/{version_id}/entities/{entity_id}/suggest") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), entity_id: (encode-path-segment $entity_id)} | format pattern "/apps/{app_id}/versions/{version_id}/entities/{entity_id}/suggest") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"take": $take} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"take": $take} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Adds a labeled example utterance in a version of the application.
@@ -2796,12 +3751,23 @@ export def "apps-versions-example create" [
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id)} | format pattern "/apps/{app_id}/versions/{version_id}/example"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id)} | format pattern "/apps/{app_id}/versions/{version_id}/example") $auth.query)
   let req_body = {"entityLabels": $entity_labels, "intentName": $intent_name, "text": $text} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Returns example utterances to be reviewed from a version of the application.
@@ -2828,10 +3794,21 @@ export def "apps-versions-examples list" [
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
   let qp = [(serialize-qp "skip" $skip "scalar") (serialize-qp "take" $take "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id)} | format pattern "/apps/{app_id}/versions/{version_id}/examples") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id)} | format pattern "/apps/{app_id}/versions/{version_id}/examples") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"skip": $skip, "take": $take} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"skip": $skip, "take": $take} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Adds a batch of labeled example utterances to a version of the application.
@@ -2857,12 +3834,23 @@ export def "apps-versions-examples create-batch" [
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id)} | format pattern "/apps/{app_id}/versions/{version_id}/examples"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id)} | format pattern "/apps/{app_id}/versions/{version_id}/examples") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201 207]
 }
 
 # Deletes the labeled example utterances with the specified ID from a version of the application.
@@ -2888,10 +3876,21 @@ export def "apps-versions-examples delete" [
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
   if ($example_id | is-empty) { error make --unspanned { msg: "path parameter 'exampleId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), example_id: (encode-path-segment $example_id)} | format pattern "/apps/{app_id}/versions/{version_id}/examples/{example_id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), example_id: (encode-path-segment $example_id)} | format pattern "/apps/{app_id}/versions/{version_id}/examples/{example_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Exports a LUIS application to JSON format.
@@ -2915,10 +3914,21 @@ export def "apps-versions-export export" [
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id)} | format pattern "/apps/{app_id}/versions/{version_id}/export"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id)} | format pattern "/apps/{app_id}/versions/{version_id}/export") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets all the extraction phraselist and pattern features in a version of the application.
@@ -2945,10 +3955,21 @@ export def "apps-versions-features list" [
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
   let qp = [(serialize-qp "skip" $skip "scalar") (serialize-qp "take" $take "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id)} | format pattern "/apps/{app_id}/versions/{version_id}/features") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id)} | format pattern "/apps/{app_id}/versions/{version_id}/features") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"skip": $skip, "take": $take} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"skip": $skip, "take": $take} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets information about all the hierarchical entity models in a version of the application.
@@ -2975,10 +3996,21 @@ export def "apps-versions-hierarchicalentities list-model-hierarchical-entities"
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
   let qp = [(serialize-qp "skip" $skip "scalar") (serialize-qp "take" $take "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id)} | format pattern "/apps/{app_id}/versions/{version_id}/hierarchicalentities") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id)} | format pattern "/apps/{app_id}/versions/{version_id}/hierarchicalentities") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"skip": $skip, "take": $take} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"skip": $skip, "take": $take} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes a hierarchical entity from a version of the application.
@@ -3004,10 +4036,21 @@ export def "apps-versions-hierarchicalentities delete-model-hierarchical-entity"
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
   if ($h_entity_id | is-empty) { error make --unspanned { msg: "path parameter 'hEntityId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), h_entity_id: (encode-path-segment $h_entity_id)} | format pattern "/apps/{app_id}/versions/{version_id}/hierarchicalentities/{h_entity_id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), h_entity_id: (encode-path-segment $h_entity_id)} | format pattern "/apps/{app_id}/versions/{version_id}/hierarchicalentities/{h_entity_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Gets information about a hierarchical entity in a version of the application.
@@ -3033,10 +4076,21 @@ export def "apps-versions-hierarchicalentities get-model-hierarchical-entity" [
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
   if ($h_entity_id | is-empty) { error make --unspanned { msg: "path parameter 'hEntityId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), h_entity_id: (encode-path-segment $h_entity_id)} | format pattern "/apps/{app_id}/versions/{version_id}/hierarchicalentities/{h_entity_id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), h_entity_id: (encode-path-segment $h_entity_id)} | format pattern "/apps/{app_id}/versions/{version_id}/hierarchicalentities/{h_entity_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates the name of a hierarchical entity model in a version of the application.
@@ -3064,12 +4118,23 @@ export def "apps-versions-hierarchicalentities update-model-hierarchical-entity"
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
   if ($h_entity_id | is-empty) { error make --unspanned { msg: "path parameter 'hEntityId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), h_entity_id: (encode-path-segment $h_entity_id)} | format pattern "/apps/{app_id}/versions/{version_id}/hierarchicalentities/{h_entity_id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), h_entity_id: (encode-path-segment $h_entity_id)} | format pattern "/apps/{app_id}/versions/{version_id}/hierarchicalentities/{h_entity_id}") $auth.query)
   let req_body = {"name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes a hierarchical entity extractor child in a version of the application.
@@ -3097,10 +4162,21 @@ export def "apps-versions-hierarchicalentities-children delete-model-hierarchica
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
   if ($h_entity_id | is-empty) { error make --unspanned { msg: "path parameter 'hEntityId' must be non-empty" } }
   if ($h_child_id | is-empty) { error make --unspanned { msg: "path parameter 'hChildId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), h_entity_id: (encode-path-segment $h_entity_id), h_child_id: (encode-path-segment $h_child_id)} | format pattern "/apps/{app_id}/versions/{version_id}/hierarchicalentities/{h_entity_id}/children/{h_child_id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), h_entity_id: (encode-path-segment $h_entity_id), h_child_id: (encode-path-segment $h_child_id)} | format pattern "/apps/{app_id}/versions/{version_id}/hierarchicalentities/{h_entity_id}/children/{h_child_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Gets information about the child's model contained in an hierarchical entity child model in a version of the application.
@@ -3128,10 +4204,21 @@ export def "apps-versions-hierarchicalentities-children get-model-hierarchical-e
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
   if ($h_entity_id | is-empty) { error make --unspanned { msg: "path parameter 'hEntityId' must be non-empty" } }
   if ($h_child_id | is-empty) { error make --unspanned { msg: "path parameter 'hChildId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), h_entity_id: (encode-path-segment $h_entity_id), h_child_id: (encode-path-segment $h_child_id)} | format pattern "/apps/{app_id}/versions/{version_id}/hierarchicalentities/{h_entity_id}/children/{h_child_id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), h_entity_id: (encode-path-segment $h_entity_id), h_child_id: (encode-path-segment $h_child_id)} | format pattern "/apps/{app_id}/versions/{version_id}/hierarchicalentities/{h_entity_id}/children/{h_child_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Renames a single child in an existing hierarchical entity model in a version of the application.
@@ -3161,12 +4248,23 @@ export def "apps-versions-hierarchicalentities-children update-model-hierarchica
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
   if ($h_entity_id | is-empty) { error make --unspanned { msg: "path parameter 'hEntityId' must be non-empty" } }
   if ($h_child_id | is-empty) { error make --unspanned { msg: "path parameter 'hChildId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), h_entity_id: (encode-path-segment $h_entity_id), h_child_id: (encode-path-segment $h_child_id)} | format pattern "/apps/{app_id}/versions/{version_id}/hierarchicalentities/{h_entity_id}/children/{h_child_id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), h_entity_id: (encode-path-segment $h_entity_id), h_child_id: (encode-path-segment $h_child_id)} | format pattern "/apps/{app_id}/versions/{version_id}/hierarchicalentities/{h_entity_id}/children/{h_child_id}") $auth.query)
   let req_body = {"name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get all roles for a hierarchical entity in a version of the application
@@ -3192,10 +4290,21 @@ export def "apps-versions-hierarchicalentities-roles list-model-hierarchical-ent
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
   if ($h_entity_id | is-empty) { error make --unspanned { msg: "path parameter 'hEntityId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), h_entity_id: (encode-path-segment $h_entity_id)} | format pattern "/apps/{app_id}/versions/{version_id}/hierarchicalentities/{h_entity_id}/roles"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), h_entity_id: (encode-path-segment $h_entity_id)} | format pattern "/apps/{app_id}/versions/{version_id}/hierarchicalentities/{h_entity_id}/roles") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a role for an hierarchical entity in a version of the application.
@@ -3223,12 +4332,23 @@ export def "apps-versions-hierarchicalentities-roles create-model-hierarchical-e
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
   if ($h_entity_id | is-empty) { error make --unspanned { msg: "path parameter 'hEntityId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), h_entity_id: (encode-path-segment $h_entity_id)} | format pattern "/apps/{app_id}/versions/{version_id}/hierarchicalentities/{h_entity_id}/roles"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), h_entity_id: (encode-path-segment $h_entity_id)} | format pattern "/apps/{app_id}/versions/{version_id}/hierarchicalentities/{h_entity_id}/roles") $auth.query)
   let req_body = {"name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Delete a role for a given hierarchical role in a version of the application.
@@ -3256,10 +4376,21 @@ export def "apps-versions-hierarchicalentities-roles delete-model-hierarchical-e
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
   if ($h_entity_id | is-empty) { error make --unspanned { msg: "path parameter 'hEntityId' must be non-empty" } }
   if ($role_id | is-empty) { error make --unspanned { msg: "path parameter 'roleId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), h_entity_id: (encode-path-segment $h_entity_id), role_id: (encode-path-segment $role_id)} | format pattern "/apps/{app_id}/versions/{version_id}/hierarchicalentities/{h_entity_id}/roles/{role_id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), h_entity_id: (encode-path-segment $h_entity_id), role_id: (encode-path-segment $role_id)} | format pattern "/apps/{app_id}/versions/{version_id}/hierarchicalentities/{h_entity_id}/roles/{role_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Get one role for a given hierarchical entity in a version of the application.
@@ -3287,10 +4418,21 @@ export def "apps-versions-hierarchicalentities-roles get-model-hierarchical-enti
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
   if ($h_entity_id | is-empty) { error make --unspanned { msg: "path parameter 'hEntityId' must be non-empty" } }
   if ($role_id | is-empty) { error make --unspanned { msg: "path parameter 'roleId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), h_entity_id: (encode-path-segment $h_entity_id), role_id: (encode-path-segment $role_id)} | format pattern "/apps/{app_id}/versions/{version_id}/hierarchicalentities/{h_entity_id}/roles/{role_id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), h_entity_id: (encode-path-segment $h_entity_id), role_id: (encode-path-segment $role_id)} | format pattern "/apps/{app_id}/versions/{version_id}/hierarchicalentities/{h_entity_id}/roles/{role_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update a role for a given hierarchical entity in a version of the application.
@@ -3320,12 +4462,23 @@ export def "apps-versions-hierarchicalentities-roles update-model-hierarchical-e
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
   if ($h_entity_id | is-empty) { error make --unspanned { msg: "path parameter 'hEntityId' must be non-empty" } }
   if ($role_id | is-empty) { error make --unspanned { msg: "path parameter 'roleId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), h_entity_id: (encode-path-segment $h_entity_id), role_id: (encode-path-segment $role_id)} | format pattern "/apps/{app_id}/versions/{version_id}/hierarchicalentities/{h_entity_id}/roles/{role_id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), h_entity_id: (encode-path-segment $h_entity_id), role_id: (encode-path-segment $role_id)} | format pattern "/apps/{app_id}/versions/{version_id}/hierarchicalentities/{h_entity_id}/roles/{role_id}") $auth.query)
   let req_body = {"name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Gets information about the intent models in a version of the application.
@@ -3352,10 +4505,21 @@ export def "apps-versions-intents list-model" [
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
   let qp = [(serialize-qp "skip" $skip "scalar") (serialize-qp "take" $take "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id)} | format pattern "/apps/{app_id}/versions/{version_id}/intents") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id)} | format pattern "/apps/{app_id}/versions/{version_id}/intents") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"skip": $skip, "take": $take} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"skip": $skip, "take": $take} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Adds an intent to a version of the application.
@@ -3381,12 +4545,23 @@ export def "apps-versions-intents create-model" [
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id)} | format pattern "/apps/{app_id}/versions/{version_id}/intents"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id)} | format pattern "/apps/{app_id}/versions/{version_id}/intents") $auth.query)
   let req_body = {"name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Deletes an intent from a version of the application.
@@ -3414,10 +4589,21 @@ export def "apps-versions-intents delete-model" [
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
   if ($intent_id | is-empty) { error make --unspanned { msg: "path parameter 'intentId' must be non-empty" } }
   let qp = [(serialize-qp "deleteUtterances" $delete_utterances "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), intent_id: (encode-path-segment $intent_id)} | format pattern "/apps/{app_id}/versions/{version_id}/intents/{intent_id}") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), intent_id: (encode-path-segment $intent_id)} | format pattern "/apps/{app_id}/versions/{version_id}/intents/{intent_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"deleteUtterances": $delete_utterances} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"deleteUtterances": $delete_utterances} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Gets information about the intent model in a version of the application.
@@ -3443,10 +4629,21 @@ export def "apps-versions-intents get-model" [
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
   if ($intent_id | is-empty) { error make --unspanned { msg: "path parameter 'intentId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), intent_id: (encode-path-segment $intent_id)} | format pattern "/apps/{app_id}/versions/{version_id}/intents/{intent_id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), intent_id: (encode-path-segment $intent_id)} | format pattern "/apps/{app_id}/versions/{version_id}/intents/{intent_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates the name of an intent in a version of the application.
@@ -3474,12 +4671,23 @@ export def "apps-versions-intents update-model" [
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
   if ($intent_id | is-empty) { error make --unspanned { msg: "path parameter 'intentId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), intent_id: (encode-path-segment $intent_id)} | format pattern "/apps/{app_id}/versions/{version_id}/intents/{intent_id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), intent_id: (encode-path-segment $intent_id)} | format pattern "/apps/{app_id}/versions/{version_id}/intents/{intent_id}") $auth.query)
   let req_body = {"name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes a relation from the feature relations used by the intent in a version of the application.
@@ -3508,12 +4716,23 @@ export def "apps-versions-intents-features delete-model" [
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
   if ($intent_id | is-empty) { error make --unspanned { msg: "path parameter 'intentId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), intent_id: (encode-path-segment $intent_id)} | format pattern "/apps/{app_id}/versions/{version_id}/intents/{intent_id}/features"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), intent_id: (encode-path-segment $intent_id)} | format pattern "/apps/{app_id}/versions/{version_id}/intents/{intent_id}/features") $auth.query)
   let req_body = {"featureName": $feature_name, "modelName": $model_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the information of the features used by the intent in a version of the application.
@@ -3539,10 +4758,21 @@ export def "apps-versions-intents-features get-model" [
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
   if ($intent_id | is-empty) { error make --unspanned { msg: "path parameter 'intentId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), intent_id: (encode-path-segment $intent_id)} | format pattern "/apps/{app_id}/versions/{version_id}/intents/{intent_id}/features"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), intent_id: (encode-path-segment $intent_id)} | format pattern "/apps/{app_id}/versions/{version_id}/intents/{intent_id}/features") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Adds a new feature relation to be used by the intent in a version of the application.
@@ -3571,12 +4801,23 @@ export def "apps-versions-intents-features create" [
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
   if ($intent_id | is-empty) { error make --unspanned { msg: "path parameter 'intentId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), intent_id: (encode-path-segment $intent_id)} | format pattern "/apps/{app_id}/versions/{version_id}/intents/{intent_id}/features"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), intent_id: (encode-path-segment $intent_id)} | format pattern "/apps/{app_id}/versions/{version_id}/intents/{intent_id}/features") $auth.query)
   let req_body = {"featureName": $feature_name, "modelName": $model_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Updates the information of the features used by the intent in a version of the application.
@@ -3604,12 +4845,23 @@ export def "apps-versions-intents-features update-model" [
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
   if ($intent_id | is-empty) { error make --unspanned { msg: "path parameter 'intentId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), intent_id: (encode-path-segment $intent_id)} | format pattern "/apps/{app_id}/versions/{version_id}/intents/{intent_id}/features"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), intent_id: (encode-path-segment $intent_id)} | format pattern "/apps/{app_id}/versions/{version_id}/intents/{intent_id}/features") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Returns patterns for the specific intent in a version of the application.
@@ -3638,10 +4890,21 @@ export def "apps-versions-intents-patternrules list-pattern-patterns" [
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
   if ($intent_id | is-empty) { error make --unspanned { msg: "path parameter 'intentId' must be non-empty" } }
   let qp = [(serialize-qp "skip" $skip "scalar") (serialize-qp "take" $take "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), intent_id: (encode-path-segment $intent_id)} | format pattern "/apps/{app_id}/versions/{version_id}/intents/{intent_id}/patternrules") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), intent_id: (encode-path-segment $intent_id)} | format pattern "/apps/{app_id}/versions/{version_id}/intents/{intent_id}/patternrules") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"skip": $skip, "take": $take} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"skip": $skip, "take": $take} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Suggests example utterances that would improve the accuracy of the intent model in a version of the application.
@@ -3669,10 +4932,21 @@ export def "apps-versions-intents-suggest list-model-suggestions" [
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
   if ($intent_id | is-empty) { error make --unspanned { msg: "path parameter 'intentId' must be non-empty" } }
   let qp = [(serialize-qp "take" $take "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), intent_id: (encode-path-segment $intent_id)} | format pattern "/apps/{app_id}/versions/{version_id}/intents/{intent_id}/suggest") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), intent_id: (encode-path-segment $intent_id)} | format pattern "/apps/{app_id}/versions/{version_id}/intents/{intent_id}/suggest") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"take": $take} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"take": $take} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets all the available prebuilt entities in a version of the application.
@@ -3696,10 +4970,21 @@ export def "apps-versions-list-prebuilts list-model-entities" [
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id)} | format pattern "/apps/{app_id}/versions/{version_id}/listprebuilts"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id)} | format pattern "/apps/{app_id}/versions/{version_id}/listprebuilts") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets information about all the intent and entity models in a version of the application.
@@ -3726,10 +5011,21 @@ export def "apps-versions-models list" [
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
   let qp = [(serialize-qp "skip" $skip "scalar") (serialize-qp "take" $take "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id)} | format pattern "/apps/{app_id}/versions/{version_id}/models") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id)} | format pattern "/apps/{app_id}/versions/{version_id}/models") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"skip": $skip, "take": $take} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"skip": $skip, "take": $take} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the example utterances for the given intent or entity model in a version of the application.
@@ -3758,10 +5054,21 @@ export def "apps-versions-models-examples get" [
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
   if ($model_id | is-empty) { error make --unspanned { msg: "path parameter 'modelId' must be non-empty" } }
   let qp = [(serialize-qp "skip" $skip "scalar") (serialize-qp "take" $take "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), model_id: (encode-path-segment $model_id)} | format pattern "/apps/{app_id}/versions/{version_id}/models/{model_id}/examples") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), model_id: (encode-path-segment $model_id)} | format pattern "/apps/{app_id}/versions/{version_id}/models/{model_id}/examples") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"skip": $skip, "take": $take} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"skip": $skip, "take": $take} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get information about the Pattern.Any entity models in a version of the application.
@@ -3788,10 +5095,21 @@ export def "apps-versions-patternanyentities list-model-pattern-any-entity-infos
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
   let qp = [(serialize-qp "skip" $skip "scalar") (serialize-qp "take" $take "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id)} | format pattern "/apps/{app_id}/versions/{version_id}/patternanyentities") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id)} | format pattern "/apps/{app_id}/versions/{version_id}/patternanyentities") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"skip": $skip, "take": $take} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"skip": $skip, "take": $take} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Adds a pattern.any entity extractor to a version of the application.
@@ -3818,12 +5136,23 @@ export def "apps-versions-patternanyentities create-model-pattern-any-entity-mod
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id)} | format pattern "/apps/{app_id}/versions/{version_id}/patternanyentities"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id)} | format pattern "/apps/{app_id}/versions/{version_id}/patternanyentities") $auth.query)
   let req_body = {"explicitList": $explicit_list, "name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Deletes a Pattern.Any entity extractor from a version of the application.
@@ -3849,10 +5178,21 @@ export def "apps-versions-patternanyentities delete-model-pattern-any-entity-mod
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
   if ($entity_id | is-empty) { error make --unspanned { msg: "path parameter 'entityId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), entity_id: (encode-path-segment $entity_id)} | format pattern "/apps/{app_id}/versions/{version_id}/patternanyentities/{entity_id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), entity_id: (encode-path-segment $entity_id)} | format pattern "/apps/{app_id}/versions/{version_id}/patternanyentities/{entity_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Gets information about the Pattern.Any model in a version of the application.
@@ -3878,10 +5218,21 @@ export def "apps-versions-patternanyentities get-model-pattern-any-entity" [
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
   if ($entity_id | is-empty) { error make --unspanned { msg: "path parameter 'entityId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), entity_id: (encode-path-segment $entity_id)} | format pattern "/apps/{app_id}/versions/{version_id}/patternanyentities/{entity_id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), entity_id: (encode-path-segment $entity_id)} | format pattern "/apps/{app_id}/versions/{version_id}/patternanyentities/{entity_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates the name and explicit (exception) list of a Pattern.Any entity model in a version of the application.
@@ -3910,12 +5261,23 @@ export def "apps-versions-patternanyentities update-model-pattern-any-entity-mod
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
   if ($entity_id | is-empty) { error make --unspanned { msg: "path parameter 'entityId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), entity_id: (encode-path-segment $entity_id)} | format pattern "/apps/{app_id}/versions/{version_id}/patternanyentities/{entity_id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), entity_id: (encode-path-segment $entity_id)} | format pattern "/apps/{app_id}/versions/{version_id}/patternanyentities/{entity_id}") $auth.query)
   let req_body = {"explicitList": $explicit_list, "name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get the explicit (exception) list of the pattern.any entity in a version of the application.
@@ -3941,10 +5303,21 @@ export def "apps-versions-patternanyentities-explicitlist get-model-explicit-lis
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
   if ($entity_id | is-empty) { error make --unspanned { msg: "path parameter 'entityId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), entity_id: (encode-path-segment $entity_id)} | format pattern "/apps/{app_id}/versions/{version_id}/patternanyentities/{entity_id}/explicitlist"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), entity_id: (encode-path-segment $entity_id)} | format pattern "/apps/{app_id}/versions/{version_id}/patternanyentities/{entity_id}/explicitlist") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Add a new exception to the explicit list for the Pattern.Any entity in a version of the application.
@@ -3972,12 +5345,23 @@ export def "apps-versions-patternanyentities-explicitlist create-model-explicit-
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
   if ($entity_id | is-empty) { error make --unspanned { msg: "path parameter 'entityId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), entity_id: (encode-path-segment $entity_id)} | format pattern "/apps/{app_id}/versions/{version_id}/patternanyentities/{entity_id}/explicitlist"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), entity_id: (encode-path-segment $entity_id)} | format pattern "/apps/{app_id}/versions/{version_id}/patternanyentities/{entity_id}/explicitlist") $auth.query)
   let req_body = {"explicitListItem": $explicit_list_item} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Delete an item from the explicit (exception) list for a Pattern.any entity in a version of the application.
@@ -4005,10 +5389,21 @@ export def "apps-versions-patternanyentities-explicitlist delete-model-explicit-
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
   if ($entity_id | is-empty) { error make --unspanned { msg: "path parameter 'entityId' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), entity_id: (encode-path-segment $entity_id), item_id: (encode-path-segment $item_id)} | format pattern "/apps/{app_id}/versions/{version_id}/patternanyentities/{entity_id}/explicitlist/{item_id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), entity_id: (encode-path-segment $entity_id), item_id: (encode-path-segment $item_id)} | format pattern "/apps/{app_id}/versions/{version_id}/patternanyentities/{entity_id}/explicitlist/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Get the explicit (exception) list of the pattern.any entity in a version of the application.
@@ -4036,10 +5431,21 @@ export def "apps-versions-patternanyentities-explicitlist get-model-explicit-lis
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
   if ($entity_id | is-empty) { error make --unspanned { msg: "path parameter 'entityId' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), entity_id: (encode-path-segment $entity_id), item_id: (encode-path-segment $item_id)} | format pattern "/apps/{app_id}/versions/{version_id}/patternanyentities/{entity_id}/explicitlist/{item_id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), entity_id: (encode-path-segment $entity_id), item_id: (encode-path-segment $item_id)} | format pattern "/apps/{app_id}/versions/{version_id}/patternanyentities/{entity_id}/explicitlist/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates an explicit (exception) list item for a Pattern.Any entity in a version of the application.
@@ -4069,12 +5475,23 @@ export def "apps-versions-patternanyentities-explicitlist update-model-explicit-
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
   if ($entity_id | is-empty) { error make --unspanned { msg: "path parameter 'entityId' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), entity_id: (encode-path-segment $entity_id), item_id: (encode-path-segment $item_id)} | format pattern "/apps/{app_id}/versions/{version_id}/patternanyentities/{entity_id}/explicitlist/{item_id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), entity_id: (encode-path-segment $entity_id), item_id: (encode-path-segment $item_id)} | format pattern "/apps/{app_id}/versions/{version_id}/patternanyentities/{entity_id}/explicitlist/{item_id}") $auth.query)
   let req_body = {"explicitListItem": $explicit_list_item} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get all roles for a Pattern.any entity in a version of the application
@@ -4100,10 +5517,21 @@ export def "apps-versions-patternanyentities-roles list-model-pattern-any-entity
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
   if ($entity_id | is-empty) { error make --unspanned { msg: "path parameter 'entityId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), entity_id: (encode-path-segment $entity_id)} | format pattern "/apps/{app_id}/versions/{version_id}/patternanyentities/{entity_id}/roles"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), entity_id: (encode-path-segment $entity_id)} | format pattern "/apps/{app_id}/versions/{version_id}/patternanyentities/{entity_id}/roles") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a role for an Pattern.any entity in a version of the application.
@@ -4131,12 +5559,23 @@ export def "apps-versions-patternanyentities-roles create-model-pattern-any-enti
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
   if ($entity_id | is-empty) { error make --unspanned { msg: "path parameter 'entityId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), entity_id: (encode-path-segment $entity_id)} | format pattern "/apps/{app_id}/versions/{version_id}/patternanyentities/{entity_id}/roles"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), entity_id: (encode-path-segment $entity_id)} | format pattern "/apps/{app_id}/versions/{version_id}/patternanyentities/{entity_id}/roles") $auth.query)
   let req_body = {"name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Delete a role for a given Pattern.any entity in a version of the application.
@@ -4164,10 +5603,21 @@ export def "apps-versions-patternanyentities-roles delete-model-pattern-any-enti
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
   if ($entity_id | is-empty) { error make --unspanned { msg: "path parameter 'entityId' must be non-empty" } }
   if ($role_id | is-empty) { error make --unspanned { msg: "path parameter 'roleId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), entity_id: (encode-path-segment $entity_id), role_id: (encode-path-segment $role_id)} | format pattern "/apps/{app_id}/versions/{version_id}/patternanyentities/{entity_id}/roles/{role_id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), entity_id: (encode-path-segment $entity_id), role_id: (encode-path-segment $role_id)} | format pattern "/apps/{app_id}/versions/{version_id}/patternanyentities/{entity_id}/roles/{role_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Get one role for a given Pattern.any entity in a version of the application.
@@ -4195,10 +5645,21 @@ export def "apps-versions-patternanyentities-roles get-model-pattern-any-entity"
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
   if ($entity_id | is-empty) { error make --unspanned { msg: "path parameter 'entityId' must be non-empty" } }
   if ($role_id | is-empty) { error make --unspanned { msg: "path parameter 'roleId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), entity_id: (encode-path-segment $entity_id), role_id: (encode-path-segment $role_id)} | format pattern "/apps/{app_id}/versions/{version_id}/patternanyentities/{entity_id}/roles/{role_id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), entity_id: (encode-path-segment $entity_id), role_id: (encode-path-segment $role_id)} | format pattern "/apps/{app_id}/versions/{version_id}/patternanyentities/{entity_id}/roles/{role_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update a role for a given Pattern.any entity in a version of the application.
@@ -4228,12 +5689,23 @@ export def "apps-versions-patternanyentities-roles update-model-pattern-any-enti
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
   if ($entity_id | is-empty) { error make --unspanned { msg: "path parameter 'entityId' must be non-empty" } }
   if ($role_id | is-empty) { error make --unspanned { msg: "path parameter 'roleId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), entity_id: (encode-path-segment $entity_id), role_id: (encode-path-segment $role_id)} | format pattern "/apps/{app_id}/versions/{version_id}/patternanyentities/{entity_id}/roles/{role_id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), entity_id: (encode-path-segment $entity_id), role_id: (encode-path-segment $role_id)} | format pattern "/apps/{app_id}/versions/{version_id}/patternanyentities/{entity_id}/roles/{role_id}") $auth.query)
   let req_body = {"name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Adds a pattern to a version of the application.
@@ -4260,12 +5732,23 @@ export def "apps-versions-patternrule create-pattern-pattern" [
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id)} | format pattern "/apps/{app_id}/versions/{version_id}/patternrule"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id)} | format pattern "/apps/{app_id}/versions/{version_id}/patternrule") $auth.query)
   let req_body = {"intent": $intent, "pattern": $pattern} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Deletes a list of patterns in a version of the application.
@@ -4291,12 +5774,23 @@ export def "apps-versions-patternrules delete-pattern-patterns" [
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id)} | format pattern "/apps/{app_id}/versions/{version_id}/patternrules"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id)} | format pattern "/apps/{app_id}/versions/{version_id}/patternrules") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Gets patterns in a version of the application.
@@ -4323,10 +5817,21 @@ export def "apps-versions-patternrules list-pattern-patterns" [
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
   let qp = [(serialize-qp "skip" $skip "scalar") (serialize-qp "take" $take "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id)} | format pattern "/apps/{app_id}/versions/{version_id}/patternrules") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id)} | format pattern "/apps/{app_id}/versions/{version_id}/patternrules") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"skip": $skip, "take": $take} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"skip": $skip, "take": $take} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Adds a batch of patterns in a version of the application.
@@ -4352,12 +5857,23 @@ export def "apps-versions-patternrules create-pattern-batch-patterns" [
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id)} | format pattern "/apps/{app_id}/versions/{version_id}/patternrules"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id)} | format pattern "/apps/{app_id}/versions/{version_id}/patternrules") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Updates patterns in a version of the application.
@@ -4383,12 +5899,23 @@ export def "apps-versions-patternrules update-pattern-patterns" [
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id)} | format pattern "/apps/{app_id}/versions/{version_id}/patternrules"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id)} | format pattern "/apps/{app_id}/versions/{version_id}/patternrules") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes the pattern with the specified ID from a version of the application..
@@ -4414,10 +5941,21 @@ export def "apps-versions-patternrules delete-pattern-pattern" [
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
   if ($pattern_id | is-empty) { error make --unspanned { msg: "path parameter 'patternId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), pattern_id: (encode-path-segment $pattern_id)} | format pattern "/apps/{app_id}/versions/{version_id}/patternrules/{pattern_id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), pattern_id: (encode-path-segment $pattern_id)} | format pattern "/apps/{app_id}/versions/{version_id}/patternrules/{pattern_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Updates a pattern in a version of the application.
@@ -4447,12 +5985,23 @@ export def "apps-versions-patternrules update-pattern-pattern" [
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
   if ($pattern_id | is-empty) { error make --unspanned { msg: "path parameter 'patternId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), pattern_id: (encode-path-segment $pattern_id)} | format pattern "/apps/{app_id}/versions/{version_id}/patternrules/{pattern_id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), pattern_id: (encode-path-segment $pattern_id)} | format pattern "/apps/{app_id}/versions/{version_id}/patternrules/{pattern_id}") $auth.query)
   let req_body = {"id": $id, "intent": $intent, "pattern": $pattern} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Gets all the phraselist features in a version of the application.
@@ -4479,10 +6028,21 @@ export def "apps-versions-phraselists list-features-phrase-lists" [
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
   let qp = [(serialize-qp "skip" $skip "scalar") (serialize-qp "take" $take "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id)} | format pattern "/apps/{app_id}/versions/{version_id}/phraselists") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id)} | format pattern "/apps/{app_id}/versions/{version_id}/phraselists") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"skip": $skip, "take": $take} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"skip": $skip, "take": $take} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Creates a new phraselist feature in a version of the application.
@@ -4511,12 +6071,23 @@ export def "apps-versions-phraselists create-features-phrase-list" [
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id)} | format pattern "/apps/{app_id}/versions/{version_id}/phraselists"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id)} | format pattern "/apps/{app_id}/versions/{version_id}/phraselists") $auth.query)
   let req_body = {"enabledForAllModels": $enabled_for_all_models, "isExchangeable": $is_exchangeable, "name": $name, "phrases": $phrases} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Deletes a phraselist feature from a version of the application.
@@ -4542,10 +6113,21 @@ export def "apps-versions-phraselists delete-features-phrase-list" [
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
   if ($phraselist_id | is-empty) { error make --unspanned { msg: "path parameter 'phraselistId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), phraselist_id: (encode-path-segment $phraselist_id)} | format pattern "/apps/{app_id}/versions/{version_id}/phraselists/{phraselist_id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), phraselist_id: (encode-path-segment $phraselist_id)} | format pattern "/apps/{app_id}/versions/{version_id}/phraselists/{phraselist_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Gets phraselist feature info in a version of the application.
@@ -4571,10 +6153,21 @@ export def "apps-versions-phraselists get-features-phrase-list" [
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
   if ($phraselist_id | is-empty) { error make --unspanned { msg: "path parameter 'phraselistId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), phraselist_id: (encode-path-segment $phraselist_id)} | format pattern "/apps/{app_id}/versions/{version_id}/phraselists/{phraselist_id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), phraselist_id: (encode-path-segment $phraselist_id)} | format pattern "/apps/{app_id}/versions/{version_id}/phraselists/{phraselist_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates the phrases, the state and the name of the phraselist feature in a version of the application.
@@ -4606,12 +6199,23 @@ export def "apps-versions-phraselists update-features-phrase-list" [
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
   if ($phraselist_id | is-empty) { error make --unspanned { msg: "path parameter 'phraselistId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), phraselist_id: (encode-path-segment $phraselist_id)} | format pattern "/apps/{app_id}/versions/{version_id}/phraselists/{phraselist_id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), phraselist_id: (encode-path-segment $phraselist_id)} | format pattern "/apps/{app_id}/versions/{version_id}/phraselists/{phraselist_id}") $auth.query)
   let req_body = {"enabledForAllModels": $enabled_for_all_models, "isActive": $is_active, "isExchangeable": $is_exchangeable, "name": $name, "phrases": $phrases} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Gets information about all the prebuilt entities in a version of the application.
@@ -4638,10 +6242,21 @@ export def "apps-versions-prebuilts list-model" [
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
   let qp = [(serialize-qp "skip" $skip "scalar") (serialize-qp "take" $take "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id)} | format pattern "/apps/{app_id}/versions/{version_id}/prebuilts") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id)} | format pattern "/apps/{app_id}/versions/{version_id}/prebuilts") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"skip": $skip, "take": $take} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"skip": $skip, "take": $take} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Adds a list of prebuilt entities to a version of the application.
@@ -4667,12 +6282,23 @@ export def "apps-versions-prebuilts create-model" [
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id)} | format pattern "/apps/{app_id}/versions/{version_id}/prebuilts"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id)} | format pattern "/apps/{app_id}/versions/{version_id}/prebuilts") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Get a prebuilt entity's roles in a version of the application.
@@ -4698,10 +6324,21 @@ export def "apps-versions-prebuilts-roles list-model-entity" [
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
   if ($entity_id | is-empty) { error make --unspanned { msg: "path parameter 'entityId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), entity_id: (encode-path-segment $entity_id)} | format pattern "/apps/{app_id}/versions/{version_id}/prebuilts/{entity_id}/roles"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), entity_id: (encode-path-segment $entity_id)} | format pattern "/apps/{app_id}/versions/{version_id}/prebuilts/{entity_id}/roles") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a role for a prebuilt entity in a version of the application.
@@ -4729,12 +6366,23 @@ export def "apps-versions-prebuilts-roles create-model-entity" [
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
   if ($entity_id | is-empty) { error make --unspanned { msg: "path parameter 'entityId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), entity_id: (encode-path-segment $entity_id)} | format pattern "/apps/{app_id}/versions/{version_id}/prebuilts/{entity_id}/roles"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), entity_id: (encode-path-segment $entity_id)} | format pattern "/apps/{app_id}/versions/{version_id}/prebuilts/{entity_id}/roles") $auth.query)
   let req_body = {"name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Delete a role in a prebuilt entity in a version of the application.
@@ -4762,10 +6410,21 @@ export def "apps-versions-prebuilts-roles delete-model-entity" [
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
   if ($entity_id | is-empty) { error make --unspanned { msg: "path parameter 'entityId' must be non-empty" } }
   if ($role_id | is-empty) { error make --unspanned { msg: "path parameter 'roleId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), entity_id: (encode-path-segment $entity_id), role_id: (encode-path-segment $role_id)} | format pattern "/apps/{app_id}/versions/{version_id}/prebuilts/{entity_id}/roles/{role_id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), entity_id: (encode-path-segment $entity_id), role_id: (encode-path-segment $role_id)} | format pattern "/apps/{app_id}/versions/{version_id}/prebuilts/{entity_id}/roles/{role_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Get one role for a given prebuilt entity in a version of the application
@@ -4793,10 +6452,21 @@ export def "apps-versions-prebuilts-roles get-model-entity" [
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
   if ($entity_id | is-empty) { error make --unspanned { msg: "path parameter 'entityId' must be non-empty" } }
   if ($role_id | is-empty) { error make --unspanned { msg: "path parameter 'roleId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), entity_id: (encode-path-segment $entity_id), role_id: (encode-path-segment $role_id)} | format pattern "/apps/{app_id}/versions/{version_id}/prebuilts/{entity_id}/roles/{role_id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), entity_id: (encode-path-segment $entity_id), role_id: (encode-path-segment $role_id)} | format pattern "/apps/{app_id}/versions/{version_id}/prebuilts/{entity_id}/roles/{role_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update a role for a given prebuilt entity in a version of the application
@@ -4826,12 +6496,23 @@ export def "apps-versions-prebuilts-roles update-model-entity" [
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
   if ($entity_id | is-empty) { error make --unspanned { msg: "path parameter 'entityId' must be non-empty" } }
   if ($role_id | is-empty) { error make --unspanned { msg: "path parameter 'roleId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), entity_id: (encode-path-segment $entity_id), role_id: (encode-path-segment $role_id)} | format pattern "/apps/{app_id}/versions/{version_id}/prebuilts/{entity_id}/roles/{role_id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), entity_id: (encode-path-segment $entity_id), role_id: (encode-path-segment $role_id)} | format pattern "/apps/{app_id}/versions/{version_id}/prebuilts/{entity_id}/roles/{role_id}") $auth.query)
   let req_body = {"name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes a prebuilt entity extractor from a version of the application.
@@ -4857,10 +6538,21 @@ export def "apps-versions-prebuilts delete-model" [
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
   if ($prebuilt_id | is-empty) { error make --unspanned { msg: "path parameter 'prebuiltId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), prebuilt_id: (encode-path-segment $prebuilt_id)} | format pattern "/apps/{app_id}/versions/{version_id}/prebuilts/{prebuilt_id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), prebuilt_id: (encode-path-segment $prebuilt_id)} | format pattern "/apps/{app_id}/versions/{version_id}/prebuilts/{prebuilt_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Gets information about a prebuilt entity model in a version of the application.
@@ -4886,10 +6578,21 @@ export def "apps-versions-prebuilts get-model" [
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
   if ($prebuilt_id | is-empty) { error make --unspanned { msg: "path parameter 'prebuiltId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), prebuilt_id: (encode-path-segment $prebuilt_id)} | format pattern "/apps/{app_id}/versions/{version_id}/prebuilts/{prebuilt_id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), prebuilt_id: (encode-path-segment $prebuilt_id)} | format pattern "/apps/{app_id}/versions/{version_id}/prebuilts/{prebuilt_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets information about the regular expression entity models in a version of the application.
@@ -4916,10 +6619,21 @@ export def "apps-versions-regexentities list-model-regex-entity-infos" [
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
   let qp = [(serialize-qp "skip" $skip "scalar") (serialize-qp "take" $take "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id)} | format pattern "/apps/{app_id}/versions/{version_id}/regexentities") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id)} | format pattern "/apps/{app_id}/versions/{version_id}/regexentities") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"skip": $skip, "take": $take} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"skip": $skip, "take": $take} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Adds a regular expression entity model to a version of the application.
@@ -4946,12 +6660,23 @@ export def "apps-versions-regexentities create-model-regex-entity-model" [
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id)} | format pattern "/apps/{app_id}/versions/{version_id}/regexentities"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id)} | format pattern "/apps/{app_id}/versions/{version_id}/regexentities") $auth.query)
   let req_body = {"name": $name, "regexPattern": $regex_pattern} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Get all roles for a regular expression entity in a version of the application.
@@ -4977,10 +6702,21 @@ export def "apps-versions-regexentities-roles list-model-regex-entity" [
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
   if ($entity_id | is-empty) { error make --unspanned { msg: "path parameter 'entityId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), entity_id: (encode-path-segment $entity_id)} | format pattern "/apps/{app_id}/versions/{version_id}/regexentities/{entity_id}/roles"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), entity_id: (encode-path-segment $entity_id)} | format pattern "/apps/{app_id}/versions/{version_id}/regexentities/{entity_id}/roles") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a role for an regular expression entity in a version of the application.
@@ -5008,12 +6744,23 @@ export def "apps-versions-regexentities-roles create-model-regex-entity" [
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
   if ($entity_id | is-empty) { error make --unspanned { msg: "path parameter 'entityId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), entity_id: (encode-path-segment $entity_id)} | format pattern "/apps/{app_id}/versions/{version_id}/regexentities/{entity_id}/roles"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), entity_id: (encode-path-segment $entity_id)} | format pattern "/apps/{app_id}/versions/{version_id}/regexentities/{entity_id}/roles") $auth.query)
   let req_body = {"name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Delete a role for a given regular expression in a version of the application.
@@ -5041,10 +6788,21 @@ export def "apps-versions-regexentities-roles delete-model-regex-entity" [
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
   if ($entity_id | is-empty) { error make --unspanned { msg: "path parameter 'entityId' must be non-empty" } }
   if ($role_id | is-empty) { error make --unspanned { msg: "path parameter 'roleId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), entity_id: (encode-path-segment $entity_id), role_id: (encode-path-segment $role_id)} | format pattern "/apps/{app_id}/versions/{version_id}/regexentities/{entity_id}/roles/{role_id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), entity_id: (encode-path-segment $entity_id), role_id: (encode-path-segment $role_id)} | format pattern "/apps/{app_id}/versions/{version_id}/regexentities/{entity_id}/roles/{role_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Get one role for a given regular expression entity in a version of the application.
@@ -5072,10 +6830,21 @@ export def "apps-versions-regexentities-roles get-model-regex-entity" [
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
   if ($entity_id | is-empty) { error make --unspanned { msg: "path parameter 'entityId' must be non-empty" } }
   if ($role_id | is-empty) { error make --unspanned { msg: "path parameter 'roleId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), entity_id: (encode-path-segment $entity_id), role_id: (encode-path-segment $role_id)} | format pattern "/apps/{app_id}/versions/{version_id}/regexentities/{entity_id}/roles/{role_id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), entity_id: (encode-path-segment $entity_id), role_id: (encode-path-segment $role_id)} | format pattern "/apps/{app_id}/versions/{version_id}/regexentities/{entity_id}/roles/{role_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update a role for a given regular expression entity in a version of the application
@@ -5105,12 +6874,23 @@ export def "apps-versions-regexentities-roles update-model-regex-entity" [
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
   if ($entity_id | is-empty) { error make --unspanned { msg: "path parameter 'entityId' must be non-empty" } }
   if ($role_id | is-empty) { error make --unspanned { msg: "path parameter 'roleId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), entity_id: (encode-path-segment $entity_id), role_id: (encode-path-segment $role_id)} | format pattern "/apps/{app_id}/versions/{version_id}/regexentities/{entity_id}/roles/{role_id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), entity_id: (encode-path-segment $entity_id), role_id: (encode-path-segment $role_id)} | format pattern "/apps/{app_id}/versions/{version_id}/regexentities/{entity_id}/roles/{role_id}") $auth.query)
   let req_body = {"name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes a regular expression entity from a version of the application.
@@ -5136,10 +6916,21 @@ export def "apps-versions-regexentities delete-model-regex-entity-model" [
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
   if ($regex_entity_id | is-empty) { error make --unspanned { msg: "path parameter 'regexEntityId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), regex_entity_id: (encode-path-segment $regex_entity_id)} | format pattern "/apps/{app_id}/versions/{version_id}/regexentities/{regex_entity_id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), regex_entity_id: (encode-path-segment $regex_entity_id)} | format pattern "/apps/{app_id}/versions/{version_id}/regexentities/{regex_entity_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Gets information about a regular expression entity in a version of the application.
@@ -5165,10 +6956,21 @@ export def "apps-versions-regexentities get-model-regex-entity-entity" [
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
   if ($regex_entity_id | is-empty) { error make --unspanned { msg: "path parameter 'regexEntityId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), regex_entity_id: (encode-path-segment $regex_entity_id)} | format pattern "/apps/{app_id}/versions/{version_id}/regexentities/{regex_entity_id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), regex_entity_id: (encode-path-segment $regex_entity_id)} | format pattern "/apps/{app_id}/versions/{version_id}/regexentities/{regex_entity_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates the regular expression entity in a version of the application.
@@ -5197,12 +6999,23 @@ export def "apps-versions-regexentities update-model-regex-entity-model" [
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
   if ($regex_entity_id | is-empty) { error make --unspanned { msg: "path parameter 'regexEntityId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), regex_entity_id: (encode-path-segment $regex_entity_id)} | format pattern "/apps/{app_id}/versions/{version_id}/regexentities/{regex_entity_id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), regex_entity_id: (encode-path-segment $regex_entity_id)} | format pattern "/apps/{app_id}/versions/{version_id}/regexentities/{regex_entity_id}") $auth.query)
   let req_body = {"name": $name, "regexPattern": $regex_pattern} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the settings in a version of the application.
@@ -5226,10 +7039,21 @@ export def "apps-versions-settings list" [
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id)} | format pattern "/apps/{app_id}/versions/{version_id}/settings"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id)} | format pattern "/apps/{app_id}/versions/{version_id}/settings") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates the settings in a version of the application.
@@ -5255,12 +7079,23 @@ export def "apps-versions-settings update" [
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id)} | format pattern "/apps/{app_id}/versions/{version_id}/settings"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id)} | format pattern "/apps/{app_id}/versions/{version_id}/settings") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deleted an unlabelled utterance in a version of the application.
@@ -5286,12 +7121,23 @@ export def "apps-versions-suggest delete-unlabelled-utterance" [
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id)} | format pattern "/apps/{app_id}/versions/{version_id}/suggest"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id)} | format pattern "/apps/{app_id}/versions/{version_id}/suggest") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the training status of all models (intents and entities) for the specified LUIS app. You must call the train API to train the LUIS app before you call this API to get training status. "appID" specifies the LUIS app ID. "versionId" specifies the version number of the LUIS app. For example, "0.1".
@@ -5316,10 +7162,21 @@ export def "apps-versions-train get-status" [
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id)} | format pattern "/apps/{app_id}/versions/{version_id}/train"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id)} | format pattern "/apps/{app_id}/versions/{version_id}/train") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Sends a training request for a version of a specified LUIS app. This POST request initiates a request asynchronously. To determine whether the training request is successful, submit a GET request to get training status. Note: The application version is not fully trained unless all the models (intents and entities) are trained successfully or are up to date. To verify training success, get the training status at least once after training is complete.
@@ -5343,10 +7200,21 @@ export def "apps-versions-train version" [
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id)} | format pattern "/apps/{app_id}/versions/{version_id}/train"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id)} | format pattern "/apps/{app_id}/versions/{version_id}/train") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [202]
 }
 
 # user - Get LUIS Azure accounts
@@ -5367,12 +7235,23 @@ export def "azureaccounts list-azure-accounts-user-luis-accounts" [
 ]: nothing -> table<accountName: string, azureSubscriptionId: string, resourceGroup: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/azureaccounts")
+  let full_url = (build-url $base "/azureaccounts" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # package - Gets published LUIS application package in binary stream GZip format
@@ -5397,10 +7276,21 @@ export def "package-slot-gzip get-apps-published-application" [
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($slot_name | is-empty) { error make --unspanned { msg: "path parameter 'slotName' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), slot_name: (encode-path-segment $slot_name)} | format pattern "/package/{app_id}/slot/{slot_name}/gzip"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), slot_name: (encode-path-segment $slot_name)} | format pattern "/package/{app_id}/slot/{slot_name}/gzip") $auth.query)
   let accept_val = ($accept | default "application/octet-stream")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # package - Gets trained LUIS application package in binary stream GZip format
@@ -5425,8 +7315,19 @@ export def "package-versions-gzip get-apps-trained-application" [
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
-  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id)} | format pattern "/package/{app_id}/versions/{version_id}/gzip"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id)} | format pattern "/package/{app_id}/versions/{version_id}/gzip") $auth.query)
   let accept_val = ($accept | default "application/octet-stream")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }

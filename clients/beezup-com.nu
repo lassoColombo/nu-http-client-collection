@@ -8,7 +8,7 @@ const BASE_URL = "https://api.beezup.com"
 # `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
 # where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o BEEZUP_MERCHANT_API_TOKEN | default "" }
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o BEEZUP_MERCHANT_API_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
@@ -41,14 +41,11 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
-# Trick: `url encode --all` over-encodes, then we decode the four unreserved
-# punctuation chars back. Pre-existing %XX sequences in the input survive
-# because `url encode --all` first turns their % into %25.
 def encode-path-segment [v: any]: nothing -> string {
   $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
-# Serialize an array-typed path parameter (issue 49.A). OpenAPI 3 `style: simple`
+# Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
 # (the default for path params) and Swagger 2 `collectionFormat: csv` both join
 # the elements with a literal comma WITHIN the single path segment, each element
 # RFC-3986-encoded individually (so a comma inside an element stays %2C). Without
@@ -59,51 +56,70 @@ def encode-path-array [v: any]: nothing -> string {
   if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
 }
 
-# Build URL from base, path, and optional query string
-def build-url [base: string, path: string, query?: string]: nothing -> string {
+# Build the request URL from base, path, and any number of pre-encoded query
+# fragments (param serializer output and/or the auth query). Each fragment is an
+# `&`-joinable `key=value` string already percent-encoded by its producer; empty
+# fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
+# delimiters are hand-spliced — and any query already on the base URL is merged in.
+def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
   let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
-  let result = ($parsed | upsert path $full_path)
-  if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
+  let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
+  $parsed | upsert path $full_path | upsert query $query | url join
 }
 
-# Build the dry-run record returned by --dry-run. Shape:
-#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
-#    auth: {scheme, location}}
-# `meta` carries logical-form data (the query record by spec name, the pre-serialization
-# body) that do-request itself cannot reconstruct from its wire-format args.
-def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
-  let m = ($meta | default {})
-  {
-    dry_run: true
-    method: $method
-    url: $url
-    query: ($m | get -o query | default {})
-    headers: $auth.headers
-    body: ($m | get -o body)
-    content_type: $content_type
-    timeout: $timeout
-    auth: {scheme: $auth.scheme, location: $auth.location}
-  }
+# Success policy: did this response succeed? Single source of truth, consulted by
+# handle-response and the HEAD header-unwrap. Empty ok_codes means the spec listed
+# none, so fall back to < 400. Otherwise: any 2xx, plus documented success codes.
+def status-ok [status: int, ok_codes: list<int>]: nothing -> bool {
+  if ($ok_codes | is-empty) { $status < 400 } else { ($status >= 200 and $status < 300) or ($status in $ok_codes) }
 }
 
-# Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
-  let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
-  let timeout = ($max_time | default 30min)
-  let ct = ($content_type | default "application/json")
-  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
-  let resp = match $method {
-    "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
-  }
-  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
-  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
+# Unwrap a `--full` HTTP response into the user-facing value. Response arrives
+# via pipeline; ok_codes gates the error throw (see status-ok).
+def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: record -> any {
+  let resp = $in
+  if $allow_errors { return $resp }
+  if not (status-ok $resp.status $ok_codes) { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } }
+  if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
+  if $resp.status == 204 { return null }
+  $resp.body
+}
+
+# GET — bodyless, honours --raw
+def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+}
+
+# HEAD — bodyless; default surfaces just the headers on success
+def send-head [req: record, insecure: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = (http head --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure $req.url)
+  if (not $full) and (not $allow_errors) and (status-ok $resp.status $ok_codes) { return $resp.headers }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# POST — body + content-type
+def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# PUT — body + content-type
+def send-put [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http put --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http put --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# PATCH — body + content-type
+def send-patch [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http patch --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http patch --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# DELETE — body via --data
+def send-delete [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http delete --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url } else { http delete --headers $req.headers --content-type $req.content_type --data $body --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url }
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 def base-url-completer [] { ["https://api.beezup.com"] }
@@ -167,12 +183,23 @@ export def "orders-batches-change-orders list" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "userName" $user_name "scalar") (serialize-qp "testMode" $test_mode "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/orders/v3/batches/changeOrders" $qp)
+  let full_url = (build-url $base "/orders/v3/batches/changeOrders" $qp $auth.query)
   let req_body = {"changeOrders": $change_orders} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"userName": $user_name, "testMode": $test_mode} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"userName": $user_name, "testMode": $test_mode} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [202]
 }
 
 # Send a batch of operations to change your marketplace Order information: accept, ship, etc. (max 100 items per call)
@@ -200,12 +227,23 @@ export def "orders-batches-change-orders list-by-change-order-type" [
   let base = ($base_url | default $BASE_URL)
   if ($change_order_type | is-empty) { error make --unspanned { msg: "path parameter 'changeOrderType' must be non-empty" } }
   let qp = [(serialize-qp "userName" $user_name "scalar") (serialize-qp "testMode" $test_mode "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({change_order_type: (encode-path-segment $change_order_type)} | format pattern "/orders/v3/batches/changeOrders/{change_order_type}") $qp)
+  let full_url = (build-url $base ({change_order_type: (encode-path-segment $change_order_type)} | format pattern "/orders/v3/batches/changeOrders/{change_order_type}") $qp $auth.query)
   let req_body = {"changeOrders": $change_orders} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"userName": $user_name, "testMode": $test_mode} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"userName": $user_name, "testMode": $test_mode} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [202]
 }
 
 # Send a batch of operations to clear an Order's merchant information (max 100 items per call)
@@ -230,12 +268,23 @@ export def "orders-batches-clear-merchant-order-infos list" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "testMode" $test_mode "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/orders/v3/batches/clearMerchantOrderInfos" $qp)
+  let full_url = (build-url $base "/orders/v3/batches/clearMerchantOrderInfos" $qp $auth.query)
   let req_body = {"orders": $orders} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"testMode": $test_mode} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"testMode": $test_mode} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [202]
 }
 
 # Send a batch of operations to set an Order's merchant information (max 100 items per call)
@@ -262,12 +311,23 @@ export def "orders-batches-set-merchant-order-infos list" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "testMode" $test_mode "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/orders/v3/batches/setMerchantOrderInfos" $qp)
+  let full_url = (build-url $base "/orders/v3/batches/setMerchantOrderInfos" $qp $auth.query)
   let req_body = {"order_MerchantECommerceSoftwareName": $order_merchant_e_commerce_software_name, "order_MerchantECommerceSoftwareVersion": $order_merchant_e_commerce_software_version, "orders": $orders} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"testMode": $test_mode} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"testMode": $test_mode} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [202]
 }
 
 # Send harvest request to all your marketplaces
@@ -289,10 +349,21 @@ export def "orders-harvest list" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "storeId" $store_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/orders/v3/harvest" $qp)
+  let full_url = (build-url $base "/orders/v3/harvest" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"storeId": $store_id} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"storeId": $store_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [202]
 }
 
 # Get a paginated list of all Orders with all Order and Order Item(s) properties
@@ -329,14 +400,25 @@ export def "orders-list-full get" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/orders/v3/list/full")
+  let full_url = (build-url $base "/orders/v3/list/full" $auth.query)
   let req_body = {"accountIds": $account_ids, "beezUPOrderStatuses": $beez_up_order_statuses, "beginPeriodUtcDate": $begin_period_utc_date, "dateSearchType": $date_search_type, "endPeriodUtcDate": $end_period_utc_date, "invoiceAvailabilityType": $invoice_availability_type, "marketplaceBusinessCodes": $marketplace_business_codes, "marketplaceOrderIds": $marketplace_order_ids, "marketplaceTechnicalCodes": $marketplace_technical_codes, "orderMerchantInfoSynchronizationStatus": $order_merchant_info_synchronization_status, "order_Buyer_Name": $order_buyer_name, "order_MerchantOrderIds": $order_merchant_order_ids, "storeIds": $store_ids, "pageNumber": $page_number, "pageSize": $page_size} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Accept-Encoding": $accept_encoding} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get a paginated list of all Orders without details
@@ -372,12 +454,23 @@ export def "orders-list-light get" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/orders/v3/list/light")
+  let full_url = (build-url $base "/orders/v3/list/light" $auth.query)
   let req_body = {"accountIds": $account_ids, "beezUPOrderStatuses": $beez_up_order_statuses, "beginPeriodUtcDate": $begin_period_utc_date, "dateSearchType": $date_search_type, "endPeriodUtcDate": $end_period_utc_date, "invoiceAvailabilityType": $invoice_availability_type, "marketplaceBusinessCodes": $marketplace_business_codes, "marketplaceOrderIds": $marketplace_order_ids, "marketplaceTechnicalCodes": $marketplace_technical_codes, "orderMerchantInfoSynchronizationStatus": $order_merchant_info_synchronization_status, "order_Buyer_Name": $order_buyer_name, "order_MerchantOrderIds": $order_merchant_order_ids, "storeIds": $store_ids, "pageNumber": $page_number, "pageSize": $page_size} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get the list of MarketplaceBusinessCode ready for Order Management
@@ -400,12 +493,23 @@ export def "orders-lov-order-management-ready-marketplace-business-code get" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "storeIds" $store_ids "csv")] | flatten | str join "&"
-  let full_url = (build-url $base "/orders/v3/lov/orderManagementReadyMarketplaceBusinessCode" $qp)
+  let full_url = (build-url $base "/orders/v3/lov/orderManagementReadyMarketplaceBusinessCode" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": (if ($accept_language | describe | str starts-with "list") { $accept_language | each { into string } | str join "," } else { $accept_language })} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"storeIds": $store_ids} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"storeIds": $store_ids} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Get current synchronization status between your marketplaces and BeezUP accounts
@@ -428,12 +532,23 @@ export def "orders-status get-marketplace-accounts-synchronization" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "storeIds" $store_ids "csv")] | flatten | str join "&"
-  let full_url = (build-url $base "/orders/v3/status" $qp)
+  let full_url = (build-url $base "/orders/v3/status" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"storeIds": $store_ids} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"storeIds": $store_ids} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Send harvest request for an Account
@@ -460,10 +575,21 @@ export def "orders-harvest create-account" [
   if ($marketplace_technical_code | is-empty) { error make --unspanned { msg: "path parameter 'marketplaceTechnicalCode' must be non-empty" } }
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let qp = [(serialize-qp "marketplaceOrderId" $marketplace_order_id "scalar") (serialize-qp "beezUPOrderId" $beez_up_order_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({marketplace_technical_code: (encode-path-segment $marketplace_technical_code), account_id: (encode-path-segment $account_id)} | format pattern "/orders/v3/{marketplace_technical_code}/{account_id}/harvest") $qp)
+  let full_url = (build-url $base ({marketplace_technical_code: (encode-path-segment $marketplace_technical_code), account_id: (encode-path-segment $account_id)} | format pattern "/orders/v3/{marketplace_technical_code}/{account_id}/harvest") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"marketplaceOrderId": $marketplace_order_id, "beezUPOrderId": $beez_up_order_id} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"marketplaceOrderId": $marketplace_order_id, "beezUPOrderId": $beez_up_order_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [202]
 }
 
 # Get full Order and Order Item(s) properties
@@ -490,12 +616,23 @@ export def "orders get" [
   if ($marketplace_technical_code | is-empty) { error make --unspanned { msg: "path parameter 'marketplaceTechnicalCode' must be non-empty" } }
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   if ($beez_up_order_id | is-empty) { error make --unspanned { msg: "path parameter 'beezUPOrderId' must be non-empty" } }
-  let full_url = (build-url $base ({marketplace_technical_code: (encode-path-segment $marketplace_technical_code), account_id: (encode-path-segment $account_id), beez_up_order_id: (encode-path-segment $beez_up_order_id)} | format pattern "/orders/v3/{marketplace_technical_code}/{account_id}/{beez_up_order_id}"))
+  let full_url = (build-url $base ({marketplace_technical_code: (encode-path-segment $marketplace_technical_code), account_id: (encode-path-segment $account_id), beez_up_order_id: (encode-path-segment $beez_up_order_id)} | format pattern "/orders/v3/{marketplace_technical_code}/{account_id}/{beez_up_order_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Get the meta information about the order (ETag, Last-Modified)
@@ -522,12 +659,23 @@ export def "orders head" [
   if ($marketplace_technical_code | is-empty) { error make --unspanned { msg: "path parameter 'marketplaceTechnicalCode' must be non-empty" } }
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   if ($beez_up_order_id | is-empty) { error make --unspanned { msg: "path parameter 'beezUPOrderId' must be non-empty" } }
-  let full_url = (build-url $base ({marketplace_technical_code: (encode-path-segment $marketplace_technical_code), account_id: (encode-path-segment $account_id), beez_up_order_id: (encode-path-segment $beez_up_order_id)} | format pattern "/orders/v3/{marketplace_technical_code}/{account_id}/{beez_up_order_id}"))
+  let full_url = (build-url $base ({marketplace_technical_code: (encode-path-segment $marketplace_technical_code), account_id: (encode-path-segment $account_id), beez_up_order_id: (encode-path-segment $beez_up_order_id)} | format pattern "/orders/v3/{marketplace_technical_code}/{account_id}/{beez_up_order_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "head" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "head"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-head $req $insecure $allow_errors $full [200 304]
 }
 
 # Clear an Order's merchant information
@@ -555,10 +703,21 @@ export def "orders-clear-merchant-order-info get" [
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   if ($beez_up_order_id | is-empty) { error make --unspanned { msg: "path parameter 'beezUPOrderId' must be non-empty" } }
   let qp = [(serialize-qp "testMode" $test_mode "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({marketplace_technical_code: (encode-path-segment $marketplace_technical_code), account_id: (encode-path-segment $account_id), beez_up_order_id: (encode-path-segment $beez_up_order_id)} | format pattern "/orders/v3/{marketplace_technical_code}/{account_id}/{beez_up_order_id}/clearMerchantOrderInfo") $qp)
+  let full_url = (build-url $base ({marketplace_technical_code: (encode-path-segment $marketplace_technical_code), account_id: (encode-path-segment $account_id), beez_up_order_id: (encode-path-segment $beez_up_order_id)} | format pattern "/orders/v3/{marketplace_technical_code}/{account_id}/{beez_up_order_id}/clearMerchantOrderInfo") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"testMode": $test_mode} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"testMode": $test_mode} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [202]
 }
 
 # Send harvest request for a single Order
@@ -584,10 +743,21 @@ export def "orders-harvest create" [
   if ($marketplace_technical_code | is-empty) { error make --unspanned { msg: "path parameter 'marketplaceTechnicalCode' must be non-empty" } }
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   if ($beez_up_order_id | is-empty) { error make --unspanned { msg: "path parameter 'beezUPOrderId' must be non-empty" } }
-  let full_url = (build-url $base ({marketplace_technical_code: (encode-path-segment $marketplace_technical_code), account_id: (encode-path-segment $account_id), beez_up_order_id: (encode-path-segment $beez_up_order_id)} | format pattern "/orders/v3/{marketplace_technical_code}/{account_id}/{beez_up_order_id}/harvest"))
+  let full_url = (build-url $base ({marketplace_technical_code: (encode-path-segment $marketplace_technical_code), account_id: (encode-path-segment $account_id), beez_up_order_id: (encode-path-segment $beez_up_order_id)} | format pattern "/orders/v3/{marketplace_technical_code}/{account_id}/{beez_up_order_id}/harvest") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [202]
 }
 
 # Get an Order's harvest and change history
@@ -613,10 +783,21 @@ export def "orders-history get" [
   if ($marketplace_technical_code | is-empty) { error make --unspanned { msg: "path parameter 'marketplaceTechnicalCode' must be non-empty" } }
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   if ($beez_up_order_id | is-empty) { error make --unspanned { msg: "path parameter 'beezUPOrderId' must be non-empty" } }
-  let full_url = (build-url $base ({marketplace_technical_code: (encode-path-segment $marketplace_technical_code), account_id: (encode-path-segment $account_id), beez_up_order_id: (encode-path-segment $beez_up_order_id)} | format pattern "/orders/v3/{marketplace_technical_code}/{account_id}/{beez_up_order_id}/history"))
+  let full_url = (build-url $base ({marketplace_technical_code: (encode-path-segment $marketplace_technical_code), account_id: (encode-path-segment $account_id), beez_up_order_id: (encode-path-segment $beez_up_order_id)} | format pattern "/orders/v3/{marketplace_technical_code}/{account_id}/{beez_up_order_id}/history") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Get the order change reporting
@@ -644,10 +825,21 @@ export def "orders-history get-change-reporting" [
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   if ($beez_up_order_id | is-empty) { error make --unspanned { msg: "path parameter 'beezUPOrderId' must be non-empty" } }
   if ($order_change_execution_uuid | is-empty) { error make --unspanned { msg: "path parameter 'orderChangeExecutionUUID' must be non-empty" } }
-  let full_url = (build-url $base ({marketplace_technical_code: (encode-path-segment $marketplace_technical_code), account_id: (encode-path-segment $account_id), beez_up_order_id: (encode-path-segment $beez_up_order_id), order_change_execution_uuid: (encode-path-segment $order_change_execution_uuid)} | format pattern "/orders/v3/{marketplace_technical_code}/{account_id}/{beez_up_order_id}/history/{order_change_execution_uuid}"))
+  let full_url = (build-url $base ({marketplace_technical_code: (encode-path-segment $marketplace_technical_code), account_id: (encode-path-segment $account_id), beez_up_order_id: (encode-path-segment $beez_up_order_id), order_change_execution_uuid: (encode-path-segment $order_change_execution_uuid)} | format pattern "/orders/v3/{marketplace_technical_code}/{account_id}/{beez_up_order_id}/history/{order_change_execution_uuid}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Set an Order's merchant information
@@ -679,12 +871,23 @@ export def "orders-set-merchant-order-info update" [
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   if ($beez_up_order_id | is-empty) { error make --unspanned { msg: "path parameter 'beezUPOrderId' must be non-empty" } }
   let qp = [(serialize-qp "testMode" $test_mode "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({marketplace_technical_code: (encode-path-segment $marketplace_technical_code), account_id: (encode-path-segment $account_id), beez_up_order_id: (encode-path-segment $beez_up_order_id)} | format pattern "/orders/v3/{marketplace_technical_code}/{account_id}/{beez_up_order_id}/setMerchantOrderInfo") $qp)
+  let full_url = (build-url $base ({marketplace_technical_code: (encode-path-segment $marketplace_technical_code), account_id: (encode-path-segment $account_id), beez_up_order_id: (encode-path-segment $beez_up_order_id)} | format pattern "/orders/v3/{marketplace_technical_code}/{account_id}/{beez_up_order_id}/setMerchantOrderInfo") $qp $auth.query)
   let req_body = {"order_MerchantECommerceSoftwareName": $order_merchant_e_commerce_software_name, "order_MerchantECommerceSoftwareVersion": $order_merchant_e_commerce_software_version, "order_MerchantOrderId": $order_merchant_order_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"testMode": $test_mode} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"testMode": $test_mode} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [202]
 }
 
 # Change your marketplace Order Information (accept, ship, etc.)
@@ -717,12 +920,23 @@ export def "orders create-change" [
   if ($beez_up_order_id | is-empty) { error make --unspanned { msg: "path parameter 'beezUPOrderId' must be non-empty" } }
   if ($change_order_type | is-empty) { error make --unspanned { msg: "path parameter 'changeOrderType' must be non-empty" } }
   let qp = [(serialize-qp "userName" $user_name "scalar") (serialize-qp "testMode" $test_mode "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({marketplace_technical_code: (encode-path-segment $marketplace_technical_code), account_id: (encode-path-segment $account_id), beez_up_order_id: (encode-path-segment $beez_up_order_id), change_order_type: (encode-path-segment $change_order_type)} | format pattern "/orders/v3/{marketplace_technical_code}/{account_id}/{beez_up_order_id}/{change_order_type}") $qp)
+  let full_url = (build-url $base ({marketplace_technical_code: (encode-path-segment $marketplace_technical_code), account_id: (encode-path-segment $account_id), beez_up_order_id: (encode-path-segment $beez_up_order_id), change_order_type: (encode-path-segment $change_order_type)} | format pattern "/orders/v3/{marketplace_technical_code}/{account_id}/{beez_up_order_id}/{change_order_type}") $qp $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"userName": $user_name, "testMode": $test_mode} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"userName": $user_name, "testMode": $test_mode} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [202]
 }
 
 # Get public channel index
@@ -743,12 +957,23 @@ export def "public-channels get-index" [
 ]: nothing -> record<channels: record, links: record<channelCountryLov: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, channelTypeLov: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, sectorLov: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v2/public/channels/")
+  let full_url = (build-url $base "/v2/public/channels/" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # The channel list for one country
@@ -772,12 +997,23 @@ export def "public-channels get" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($country_iso_code | is-empty) { error make --unspanned { msg: "path parameter 'countryIsoCode' must be non-empty" } }
-  let full_url = (build-url $base ({country_iso_code: (encode-path-segment $country_iso_code)} | format pattern "/v2/public/channels/{country_iso_code}"))
+  let full_url = (build-url $base ({country_iso_code: (encode-path-segment $country_iso_code)} | format pattern "/v2/public/channels/{country_iso_code}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Accept-Encoding": (if ($accept_encoding | describe | str starts-with "list") { $accept_encoding | each { into string } | str join "," } else { $accept_encoding }), "If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Get all list names
@@ -798,12 +1034,23 @@ export def "public-lov get-index" [
 ]: nothing -> record<links: record<lists: record, self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v2/public/lov/")
+  let full_url = (build-url $base "/v2/public/lov/" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Get the list of values related to this list name
@@ -827,12 +1074,23 @@ export def "public-lov get-list-of-values" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($list_name | is-empty) { error make --unspanned { msg: "path parameter 'listName' must be non-empty" } }
-  let full_url = (build-url $base ({list_name: (encode-path-segment $list_name)} | format pattern "/v2/public/lov/{list_name}"))
+  let full_url = (build-url $base ({list_name: (encode-path-segment $list_name)} | format pattern "/v2/public/lov/{list_name}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": (if ($accept_language | describe | str starts-with "list") { $accept_language | each { into string } | str join "," } else { $accept_language }), "If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Login
@@ -855,12 +1113,23 @@ export def "public-security-login create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v2/public/security/login")
+  let full_url = (build-url $base "/v2/public/security/login" $auth.query)
   let req_body = {"login": $login, "password": $password} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Lost password
@@ -882,12 +1151,23 @@ export def "public-security-lostpassword create-lost-password" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v2/public/security/lostpassword")
+  let full_url = (build-url $base "/v2/public/security/lostpassword" $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # User Registration
@@ -912,12 +1192,23 @@ export def "public-security-register create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v2/public/security/register")
+  let full_url = (build-url $base "/v2/public/security/register" $auth.query)
   let req_body = {"commercialOwnerUserId": $commercial_owner_user_id, "cultureName": $culture_name, "email": $email, "password": $password} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Get the Analytics API operation index
@@ -937,10 +1228,21 @@ export def "user-analytics get-index" [
 ]: nothing -> record<links: record<self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, trackingStatus: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>, lovLinks: record<analyticsNumericalProductColumnFilterOperatorNameLov: record<href: string, method: string>, analyticsProductColumnFilterOperatorNameLov: record<href: string, method: string>, analyticsStringProductColumnFilterOperatorNameLov: record<href: string, method: string>, performanceIndicatorFilterOperatorNameLov: record<href: string, method: string>, performanceIndicatorFormulaOperatorNameLov: record<href: string, method: string>, performanceIndicatorFormulaParameterTypeLov: record<href: string, method: string>, performanceIndicatorTypeForReportsByCategoryLov: record<href: string, method: string>, performanceIndicatorTypeForReportsByChannelLov: record<href: string, method: string>, performanceIndicatorTypeForReportsByProductLov: record<href: string, method: string>, performanceIndicatorTypeLov: record<href: string, method: string>, storeOptimisationRuleExecutionStatusLov: record<href: string, method: string>>, stores: table<links: record>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v2/user/analytics/")
+  let full_url = (build-url $base "/v2/user/analytics/" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get the report by day for a StoreId
@@ -968,12 +1270,23 @@ export def "user-analytics-reports-byday get-store-by-day-per-store" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v2/user/analytics/reports/byday")
+  let full_url = (build-url $base "/v2/user/analytics/reports/byday" $auth.query)
   let req_body = {"advancedFilters": $advanced_filters, "beginPeriodUtcDate": $begin_period_utc_date, "catalogCategoryId": $catalog_category_id, "channelIds": $channel_ids, "endPeriodUtcDate": $end_period_utc_date, "productId": $product_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get the global synchronization status of clicks and orders
@@ -993,10 +1306,21 @@ export def "user-analytics-tracking-status get" [
 ]: nothing -> record<clickSynchronizationUtcDate: string, marketplaceOrderSynchonizationUtcDate: string, orderSynchonizationUtcDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v2/user/analytics/tracking/status")
+  let full_url = (build-url $base "/v2/user/analytics/tracking/status" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get the Analytics API operation index for one store
@@ -1018,10 +1342,21 @@ export def "user-analytics get-store-index" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
-  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id)} | format pattern "/v2/user/analytics/{store_id}"))
+  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id)} | format pattern "/v2/user/analytics/{store_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Optimise all products
@@ -1051,12 +1386,23 @@ export def "user-analytics-optimisations-all list-optimise" [
   let base = ($base_url | default $BASE_URL)
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
   if ($action_name | is-empty) { error make --unspanned { msg: "path parameter 'actionName' must be non-empty" } }
-  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), action_name: (encode-path-segment $action_name)} | format pattern "/v2/user/analytics/{store_id}/optimisations/all/{action_name}"))
+  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), action_name: (encode-path-segment $action_name)} | format pattern "/v2/user/analytics/{store_id}/optimisations/all/{action_name}") $auth.query)
   let req_body = {"analyticsProductColumnFilters": $analytics_product_column_filters, "productColumnsToDisplay": $product_columns_to_display, "productState": $product_state, "reportType": $report_type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Optimise products by category
@@ -1084,12 +1430,23 @@ export def "user-analytics-optimisations-bycategory create-optimise-by-category"
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
   if ($catalog_category_id | is-empty) { error make --unspanned { msg: "path parameter 'catalogCategoryId' must be non-empty" } }
   if ($action_name | is-empty) { error make --unspanned { msg: "path parameter 'actionName' must be non-empty" } }
-  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), catalog_category_id: (encode-path-segment $catalog_category_id), action_name: (encode-path-segment $action_name)} | format pattern "/v2/user/analytics/{store_id}/optimisations/bycategory/{catalog_category_id}/{action_name}"))
+  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), catalog_category_id: (encode-path-segment $catalog_category_id), action_name: (encode-path-segment $action_name)} | format pattern "/v2/user/analytics/{store_id}/optimisations/bycategory/{catalog_category_id}/{action_name}") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Optimise products by channel
@@ -1115,10 +1472,21 @@ export def "user-analytics-optimisations-bychannel create-optimise-by-channel" [
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
   if ($channel_id | is-empty) { error make --unspanned { msg: "path parameter 'channelId' must be non-empty" } }
   if ($action_name | is-empty) { error make --unspanned { msg: "path parameter 'actionName' must be non-empty" } }
-  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), channel_id: (encode-path-segment $channel_id), action_name: (encode-path-segment $action_name)} | format pattern "/v2/user/analytics/{store_id}/optimisations/bychannel/{channel_id}/{action_name}"))
+  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), channel_id: (encode-path-segment $channel_id), action_name: (encode-path-segment $action_name)} | format pattern "/v2/user/analytics/{store_id}/optimisations/bychannel/{channel_id}/{action_name}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Optimise product
@@ -1146,12 +1514,23 @@ export def "user-analytics-optimisations-byproduct create-optimise-by-product" [
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
   if ($product_id | is-empty) { error make --unspanned { msg: "path parameter 'productId' must be non-empty" } }
   if ($action_name | is-empty) { error make --unspanned { msg: "path parameter 'actionName' must be non-empty" } }
-  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), product_id: (encode-path-segment $product_id), action_name: (encode-path-segment $action_name)} | format pattern "/v2/user/analytics/{store_id}/optimisations/byproduct/{product_id}/{action_name}"))
+  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), product_id: (encode-path-segment $product_id), action_name: (encode-path-segment $action_name)} | format pattern "/v2/user/analytics/{store_id}/optimisations/byproduct/{product_id}/{action_name}") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Copy product optimisations between 2 channels
@@ -1177,12 +1556,23 @@ export def "user-analytics-optimisations-copy copy" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
-  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id)} | format pattern "/v2/user/analytics/{store_id}/optimisations/copy"))
+  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id)} | format pattern "/v2/user/analytics/{store_id}/optimisations/copy") $auth.query)
   let req_body = {"channelIdSource": $channel_id_source, "channelIdTarget": $channel_id_target, "keepExistingOptimisation": $keep_existing_optimisation} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Optimise products by page
@@ -1209,12 +1599,23 @@ export def "user-analytics-optimisations create-optimise" [
   let base = ($base_url | default $BASE_URL)
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
   if ($action_name | is-empty) { error make --unspanned { msg: "path parameter 'actionName' must be non-empty" } }
-  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), action_name: (encode-path-segment $action_name)} | format pattern "/v2/user/analytics/{store_id}/optimisations/{action_name}"))
+  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), action_name: (encode-path-segment $action_name)} | format pattern "/v2/user/analytics/{store_id}/optimisations/{action_name}") $auth.query)
   let req_body = {"pageNumber": $page_number, "pageSize": $page_size} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Get the report by category
@@ -1239,12 +1640,23 @@ export def "user-analytics-reports-bycategory get-store-by-category" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
-  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id)} | format pattern "/v2/user/analytics/{store_id}/reports/bycategory"))
+  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id)} | format pattern "/v2/user/analytics/{store_id}/reports/bycategory") $auth.query)
   let req_body = {"pageNumber": $page_number, "pageSize": $page_size} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get the report by channel
@@ -1269,12 +1681,23 @@ export def "user-analytics-reports-bychannel get-store-by-channel" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
-  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id)} | format pattern "/v2/user/analytics/{store_id}/reports/bychannel"))
+  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id)} | format pattern "/v2/user/analytics/{store_id}/reports/bychannel") $auth.query)
   let req_body = {"pageNumber": $page_number, "pageSize": $page_size} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get the report by day for a StoreId
@@ -1304,12 +1727,23 @@ export def "user-analytics-reports-byday get-store-by-day" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
-  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id)} | format pattern "/v2/user/analytics/{store_id}/reports/byday"))
+  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id)} | format pattern "/v2/user/analytics/{store_id}/reports/byday") $auth.query)
   let req_body = {"advancedFilters": $advanced_filters, "beginPeriodUtcDate": $begin_period_utc_date, "catalogCategoryId": $catalog_category_id, "channelIds": $channel_ids, "endPeriodUtcDate": $end_period_utc_date, "productId": $product_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get the report by product
@@ -1338,12 +1772,23 @@ export def "user-analytics-reports-byproduct get-store-by-product" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
-  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id)} | format pattern "/v2/user/analytics/{store_id}/reports/byproduct"))
+  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id)} | format pattern "/v2/user/analytics/{store_id}/reports/byproduct") $auth.query)
   let req_body = {"pageNumber": $page_number, "pageSize": $page_size, "analyticsProductColumnFilters": $analytics_product_column_filters, "productColumnsToDisplay": $product_columns_to_display, "productState": $product_state} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get report filter list for the given store
@@ -1365,10 +1810,21 @@ export def "user-analytics-reports-filters list" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
-  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id)} | format pattern "/v2/user/analytics/{store_id}/reports/filters"))
+  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id)} | format pattern "/v2/user/analytics/{store_id}/reports/filters") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Delete the report filter
@@ -1392,10 +1848,21 @@ export def "user-analytics-reports-filters delete" [
   let base = ($base_url | default $BASE_URL)
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
   if ($report_filter_id | is-empty) { error make --unspanned { msg: "path parameter 'reportFilterId' must be non-empty" } }
-  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), report_filter_id: (encode-path-segment $report_filter_id)} | format pattern "/v2/user/analytics/{store_id}/reports/filters/{report_filter_id}"))
+  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), report_filter_id: (encode-path-segment $report_filter_id)} | format pattern "/v2/user/analytics/{store_id}/reports/filters/{report_filter_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Get the report filter description
@@ -1419,10 +1886,21 @@ export def "user-analytics-reports-filters get" [
   let base = ($base_url | default $BASE_URL)
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
   if ($report_filter_id | is-empty) { error make --unspanned { msg: "path parameter 'reportFilterId' must be non-empty" } }
-  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), report_filter_id: (encode-path-segment $report_filter_id)} | format pattern "/v2/user/analytics/{store_id}/reports/filters/{report_filter_id}"))
+  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), report_filter_id: (encode-path-segment $report_filter_id)} | format pattern "/v2/user/analytics/{store_id}/reports/filters/{report_filter_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Save the report filter
@@ -1449,12 +1927,23 @@ export def "user-analytics-reports-filters update-save" [
   let base = ($base_url | default $BASE_URL)
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
   if ($report_filter_id | is-empty) { error make --unspanned { msg: "path parameter 'reportFilterId' must be non-empty" } }
-  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), report_filter_id: (encode-path-segment $report_filter_id)} | format pattern "/v2/user/analytics/{store_id}/reports/filters/{report_filter_id}"))
+  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), report_filter_id: (encode-path-segment $report_filter_id)} | format pattern "/v2/user/analytics/{store_id}/reports/filters/{report_filter_id}") $auth.query)
   let req_body = {"parameters": $parameters, "reportFilterName": $report_filter_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Gets the list of rules for a given store
@@ -1476,10 +1965,21 @@ export def "user-analytics-rules list" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
-  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id)} | format pattern "/v2/user/analytics/{store_id}/rules"))
+  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id)} | format pattern "/v2/user/analytics/{store_id}/rules") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Rule creation
@@ -1507,12 +2007,23 @@ export def "user-analytics-rules create" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
-  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id)} | format pattern "/v2/user/analytics/{store_id}/rules"))
+  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id)} | format pattern "/v2/user/analytics/{store_id}/rules") $auth.query)
   let req_body = {"endUtcDate": $end_utc_date, "optimisationActionName": $optimisation_action_name, "reportFilterId": $report_filter_id, "ruleName": $rule_name, "startUtcDate": $start_utc_date} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Get the rules execution history
@@ -1537,10 +2048,21 @@ export def "user-analytics-rules-executions get" [
   let base = ($base_url | default $BASE_URL)
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
   let qp = [(serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id)} | format pattern "/v2/user/analytics/{store_id}/rules/executions") $qp)
+  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id)} | format pattern "/v2/user/analytics/{store_id}/rules/executions") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"pageNumber": $page_number, "pageSize": $page_size} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Run all rules for this store
@@ -1562,10 +2084,21 @@ export def "user-analytics-rules-run create-by-store-id" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
-  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id)} | format pattern "/v2/user/analytics/{store_id}/rules/run"))
+  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id)} | format pattern "/v2/user/analytics/{store_id}/rules/run") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Delete Rule
@@ -1589,10 +2122,21 @@ export def "user-analytics-rules delete" [
   let base = ($base_url | default $BASE_URL)
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
   if ($rule_id | is-empty) { error make --unspanned { msg: "path parameter 'ruleId' must be non-empty" } }
-  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), rule_id: (encode-path-segment $rule_id)} | format pattern "/v2/user/analytics/{store_id}/rules/{rule_id}"))
+  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), rule_id: (encode-path-segment $rule_id)} | format pattern "/v2/user/analytics/{store_id}/rules/{rule_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Gets the rule
@@ -1616,10 +2160,21 @@ export def "user-analytics-rules get" [
   let base = ($base_url | default $BASE_URL)
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
   if ($rule_id | is-empty) { error make --unspanned { msg: "path parameter 'ruleId' must be non-empty" } }
-  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), rule_id: (encode-path-segment $rule_id)} | format pattern "/v2/user/analytics/{store_id}/rules/{rule_id}"))
+  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), rule_id: (encode-path-segment $rule_id)} | format pattern "/v2/user/analytics/{store_id}/rules/{rule_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update Rule
@@ -1647,12 +2202,23 @@ export def "user-analytics-rules update" [
   let base = ($base_url | default $BASE_URL)
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
   if ($rule_id | is-empty) { error make --unspanned { msg: "path parameter 'ruleId' must be non-empty" } }
-  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), rule_id: (encode-path-segment $rule_id)} | format pattern "/v2/user/analytics/{store_id}/rules/{rule_id}"))
+  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), rule_id: (encode-path-segment $rule_id)} | format pattern "/v2/user/analytics/{store_id}/rules/{rule_id}") $auth.query)
   let req_body = {"endUtcDate": $end_utc_date, "ruleName": $rule_name, "startUtcDate": $start_utc_date} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Disable rule
@@ -1676,10 +2242,21 @@ export def "user-analytics-rules-disable disable" [
   let base = ($base_url | default $BASE_URL)
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
   if ($rule_id | is-empty) { error make --unspanned { msg: "path parameter 'ruleId' must be non-empty" } }
-  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), rule_id: (encode-path-segment $rule_id)} | format pattern "/v2/user/analytics/{store_id}/rules/{rule_id}/disable"))
+  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), rule_id: (encode-path-segment $rule_id)} | format pattern "/v2/user/analytics/{store_id}/rules/{rule_id}/disable") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Enable rule
@@ -1703,10 +2280,21 @@ export def "user-analytics-rules-enable enable" [
   let base = ($base_url | default $BASE_URL)
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
   if ($rule_id | is-empty) { error make --unspanned { msg: "path parameter 'ruleId' must be non-empty" } }
-  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), rule_id: (encode-path-segment $rule_id)} | format pattern "/v2/user/analytics/{store_id}/rules/{rule_id}/enable"))
+  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), rule_id: (encode-path-segment $rule_id)} | format pattern "/v2/user/analytics/{store_id}/rules/{rule_id}/enable") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Move the rule down
@@ -1730,10 +2318,21 @@ export def "user-analytics-rules-movedown move-down" [
   let base = ($base_url | default $BASE_URL)
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
   if ($rule_id | is-empty) { error make --unspanned { msg: "path parameter 'ruleId' must be non-empty" } }
-  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), rule_id: (encode-path-segment $rule_id)} | format pattern "/v2/user/analytics/{store_id}/rules/{rule_id}/movedown"))
+  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), rule_id: (encode-path-segment $rule_id)} | format pattern "/v2/user/analytics/{store_id}/rules/{rule_id}/movedown") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Move the rule up
@@ -1757,10 +2356,21 @@ export def "user-analytics-rules-moveup move-up" [
   let base = ($base_url | default $BASE_URL)
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
   if ($rule_id | is-empty) { error make --unspanned { msg: "path parameter 'ruleId' must be non-empty" } }
-  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), rule_id: (encode-path-segment $rule_id)} | format pattern "/v2/user/analytics/{store_id}/rules/{rule_id}/moveup"))
+  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), rule_id: (encode-path-segment $rule_id)} | format pattern "/v2/user/analytics/{store_id}/rules/{rule_id}/moveup") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Run rule
@@ -1784,10 +2394,21 @@ export def "user-analytics-rules-run create-by-store-id-rule-id" [
   let base = ($base_url | default $BASE_URL)
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
   if ($rule_id | is-empty) { error make --unspanned { msg: "path parameter 'ruleId' must be non-empty" } }
-  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), rule_id: (encode-path-segment $rule_id)} | format pattern "/v2/user/analytics/{store_id}/rules/{rule_id}/run"))
+  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), rule_id: (encode-path-segment $rule_id)} | format pattern "/v2/user/analytics/{store_id}/rules/{rule_id}/run") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Get the latest tracked clicks
@@ -1811,10 +2432,21 @@ export def "user-analytics-tracking-clicks get-store-tracked" [
   let base = ($base_url | default $BASE_URL)
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
   let qp = [(serialize-qp "count" $count "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id)} | format pattern "/v2/user/analytics/{store_id}/tracking/clicks") $qp)
+  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id)} | format pattern "/v2/user/analytics/{store_id}/tracking/clicks") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"count": $count} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"count": $count} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get the latest tracked external orders
@@ -1838,10 +2470,21 @@ export def "user-analytics-tracking-externalorders get-store-tracked-external-or
   let base = ($base_url | default $BASE_URL)
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
   let qp = [(serialize-qp "count" $count "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id)} | format pattern "/v2/user/analytics/{store_id}/tracking/externalorders") $qp)
+  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id)} | format pattern "/v2/user/analytics/{store_id}/tracking/externalorders") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"count": $count} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"count": $count} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get the latest tracked orders
@@ -1865,10 +2508,21 @@ export def "user-analytics-tracking-orders get-store-tracked" [
   let base = ($base_url | default $BASE_URL)
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
   let qp = [(serialize-qp "count" $count "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id)} | format pattern "/v2/user/analytics/{store_id}/tracking/orders") $qp)
+  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id)} | format pattern "/v2/user/analytics/{store_id}/tracking/orders") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"count": $count} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"count": $count} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get the synchronization status of clicks and orders of a store
@@ -1890,10 +2544,21 @@ export def "user-analytics-tracking-status get-store" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
-  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id)} | format pattern "/v2/user/analytics/{store_id}/tracking/status"))
+  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id)} | format pattern "/v2/user/analytics/{store_id}/tracking/status") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get the index of the catalog API
@@ -1913,10 +2578,21 @@ export def "user-catalogs get-index" [
 ]: nothing -> record<links: record<beezUPColumns: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>, lovLinks: record<beezUPColumnDataTypeLov: record<href: string, method: string>, beezUPColumnDisplayGroupLov: record<href: string, method: string>, beezUPColumnImportanceLov: record<href: string, method: string>, beezUPColumnLov: record<href: string, method: string>, compareOptionLov: record<href: string, method: string>, duplicateProductValueStrategyLov: record<href: string, method: string>>, storeLinks: record<links: record>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v2/user/catalogs/")
+  let full_url = (build-url $base "/v2/user/catalogs/" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get the BeezUP columns
@@ -1936,10 +2612,21 @@ export def "user-catalogs-beezup-columns get-beez-up" [
 ]: nothing -> table<beezUPColumnName: string, canBeTruncated: bool, columnDataType: string, columnImportance: string, description: string, displayGroupName: string, unique: bool> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v2/user/catalogs/beezupColumns")
+  let full_url = (build-url $base "/v2/user/catalogs/beezupColumns" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get the latest catalog importation reporting for all your stores
@@ -1959,10 +2646,21 @@ export def "user-catalogs-importations get-reportings-list-stores" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v2/user/catalogs/importations")
+  let full_url = (build-url $base "/v2/user/catalogs/importations" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get the index of the catalog API for this store
@@ -1984,10 +2682,21 @@ export def "user-catalogs get-store-index" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
-  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id)} | format pattern "/v2/user/catalogs/{store_id}"))
+  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id)} | format pattern "/v2/user/catalogs/{store_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Delete Auto Import
@@ -2009,10 +2718,21 @@ export def "user-catalogs-auto-import delete" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
-  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id)} | format pattern "/v2/user/catalogs/{store_id}/autoImport"))
+  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id)} | format pattern "/v2/user/catalogs/{store_id}/autoImport") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Get the auto import configuration
@@ -2034,10 +2754,21 @@ export def "user-catalogs-auto-import get-configuration" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
-  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id)} | format pattern "/v2/user/catalogs/{store_id}/autoImport"))
+  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id)} | format pattern "/v2/user/catalogs/{store_id}/autoImport") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Activate the auto importation of the last successful manual catalog importation.
@@ -2059,10 +2790,21 @@ export def "user-catalogs-auto-import-activate import-importation" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
-  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id)} | format pattern "/v2/user/catalogs/{store_id}/autoImport/activate"))
+  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id)} | format pattern "/v2/user/catalogs/{store_id}/autoImport/activate") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Pause Auto Import
@@ -2084,10 +2826,21 @@ export def "user-catalogs-auto-import-pause pause" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
-  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id)} | format pattern "/v2/user/catalogs/{store_id}/autoImport/pause"))
+  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id)} | format pattern "/v2/user/catalogs/{store_id}/autoImport/pause") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Resume Auto Import
@@ -2109,10 +2862,21 @@ export def "user-catalogs-auto-import-resume import" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
-  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id)} | format pattern "/v2/user/catalogs/{store_id}/autoImport/resume"))
+  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id)} | format pattern "/v2/user/catalogs/{store_id}/autoImport/resume") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Configure Auto Import Interval
@@ -2136,12 +2900,23 @@ export def "user-catalogs-auto-import-scheduling-interval import-configure" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
-  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id)} | format pattern "/v2/user/catalogs/{store_id}/autoImport/scheduling/interval"))
+  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id)} | format pattern "/v2/user/catalogs/{store_id}/autoImport/scheduling/interval") $auth.query)
   let req_body = {"interval": $interval} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Configure Auto Import Schedules
@@ -2166,12 +2941,23 @@ export def "user-catalogs-auto-import-scheduling-schedules import" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
-  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id)} | format pattern "/v2/user/catalogs/{store_id}/autoImport/scheduling/schedules"))
+  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id)} | format pattern "/v2/user/catalogs/{store_id}/autoImport/scheduling/schedules") $auth.query)
   let req_body = {"localTimeZoneName": $local_time_zone_name, "schedules": $schedules} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Start Auto Import Manually
@@ -2193,10 +2979,21 @@ export def "user-catalogs-auto-import-start start" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
-  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id)} | format pattern "/v2/user/catalogs/{store_id}/autoImport/start"))
+  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id)} | format pattern "/v2/user/catalogs/{store_id}/autoImport/start") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [202]
 }
 
 # Get catalog column list
@@ -2218,10 +3015,21 @@ export def "user-catalogs-catalog-columns get" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
-  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id)} | format pattern "/v2/user/catalogs/{store_id}/catalogColumns"))
+  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id)} | format pattern "/v2/user/catalogs/{store_id}/catalogColumns") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Change Catalog Column User Name
@@ -2247,12 +3055,23 @@ export def "user-catalogs-catalog-columns-rename create-change-name" [
   let base = ($base_url | default $BASE_URL)
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
   if ($column_id | is-empty) { error make --unspanned { msg: "path parameter 'columnId' must be non-empty" } }
-  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), column_id: (encode-path-segment $column_id)} | format pattern "/v2/user/catalogs/{store_id}/catalogColumns/{column_id}/rename"))
+  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), column_id: (encode-path-segment $column_id)} | format pattern "/v2/user/catalogs/{store_id}/catalogColumns/{column_id}/rename") $auth.query)
   let req_body = {"userColumName": $user_colum_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Get category list
@@ -2275,12 +3094,23 @@ export def "user-catalogs-categories get" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
-  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id)} | format pattern "/v2/user/catalogs/{store_id}/categories"))
+  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id)} | format pattern "/v2/user/catalogs/{store_id}/categories") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Accept-Encoding": (if ($accept_encoding | describe | str starts-with "list") { $accept_encoding | each { into string } | str join "," } else { $accept_encoding })} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get custom column list
@@ -2302,10 +3132,21 @@ export def "user-catalogs-custom-columns get" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
-  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id)} | format pattern "/v2/user/catalogs/{store_id}/customColumns"))
+  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id)} | format pattern "/v2/user/catalogs/{store_id}/customColumns") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Compute the expression for this catalog.
@@ -2330,12 +3171,23 @@ export def "user-catalogs-custom-columns-compute-expression create" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
-  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id)} | format pattern "/v2/user/catalogs/{store_id}/customColumns/computeExpression"))
+  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id)} | format pattern "/v2/user/catalogs/{store_id}/customColumns/computeExpression") $auth.query)
   let req_body = {"encryptedExpression": $encrypted_expression, "productValues": $product_values} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Delete custom column
@@ -2359,10 +3211,21 @@ export def "user-catalogs-custom-columns delete" [
   let base = ($base_url | default $BASE_URL)
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
   if ($column_id | is-empty) { error make --unspanned { msg: "path parameter 'columnId' must be non-empty" } }
-  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), column_id: (encode-path-segment $column_id)} | format pattern "/v2/user/catalogs/{store_id}/customColumns/{column_id}"))
+  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), column_id: (encode-path-segment $column_id)} | format pattern "/v2/user/catalogs/{store_id}/customColumns/{column_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Create or replace a custom column
@@ -2391,12 +3254,23 @@ export def "user-catalogs-custom-columns update-save" [
   let base = ($base_url | default $BASE_URL)
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
   if ($column_id | is-empty) { error make --unspanned { msg: "path parameter 'columnId' must be non-empty" } }
-  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), column_id: (encode-path-segment $column_id)} | format pattern "/v2/user/catalogs/{store_id}/customColumns/{column_id}"))
+  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), column_id: (encode-path-segment $column_id)} | format pattern "/v2/user/catalogs/{store_id}/customColumns/{column_id}") $auth.query)
   let req_body = {"displayGroupName": $display_group_name, "encryptedBlocklyExpression": $encrypted_blockly_expression, "encryptedExpression": $encrypted_expression, "userColumnName": $user_column_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Get the encrypted custom column expression
@@ -2420,10 +3294,21 @@ export def "user-catalogs-custom-columns-expression get" [
   let base = ($base_url | default $BASE_URL)
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
   if ($column_id | is-empty) { error make --unspanned { msg: "path parameter 'columnId' must be non-empty" } }
-  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), column_id: (encode-path-segment $column_id)} | format pattern "/v2/user/catalogs/{store_id}/customColumns/{column_id}/expression"))
+  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), column_id: (encode-path-segment $column_id)} | format pattern "/v2/user/catalogs/{store_id}/customColumns/{column_id}/expression") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Change custom column expression
@@ -2450,12 +3335,23 @@ export def "user-catalogs-custom-columns-expression update-change" [
   let base = ($base_url | default $BASE_URL)
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
   if ($column_id | is-empty) { error make --unspanned { msg: "path parameter 'columnId' must be non-empty" } }
-  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), column_id: (encode-path-segment $column_id)} | format pattern "/v2/user/catalogs/{store_id}/customColumns/{column_id}/expression"))
+  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), column_id: (encode-path-segment $column_id)} | format pattern "/v2/user/catalogs/{store_id}/customColumns/{column_id}/expression") $auth.query)
   let req_body = {"encryptedBlocklyExpression": $encrypted_blockly_expression, "encryptedExpression": $encrypted_expression} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Change Custom Column User Name
@@ -2481,12 +3377,23 @@ export def "user-catalogs-custom-columns-rename create-change-name" [
   let base = ($base_url | default $BASE_URL)
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
   if ($column_id | is-empty) { error make --unspanned { msg: "path parameter 'columnId' must be non-empty" } }
-  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), column_id: (encode-path-segment $column_id)} | format pattern "/v2/user/catalogs/{store_id}/customColumns/{column_id}/rename"))
+  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), column_id: (encode-path-segment $column_id)} | format pattern "/v2/user/catalogs/{store_id}/customColumns/{column_id}/rename") $auth.query)
   let req_body = {"userColumName": $user_colum_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Get the latest catalog importation reporting
@@ -2508,10 +3415,21 @@ export def "user-catalogs-importations get-reportings" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
-  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id)} | format pattern "/v2/user/catalogs/{store_id}/importations"))
+  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id)} | format pattern "/v2/user/catalogs/{store_id}/importations") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Start Manual Import
@@ -2538,12 +3456,23 @@ export def "user-catalogs-importations-start update-manual" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
-  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id)} | format pattern "/v2/user/catalogs/{store_id}/importations/start"))
+  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id)} | format pattern "/v2/user/catalogs/{store_id}/importations/start") $auth.query)
   let req_body = {"duplicateProductSkuConfiguration": $duplicate_product_sku_configuration, "input": $input} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [202]
 }
 
 # Get the importation status
@@ -2567,10 +3496,21 @@ export def "user-catalogs-importations get-monitoring" [
   let base = ($base_url | default $BASE_URL)
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
   if ($execution_id | is-empty) { error make --unspanned { msg: "path parameter 'executionId' must be non-empty" } }
-  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), execution_id: (encode-path-segment $execution_id)} | format pattern "/v2/user/catalogs/{store_id}/importations/{execution_id}"))
+  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), execution_id: (encode-path-segment $execution_id)} | format pattern "/v2/user/catalogs/{store_id}/importations/{execution_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Cancel importation
@@ -2594,10 +3534,21 @@ export def "user-catalogs-importations-cancel cancel" [
   let base = ($base_url | default $BASE_URL)
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
   if ($execution_id | is-empty) { error make --unspanned { msg: "path parameter 'executionId' must be non-empty" } }
-  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), execution_id: (encode-path-segment $execution_id)} | format pattern "/v2/user/catalogs/{store_id}/importations/{execution_id}/cancel"))
+  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), execution_id: (encode-path-segment $execution_id)} | format pattern "/v2/user/catalogs/{store_id}/importations/{execution_id}/cancel") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Get detected catalog columns during this importation.
@@ -2621,10 +3572,21 @@ export def "user-catalogs-importations-catalog-columns get-detected" [
   let base = ($base_url | default $BASE_URL)
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
   if ($execution_id | is-empty) { error make --unspanned { msg: "path parameter 'executionId' must be non-empty" } }
-  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), execution_id: (encode-path-segment $execution_id)} | format pattern "/v2/user/catalogs/{store_id}/importations/{execution_id}/catalogColumns"))
+  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), execution_id: (encode-path-segment $execution_id)} | format pattern "/v2/user/catalogs/{store_id}/importations/{execution_id}/catalogColumns") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Configure catalog column
@@ -2653,12 +3615,23 @@ export def "user-catalogs-importations-catalog-columns create-configure" [
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
   if ($execution_id | is-empty) { error make --unspanned { msg: "path parameter 'executionId' must be non-empty" } }
   if ($column_id | is-empty) { error make --unspanned { msg: "path parameter 'columnId' must be non-empty" } }
-  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), execution_id: (encode-path-segment $execution_id), column_id: (encode-path-segment $column_id)} | format pattern "/v2/user/catalogs/{store_id}/importations/{execution_id}/catalogColumns/{column_id}"))
+  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), execution_id: (encode-path-segment $execution_id), column_id: (encode-path-segment $column_id)} | format pattern "/v2/user/catalogs/{store_id}/importations/{execution_id}/catalogColumns/{column_id}") $auth.query)
   let req_body = {"catalogColumn": $catalog_column} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Ignore Column
@@ -2684,10 +3657,21 @@ export def "user-catalogs-importations-catalog-columns-ignore create" [
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
   if ($execution_id | is-empty) { error make --unspanned { msg: "path parameter 'executionId' must be non-empty" } }
   if ($column_id | is-empty) { error make --unspanned { msg: "path parameter 'columnId' must be non-empty" } }
-  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), execution_id: (encode-path-segment $execution_id), column_id: (encode-path-segment $column_id)} | format pattern "/v2/user/catalogs/{store_id}/importations/{execution_id}/catalogColumns/{column_id}/ignore"))
+  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), execution_id: (encode-path-segment $execution_id), column_id: (encode-path-segment $column_id)} | format pattern "/v2/user/catalogs/{store_id}/importations/{execution_id}/catalogColumns/{column_id}/ignore") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Map catalog column to a BeezUP column
@@ -2715,12 +3699,23 @@ export def "user-catalogs-importations-catalog-columns-map create" [
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
   if ($execution_id | is-empty) { error make --unspanned { msg: "path parameter 'executionId' must be non-empty" } }
   if ($column_id | is-empty) { error make --unspanned { msg: "path parameter 'columnId' must be non-empty" } }
-  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), execution_id: (encode-path-segment $execution_id), column_id: (encode-path-segment $column_id)} | format pattern "/v2/user/catalogs/{store_id}/importations/{execution_id}/catalogColumns/{column_id}/map"))
+  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), execution_id: (encode-path-segment $execution_id), column_id: (encode-path-segment $column_id)} | format pattern "/v2/user/catalogs/{store_id}/importations/{execution_id}/catalogColumns/{column_id}/map") $auth.query)
   let req_body = {"beezUPColumnName": $beez_up_column_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Reattend Column
@@ -2746,10 +3741,21 @@ export def "user-catalogs-importations-catalog-columns-reattend create" [
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
   if ($execution_id | is-empty) { error make --unspanned { msg: "path parameter 'executionId' must be non-empty" } }
   if ($column_id | is-empty) { error make --unspanned { msg: "path parameter 'columnId' must be non-empty" } }
-  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), execution_id: (encode-path-segment $execution_id), column_id: (encode-path-segment $column_id)} | format pattern "/v2/user/catalogs/{store_id}/importations/{execution_id}/catalogColumns/{column_id}/reattend"))
+  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), execution_id: (encode-path-segment $execution_id), column_id: (encode-path-segment $column_id)} | format pattern "/v2/user/catalogs/{store_id}/importations/{execution_id}/catalogColumns/{column_id}/reattend") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Unmap catalog column
@@ -2775,10 +3781,21 @@ export def "user-catalogs-importations-catalog-columns-unmap create" [
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
   if ($execution_id | is-empty) { error make --unspanned { msg: "path parameter 'executionId' must be non-empty" } }
   if ($column_id | is-empty) { error make --unspanned { msg: "path parameter 'columnId' must be non-empty" } }
-  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), execution_id: (encode-path-segment $execution_id), column_id: (encode-path-segment $column_id)} | format pattern "/v2/user/catalogs/{store_id}/importations/{execution_id}/catalogColumns/{column_id}/unmap"))
+  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), execution_id: (encode-path-segment $execution_id), column_id: (encode-path-segment $column_id)} | format pattern "/v2/user/catalogs/{store_id}/importations/{execution_id}/catalogColumns/{column_id}/unmap") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Commit Importation
@@ -2802,10 +3819,21 @@ export def "user-catalogs-importations-commit commit" [
   let base = ($base_url | default $BASE_URL)
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
   if ($execution_id | is-empty) { error make --unspanned { msg: "path parameter 'executionId' must be non-empty" } }
-  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), execution_id: (encode-path-segment $execution_id)} | format pattern "/v2/user/catalogs/{store_id}/importations/{execution_id}/commit"))
+  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), execution_id: (encode-path-segment $execution_id)} | format pattern "/v2/user/catalogs/{store_id}/importations/{execution_id}/commit") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Commit columns
@@ -2829,10 +3857,21 @@ export def "user-catalogs-importations-commit-columns commit" [
   let base = ($base_url | default $BASE_URL)
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
   if ($execution_id | is-empty) { error make --unspanned { msg: "path parameter 'executionId' must be non-empty" } }
-  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), execution_id: (encode-path-segment $execution_id)} | format pattern "/v2/user/catalogs/{store_id}/importations/{execution_id}/commitColumns"))
+  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), execution_id: (encode-path-segment $execution_id)} | format pattern "/v2/user/catalogs/{store_id}/importations/{execution_id}/commitColumns") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Configure remaining catalog columns
@@ -2856,10 +3895,21 @@ export def "user-catalogs-importations-configure-remaining-catalog-columns creat
   let base = ($base_url | default $BASE_URL)
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
   if ($execution_id | is-empty) { error make --unspanned { msg: "path parameter 'executionId' must be non-empty" } }
-  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), execution_id: (encode-path-segment $execution_id)} | format pattern "/v2/user/catalogs/{store_id}/importations/{execution_id}/configureRemainingCatalogColumns"))
+  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), execution_id: (encode-path-segment $execution_id)} | format pattern "/v2/user/catalogs/{store_id}/importations/{execution_id}/configureRemainingCatalogColumns") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Get custom columns currently place in this importation
@@ -2883,10 +3933,21 @@ export def "user-catalogs-importations-custom-columns get" [
   let base = ($base_url | default $BASE_URL)
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
   if ($execution_id | is-empty) { error make --unspanned { msg: "path parameter 'executionId' must be non-empty" } }
-  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), execution_id: (encode-path-segment $execution_id)} | format pattern "/v2/user/catalogs/{store_id}/importations/{execution_id}/customColumns"))
+  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), execution_id: (encode-path-segment $execution_id)} | format pattern "/v2/user/catalogs/{store_id}/importations/{execution_id}/customColumns") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Delete Custom Column
@@ -2912,10 +3973,21 @@ export def "user-catalogs-importations-custom-columns delete" [
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
   if ($execution_id | is-empty) { error make --unspanned { msg: "path parameter 'executionId' must be non-empty" } }
   if ($column_id | is-empty) { error make --unspanned { msg: "path parameter 'columnId' must be non-empty" } }
-  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), execution_id: (encode-path-segment $execution_id), column_id: (encode-path-segment $column_id)} | format pattern "/v2/user/catalogs/{store_id}/importations/{execution_id}/customColumns/{column_id}"))
+  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), execution_id: (encode-path-segment $execution_id), column_id: (encode-path-segment $column_id)} | format pattern "/v2/user/catalogs/{store_id}/importations/{execution_id}/customColumns/{column_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Create or replace a custom column
@@ -2945,12 +4017,23 @@ export def "user-catalogs-importations-custom-columns update-save" [
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
   if ($execution_id | is-empty) { error make --unspanned { msg: "path parameter 'executionId' must be non-empty" } }
   if ($column_id | is-empty) { error make --unspanned { msg: "path parameter 'columnId' must be non-empty" } }
-  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), execution_id: (encode-path-segment $execution_id), column_id: (encode-path-segment $column_id)} | format pattern "/v2/user/catalogs/{store_id}/importations/{execution_id}/customColumns/{column_id}"))
+  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), execution_id: (encode-path-segment $execution_id), column_id: (encode-path-segment $column_id)} | format pattern "/v2/user/catalogs/{store_id}/importations/{execution_id}/customColumns/{column_id}") $auth.query)
   let req_body = {"encryptedBlocklyExpression": $encrypted_blockly_expression, "encryptedExpression": $encrypted_expression, "userColumName": $user_colum_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Get the encrypted custom column expression in this importation
@@ -2976,10 +4059,21 @@ export def "user-catalogs-importations-custom-columns-expression get" [
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
   if ($execution_id | is-empty) { error make --unspanned { msg: "path parameter 'executionId' must be non-empty" } }
   if ($column_id | is-empty) { error make --unspanned { msg: "path parameter 'columnId' must be non-empty" } }
-  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), execution_id: (encode-path-segment $execution_id), column_id: (encode-path-segment $column_id)} | format pattern "/v2/user/catalogs/{store_id}/importations/{execution_id}/customColumns/{column_id}/expression"))
+  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), execution_id: (encode-path-segment $execution_id), column_id: (encode-path-segment $column_id)} | format pattern "/v2/user/catalogs/{store_id}/importations/{execution_id}/customColumns/{column_id}/expression") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Map custom column to a BeezUP column
@@ -3007,12 +4101,23 @@ export def "user-catalogs-importations-custom-columns-map create" [
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
   if ($execution_id | is-empty) { error make --unspanned { msg: "path parameter 'executionId' must be non-empty" } }
   if ($column_id | is-empty) { error make --unspanned { msg: "path parameter 'columnId' must be non-empty" } }
-  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), execution_id: (encode-path-segment $execution_id), column_id: (encode-path-segment $column_id)} | format pattern "/v2/user/catalogs/{store_id}/importations/{execution_id}/customColumns/{column_id}/map"))
+  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), execution_id: (encode-path-segment $execution_id), column_id: (encode-path-segment $column_id)} | format pattern "/v2/user/catalogs/{store_id}/importations/{execution_id}/customColumns/{column_id}/map") $auth.query)
   let req_body = {"beezUPColumnName": $beez_up_column_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Unmap custom column
@@ -3038,10 +4143,21 @@ export def "user-catalogs-importations-custom-columns-unmap create" [
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
   if ($execution_id | is-empty) { error make --unspanned { msg: "path parameter 'executionId' must be non-empty" } }
   if ($column_id | is-empty) { error make --unspanned { msg: "path parameter 'columnId' must be non-empty" } }
-  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), execution_id: (encode-path-segment $execution_id), column_id: (encode-path-segment $column_id)} | format pattern "/v2/user/catalogs/{store_id}/importations/{execution_id}/customColumns/{column_id}/unmap"))
+  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), execution_id: (encode-path-segment $execution_id), column_id: (encode-path-segment $column_id)} | format pattern "/v2/user/catalogs/{store_id}/importations/{execution_id}/customColumns/{column_id}/unmap") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Get the product sample related to this importation with all columns (catalog and custom)
@@ -3067,10 +4183,21 @@ export def "user-catalogs-importations-product-samples get" [
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
   if ($execution_id | is-empty) { error make --unspanned { msg: "path parameter 'executionId' must be non-empty" } }
   if ($product_sample_index | is-empty) { error make --unspanned { msg: "path parameter 'productSampleIndex' must be non-empty" } }
-  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), execution_id: (encode-path-segment $execution_id), product_sample_index: (encode-path-segment $product_sample_index)} | format pattern "/v2/user/catalogs/{store_id}/importations/{execution_id}/productSamples/{product_sample_index}"))
+  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), execution_id: (encode-path-segment $execution_id), product_sample_index: (encode-path-segment $product_sample_index)} | format pattern "/v2/user/catalogs/{store_id}/importations/{execution_id}/productSamples/{product_sample_index}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get product sample custom column value related to this importation.
@@ -3098,10 +4225,21 @@ export def "user-catalogs-importations-product-samples-custom-columns get-value"
   if ($execution_id | is-empty) { error make --unspanned { msg: "path parameter 'executionId' must be non-empty" } }
   if ($product_sample_index | is-empty) { error make --unspanned { msg: "path parameter 'productSampleIndex' must be non-empty" } }
   if ($column_id | is-empty) { error make --unspanned { msg: "path parameter 'columnId' must be non-empty" } }
-  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), execution_id: (encode-path-segment $execution_id), product_sample_index: (encode-path-segment $product_sample_index), column_id: (encode-path-segment $column_id)} | format pattern "/v2/user/catalogs/{store_id}/importations/{execution_id}/productSamples/{product_sample_index}/customColumns/{column_id}"))
+  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), execution_id: (encode-path-segment $execution_id), product_sample_index: (encode-path-segment $product_sample_index), column_id: (encode-path-segment $column_id)} | format pattern "/v2/user/catalogs/{store_id}/importations/{execution_id}/productSamples/{product_sample_index}/customColumns/{column_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Importation Get Products Report
@@ -3134,12 +4272,23 @@ export def "user-catalogs-importations-products-list get-report" [
   let base = ($base_url | default $BASE_URL)
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
   if ($execution_id | is-empty) { error make --unspanned { msg: "path parameter 'executionId' must be non-empty" } }
-  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), execution_id: (encode-path-segment $execution_id)} | format pattern "/v2/user/catalogs/{store_id}/importations/{execution_id}/products/list"))
+  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), execution_id: (encode-path-segment $execution_id)} | format pattern "/v2/user/catalogs/{store_id}/importations/{execution_id}/products/list") $auth.query)
   let req_body = {"ean": $ean, "errorCodes": $error_codes, "mpn": $mpn, "pageNumber": $page_number, "pageSize": $page_size, "sku": $sku, "title": $title} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Importation Get Report
@@ -3163,10 +4312,21 @@ export def "user-catalogs-importations-report get" [
   let base = ($base_url | default $BASE_URL)
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
   if ($execution_id | is-empty) { error make --unspanned { msg: "path parameter 'executionId' must be non-empty" } }
-  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), execution_id: (encode-path-segment $execution_id)} | format pattern "/v2/user/catalogs/{store_id}/importations/{execution_id}/report"))
+  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), execution_id: (encode-path-segment $execution_id)} | format pattern "/v2/user/catalogs/{store_id}/importations/{execution_id}/report") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get technical progression
@@ -3190,10 +4350,21 @@ export def "user-catalogs-importations-technical-progression get" [
   let base = ($base_url | default $BASE_URL)
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
   if ($execution_id | is-empty) { error make --unspanned { msg: "path parameter 'executionId' must be non-empty" } }
-  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), execution_id: (encode-path-segment $execution_id)} | format pattern "/v2/user/catalogs/{store_id}/importations/{execution_id}/technicalProgression"))
+  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), execution_id: (encode-path-segment $execution_id)} | format pattern "/v2/user/catalogs/{store_id}/importations/{execution_id}/technicalProgression") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get the last input configuration
@@ -3215,10 +4386,21 @@ export def "user-catalogs-input-configuration get-importation-manual-update-last
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
-  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id)} | format pattern "/v2/user/catalogs/{store_id}/inputConfiguration"))
+  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id)} | format pattern "/v2/user/catalogs/{store_id}/inputConfiguration") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get product by Sku
@@ -3242,10 +4424,21 @@ export def "user-catalogs-products get-by-sku" [
   let base = ($base_url | default $BASE_URL)
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
   let qp = [(serialize-qp "sku" $sku "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id)} | format pattern "/v2/user/catalogs/{store_id}/products") $qp)
+  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id)} | format pattern "/v2/user/catalogs/{store_id}/products") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"sku": $sku} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"sku": $sku} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get product list
@@ -3280,12 +4473,23 @@ export def "user-catalogs-products-list get" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
-  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id)} | format pattern "/v2/user/catalogs/{store_id}/products/list"))
+  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id)} | format pattern "/v2/user/catalogs/{store_id}/products/list") $auth.query)
   let req_body = {"categoryPath": $category_path, "columnIdList": $column_id_list, "ean": $ean, "exists": $exists, "mpn": $mpn, "orderByCatalogColumnId": $order_by_catalog_column_id, "pageNumber": $page_number, "pageSize": $page_size, "productIdList": $product_id_list, "sku": $sku, "title": $title, "withoutSubCategories": $without_sub_categories} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get random product list
@@ -3307,10 +4511,21 @@ export def "user-catalogs-products-random get" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
-  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id)} | format pattern "/v2/user/catalogs/{store_id}/products/random"))
+  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id)} | format pattern "/v2/user/catalogs/{store_id}/products/random") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get product by ProductId
@@ -3334,10 +4549,21 @@ export def "user-catalogs-products get" [
   let base = ($base_url | default $BASE_URL)
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
   if ($product_id | is-empty) { error make --unspanned { msg: "path parameter 'productId' must be non-empty" } }
-  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), product_id: (encode-path-segment $product_id)} | format pattern "/v2/user/catalogs/{store_id}/products/{product_id}"))
+  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), product_id: (encode-path-segment $product_id)} | format pattern "/v2/user/catalogs/{store_id}/products/{product_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List all your current channel catalogs
@@ -3359,10 +4585,21 @@ export def "user-channel-catalogs list" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "storeId" $store_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v2/user/channelCatalogs/" $qp)
+  let full_url = (build-url $base "/v2/user/channelCatalogs/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"storeId": $store_id} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"storeId": $store_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Add a new channel catalog
@@ -3385,12 +4622,23 @@ export def "user-channel-catalogs create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v2/user/channelCatalogs/")
+  let full_url = (build-url $base "/v2/user/channelCatalogs/" $auth.query)
   let req_body = {"channelId": $channel_id, "storeId": $store_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Get channel catalog filter operators
@@ -3410,10 +4658,21 @@ export def "user-channel-catalogs-filter-operators get" [
 ]: nothing -> table<expectedChannelColumnDataType: string, expectedValueDataType: string, name: string, valueRequired: bool> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v2/user/channelCatalogs/filterOperators")
+  let full_url = (build-url $base "/v2/user/channelCatalogs/filterOperators" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get channel catalog products related to these channel catalogs
@@ -3437,12 +4696,23 @@ export def "user-channel-catalogs-products get" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v2/user/channelCatalogs/products")
+  let full_url = (build-url $base "/v2/user/channelCatalogs/products" $auth.query)
   let req_body = {"channelCatalogIds": $channel_catalog_ids, "productId": $product_id, "storeId": $store_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Delete the channel catalog
@@ -3464,10 +4734,21 @@ export def "user-channel-catalogs delete" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($channel_catalog_id | is-empty) { error make --unspanned { msg: "path parameter 'channelCatalogId' must be non-empty" } }
-  let full_url = (build-url $base ({channel_catalog_id: (encode-path-segment $channel_catalog_id)} | format pattern "/v2/user/channelCatalogs/{channel_catalog_id}"))
+  let full_url = (build-url $base ({channel_catalog_id: (encode-path-segment $channel_catalog_id)} | format pattern "/v2/user/channelCatalogs/{channel_catalog_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Get the channel catalog information
@@ -3489,10 +4770,21 @@ export def "user-channel-catalogs get" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($channel_catalog_id | is-empty) { error make --unspanned { msg: "path parameter 'channelCatalogId' must be non-empty" } }
-  let full_url = (build-url $base ({channel_catalog_id: (encode-path-segment $channel_catalog_id)} | format pattern "/v2/user/channelCatalogs/{channel_catalog_id}"))
+  let full_url = (build-url $base ({channel_catalog_id: (encode-path-segment $channel_catalog_id)} | format pattern "/v2/user/channelCatalogs/{channel_catalog_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get channel catalog categories
@@ -3514,10 +4806,21 @@ export def "user-channel-catalogs-categories get" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($channel_catalog_id | is-empty) { error make --unspanned { msg: "path parameter 'channelCatalogId' must be non-empty" } }
-  let full_url = (build-url $base ({channel_catalog_id: (encode-path-segment $channel_catalog_id)} | format pattern "/v2/user/channelCatalogs/{channel_catalog_id}/categories"))
+  let full_url = (build-url $base ({channel_catalog_id: (encode-path-segment $channel_catalog_id)} | format pattern "/v2/user/channelCatalogs/{channel_catalog_id}/categories") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Configure channel catalog category
@@ -3543,12 +4846,23 @@ export def "user-channel-catalogs-categories-configure create-category" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($channel_catalog_id | is-empty) { error make --unspanned { msg: "path parameter 'channelCatalogId' must be non-empty" } }
-  let full_url = (build-url $base ({channel_catalog_id: (encode-path-segment $channel_catalog_id)} | format pattern "/v2/user/channelCatalogs/{channel_catalog_id}/categories/configure"))
+  let full_url = (build-url $base ({channel_catalog_id: (encode-path-segment $channel_catalog_id)} | format pattern "/v2/user/channelCatalogs/{channel_catalog_id}/categories/configure") $auth.query)
   let req_body = {"channelCatalogCategories": $channel_catalog_categories, "overrideSubCategoryMappings": $override_sub_category_mappings} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Disable a channel catalog category mapping
@@ -3570,10 +4884,21 @@ export def "user-channel-catalogs-categories-disable-mapping disable-category" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($channel_catalog_id | is-empty) { error make --unspanned { msg: "path parameter 'channelCatalogId' must be non-empty" } }
-  let full_url = (build-url $base ({channel_catalog_id: (encode-path-segment $channel_catalog_id)} | format pattern "/v2/user/channelCatalogs/{channel_catalog_id}/categories/disableMapping"))
+  let full_url = (build-url $base ({channel_catalog_id: (encode-path-segment $channel_catalog_id)} | format pattern "/v2/user/channelCatalogs/{channel_catalog_id}/categories/disableMapping") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Reenable a channel catalog category mapping
@@ -3595,10 +4920,21 @@ export def "user-channel-catalogs-categories-reenable-mapping create-category" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($channel_catalog_id | is-empty) { error make --unspanned { msg: "path parameter 'channelCatalogId' must be non-empty" } }
-  let full_url = (build-url $base ({channel_catalog_id: (encode-path-segment $channel_catalog_id)} | format pattern "/v2/user/channelCatalogs/{channel_catalog_id}/categories/reenableMapping"))
+  let full_url = (build-url $base ({channel_catalog_id: (encode-path-segment $channel_catalog_id)} | format pattern "/v2/user/channelCatalogs/{channel_catalog_id}/categories/reenableMapping") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Configure channel catalog column mappings
@@ -3622,12 +4958,23 @@ export def "user-channel-catalogs-column-mappings update-configure" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($channel_catalog_id | is-empty) { error make --unspanned { msg: "path parameter 'channelCatalogId' must be non-empty" } }
-  let full_url = (build-url $base ({channel_catalog_id: (encode-path-segment $channel_catalog_id)} | format pattern "/v2/user/channelCatalogs/{channel_catalog_id}/columnMappings"))
+  let full_url = (build-url $base ({channel_catalog_id: (encode-path-segment $channel_catalog_id)} | format pattern "/v2/user/channelCatalogs/{channel_catalog_id}/columnMappings") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Disable a channel catalog
@@ -3649,10 +4996,21 @@ export def "user-channel-catalogs-disable disable" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($channel_catalog_id | is-empty) { error make --unspanned { msg: "path parameter 'channelCatalogId' must be non-empty" } }
-  let full_url = (build-url $base ({channel_catalog_id: (encode-path-segment $channel_catalog_id)} | format pattern "/v2/user/channelCatalogs/{channel_catalog_id}/disable"))
+  let full_url = (build-url $base ({channel_catalog_id: (encode-path-segment $channel_catalog_id)} | format pattern "/v2/user/channelCatalogs/{channel_catalog_id}/disable") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Enable a channel catalog
@@ -3674,10 +5032,21 @@ export def "user-channel-catalogs-enable enable" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($channel_catalog_id | is-empty) { error make --unspanned { msg: "path parameter 'channelCatalogId' must be non-empty" } }
-  let full_url = (build-url $base ({channel_catalog_id: (encode-path-segment $channel_catalog_id)} | format pattern "/v2/user/channelCatalogs/{channel_catalog_id}/enable"))
+  let full_url = (build-url $base ({channel_catalog_id: (encode-path-segment $channel_catalog_id)} | format pattern "/v2/user/channelCatalogs/{channel_catalog_id}/enable") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Get channel catalog exclusion filters
@@ -3699,10 +5068,21 @@ export def "user-channel-catalogs-exclusion-filters get" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($channel_catalog_id | is-empty) { error make --unspanned { msg: "path parameter 'channelCatalogId' must be non-empty" } }
-  let full_url = (build-url $base ({channel_catalog_id: (encode-path-segment $channel_catalog_id)} | format pattern "/v2/user/channelCatalogs/{channel_catalog_id}/exclusionFilters"))
+  let full_url = (build-url $base ({channel_catalog_id: (encode-path-segment $channel_catalog_id)} | format pattern "/v2/user/channelCatalogs/{channel_catalog_id}/exclusionFilters") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Configure channel catalog exclusion filters
@@ -3726,12 +5106,23 @@ export def "user-channel-catalogs-exclusion-filters update-configure" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($channel_catalog_id | is-empty) { error make --unspanned { msg: "path parameter 'channelCatalogId' must be non-empty" } }
-  let full_url = (build-url $base ({channel_catalog_id: (encode-path-segment $channel_catalog_id)} | format pattern "/v2/user/channelCatalogs/{channel_catalog_id}/exclusionFilters"))
+  let full_url = (build-url $base ({channel_catalog_id: (encode-path-segment $channel_catalog_id)} | format pattern "/v2/user/channelCatalogs/{channel_catalog_id}/exclusionFilters") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Get the exportation cache information
@@ -3753,10 +5144,21 @@ export def "user-channel-catalogs-exportations-cache get" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($channel_catalog_id | is-empty) { error make --unspanned { msg: "path parameter 'channelCatalogId' must be non-empty" } }
-  let full_url = (build-url $base ({channel_catalog_id: (encode-path-segment $channel_catalog_id)} | format pattern "/v2/user/channelCatalogs/{channel_catalog_id}/exportations/cache"))
+  let full_url = (build-url $base ({channel_catalog_id: (encode-path-segment $channel_catalog_id)} | format pattern "/v2/user/channelCatalogs/{channel_catalog_id}/exportations/cache") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Clear the exportation cache
@@ -3778,10 +5180,21 @@ export def "user-channel-catalogs-exportations-cache-clear create" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($channel_catalog_id | is-empty) { error make --unspanned { msg: "path parameter 'channelCatalogId' must be non-empty" } }
-  let full_url = (build-url $base ({channel_catalog_id: (encode-path-segment $channel_catalog_id)} | format pattern "/v2/user/channelCatalogs/{channel_catalog_id}/exportations/cache/clear"))
+  let full_url = (build-url $base ({channel_catalog_id: (encode-path-segment $channel_catalog_id)} | format pattern "/v2/user/channelCatalogs/{channel_catalog_id}/exportations/cache/clear") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Get the exportation history
@@ -3806,10 +5219,21 @@ export def "user-channel-catalogs-exportations-history get" [
   let base = ($base_url | default $BASE_URL)
   if ($channel_catalog_id | is-empty) { error make --unspanned { msg: "path parameter 'channelCatalogId' must be non-empty" } }
   let qp = [(serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({channel_catalog_id: (encode-path-segment $channel_catalog_id)} | format pattern "/v2/user/channelCatalogs/{channel_catalog_id}/exportations/history") $qp)
+  let full_url = (build-url $base ({channel_catalog_id: (encode-path-segment $channel_catalog_id)} | format pattern "/v2/user/channelCatalogs/{channel_catalog_id}/exportations/history") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"pageNumber": $page_number, "pageSize": $page_size} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get channel catalog product information list
@@ -3843,12 +5267,23 @@ export def "user-channel-catalogs-products get-list" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($channel_catalog_id | is-empty) { error make --unspanned { msg: "path parameter 'channelCatalogId' must be non-empty" } }
-  let full_url = (build-url $base ({channel_catalog_id: (encode-path-segment $channel_catalog_id)} | format pattern "/v2/user/channelCatalogs/{channel_catalog_id}/products"))
+  let full_url = (build-url $base ({channel_catalog_id: (encode-path-segment $channel_catalog_id)} | format pattern "/v2/user/channelCatalogs/{channel_catalog_id}/products") $auth.query)
   let req_body = {"catalogCategoryFilter": $catalog_category_filter, "channelCategoryFilter": $channel_category_filter, "criteria": $criteria, "overridden": $overridden, "pageNumber": $page_number, "pageSize": $page_size, "productFilters": $product_filters} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get channel catalog products' counters
@@ -3870,10 +5305,21 @@ export def "user-channel-catalogs-products-counters get" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($channel_catalog_id | is-empty) { error make --unspanned { msg: "path parameter 'channelCatalogId' must be non-empty" } }
-  let full_url = (build-url $base ({channel_catalog_id: (encode-path-segment $channel_catalog_id)} | format pattern "/v2/user/channelCatalogs/{channel_catalog_id}/products/counters"))
+  let full_url = (build-url $base ({channel_catalog_id: (encode-path-segment $channel_catalog_id)} | format pattern "/v2/user/channelCatalogs/{channel_catalog_id}/products/counters") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Export channel catalog product information list
@@ -3909,12 +5355,23 @@ export def "user-channel-catalogs-products-export get-list" [
   let base = ($base_url | default $BASE_URL)
   if ($channel_catalog_id | is-empty) { error make --unspanned { msg: "path parameter 'channelCatalogId' must be non-empty" } }
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({channel_catalog_id: (encode-path-segment $channel_catalog_id)} | format pattern "/v2/user/channelCatalogs/{channel_catalog_id}/products/export") $qp)
+  let full_url = (build-url $base ({channel_catalog_id: (encode-path-segment $channel_catalog_id)} | format pattern "/v2/user/channelCatalogs/{channel_catalog_id}/products/export") $qp $auth.query)
   let req_body = {"catalogCategoryFilter": $catalog_category_filter, "channelCategoryFilter": $channel_category_filter, "criteria": $criteria, "overridden": $overridden, "pageNumber": $page_number, "pageSize": $page_size, "productFilters": $product_filters} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"format": $format} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"format": $format} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get channel catalog product information
@@ -3938,10 +5395,21 @@ export def "user-channel-catalogs-products get-by-channel-catalog-id-product-id"
   let base = ($base_url | default $BASE_URL)
   if ($channel_catalog_id | is-empty) { error make --unspanned { msg: "path parameter 'channelCatalogId' must be non-empty" } }
   if ($product_id | is-empty) { error make --unspanned { msg: "path parameter 'productId' must be non-empty" } }
-  let full_url = (build-url $base ({channel_catalog_id: (encode-path-segment $channel_catalog_id), product_id: (encode-path-segment $product_id)} | format pattern "/v2/user/channelCatalogs/{channel_catalog_id}/products/{product_id}"))
+  let full_url = (build-url $base ({channel_catalog_id: (encode-path-segment $channel_catalog_id), product_id: (encode-path-segment $product_id)} | format pattern "/v2/user/channelCatalogs/{channel_catalog_id}/products/{product_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Disable channel catalog product
@@ -3965,10 +5433,21 @@ export def "user-channel-catalogs-products-disable disable" [
   let base = ($base_url | default $BASE_URL)
   if ($channel_catalog_id | is-empty) { error make --unspanned { msg: "path parameter 'channelCatalogId' must be non-empty" } }
   if ($product_id | is-empty) { error make --unspanned { msg: "path parameter 'productId' must be non-empty" } }
-  let full_url = (build-url $base ({channel_catalog_id: (encode-path-segment $channel_catalog_id), product_id: (encode-path-segment $product_id)} | format pattern "/v2/user/channelCatalogs/{channel_catalog_id}/products/{product_id}/disable"))
+  let full_url = (build-url $base ({channel_catalog_id: (encode-path-segment $channel_catalog_id), product_id: (encode-path-segment $product_id)} | format pattern "/v2/user/channelCatalogs/{channel_catalog_id}/products/{product_id}/disable") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Override channel catalog product values
@@ -3994,12 +5473,23 @@ export def "user-channel-catalogs-products-overrides update-values" [
   let base = ($base_url | default $BASE_URL)
   if ($channel_catalog_id | is-empty) { error make --unspanned { msg: "path parameter 'channelCatalogId' must be non-empty" } }
   if ($product_id | is-empty) { error make --unspanned { msg: "path parameter 'productId' must be non-empty" } }
-  let full_url = (build-url $base ({channel_catalog_id: (encode-path-segment $channel_catalog_id), product_id: (encode-path-segment $product_id)} | format pattern "/v2/user/channelCatalogs/{channel_catalog_id}/products/{product_id}/overrides"))
+  let full_url = (build-url $base ({channel_catalog_id: (encode-path-segment $channel_catalog_id), product_id: (encode-path-segment $product_id)} | format pattern "/v2/user/channelCatalogs/{channel_catalog_id}/products/{product_id}/overrides") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Get channel catalog product value override compatibilities status
@@ -4023,10 +5513,21 @@ export def "user-channel-catalogs-products-overrides-copy get-value" [
   let base = ($base_url | default $BASE_URL)
   if ($channel_catalog_id | is-empty) { error make --unspanned { msg: "path parameter 'channelCatalogId' must be non-empty" } }
   if ($product_id | is-empty) { error make --unspanned { msg: "path parameter 'productId' must be non-empty" } }
-  let full_url = (build-url $base ({channel_catalog_id: (encode-path-segment $channel_catalog_id), product_id: (encode-path-segment $product_id)} | format pattern "/v2/user/channelCatalogs/{channel_catalog_id}/products/{product_id}/overrides/copy"))
+  let full_url = (build-url $base ({channel_catalog_id: (encode-path-segment $channel_catalog_id), product_id: (encode-path-segment $product_id)} | format pattern "/v2/user/channelCatalogs/{channel_catalog_id}/products/{product_id}/overrides/copy") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [204]
 }
 
 # Copy channel catalog product value override
@@ -4050,10 +5551,21 @@ export def "user-channel-catalogs-products-overrides-copy copy-configure-value" 
   let base = ($base_url | default $BASE_URL)
   if ($channel_catalog_id | is-empty) { error make --unspanned { msg: "path parameter 'channelCatalogId' must be non-empty" } }
   if ($product_id | is-empty) { error make --unspanned { msg: "path parameter 'productId' must be non-empty" } }
-  let full_url = (build-url $base ({channel_catalog_id: (encode-path-segment $channel_catalog_id), product_id: (encode-path-segment $product_id)} | format pattern "/v2/user/channelCatalogs/{channel_catalog_id}/products/{product_id}/overrides/copy"))
+  let full_url = (build-url $base ({channel_catalog_id: (encode-path-segment $channel_catalog_id), product_id: (encode-path-segment $product_id)} | format pattern "/v2/user/channelCatalogs/{channel_catalog_id}/products/{product_id}/overrides/copy") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Delete a specific channel catalog product value override
@@ -4079,10 +5591,21 @@ export def "user-channel-catalogs-products-overrides delete-value" [
   if ($channel_catalog_id | is-empty) { error make --unspanned { msg: "path parameter 'channelCatalogId' must be non-empty" } }
   if ($product_id | is-empty) { error make --unspanned { msg: "path parameter 'productId' must be non-empty" } }
   if ($channel_column_id | is-empty) { error make --unspanned { msg: "path parameter 'channelColumnId' must be non-empty" } }
-  let full_url = (build-url $base ({channel_catalog_id: (encode-path-segment $channel_catalog_id), product_id: (encode-path-segment $product_id), channel_column_id: (encode-path-segment $channel_column_id)} | format pattern "/v2/user/channelCatalogs/{channel_catalog_id}/products/{product_id}/overrides/{channel_column_id}"))
+  let full_url = (build-url $base ({channel_catalog_id: (encode-path-segment $channel_catalog_id), product_id: (encode-path-segment $product_id), channel_column_id: (encode-path-segment $channel_column_id)} | format pattern "/v2/user/channelCatalogs/{channel_catalog_id}/products/{product_id}/overrides/{channel_column_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Reenable channel catalog product
@@ -4106,10 +5629,21 @@ export def "user-channel-catalogs-products-reenable create" [
   let base = ($base_url | default $BASE_URL)
   if ($channel_catalog_id | is-empty) { error make --unspanned { msg: "path parameter 'channelCatalogId' must be non-empty" } }
   if ($product_id | is-empty) { error make --unspanned { msg: "path parameter 'productId' must be non-empty" } }
-  let full_url = (build-url $base ({channel_catalog_id: (encode-path-segment $channel_catalog_id), product_id: (encode-path-segment $product_id)} | format pattern "/v2/user/channelCatalogs/{channel_catalog_id}/products/{product_id}/reenable"))
+  let full_url = (build-url $base ({channel_catalog_id: (encode-path-segment $channel_catalog_id), product_id: (encode-path-segment $product_id)} | format pattern "/v2/user/channelCatalogs/{channel_catalog_id}/products/{product_id}/reenable") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Configure channel catalog cost settings
@@ -4134,12 +5668,23 @@ export def "user-channel-catalogs-settings-cost update-configure" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($channel_catalog_id | is-empty) { error make --unspanned { msg: "path parameter 'channelCatalogId' must be non-empty" } }
-  let full_url = (build-url $base ({channel_catalog_id: (encode-path-segment $channel_catalog_id)} | format pattern "/v2/user/channelCatalogs/{channel_catalog_id}/settings/cost"))
+  let full_url = (build-url $base ({channel_catalog_id: (encode-path-segment $channel_catalog_id)} | format pattern "/v2/user/channelCatalogs/{channel_catalog_id}/settings/cost") $auth.query)
   let req_body = {"costType": $cost_type, "globalCostValue": $global_cost_value} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Configure channel catalog general settings
@@ -4165,12 +5710,23 @@ export def "user-channel-catalogs-settings-general update-configure" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($channel_catalog_id | is-empty) { error make --unspanned { msg: "path parameter 'channelCatalogId' must be non-empty" } }
-  let full_url = (build-url $base ({channel_catalog_id: (encode-path-segment $channel_catalog_id)} | format pattern "/v2/user/channelCatalogs/{channel_catalog_id}/settings/general"))
+  let full_url = (build-url $base ({channel_catalog_id: (encode-path-segment $channel_catalog_id)} | format pattern "/v2/user/channelCatalogs/{channel_catalog_id}/settings/general") $auth.query)
   let req_body = {"acceptToPublishInfo": $accept_to_publish_info, "activeBeezUPTracking": $active_beez_up_tracking, "doNotExportOutOfStockProducts": $do_not_export_out_of_stock_products} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # List all available channel for this store
@@ -4192,10 +5748,21 @@ export def "user-channels get-available" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "storeId" $store_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v2/user/channels/" $qp)
+  let full_url = (build-url $base "/v2/user/channels/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"storeId": $store_id} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"storeId": $store_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get channel information
@@ -4217,10 +5784,21 @@ export def "user-channels get" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($channel_id | is-empty) { error make --unspanned { msg: "path parameter 'channelId' must be non-empty" } }
-  let full_url = (build-url $base ({channel_id: (encode-path-segment $channel_id)} | format pattern "/v2/user/channels/{channel_id}"))
+  let full_url = (build-url $base ({channel_id: (encode-path-segment $channel_id)} | format pattern "/v2/user/channels/{channel_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get channel categories
@@ -4243,12 +5821,23 @@ export def "user-channels-categories get" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($channel_id | is-empty) { error make --unspanned { msg: "path parameter 'channelId' must be non-empty" } }
-  let full_url = (build-url $base ({channel_id: (encode-path-segment $channel_id)} | format pattern "/v2/user/channels/{channel_id}/categories"))
+  let full_url = (build-url $base ({channel_id: (encode-path-segment $channel_id)} | format pattern "/v2/user/channels/{channel_id}/categories") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Accept-Encoding": (if ($accept_encoding | describe | str starts-with "list") { $accept_encoding | each { into string } | str join "," } else { $accept_encoding })} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get channel columns
@@ -4273,14 +5862,25 @@ export def "user-channels-columns get" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($channel_id | is-empty) { error make --unspanned { msg: "path parameter 'channelId' must be non-empty" } }
-  let full_url = (build-url $base ({channel_id: (encode-path-segment $channel_id)} | format pattern "/v2/user/channels/{channel_id}/columns"))
+  let full_url = (build-url $base ({channel_id: (encode-path-segment $channel_id)} | format pattern "/v2/user/channels/{channel_id}/columns") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Accept-Encoding": (if ($accept_encoding | describe | str starts-with "list") { $accept_encoding | each { into string } | str join "," } else { $accept_encoding })} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # The index of all operations and LOV
@@ -4301,12 +5901,23 @@ export def "user-customer get-index" [
 ]: nothing -> record<links: record<accountInfo: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, billingPeriods: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, contracts: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, friendInfo: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, getOffer: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, invoices: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, logout: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, standardOffers: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, stores: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>, lovLinks: record<activeOfferLov: record<href: string, method: string>, beezUPTimeZoneLov: record<href: string, method: string>, contractTerminationReasonLov: record<href: string, method: string>, countryLov: record<href: string, method: string>, customerStatusLov: record<href: string, method: string>, invoicePaymentStatusLov: record<href: string, method: string>, offerLov: record<href: string, method: string>, storeCountryLov: record<href: string, method: string>, storeSectorLov: record<href: string, method: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v2/user/customer/")
+  let full_url = (build-url $base "/v2/user/customer/" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Get user account information
@@ -4327,12 +5938,23 @@ export def "user-customer-account get" [
 ]: nothing -> record<commercialOwnerEmail: string, companyInfo: record<accountingEmails: list<string>, address: string, city: string, company: string, countryIsoCodeAlpha3: string, postalCode: string, vatNumber: string>, email: string, info: record<errors: list<record>, informations: list<record>, successes: list<record>, warnings: list<record>>, links: record<activateUserAccount: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, changeEmail: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, changePassword: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, getCreditCardInfo: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, getProfilePictureInfo: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, saveCompanyInfo: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, saveCreditCardInfo: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, savePersonalInfo: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, saveProfilePictureInfo: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>, personalInfo: record<beezUPTimeZoneId: int, firstName: string, lastName: string, phoneNumber: string, whatIDo: string>, profilePictureUrl: string, status: string, userId: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v2/user/customer/account")
+  let full_url = (build-url $base "/v2/user/customer/account" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Activate the user account
@@ -4354,12 +5976,23 @@ export def "user-customer-account-activate create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v2/user/customer/account/activate")
+  let full_url = (build-url $base "/v2/user/customer/account/activate" $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Change user email
@@ -4381,12 +6014,23 @@ export def "user-customer-account-change-email create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v2/user/customer/account/changeEmail")
+  let full_url = (build-url $base "/v2/user/customer/account/changeEmail" $auth.query)
   let req_body = {"newEmail": $new_email} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Change user password
@@ -4409,12 +6053,23 @@ export def "user-customer-account-change-password create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v2/user/customer/account/changePassword")
+  let full_url = (build-url $base "/v2/user/customer/account/changePassword" $auth.query)
   let req_body = {"newPassword": $new_password, "oldPassword": $old_password} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Change company information
@@ -4442,12 +6097,23 @@ export def "user-customer-account-company-info get-save" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v2/user/customer/account/companyInfo")
+  let full_url = (build-url $base "/v2/user/customer/account/companyInfo" $auth.query)
   let req_body = {"accountingEmails": $accounting_emails, "address": $address, "city": $city, "company": $company, "countryIsoCodeAlpha3": $country_iso_code_alpha3, "postalCode": $postal_code, "vatNumber": $vat_number} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Get credit card information
@@ -4468,12 +6134,23 @@ export def "user-customer-account-credit-card-info get" [
 ]: nothing -> record<creditCardInfo: record<cardNumber: string, cardType: string, expirationMonth: int, expirationYear: int>, currentPaymentMethod: string, info: record<errors: list<record>, informations: list<record>, successes: list<record>, warnings: list<record>>, links: record<saveCreditCardInfo: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v2/user/customer/account/creditCardInfo")
+  let full_url = (build-url $base "/v2/user/customer/account/creditCardInfo" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Save user credit card info
@@ -4498,12 +6175,23 @@ export def "user-customer-account-credit-card-info get-save" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v2/user/customer/account/creditCardInfo")
+  let full_url = (build-url $base "/v2/user/customer/account/creditCardInfo" $auth.query)
   let req_body = {"cardNumber": $card_number, "cardVerificationCode": $card_verification_code, "expirationMonth": $expiration_month, "expirationYear": $expiration_year} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [202]
 }
 
 # Save user personal information
@@ -4529,12 +6217,23 @@ export def "user-customer-account-personal-info get-save" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v2/user/customer/account/personalInfo")
+  let full_url = (build-url $base "/v2/user/customer/account/personalInfo" $auth.query)
   let req_body = {"beezUPTimeZoneId": $beez_up_time_zone_id, "firstName": $first_name, "lastName": $last_name, "phoneNumber": $phone_number, "whatIDo": $what_i_do} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Get profile picture information
@@ -4555,12 +6254,23 @@ export def "user-customer-account-profile-picture-info get" [
 ]: nothing -> record<links: record<save: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>, profilePictureInfo: record<profilePictureSelected: string, profilePictureUrl: string, gravatarProfilePictureUrl: string, initialsProfilePictureUrl: string>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v2/user/customer/account/profilePictureInfo")
+  let full_url = (build-url $base "/v2/user/customer/account/profilePictureInfo" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Change user picture information
@@ -4583,12 +6293,23 @@ export def "user-customer-account-profile-picture-info get-save" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v2/user/customer/account/profilePictureInfo")
+  let full_url = (build-url $base "/v2/user/customer/account/profilePictureInfo" $auth.query)
   let req_body = {"profilePictureSelected": $profile_picture_selected, "profilePictureUrl": $profile_picture_url} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Resend email activation
@@ -4608,10 +6329,21 @@ export def "user-customer-account-resend-email-activation resend" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v2/user/customer/account/resendEmailActivation")
+  let full_url = (build-url $base "/v2/user/customer/account/resendEmailActivation" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Get billing periods conditions
@@ -4632,12 +6364,23 @@ export def "user-customer-billing-periods get" [
 ]: nothing -> record<billingPeriods: table<billingPeriodInMonth: int, discountPercentage: float>, links: record<self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v2/user/customer/billingPeriods")
+  let full_url = (build-url $base "/v2/user/customer/billingPeriods" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Get contract list
@@ -4658,12 +6401,23 @@ export def "user-customer-contracts get" [
 ]: nothing -> record<current: record<additionalClickPrice: float, billingPeriodInMonth: int, billingPeriodPercentDiscount: float, clickIncluded: int, commitmentCalculatedFinishUtcDate: string, commitmentPeriodInMonth: int, contractId: string, currencyCode: string, discountDurationInMonth: int, discountEndUtcDate: string, fixedAndVariableClickInfo: record<clickIncludedAndAdditionalClickPrices: list>, fixedPrice: float, ipUserCreation: string, ipUserModification: string, isCommitmentRenewalAutomatically: bool, isModifiableContract: bool, offerId: int, offerName: string, percentDiscount: float, startUtcDate: string, storeCount: int, trialPeriodInMonth: int, variableModelInfo: record<clickIncludedAndVariablePrices: list, overflowClickCount: int, overflowClickPrice: float>, links: record<disable: record, reenable: record>>, links: record<create: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>, next: record<additionalClickPrice: float, billingPeriodInMonth: int, billingPeriodPercentDiscount: float, clickIncluded: int, commitmentCalculatedFinishUtcDate: string, commitmentPeriodInMonth: int, contractId: string, currencyCode: string, discountDurationInMonth: int, discountEndUtcDate: string, fixedAndVariableClickInfo: record<clickIncludedAndAdditionalClickPrices: list>, fixedPrice: float, ipUserCreation: string, ipUserModification: string, isCommitmentRenewalAutomatically: bool, isModifiableContract: bool, offerId: int, offerName: string, percentDiscount: float, startUtcDate: string, storeCount: int, trialPeriodInMonth: int, variableModelInfo: record<clickIncludedAndVariablePrices: list, overflowClickCount: int, overflowClickPrice: float>, links: record<delete: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v2/user/customer/contracts")
+  let full_url = (build-url $base "/v2/user/customer/contracts" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Create a new contract
@@ -4689,12 +6443,23 @@ export def "user-customer-contracts create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v2/user/customer/contracts")
+  let full_url = (build-url $base "/v2/user/customer/contracts" $auth.query)
   let req_body = {"billingPeriodInMonth": $billing_period_in_month, "couponDiscountCode": $coupon_discount_code, "couponOfferCode": $coupon_offer_code, "offerId": $offer_id, "storeCount": $store_count} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Schedule termination of your current contract at the end of the commitment.
@@ -4717,12 +6482,23 @@ export def "user-customer-contracts-current-disable-auto-renewal get-terminate" 
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v2/user/customer/contracts/current/disableAutoRenewal")
+  let full_url = (build-url $base "/v2/user/customer/contracts/current/disableAutoRenewal" $auth.query)
   let req_body = {"contractTerminationReason": $contract_termination_reason, "contractTerminationReasonType": $contract_termination_reason_type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Reactivate your terminated contract.
@@ -4742,10 +6518,21 @@ export def "user-customer-contracts-current-reenable-auto-renewal get-reactivate
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v2/user/customer/contracts/current/reenableAutoRenewal")
+  let full_url = (build-url $base "/v2/user/customer/contracts/current/reenableAutoRenewal" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Delete your next contract
@@ -4765,10 +6552,21 @@ export def "user-customer-contracts-next delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v2/user/customer/contracts/next")
+  let full_url = (build-url $base "/v2/user/customer/contracts/next" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Get friend information
@@ -4791,12 +6589,23 @@ export def "user-customer-friends get" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/v2/user/customer/friends/{user_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/v2/user/customer/friends/{user_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Get all your invoices
@@ -4817,12 +6626,23 @@ export def "user-customer-invoices get" [
 ]: nothing -> record<invoices: table<amount: float, amountToBePaid: float, contractId: string, currencyCode: string, dueDate: string, invoiceDate: string, invoiceNumber: string, invoiceUrl: string, paymentStatus: string>, links: record<self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v2/user/customer/invoices")
+  let full_url = (build-url $base "/v2/user/customer/invoices" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Get all standard offers
@@ -4843,12 +6663,23 @@ export def "user-customer-offers get-standard" [
 ]: nothing -> record<functionalities: table<code: string, order: int>, links: record<self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>, offers: table<additionalClickPrice: float, currencyCode: string, fixedPrice: float, functionalities: list, includedClick: int, isMostPopular: bool, isOldOffer: bool, links: record, name: string, offerId: int, position: int>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v2/user/customer/offers")
+  let full_url = (build-url $base "/v2/user/customer/offers" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Get offer pricing
@@ -4874,12 +6705,23 @@ export def "user-customer-offers get" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v2/user/customer/offers")
+  let full_url = (build-url $base "/v2/user/customer/offers" $auth.query)
   let req_body = {"billingPeriodInMonth": $billing_period_in_month, "couponDiscountCode": $coupon_discount_code, "couponOfferCode": $coupon_offer_code, "offerId": $offer_id, "storeCount": $store_count} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Log out the current user from go2
@@ -4899,10 +6741,21 @@ export def "user-customer-security-logout create" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v2/user/customer/security/logout")
+  let full_url = (build-url $base "/v2/user/customer/security/logout" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Get store list
@@ -4923,12 +6776,23 @@ export def "user-customer-stores list" [
 ]: nothing -> record<links: record<createStore: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>, stores: table<countryIsoCodeAlpha3: string, creationUtcDate: string, currencyCode: string, goVersion: int, isTest: bool, links: record, name: string, offerId: int, offerName: string, ownerUserId: string, sectors: list, shareCount: int, status: string, storeId: string, url: string, userRole: string>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v2/user/customer/stores")
+  let full_url = (build-url $base "/v2/user/customer/stores" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Create a new store
@@ -4954,12 +6818,23 @@ export def "user-customer-stores create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v2/user/customer/stores")
+  let full_url = (build-url $base "/v2/user/customer/stores" $auth.query)
   let req_body = {"countryIsoCodeAlpha3": $country_iso_code_alpha3, "id": $id, "name": $name, "sectors": $sectors, "url": $url} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Delete a store
@@ -4981,10 +6856,21 @@ export def "user-customer-stores delete" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
-  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id)} | format pattern "/v2/user/customer/stores/{store_id}"))
+  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id)} | format pattern "/v2/user/customer/stores/{store_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Get store's information
@@ -5007,12 +6893,23 @@ export def "user-customer-stores get" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
-  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id)} | format pattern "/v2/user/customer/stores/{store_id}"))
+  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id)} | format pattern "/v2/user/customer/stores/{store_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Update some store's information.
@@ -5038,12 +6935,23 @@ export def "user-customer-stores update" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
-  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id)} | format pattern "/v2/user/customer/stores/{store_id}"))
+  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id)} | format pattern "/v2/user/customer/stores/{store_id}") $auth.query)
   let req_body = {"name": $name, "sectors": $sectors, "url": $url} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Get store's alerts
@@ -5066,12 +6974,23 @@ export def "user-customer-stores-alerts get" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
-  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id)} | format pattern "/v2/user/customer/stores/{store_id}/alerts"))
+  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id)} | format pattern "/v2/user/customer/stores/{store_id}/alerts") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Save store alerts
@@ -5095,12 +7014,23 @@ export def "user-customer-stores-alerts create-save" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
-  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id)} | format pattern "/v2/user/customer/stores/{store_id}/alerts"))
+  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id)} | format pattern "/v2/user/customer/stores/{store_id}/alerts") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Get store's rights
@@ -5122,10 +7052,21 @@ export def "user-customer-stores-rights get" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
-  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id)} | format pattern "/v2/user/customer/stores/{store_id}/rights"))
+  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id)} | format pattern "/v2/user/customer/stores/{store_id}/rights") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get shares related to this store
@@ -5148,12 +7089,23 @@ export def "user-customer-stores-shares get" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
-  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id)} | format pattern "/v2/user/customer/stores/{store_id}/shares"))
+  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id)} | format pattern "/v2/user/customer/stores/{store_id}/shares") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Share a store to another user
@@ -5177,12 +7129,23 @@ export def "user-customer-stores-shares create" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
-  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id)} | format pattern "/v2/user/customer/stores/{store_id}/shares"))
+  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id)} | format pattern "/v2/user/customer/stores/{store_id}/shares") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Delete a share of a store to another user
@@ -5206,10 +7169,21 @@ export def "user-customer-stores-shares delete" [
   let base = ($base_url | default $BASE_URL)
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
-  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), user_id: (encode-path-segment $user_id)} | format pattern "/v2/user/customer/stores/{store_id}/shares/{user_id}"))
+  let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), user_id: (encode-path-segment $user_id)} | format pattern "/v2/user/customer/stores/{store_id}/shares/{user_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Zendesk token
@@ -5229,10 +7203,21 @@ export def "user-customer-zendesk-token get" [
 ]: nothing -> record<token: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v2/user/customer/zendeskToken")
+  let full_url = (build-url $base "/v2/user/customer/zendeskToken" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List all your current channel catalogs configured to use legacy tracking format
@@ -5254,10 +7239,21 @@ export def "user-legacy-tracking-channel-catalogs list" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "storeId" $store_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v2/user/legacyTracking/channelCatalogs/" $qp)
+  let full_url = (build-url $base "/v2/user/legacyTracking/channelCatalogs/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"storeId": $store_id} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"storeId": $store_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get the channel catalog configured to use legacy tracking format information
@@ -5279,10 +7275,21 @@ export def "user-legacy-tracking-channel-catalogs get" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($channel_catalog_id | is-empty) { error make --unspanned { msg: "path parameter 'channelCatalogId' must be non-empty" } }
-  let full_url = (build-url $base ({channel_catalog_id: (encode-path-segment $channel_catalog_id)} | format pattern "/v2/user/legacyTracking/channelCatalogs/{channel_catalog_id}"))
+  let full_url = (build-url $base ({channel_catalog_id: (encode-path-segment $channel_catalog_id)} | format pattern "/v2/user/legacyTracking/channelCatalogs/{channel_catalog_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Migrate a channel catalog to current tracking format
@@ -5304,10 +7311,21 @@ export def "user-legacy-tracking-channel-catalogs-migrate create" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($channel_catalog_id | is-empty) { error make --unspanned { msg: "path parameter 'channelCatalogId' must be non-empty" } }
-  let full_url = (build-url $base ({channel_catalog_id: (encode-path-segment $channel_catalog_id)} | format pattern "/v2/user/legacyTracking/channelCatalogs/{channel_catalog_id}/migrate"))
+  let full_url = (build-url $base ({channel_catalog_id: (encode-path-segment $channel_catalog_id)} | format pattern "/v2/user/legacyTracking/channelCatalogs/{channel_catalog_id}/migrate") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Get all list names
@@ -5327,10 +7345,21 @@ export def "user-lov get-index" [
 ]: nothing -> record<links: record<lists: record, self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v2/user/lov/")
+  let full_url = (build-url $base "/v2/user/lov/" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Get the list of values related to this list name
@@ -5354,12 +7383,23 @@ export def "user-lov get-list-of-values" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($list_name | is-empty) { error make --unspanned { msg: "path parameter 'listName' must be non-empty" } }
-  let full_url = (build-url $base ({list_name: (encode-path-segment $list_name)} | format pattern "/v2/user/lov/{list_name}"))
+  let full_url = (build-url $base ({list_name: (encode-path-segment $list_name)} | format pattern "/v2/user/lov/{list_name}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": (if ($accept_language | describe | str starts-with "list") { $accept_language | each { into string } | str join "," } else { $accept_language }), "If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Get your marketplace channel catalog list
@@ -5381,10 +7421,21 @@ export def "user-marketplaces-channelcatalogs get-channel-catalogs" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "storeId" $store_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v2/user/marketplaces/channelcatalogs/" $qp)
+  let full_url = (build-url $base "/v2/user/marketplaces/channelcatalogs/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"storeId": $store_id} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"storeId": $store_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Fetch the publication history for an account, sorted by descending start date
@@ -5412,10 +7463,21 @@ export def "user-marketplaces-channelcatalogs-publications-history get" [
   if ($marketplace_technical_code | is-empty) { error make --unspanned { msg: "path parameter 'marketplaceTechnicalCode' must be non-empty" } }
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let qp = [(serialize-qp "channelCatalogId" $channel_catalog_id "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "publicationTypes" $publication_types "csv")] | flatten | str join "&"
-  let full_url = (build-url $base ({marketplace_technical_code: (encode-path-segment $marketplace_technical_code), account_id: (encode-path-segment $account_id)} | format pattern "/v2/user/marketplaces/channelcatalogs/publications/{marketplace_technical_code}/{account_id}/history") $qp)
+  let full_url = (build-url $base ({marketplace_technical_code: (encode-path-segment $marketplace_technical_code), account_id: (encode-path-segment $account_id)} | format pattern "/v2/user/marketplaces/channelcatalogs/publications/{marketplace_technical_code}/{account_id}/history") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"channelCatalogId": $channel_catalog_id, "count": $count, "publicationTypes": $publication_types} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"channelCatalogId": $channel_catalog_id, "count": $count, "publicationTypes": $publication_types} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # [PREVIEW] Launch a publication of the catalog to the marketplace
@@ -5443,12 +7505,23 @@ export def "user-marketplaces-channelcatalogs-publications-publish publish-catal
   let base = ($base_url | default $BASE_URL)
   if ($marketplace_technical_code | is-empty) { error make --unspanned { msg: "path parameter 'marketplaceTechnicalCode' must be non-empty" } }
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
-  let full_url = (build-url $base ({marketplace_technical_code: (encode-path-segment $marketplace_technical_code), account_id: (encode-path-segment $account_id)} | format pattern "/v2/user/marketplaces/channelcatalogs/publications/{marketplace_technical_code}/{account_id}/publish"))
+  let full_url = (build-url $base ({marketplace_technical_code: (encode-path-segment $marketplace_technical_code), account_id: (encode-path-segment $account_id)} | format pattern "/v2/user/marketplaces/channelcatalogs/publications/{marketplace_technical_code}/{account_id}/publish") $auth.query)
   let req_body = {"feedType": $feed_type, "publicationStrategyKind": $publication_strategy_kind, "withUnpublish": $with_unpublish} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [202]
 }
 
 # Get the marketplace properties for a channel catalog
@@ -5473,12 +7546,23 @@ export def "user-marketplaces-channelcatalogs-properties get-channel-catalog" [
   let base = ($base_url | default $BASE_URL)
   if ($channel_catalog_id | is-empty) { error make --unspanned { msg: "path parameter 'channelCatalogId' must be non-empty" } }
   let qp = [(serialize-qp "redirectionPageUrl" $redirection_page_url "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({channel_catalog_id: (encode-path-segment $channel_catalog_id)} | format pattern "/v2/user/marketplaces/channelcatalogs/{channel_catalog_id}/properties") $qp)
+  let full_url = (build-url $base ({channel_catalog_id: (encode-path-segment $channel_catalog_id)} | format pattern "/v2/user/marketplaces/channelcatalogs/{channel_catalog_id}/properties") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": (if ($accept_language | describe | str starts-with "list") { $accept_language | each { into string } | str join "," } else { $accept_language })} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"redirectionPageUrl": $redirection_page_url} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"redirectionPageUrl": $redirection_page_url} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get the marketplace settings for a channel catalog
@@ -5500,10 +7584,21 @@ export def "user-marketplaces-channelcatalogs-settings get-channel-catalog" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($channel_catalog_id | is-empty) { error make --unspanned { msg: "path parameter 'channelCatalogId' must be non-empty" } }
-  let full_url = (build-url $base ({channel_catalog_id: (encode-path-segment $channel_catalog_id)} | format pattern "/v2/user/marketplaces/channelcatalogs/{channel_catalog_id}/settings"))
+  let full_url = (build-url $base ({channel_catalog_id: (encode-path-segment $channel_catalog_id)} | format pattern "/v2/user/marketplaces/channelcatalogs/{channel_catalog_id}/settings") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Save new marketplace settings for a channel catalog
@@ -5528,12 +7623,23 @@ export def "user-marketplaces-channelcatalogs-settings update-channel-catalog" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($channel_catalog_id | is-empty) { error make --unspanned { msg: "path parameter 'channelCatalogId' must be non-empty" } }
-  let full_url = (build-url $base ({channel_catalog_id: (encode-path-segment $channel_catalog_id)} | format pattern "/v2/user/marketplaces/channelcatalogs/{channel_catalog_id}/settings"))
+  let full_url = (build-url $base ({channel_catalog_id: (encode-path-segment $channel_catalog_id)} | format pattern "/v2/user/marketplaces/channelcatalogs/{channel_catalog_id}/settings") $auth.query)
   let req_body = {"settings": $settings} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # [DEPRECATED] Get all actions you can do on the order API
@@ -5556,12 +7662,23 @@ export def "user-marketplaces-orders get-index" [
 ]: nothing -> record<links: record<autoTransitions: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, clearMerchantInfos: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, export: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, exportations: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, harvest: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, lightOrders: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, orders: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, setMerchantInfos: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, status: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>, lovLinks: record<orderChangeBusinessOperationType: record<href: string, method: string>, orderProperty: record<href: string, method: string>, orderPropertyPosted: record<href: string, method: string>, orderState: record<href: string, method: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v2/user/marketplaces/orders/")
+  let full_url = (build-url $base "/v2/user/marketplaces/orders/" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Get list of configured automatic Order status transitions
@@ -5584,12 +7701,23 @@ export def "user-marketplaces-orders-automatic-transitions get" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "storeId" $store_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v2/user/marketplaces/orders/automaticTransitions" $qp)
+  let full_url = (build-url $base "/v2/user/marketplaces/orders/automaticTransitions" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"storeId": $store_id} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"storeId": $store_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Configure new or existing automatic Order status transition
@@ -5612,12 +7740,23 @@ export def "user-marketplaces-orders-automatic-transitions create-configure" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v2/user/marketplaces/orders/automaticTransitions")
+  let full_url = (build-url $base "/v2/user/marketplaces/orders/automaticTransitions" $auth.query)
   let req_body = {"automaticTransitions": $automatic_transitions} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # [DEPRECATED] Send a batch of operations to change your marketplace Order information: accept, ship, etc. (max 100 items per call)
@@ -5647,12 +7786,23 @@ export def "user-marketplaces-orders-batches-change-orders list" [
   let base = ($base_url | default $BASE_URL)
   if ($change_order_type | is-empty) { error make --unspanned { msg: "path parameter 'changeOrderType' must be non-empty" } }
   let qp = [(serialize-qp "userName" $user_name "scalar") (serialize-qp "testMode" $test_mode "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({change_order_type: (encode-path-segment $change_order_type)} | format pattern "/v2/user/marketplaces/orders/batches/changeOrders/{change_order_type}") $qp)
+  let full_url = (build-url $base ({change_order_type: (encode-path-segment $change_order_type)} | format pattern "/v2/user/marketplaces/orders/batches/changeOrders/{change_order_type}") $qp $auth.query)
   let req_body = {"changeOrders": $change_orders} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"userName": $user_name, "testMode": $test_mode} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"userName": $user_name, "testMode": $test_mode} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [202]
 }
 
 # [DEPRECATED] Send a batch of operations to clear an Order's merchant information (max 100 items per call)
@@ -5677,12 +7827,23 @@ export def "user-marketplaces-orders-batches-clear-merchant-order-infos list" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v2/user/marketplaces/orders/batches/clearMerchantOrderInfos")
+  let full_url = (build-url $base "/v2/user/marketplaces/orders/batches/clearMerchantOrderInfos" $auth.query)
   let req_body = {"orders": $orders} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [202]
 }
 
 # [DEPRECATED] Send a batch of operations to set an Order's merchant information (max 100 items per call)
@@ -5709,12 +7870,23 @@ export def "user-marketplaces-orders-batches-set-merchant-order-infos list" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v2/user/marketplaces/orders/batches/setMerchantOrderInfos")
+  let full_url = (build-url $base "/v2/user/marketplaces/orders/batches/setMerchantOrderInfos" $auth.query)
   let req_body = {"order_MerchantECommerceSoftwareName": $order_merchant_e_commerce_software_name, "order_MerchantECommerceSoftwareVersion": $order_merchant_e_commerce_software_version, "orders": $orders} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [202]
 }
 
 # Get a paginated list of Order report exportations
@@ -5739,12 +7911,23 @@ export def "user-marketplaces-orders-exportations get" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "storeId" $store_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v2/user/marketplaces/orders/exportations" $qp)
+  let full_url = (build-url $base "/v2/user/marketplaces/orders/exportations" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"pageNumber": $page_number, "pageSize": $page_size, "storeId": $store_id} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"pageNumber": $page_number, "pageSize": $page_size, "storeId": $store_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Request a new Order report exportation to be generated
@@ -5769,12 +7952,23 @@ export def "user-marketplaces-orders-exportations export" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v2/user/marketplaces/orders/exportations")
+  let full_url = (build-url $base "/v2/user/marketplaces/orders/exportations" $auth.query)
   let req_body = {"format": $format, "orderListRequestWithoutPagination": $order_list_request_without_pagination, "storeId": $store_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [202]
 }
 
 # [DEPRECATED] Send harvest request to all your marketplaces
@@ -5798,10 +7992,21 @@ export def "user-marketplaces-orders-harvest list" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "storeId" $store_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v2/user/marketplaces/orders/harvest" $qp)
+  let full_url = (build-url $base "/v2/user/marketplaces/orders/harvest" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"storeId": $store_id} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"storeId": $store_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [202]
 }
 
 # Generate an Order Invoice batch
@@ -5825,12 +8030,23 @@ export def "user-marketplaces-orders-invoices-generate generate-batch" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "userName" $user_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v2/user/marketplaces/orders/invoices/generate" $qp)
+  let full_url = (build-url $base "/v2/user/marketplaces/orders/invoices/generate" $qp $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"userName": $user_name} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"userName": $user_name} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [202]
 }
 
 # Returns the PDF version of the invoice
@@ -5852,12 +8068,23 @@ export def "user-marketplaces-orders-invoices-get-pdf-invoice get" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v2/user/marketplaces/orders/invoices/getPdfInvoice")
+  let full_url = (build-url $base "/v2/user/marketplaces/orders/invoices/getPdfInvoice" $auth.query)
   let req_body = {"orderInvoiceUri": $order_invoice_uri} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get Order Invoice design settings
@@ -5877,10 +8104,21 @@ export def "user-marketplaces-orders-invoices-settings-design get" [
 ]: nothing -> record<footerContentHtml: string, headerContentHtml: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v2/user/marketplaces/orders/invoices/settings/design")
+  let full_url = (build-url $base "/v2/user/marketplaces/orders/invoices/settings/design" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Save Order Invoice design settings
@@ -5903,12 +8141,23 @@ export def "user-marketplaces-orders-invoices-settings-design update-save" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v2/user/marketplaces/orders/invoices/settings/design")
+  let full_url = (build-url $base "/v2/user/marketplaces/orders/invoices/settings/design" $auth.query)
   let req_body = {"footerContentHtml": $footer_content_html, "headerContentHtml": $header_content_html} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # View a preview an Order Invoice using custom design settings
@@ -5932,14 +8181,25 @@ export def "user-marketplaces-orders-invoices-settings-design-preview get" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v2/user/marketplaces/orders/invoices/settings/design/preview")
+  let full_url = (build-url $base "/v2/user/marketplaces/orders/invoices/settings/design/preview" $auth.query)
   let req_body = {"footerContentHtml": $footer_content_html, "headerContentHtml": $header_content_html} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Accept-Encoding": $accept_encoding} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get Order Invoice general settings
@@ -5959,10 +8219,21 @@ export def "user-marketplaces-orders-invoices-settings-general get" [
 ]: nothing -> record<cultureName: string, invoicePrefix: string, invoiceStartingSequenceNumber: int, productVATPercent: float, shippingVATPercent: float, lastInvoiceSequenceNumber: int> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v2/user/marketplaces/orders/invoices/settings/general")
+  let full_url = (build-url $base "/v2/user/marketplaces/orders/invoices/settings/general" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Save Order Invoice general settings
@@ -5988,12 +8259,23 @@ export def "user-marketplaces-orders-invoices-settings-general update-save" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v2/user/marketplaces/orders/invoices/settings/general")
+  let full_url = (build-url $base "/v2/user/marketplaces/orders/invoices/settings/general" $auth.query)
   let req_body = {"cultureName": $culture_name, "invoicePrefix": $invoice_prefix, "invoiceStartingSequenceNumber": $invoice_starting_sequence_number, "productVATPercent": $product_vat_percent, "shippingVATPercent": $shipping_vat_percent} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Generate an Order Invoice
@@ -6023,12 +8305,23 @@ export def "user-marketplaces-orders-invoices-generate generate" [
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   if ($beez_up_order_uuid | is-empty) { error make --unspanned { msg: "path parameter 'beezUPOrderUUID' must be non-empty" } }
   let qp = [(serialize-qp "userName" $user_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({marketplace_technical_code: (encode-path-segment $marketplace_technical_code), account_id: (encode-path-segment $account_id), beez_up_order_uuid: (encode-path-segment $beez_up_order_uuid)} | format pattern "/v2/user/marketplaces/orders/invoices/{marketplace_technical_code}/{account_id}/{beez_up_order_uuid}/generate") $qp)
+  let full_url = (build-url $base ({marketplace_technical_code: (encode-path-segment $marketplace_technical_code), account_id: (encode-path-segment $account_id), beez_up_order_uuid: (encode-path-segment $beez_up_order_uuid)} | format pattern "/v2/user/marketplaces/orders/invoices/{marketplace_technical_code}/{account_id}/{beez_up_order_uuid}/generate") $qp $auth.query)
   let req_body = {"invoiceSequenceNumber": $invoice_sequence_number} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"userName": $user_name} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"userName": $user_name} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [202]
 }
 
 # View a preview an Order Invoice
@@ -6057,14 +8350,25 @@ export def "user-marketplaces-orders-invoices-preview get" [
   if ($marketplace_technical_code | is-empty) { error make --unspanned { msg: "path parameter 'marketplaceTechnicalCode' must be non-empty" } }
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   if ($beez_up_order_uuid | is-empty) { error make --unspanned { msg: "path parameter 'beezUPOrderUUID' must be non-empty" } }
-  let full_url = (build-url $base ({marketplace_technical_code: (encode-path-segment $marketplace_technical_code), account_id: (encode-path-segment $account_id), beez_up_order_uuid: (encode-path-segment $beez_up_order_uuid)} | format pattern "/v2/user/marketplaces/orders/invoices/{marketplace_technical_code}/{account_id}/{beez_up_order_uuid}/preview"))
+  let full_url = (build-url $base ({marketplace_technical_code: (encode-path-segment $marketplace_technical_code), account_id: (encode-path-segment $account_id), beez_up_order_uuid: (encode-path-segment $beez_up_order_uuid)} | format pattern "/v2/user/marketplaces/orders/invoices/{marketplace_technical_code}/{account_id}/{beez_up_order_uuid}/preview") $auth.query)
   let req_body = {"invoiceSequenceNumber": $invoice_sequence_number} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Accept-Encoding": $accept_encoding} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # [DEPRECATED] Get a paginated list of all Orders with all Order and Order Item(s) properties
@@ -6103,14 +8407,25 @@ export def "user-marketplaces-orders-list-full get" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v2/user/marketplaces/orders/list/full")
+  let full_url = (build-url $base "/v2/user/marketplaces/orders/list/full" $auth.query)
   let req_body = {"accountIds": $account_ids, "beezUPOrderStatuses": $beez_up_order_statuses, "beginPeriodUtcDate": $begin_period_utc_date, "dateSearchType": $date_search_type, "endPeriodUtcDate": $end_period_utc_date, "invoiceAvailabilityType": $invoice_availability_type, "marketplaceBusinessCodes": $marketplace_business_codes, "marketplaceOrderIds": $marketplace_order_ids, "marketplaceTechnicalCodes": $marketplace_technical_codes, "orderMerchantInfoSynchronizationStatus": $order_merchant_info_synchronization_status, "order_Buyer_Name": $order_buyer_name, "order_MerchantOrderIds": $order_merchant_order_ids, "storeIds": $store_ids, "pageNumber": $page_number, "pageSize": $page_size} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Accept-Encoding": (if ($accept_encoding | describe | str starts-with "list") { $accept_encoding | each { into string } | str join "," } else { $accept_encoding })} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # [DEPRECATED] Get a paginated list of all Orders without details
@@ -6148,12 +8463,23 @@ export def "user-marketplaces-orders-list-light get" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v2/user/marketplaces/orders/list/light")
+  let full_url = (build-url $base "/v2/user/marketplaces/orders/list/light" $auth.query)
   let req_body = {"accountIds": $account_ids, "beezUPOrderStatuses": $beez_up_order_statuses, "beginPeriodUtcDate": $begin_period_utc_date, "dateSearchType": $date_search_type, "endPeriodUtcDate": $end_period_utc_date, "invoiceAvailabilityType": $invoice_availability_type, "marketplaceBusinessCodes": $marketplace_business_codes, "marketplaceOrderIds": $marketplace_order_ids, "marketplaceTechnicalCodes": $marketplace_technical_codes, "orderMerchantInfoSynchronizationStatus": $order_merchant_info_synchronization_status, "order_Buyer_Name": $order_buyer_name, "order_MerchantOrderIds": $order_merchant_order_ids, "storeIds": $store_ids, "pageNumber": $page_number, "pageSize": $page_size} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # [DEPRECATED] Get current synchronization status between your marketplaces and BeezUP accounts
@@ -6178,12 +8504,23 @@ export def "user-marketplaces-orders-status get-accounts-synchronization" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "storeId" $store_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v2/user/marketplaces/orders/status" $qp)
+  let full_url = (build-url $base "/v2/user/marketplaces/orders/status" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"storeId": $store_id} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"storeId": $store_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # Get the subscription list
@@ -6203,10 +8540,21 @@ export def "user-marketplaces-orders-subscriptions get-list" [
 ]: nothing -> table<consumerHealthStatus: string, consumerLastRequestSentUri: string, consumerUnvailableSinceUtcDate: string, id: string, lastErrorMessage: record<errors: list>, lastOrderPushedModificationUtcDate: string, lastRetryUtcDate: string, lastSuccessfulOrderPushedUtcDate: string, maxRetryCount: int, merchantApplicationName: string, merchantApplicationVersion: string, merchantEmailAlert: string, name: string, nextScheduledRetryUtcDate: string, recoverBeginPeriodOrderLastModificationUtcDate: string, recoverEndPeriodOrderLastModificationUtcDate: string, retryCount: int, status: string, targetUrl: string, links: record<activate: record, deactivate: record, delete: record, reporting: record, retry: record>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v2/user/marketplaces/orders/subscriptions/")
+  let full_url = (build-url $base "/v2/user/marketplaces/orders/subscriptions/" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Delete a subscription to the orders
@@ -6228,10 +8576,21 @@ export def "user-marketplaces-orders-subscriptions delete" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/user/marketplaces/orders/subscriptions/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/user/marketplaces/orders/subscriptions/{id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [202]
 }
 
 # Get a subscription to the orders
@@ -6253,10 +8612,21 @@ export def "user-marketplaces-orders-subscriptions get" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/user/marketplaces/orders/subscriptions/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/user/marketplaces/orders/subscriptions/{id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Creates a subscription to the orders
@@ -6284,12 +8654,23 @@ export def "user-marketplaces-orders-subscriptions create" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/user/marketplaces/orders/subscriptions/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/user/marketplaces/orders/subscriptions/{id}") $auth.query)
   let req_body = {"merchantApplicationName": $merchant_application_name, "merchantApplicationVersion": $merchant_application_version, "merchantEmailAlert": $merchant_email_alert, "name": $name, "targetUrl": $target_url} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [202]
 }
 
 # Activate a subscription to the orders
@@ -6314,12 +8695,23 @@ export def "user-marketplaces-orders-subscriptions-activate create" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/user/marketplaces/orders/subscriptions/{id}/activate"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/user/marketplaces/orders/subscriptions/{id}/activate") $auth.query)
   let req_body = {"recoverBeginPeriodOrderLastModificationUtcDate": $recover_begin_period_order_last_modification_utc_date, "recoverEndPeriodOrderLastModificationUtcDate": $recover_end_period_order_last_modification_utc_date} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [202]
 }
 
 # Deactivate a subscription to the orders
@@ -6341,10 +8733,21 @@ export def "user-marketplaces-orders-subscriptions-deactivate create" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/user/marketplaces/orders/subscriptions/{id}/deactivate"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/user/marketplaces/orders/subscriptions/{id}/deactivate") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [202]
 }
 
 # Get the push reporting related to this subscription
@@ -6369,10 +8772,21 @@ export def "user-marketplaces-orders-subscriptions-reporting get-push" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/user/marketplaces/orders/subscriptions/{id}/reporting") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/user/marketplaces/orders/subscriptions/{id}/reporting") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"pageNumber": $page_number, "pageSize": $page_size} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Force retry push orders immediatly
@@ -6394,10 +8808,21 @@ export def "user-marketplaces-orders-subscriptions-retry push" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/user/marketplaces/orders/subscriptions/{id}/retry"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/user/marketplaces/orders/subscriptions/{id}/retry") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [202]
 }
 
 # [DEPRECATED] DEPRECATED - Get full Order and Order Item(s) properties
@@ -6426,12 +8851,23 @@ export def "user-marketplaces-orders get" [
   if ($marketplace_technical_code | is-empty) { error make --unspanned { msg: "path parameter 'marketplaceTechnicalCode' must be non-empty" } }
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   if ($beez_up_order_id | is-empty) { error make --unspanned { msg: "path parameter 'beezUPOrderId' must be non-empty" } }
-  let full_url = (build-url $base ({marketplace_technical_code: (encode-path-segment $marketplace_technical_code), account_id: (encode-path-segment $account_id), beez_up_order_id: (encode-path-segment $beez_up_order_id)} | format pattern "/v2/user/marketplaces/orders/{marketplace_technical_code}/{account_id}/{beez_up_order_id}"))
+  let full_url = (build-url $base ({marketplace_technical_code: (encode-path-segment $marketplace_technical_code), account_id: (encode-path-segment $account_id), beez_up_order_id: (encode-path-segment $beez_up_order_id)} | format pattern "/v2/user/marketplaces/orders/{marketplace_technical_code}/{account_id}/{beez_up_order_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # [DEPRECATED] DEPRECATED - Get the meta information about the order (ETag, Last-Modified)
@@ -6460,12 +8896,23 @@ export def "user-marketplaces-orders head" [
   if ($marketplace_technical_code | is-empty) { error make --unspanned { msg: "path parameter 'marketplaceTechnicalCode' must be non-empty" } }
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   if ($beez_up_order_id | is-empty) { error make --unspanned { msg: "path parameter 'beezUPOrderId' must be non-empty" } }
-  let full_url = (build-url $base ({marketplace_technical_code: (encode-path-segment $marketplace_technical_code), account_id: (encode-path-segment $account_id), beez_up_order_id: (encode-path-segment $beez_up_order_id)} | format pattern "/v2/user/marketplaces/orders/{marketplace_technical_code}/{account_id}/{beez_up_order_id}"))
+  let full_url = (build-url $base ({marketplace_technical_code: (encode-path-segment $marketplace_technical_code), account_id: (encode-path-segment $account_id), beez_up_order_id: (encode-path-segment $beez_up_order_id)} | format pattern "/v2/user/marketplaces/orders/{marketplace_technical_code}/{account_id}/{beez_up_order_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "head" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "head"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-head $req $insecure $allow_errors $full [200 304]
 }
 
 # [DEPRECATED] Clear an Order's merchant information
@@ -6493,10 +8940,21 @@ export def "user-marketplaces-orders-clear-merchant-order-info get" [
   if ($marketplace_technical_code | is-empty) { error make --unspanned { msg: "path parameter 'marketplaceTechnicalCode' must be non-empty" } }
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   if ($beez_up_order_id | is-empty) { error make --unspanned { msg: "path parameter 'beezUPOrderId' must be non-empty" } }
-  let full_url = (build-url $base ({marketplace_technical_code: (encode-path-segment $marketplace_technical_code), account_id: (encode-path-segment $account_id), beez_up_order_id: (encode-path-segment $beez_up_order_id)} | format pattern "/v2/user/marketplaces/orders/{marketplace_technical_code}/{account_id}/{beez_up_order_id}/clearMerchantOrderInfo"))
+  let full_url = (build-url $base ({marketplace_technical_code: (encode-path-segment $marketplace_technical_code), account_id: (encode-path-segment $account_id), beez_up_order_id: (encode-path-segment $beez_up_order_id)} | format pattern "/v2/user/marketplaces/orders/{marketplace_technical_code}/{account_id}/{beez_up_order_id}/clearMerchantOrderInfo") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [204]
 }
 
 # [DEPRECATED] Send harvest request for a single Order
@@ -6524,10 +8982,21 @@ export def "user-marketplaces-orders-harvest create" [
   if ($marketplace_technical_code | is-empty) { error make --unspanned { msg: "path parameter 'marketplaceTechnicalCode' must be non-empty" } }
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   if ($beez_up_order_id | is-empty) { error make --unspanned { msg: "path parameter 'beezUPOrderId' must be non-empty" } }
-  let full_url = (build-url $base ({marketplace_technical_code: (encode-path-segment $marketplace_technical_code), account_id: (encode-path-segment $account_id), beez_up_order_id: (encode-path-segment $beez_up_order_id)} | format pattern "/v2/user/marketplaces/orders/{marketplace_technical_code}/{account_id}/{beez_up_order_id}/harvest"))
+  let full_url = (build-url $base ({marketplace_technical_code: (encode-path-segment $marketplace_technical_code), account_id: (encode-path-segment $account_id), beez_up_order_id: (encode-path-segment $beez_up_order_id)} | format pattern "/v2/user/marketplaces/orders/{marketplace_technical_code}/{account_id}/{beez_up_order_id}/harvest") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [202]
 }
 
 # [DEPRECATED] Get an Order's harvest and change history
@@ -6556,12 +9025,23 @@ export def "user-marketplaces-orders-history get" [
   if ($marketplace_technical_code | is-empty) { error make --unspanned { msg: "path parameter 'marketplaceTechnicalCode' must be non-empty" } }
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   if ($beez_up_order_id | is-empty) { error make --unspanned { msg: "path parameter 'beezUPOrderId' must be non-empty" } }
-  let full_url = (build-url $base ({marketplace_technical_code: (encode-path-segment $marketplace_technical_code), account_id: (encode-path-segment $account_id), beez_up_order_id: (encode-path-segment $beez_up_order_id)} | format pattern "/v2/user/marketplaces/orders/{marketplace_technical_code}/{account_id}/{beez_up_order_id}/history"))
+  let full_url = (build-url $base ({marketplace_technical_code: (encode-path-segment $marketplace_technical_code), account_id: (encode-path-segment $account_id), beez_up_order_id: (encode-path-segment $beez_up_order_id)} | format pattern "/v2/user/marketplaces/orders/{marketplace_technical_code}/{account_id}/{beez_up_order_id}/history") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200 304]
 }
 
 # [DEPRECATED] Set an Order's merchant information
@@ -6593,12 +9073,23 @@ export def "user-marketplaces-orders-set-merchant-order-info update" [
   if ($marketplace_technical_code | is-empty) { error make --unspanned { msg: "path parameter 'marketplaceTechnicalCode' must be non-empty" } }
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   if ($beez_up_order_id | is-empty) { error make --unspanned { msg: "path parameter 'beezUPOrderId' must be non-empty" } }
-  let full_url = (build-url $base ({marketplace_technical_code: (encode-path-segment $marketplace_technical_code), account_id: (encode-path-segment $account_id), beez_up_order_id: (encode-path-segment $beez_up_order_id)} | format pattern "/v2/user/marketplaces/orders/{marketplace_technical_code}/{account_id}/{beez_up_order_id}/setMerchantOrderInfo"))
+  let full_url = (build-url $base ({marketplace_technical_code: (encode-path-segment $marketplace_technical_code), account_id: (encode-path-segment $account_id), beez_up_order_id: (encode-path-segment $beez_up_order_id)} | format pattern "/v2/user/marketplaces/orders/{marketplace_technical_code}/{account_id}/{beez_up_order_id}/setMerchantOrderInfo") $auth.query)
   let req_body = {"order_MerchantECommerceSoftwareName": $order_merchant_e_commerce_software_name, "order_MerchantECommerceSoftwareVersion": $order_merchant_e_commerce_software_version, "order_MerchantOrderId": $order_merchant_order_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # [DEPRECATED] Change your marketplace Order Information (accept, ship, etc.)
@@ -6634,12 +9125,23 @@ export def "user-marketplaces-orders create-change" [
   if ($beez_up_order_id | is-empty) { error make --unspanned { msg: "path parameter 'beezUPOrderId' must be non-empty" } }
   if ($change_order_type | is-empty) { error make --unspanned { msg: "path parameter 'changeOrderType' must be non-empty" } }
   let qp = [(serialize-qp "userName" $user_name "scalar") (serialize-qp "testMode" $test_mode "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({marketplace_technical_code: (encode-path-segment $marketplace_technical_code), account_id: (encode-path-segment $account_id), beez_up_order_id: (encode-path-segment $beez_up_order_id), change_order_type: (encode-path-segment $change_order_type)} | format pattern "/v2/user/marketplaces/orders/{marketplace_technical_code}/{account_id}/{beez_up_order_id}/{change_order_type}") $qp)
+  let full_url = (build-url $base ({marketplace_technical_code: (encode-path-segment $marketplace_technical_code), account_id: (encode-path-segment $account_id), beez_up_order_id: (encode-path-segment $beez_up_order_id), change_order_type: (encode-path-segment $change_order_type)} | format pattern "/v2/user/marketplaces/orders/{marketplace_technical_code}/{account_id}/{beez_up_order_id}/{change_order_type}") $qp $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"userName": $user_name, "testMode": $test_mode} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"userName": $user_name, "testMode": $test_mode} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [202]
 }

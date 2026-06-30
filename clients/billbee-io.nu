@@ -8,7 +8,7 @@ const BASE_URL = "https://app.billbee.io"
 # `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
 # where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o BILLBEE_API_TOKEN | default "" }
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o BILLBEE_API_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
@@ -43,14 +43,11 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
-# Trick: `url encode --all` over-encodes, then we decode the four unreserved
-# punctuation chars back. Pre-existing %XX sequences in the input survive
-# because `url encode --all` first turns their % into %25.
 def encode-path-segment [v: any]: nothing -> string {
   $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
-# Serialize an array-typed path parameter (issue 49.A). OpenAPI 3 `style: simple`
+# Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
 # (the default for path params) and Swagger 2 `collectionFormat: csv` both join
 # the elements with a literal comma WITHIN the single path segment, each element
 # RFC-3986-encoded individually (so a comma inside an element stays %2C). Without
@@ -61,51 +58,63 @@ def encode-path-array [v: any]: nothing -> string {
   if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
 }
 
-# Build URL from base, path, and optional query string
-def build-url [base: string, path: string, query?: string]: nothing -> string {
+# Build the request URL from base, path, and any number of pre-encoded query
+# fragments (param serializer output and/or the auth query). Each fragment is an
+# `&`-joinable `key=value` string already percent-encoded by its producer; empty
+# fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
+# delimiters are hand-spliced — and any query already on the base URL is merged in.
+def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
   let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
-  let result = ($parsed | upsert path $full_path)
-  if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
+  let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
+  $parsed | upsert path $full_path | upsert query $query | url join
 }
 
-# Build the dry-run record returned by --dry-run. Shape:
-#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
-#    auth: {scheme, location}}
-# `meta` carries logical-form data (the query record by spec name, the pre-serialization
-# body) that do-request itself cannot reconstruct from its wire-format args.
-def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
-  let m = ($meta | default {})
-  {
-    dry_run: true
-    method: $method
-    url: $url
-    query: ($m | get -o query | default {})
-    headers: $auth.headers
-    body: ($m | get -o body)
-    content_type: $content_type
-    timeout: $timeout
-    auth: {scheme: $auth.scheme, location: $auth.location}
-  }
+# Success policy: did this response succeed? Single source of truth, consulted by
+# handle-response and the HEAD header-unwrap. Empty ok_codes means the spec listed
+# none, so fall back to < 400. Otherwise: any 2xx, plus documented success codes.
+def status-ok [status: int, ok_codes: list<int>]: nothing -> bool {
+  if ($ok_codes | is-empty) { $status < 400 } else { ($status >= 200 and $status < 300) or ($status in $ok_codes) }
 }
 
-# Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
-  let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
-  let timeout = ($max_time | default 30min)
-  let ct = ($content_type | default "application/json")
-  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
-  let resp = match $method {
-    "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
-  }
-  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
-  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
+# Unwrap a `--full` HTTP response into the user-facing value. Response arrives
+# via pipeline; ok_codes gates the error throw (see status-ok).
+def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: record -> any {
+  let resp = $in
+  if $allow_errors { return $resp }
+  if not (status-ok $resp.status $ok_codes) { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } }
+  if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
+  if $resp.status == 204 { return null }
+  $resp.body
+}
+
+# GET — bodyless, honours --raw
+def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+}
+
+# POST — body + content-type
+def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# PUT — body + content-type
+def send-put [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http put --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http put --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# PATCH — body + content-type
+def send-patch [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http patch --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http patch --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# DELETE — body via --data
+def send-delete [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http delete --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url } else { http delete --headers $req.headers --content-type $req.content_type --data $body --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url }
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 def base-url-completer [] { ["https://app.billbee.io"] }
@@ -178,12 +187,23 @@ export def "automaticprovision-create-account create-automatic-provisioning" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/v1/automaticprovision/createaccount")
+  let full_url = (build-url $base "/api/v1/automaticprovision/createaccount" $auth.query)
   let req_body = {"AcceptTerms": $accept_terms, "Address": $address, "AffiliateCouponCode": $affiliate_coupon_code, "DefaultCurrrency": $default_currrency, "DefaultVatIndex": $default_vat_index, "DefaultVatMode": $default_vat_mode, "EMail": $e_mail, "Password": $password, "Vat1Rate": $vat1_rate, "Vat2Rate": $vat2_rate} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Returns infos about Billbee terms and conditions
@@ -204,10 +224,21 @@ export def "automaticprovision-termsinfo get-automatic-provisioning-terms" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/v1/automaticprovision/termsinfo")
+  let full_url = (build-url $base "/api/v1/automaticprovision/termsinfo" $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets a list of all connected cloud storage devices
@@ -228,10 +259,21 @@ export def "cloudstorages get-cloud-storage-list" [
 ]: nothing -> record<Data: table<Id: int, Name: string, Type: string, UsedAsPrinter: bool>, ErrorCode: int, ErrorDescription: int, ErrorMessage: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/v1/cloudstorages")
+  let full_url = (build-url $base "/api/v1/cloudstorages" $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get a list of all customer addresses
@@ -255,10 +297,21 @@ export def "customer-addresses get-list" [
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/v1/customer-addresses" $qp)
+  let full_url = (build-url $base "/api/v1/customer-addresses" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "pageSize": $page_size} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"page": $page, "pageSize": $page_size} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Creates a new customer address
@@ -300,12 +353,23 @@ export def "customer-addresses create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/v1/customer-addresses")
+  let full_url = (build-url $base "/api/v1/customer-addresses" $auth.query)
   let req_body = {"AddressAddition": $address_addition, "AddressType": $address_type, "ArchivedAt": $archived_at, "City": $city, "Company": $company, "CountryCode": $country_code, "CustomerId": $customer_id, "Email": $email, "Fax": $fax, "FirstName": $first_name, "Housenumber": $housenumber, "Id": $id, "LastName": $last_name, "Name2": $name2, "RestoredAt": $restored_at, "State": $state, "Street": $street, "Tel1": $tel1, "Tel2": $tel2, "Zip": $zip} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Queries a single customer address by id
@@ -328,10 +392,21 @@ export def "customer-addresses get-one" [
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/customer-addresses/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/customer-addresses/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates a customer address by id
@@ -375,12 +450,23 @@ export def "customer-addresses update" [
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/customer-addresses/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/customer-addresses/{id}") $auth.query)
   let req_body = {"AddressAddition": $address_addition, "AddressType": $address_type, "ArchivedAt": $archived_at, "City": $city, "Company": $company, "CountryCode": $country_code, "CustomerId": $customer_id, "Email": $email, "Fax": $fax, "FirstName": $first_name, "Housenumber": $housenumber, "Id": $body_id, "LastName": $last_name, "Name2": $name2, "RestoredAt": $restored_at, "State": $state, "Street": $street, "Tel1": $tel1, "Tel2": $tel2, "Zip": $zip} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get a list of all customers
@@ -404,10 +490,21 @@ export def "customers get-list" [
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/v1/customers" $qp)
+  let full_url = (build-url $base "/api/v1/customers" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "pageSize": $page_size} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"page": $page, "pageSize": $page_size} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Creates a new customer
@@ -457,12 +554,23 @@ export def "customers create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/v1/customers")
+  let full_url = (build-url $base "/api/v1/customers" $auth.query)
   let req_body = {"Address": $address, "ArchivedAt": $archived_at, "DefaultCommercialMailAddress": $default_commercial_mail_address, "DefaultFax": $default_fax, "DefaultMailAddress": $default_mail_address, "DefaultPhone1": $default_phone1, "DefaultPhone2": $default_phone2, "DefaultStatusUpdatesMailAddress": $default_status_updates_mail_address, "Email": $email, "Id": $id, "LanguageId": $language_id, "MetaData": $meta_data, "Name": $name, "Number": $number, "PriceGroupId": $price_group_id, "RestoredAt": $restored_at, "Tel1": $tel1, "Tel2": $tel2, "Type": $type, "VatId": $vat_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Queries a single address from a customer
@@ -485,10 +593,21 @@ export def "customers-addresses get-address" [
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/customers/addresses/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/customers/addresses/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates one or more fields of an address
@@ -513,12 +632,23 @@ export def "customers-addresses update-address-by-id" [
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/customers/addresses/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/customers/addresses/{id}") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Updates all fields of an address
@@ -562,12 +692,23 @@ export def "customers-addresses update-address-by-id-1" [
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/customers/addresses/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/customers/addresses/{id}") $auth.query)
   let req_body = {"AddressAddition": $address_addition, "AddressType": $address_type, "ArchivedAt": $archived_at, "City": $city, "Company": $company, "CountryCode": $country_code, "CustomerId": $customer_id, "Email": $email, "Fax": $fax, "FirstName": $first_name, "Housenumber": $housenumber, "Id": $body_id, "LastName": $last_name, "Name2": $name2, "RestoredAt": $restored_at, "State": $state, "Street": $street, "Tel1": $tel1, "Tel2": $tel2, "Zip": $zip} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Queries a single customer by id
@@ -590,10 +731,21 @@ export def "customers get-one" [
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/customers/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/customers/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates a customer by id
@@ -643,12 +795,23 @@ export def "customers update" [
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/customers/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/customers/{id}") $auth.query)
   let req_body = {"ArchivedAt": $archived_at, "DefaultCommercialMailAddress": $default_commercial_mail_address, "DefaultFax": $default_fax, "DefaultMailAddress": $default_mail_address, "DefaultPhone1": $default_phone1, "DefaultPhone2": $default_phone2, "DefaultStatusUpdatesMailAddress": $default_status_updates_mail_address, "Email": $email, "Id": $body_id, "LanguageId": $language_id, "MetaData": $meta_data, "Name": $name, "Number": $number, "PriceGroupId": $price_group_id, "RestoredAt": $restored_at, "Tel1": $tel1, "Tel2": $tel2, "Type": $type, "VatId": $vat_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Queries a list of addresses from a customer
@@ -674,10 +837,21 @@ export def "customers-addresses get" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/customers/{id}/addresses") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/customers/{id}/addresses") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "pageSize": $page_size} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"page": $page, "pageSize": $page_size} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Adds a new address to a customer
@@ -721,12 +895,23 @@ export def "customers-addresses create-address" [
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/customers/{id}/addresses"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/customers/{id}/addresses") $auth.query)
   let req_body = {"AddressAddition": $address_addition, "AddressType": $address_type, "ArchivedAt": $archived_at, "City": $city, "Company": $company, "CountryCode": $country_code, "CustomerId": $customer_id, "Email": $email, "Fax": $fax, "FirstName": $first_name, "Housenumber": $housenumber, "Id": $body_id, "LastName": $last_name, "Name2": $name2, "RestoredAt": $restored_at, "State": $state, "Street": $street, "Tel1": $tel1, "Tel2": $tel2, "Zip": $zip} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Queries a list of orders from a customer
@@ -752,10 +937,21 @@ export def "customers-orders get" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/customers/{id}/orders") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/customers/{id}/orders") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "pageSize": $page_size} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"page": $page, "pageSize": $page_size} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns a list with all defined orderstates
@@ -776,10 +972,21 @@ export def "enums-orderstates get-order-states" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/v1/enums/orderstates")
+  let full_url = (build-url $base "/api/v1/enums/orderstates" $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns a list with all defined paymenttypes
@@ -800,10 +1007,21 @@ export def "enums-paymenttypes get-payment-types" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/v1/enums/paymenttypes")
+  let full_url = (build-url $base "/api/v1/enums/paymenttypes" $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns a list with all defined shipmenttypes
@@ -824,10 +1042,21 @@ export def "enums-shipmenttypes get-shipment-types" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/v1/enums/shipmenttypes")
+  let full_url = (build-url $base "/api/v1/enums/shipmenttypes" $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns a list with all defined shippingcarriers
@@ -848,10 +1077,21 @@ export def "enums-shippingcarriers get-shipping-carriers" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/v1/enums/shippingcarriers")
+  let full_url = (build-url $base "/api/v1/enums/shippingcarriers" $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get a list of all events optionally filtered by date. This request is extra throttled to 2 calls per page per hour.
@@ -879,10 +1119,21 @@ export def "events get-list" [
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "minDate" $min_date "scalar") (serialize-qp "maxDate" $max_date "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "typeId" $type_id "multi") (serialize-qp "orderId" $order_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/v1/events" $qp)
+  let full_url = (build-url $base "/api/v1/events" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"minDate": $min_date, "maxDate": $max_date, "page": $page, "pageSize": $page_size, "typeId": $type_id, "orderId": $order_id} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"minDate": $min_date, "maxDate": $max_date, "page": $page, "pageSize": $page_size, "typeId": $type_id, "orderId": $order_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /api/v1/layouts
@@ -902,10 +1153,21 @@ export def "layouts get-list" [
 ]: nothing -> record<Data: table<Id: int, Name: string, Type: int>, ErrorCode: int, ErrorDescription: int, ErrorMessage: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/v1/layouts")
+  let full_url = (build-url $base "/api/v1/layouts" $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get a list of all orders optionally filtered by date
@@ -939,10 +1201,21 @@ export def "orders get-list" [
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "minOrderDate" $min_order_date "scalar") (serialize-qp "maxOrderDate" $max_order_date "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "shopId" $shop_id "multi") (serialize-qp "orderStateId" $order_state_id "multi") (serialize-qp "tag" $tag "multi") (serialize-qp "minimumBillBeeOrderId" $minimum_bill_bee_order_id "scalar") (serialize-qp "modifiedAtMin" $modified_at_min "scalar") (serialize-qp "modifiedAtMax" $modified_at_max "scalar") (serialize-qp "articleTitleSource" $article_title_source "scalar") (serialize-qp "excludeTags" $exclude_tags "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/v1/orders" $qp)
+  let full_url = (build-url $base "/api/v1/orders" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"minOrderDate": $min_order_date, "maxOrderDate": $max_order_date, "page": $page, "pageSize": $page_size, "shopId": $shop_id, "orderStateId": $order_state_id, "tag": $tag, "minimumBillBeeOrderId": $minimum_bill_bee_order_id, "modifiedAtMin": $modified_at_min, "modifiedAtMax": $modified_at_max, "articleTitleSource": $article_title_source, "excludeTags": $exclude_tags} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"minOrderDate": $min_order_date, "maxOrderDate": $max_order_date, "page": $page, "pageSize": $page_size, "shopId": $shop_id, "orderStateId": $order_state_id, "tag": $tag, "minimumBillBeeOrderId": $minimum_bill_bee_order_id, "modifiedAtMin": $modified_at_min, "modifiedAtMax": $modified_at_max, "articleTitleSource": $article_title_source, "excludeTags": $exclude_tags} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Creates a new order in the Billbee account
@@ -1039,12 +1312,23 @@ export def "orders create-new" [
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "shopId" $shop_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/v1/orders" $qp)
+  let full_url = (build-url $base "/api/v1/orders" $qp $auth.query)
   let req_body = {"AcceptLossOfReturnRight": $accept_loss_of_return_right, "AdjustmentCost": $adjustment_cost, "AdjustmentReason": $adjustment_reason, "ApiAccountId": $api_account_id, "ApiAccountName": $api_account_name, "ArchivedAt": $archived_at, "BillBeeOrderId": $bill_bee_order_id, "BillBeeParentOrderId": $bill_bee_parent_order_id, "Buyer": $buyer, "Comments": $comments, "ConfirmedAt": $confirmed_at, "CreatedAt": $created_at, "Currency": $currency, "CustomInvoiceNote": $custom_invoice_note, "Customer": $customer, "CustomerNumber": $customer_number, "CustomerVatId": $customer_vat_id, "DeliverySourceCountryCode": $delivery_source_country_code, "DistributionCenter": $distribution_center, "History": $history, "Id": $id, "InvoiceAddress": $invoice_address, "InvoiceDate": $invoice_date, "InvoiceNumber": $invoice_number, "InvoiceNumberPostfix": $invoice_number_postfix, "InvoiceNumberPrefix": $invoice_number_prefix, "IsCancelationFor": $is_cancelation_for, "IsFromBillbeeApi": $is_from_billbee_api, "LanguageCode": $language_code, "LastModifiedAt": $last_modified_at, "MerchantVatId": $merchant_vat_id, "OrderItems": $order_items, "OrderNumber": $order_number, "PaidAmount": $paid_amount, "PayedAt": $payed_at, "PaymentInstruction": $payment_instruction, "PaymentMethod": $payment_method, "PaymentReference": $payment_reference, "PaymentTransactionId": $payment_transaction_id, "Payments": $payments, "RestoredAt": $restored_at, "Seller": $seller, "SellerComment": $seller_comment, "ShipWeightKg": $ship_weight_kg, "ShippedAt": $shipped_at, "ShippingAddress": $shipping_address, "ShippingCost": $shipping_cost, "ShippingIds": $shipping_ids, "ShippingProfileId": $shipping_profile_id, "ShippingProfileName": $shipping_profile_name, "ShippingProviderId": $shipping_provider_id, "ShippingProviderName": $shipping_provider_name, "ShippingProviderProductId": $shipping_provider_product_id, "ShippingProviderProductName": $shipping_provider_product_name, "ShippingServices": $shipping_services, "State": $state, "Tags": $tags, "TaxRate1": $tax_rate1, "TaxRate2": $tax_rate2, "TotalCost": $total_cost, "UpdatedAt": $updated_at, "VatId": $vat_id, "VatMode": $vat_mode} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"shopId": $shop_id} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"shopId": $shop_id} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Create an delivery note for an existing order. This request is extra throttled by order and api key to a maximum of 1 per 5 minutes.
@@ -1070,10 +1354,21 @@ export def "orders-create-delivery-note create" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "includePdf" $include_pdf "scalar") (serialize-qp "sendToCloudId" $send_to_cloud_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/orders/CreateDeliveryNote/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/orders/CreateDeliveryNote/{id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"includePdf": $include_pdf, "sendToCloudId": $send_to_cloud_id} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"includePdf": $include_pdf, "sendToCloudId": $send_to_cloud_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Create an invoice for an existing order. This request is extra throttled by order and api key to a maximum of 1 per 5 minutes.
@@ -1100,10 +1395,21 @@ export def "orders-create-invoice create" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "includeInvoicePdf" $include_invoice_pdf "scalar") (serialize-qp "templateId" $template_id "scalar") (serialize-qp "sendToCloudId" $send_to_cloud_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/orders/CreateInvoice/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/orders/CreateInvoice/{id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"includeInvoicePdf": $include_invoice_pdf, "templateId": $template_id, "sendToCloudId": $send_to_cloud_id} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"includeInvoicePdf": $include_invoice_pdf, "templateId": $template_id, "sendToCloudId": $send_to_cloud_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Returns a list of fields which can be updated with the orders/{id} patch call
@@ -1124,10 +1430,21 @@ export def "orders-patchable-fields get" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/v1/orders/PatchableFields")
+  let full_url = (build-url $base "/api/v1/orders/PatchableFields" $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Find a single order by its external id (order number)
@@ -1154,10 +1471,21 @@ export def "orders-find find" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($partner | is-empty) { error make --unspanned { msg: "path parameter 'partner' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), partner: (encode-path-segment $partner)} | format pattern "/api/v1/orders/find/{id}/{partner}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), partner: (encode-path-segment $partner)} | format pattern "/api/v1/orders/find/{id}/{partner}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get a single order by its external order number
@@ -1180,10 +1508,21 @@ export def "orders-findbyextref get-by-ext-ref" [
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($ext_ref | is-empty) { error make --unspanned { msg: "path parameter 'extRef' must be non-empty" } }
-  let full_url = (build-url $base ({ext_ref: (encode-path-segment $ext_ref)} | format pattern "/api/v1/orders/findbyextref/{ext_ref}"))
+  let full_url = (build-url $base ({ext_ref: (encode-path-segment $ext_ref)} | format pattern "/api/v1/orders/findbyextref/{ext_ref}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get a list of all invoices optionally filtered by date. This request ist throttled to 1 per 1 minute for same page and minInvoiceDate
@@ -1216,10 +1555,21 @@ export def "orders-invoices get-list" [
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "minInvoiceDate" $min_invoice_date "scalar") (serialize-qp "maxInvoiceDate" $max_invoice_date "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "shopId" $shop_id "multi") (serialize-qp "orderStateId" $order_state_id "multi") (serialize-qp "tag" $tag "multi") (serialize-qp "minPayDate" $min_pay_date "scalar") (serialize-qp "maxPayDate" $max_pay_date "scalar") (serialize-qp "includePositions" $include_positions "scalar") (serialize-qp "excludeTags" $exclude_tags "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/v1/orders/invoices" $qp)
+  let full_url = (build-url $base "/api/v1/orders/invoices" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"minInvoiceDate": $min_invoice_date, "maxInvoiceDate": $max_invoice_date, "page": $page, "pageSize": $page_size, "shopId": $shop_id, "orderStateId": $order_state_id, "tag": $tag, "minPayDate": $min_pay_date, "maxPayDate": $max_pay_date, "includePositions": $include_positions, "excludeTags": $exclude_tags} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"minInvoiceDate": $min_invoice_date, "maxInvoiceDate": $max_invoice_date, "page": $page, "pageSize": $page_size, "shopId": $shop_id, "orderStateId": $order_state_id, "tag": $tag, "minPayDate": $min_pay_date, "maxPayDate": $max_pay_date, "includePositions": $include_positions, "excludeTags": $exclude_tags} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get a single order by its internal billbee id. This request is throttled to 6 calls per order in one minute
@@ -1244,10 +1594,21 @@ export def "orders get" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "articleTitleSource" $article_title_source "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/orders/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/orders/{id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"articleTitleSource": $article_title_source} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"articleTitleSource": $article_title_source} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates one or more fields of an order
@@ -1272,12 +1633,23 @@ export def "orders update" [
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/orders/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/orders/{id}") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Changes the main state of a single order
@@ -1302,12 +1674,23 @@ export def "orders-orderstate update-state" [
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/orders/{id}/orderstate"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/orders/{id}/orderstate") $auth.query)
   let req_body = {"NewStateId": $new_state_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Parses a text and replaces all placeholders
@@ -1335,12 +1718,23 @@ export def "orders-parse-placeholders create" [
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/orders/{id}/parse-placeholders"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/orders/{id}/parse-placeholders") $auth.query)
   let req_body = {"IsHtml": $is_html, "Language": $language, "TextToParse": $text_to_parse, "Trim": $trim} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Sends a message to the buyer
@@ -1370,12 +1764,23 @@ export def "orders-send-message send" [
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/orders/{id}/send-message"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/orders/{id}/send-message") $auth.query)
   let req_body = {"AlternativeMail": $alternative_mail, "Body": $body, "SendMode": $send_mode, "Subject": $subject} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Add a shipment to a given order
@@ -1406,12 +1811,23 @@ export def "orders-shipment create" [
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/orders/{id}/shipment"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/orders/{id}/shipment") $auth.query)
   let req_body = {"CarrierId": $carrier_id, "Comment": $comment, "OrderId": $order_id, "ShipmentType": $shipment_type, "ShippingId": $shipping_id, "ShippingProviderId": $shipping_provider_id, "ShippingProviderProductId": $shipping_provider_product_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Attach one or more tags to an order
@@ -1436,12 +1852,23 @@ export def "orders-tags create" [
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/orders/{id}/tags"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/orders/{id}/tags") $auth.query)
   let req_body = {"Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Sets the tags attached to an order
@@ -1466,12 +1893,23 @@ export def "orders-tags update" [
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/orders/{id}/tags"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/orders/{id}/tags") $auth.query)
   let req_body = {"Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Triggers a rule event
@@ -1497,12 +1935,23 @@ export def "orders-trigger-event trigger" [
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/orders/{id}/trigger-event"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/orders/{id}/trigger-event") $auth.query)
   let req_body = {"DelayInMinutes": $delay_in_minutes, "Name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get a list of all products
@@ -1529,10 +1978,21 @@ export def "products get-article-list" [
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "minCreatedAt" $min_created_at "scalar") (serialize-qp "minimumBillBeeArticleId" $minimum_bill_bee_article_id "scalar") (serialize-qp "maximumBillBeeArticleId" $maximum_bill_bee_article_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/v1/products" $qp)
+  let full_url = (build-url $base "/api/v1/products" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "pageSize": $page_size, "minCreatedAt": $min_created_at, "minimumBillBeeArticleId": $minimum_bill_bee_article_id, "maximumBillBeeArticleId": $maximum_bill_bee_article_id} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"page": $page, "pageSize": $page_size, "minCreatedAt": $min_created_at, "minimumBillBeeArticleId": $minimum_bill_bee_article_id, "maximumBillBeeArticleId": $maximum_bill_bee_article_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Creates a new product
@@ -1625,12 +2085,23 @@ export def "products create-article-article" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/v1/products")
+  let full_url = (build-url $base "/api/v1/products" $auth.query)
   let req_body = {"BasicAttributes": $basic_attributes, "BillOfMaterial": $bill_of_material, "Category1": $category1, "Category2": $category2, "Category3": $category3, "Condition": $condition, "CostPrice": $cost_price, "CountryOfOrigin": $country_of_origin, "CustomFields": $custom_fields, "DeliveryTime": $delivery_time, "Description": $description, "EAN": $ean, "ExportDescription": $export_description, "ExportDescriptionMultiLanguage": $export_description_multi_language, "HeightCm": $height_cm, "Id": $id, "Images": $images, "InvoiceText": $invoice_text, "IsCustomizable": $is_customizable, "IsDeactivated": $is_deactivated, "IsDigital": $is_digital, "LengthCm": $length_cm, "Manufacturer": $manufacturer, "Materials": $materials, "Occasion": $occasion, "Price": $price, "Recipient": $recipient, "SKU": $sku, "ShippingProductId": $shipping_product_id, "ShortDescription": $short_description, "SoldAmount": $sold_amount, "SoldAmountLast30Days": $sold_amount_last30_days, "SoldSumGross": $sold_sum_gross, "SoldSumGrossLast30Days": $sold_sum_gross_last30_days, "SoldSumNet": $sold_sum_net, "SoldSumNetLast30Days": $sold_sum_net_last30_days, "Sources": $sources, "StockCode": $stock_code, "StockCurrent": $stock_current, "StockDesired": $stock_desired, "StockReduceItemsPerSale": $stock_reduce_items_per_sale, "StockWarning": $stock_warning, "Stocks": $stocks, "Tags": $tags, "TaricNumber": $taric_number, "Title": $title, "Type": $type, "Unit": $unit, "UnitsPerItem": $units_per_item, "Vat1Rate": $vat1_rate, "Vat2Rate": $vat2_rate, "VatIndex": $vat_index, "Weight": $weight, "WeightNet": $weight_net, "WidthCm": $width_cm} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Returns a list of fields which can be updated with the patch call
@@ -1651,10 +2122,21 @@ export def "products-patchable-fields get-article" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/v1/products/PatchableFields")
+  let full_url = (build-url $base "/api/v1/products/PatchableFields" $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GEts a list of all defined categories
@@ -1675,10 +2157,21 @@ export def "products-category get-article" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/v1/products/category")
+  let full_url = (build-url $base "/api/v1/products/category" $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Queries a list of all custom fields
@@ -1702,10 +2195,21 @@ export def "products-custom-fields list" [
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/v1/products/custom-fields" $qp)
+  let full_url = (build-url $base "/api/v1/products/custom-fields" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "pageSize": $page_size} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"page": $page, "pageSize": $page_size} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Queries a single custom field
@@ -1728,10 +2232,21 @@ export def "products-custom-fields get-article" [
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/products/custom-fields/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/products/custom-fields/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Delete multiple images by id
@@ -1754,12 +2269,23 @@ export def "products-images-delete delete-article" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/v1/products/images/delete")
+  let full_url = (build-url $base "/api/v1/products/images/delete" $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes a single image by id
@@ -1782,10 +2308,21 @@ export def "products-images delete-article-by-image-id" [
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($image_id | is-empty) { error make --unspanned { msg: "path parameter 'imageId' must be non-empty" } }
-  let full_url = (build-url $base ({image_id: (encode-path-segment $image_id)} | format pattern "/api/v1/products/images/{image_id}"))
+  let full_url = (build-url $base ({image_id: (encode-path-segment $image_id)} | format pattern "/api/v1/products/images/{image_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Returns a single image by id
@@ -1808,10 +2345,21 @@ export def "products-images get-article-by-image-id" [
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($image_id | is-empty) { error make --unspanned { msg: "path parameter 'imageId' must be non-empty" } }
-  let full_url = (build-url $base ({image_id: (encode-path-segment $image_id)} | format pattern "/api/v1/products/images/{image_id}"))
+  let full_url = (build-url $base ({image_id: (encode-path-segment $image_id)} | format pattern "/api/v1/products/images/{image_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Queries the reserved amount for a single article by id or by sku
@@ -1836,10 +2384,21 @@ export def "products-reservedamount get-article-reserved-amount" [
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "lookupBy" $lookup_by "scalar") (serialize-qp "stockId" $stock_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/v1/products/reservedamount" $qp)
+  let full_url = (build-url $base "/api/v1/products/reservedamount" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"id": $id, "lookupBy": $lookup_by, "stockId": $stock_id} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"id": $id, "lookupBy": $lookup_by, "stockId": $stock_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Query all defined stock locations
@@ -1860,10 +2419,21 @@ export def "products-stocks get-article" [
 ]: nothing -> record<Data: table<Description: string, Id: int, IsDefault: bool, Name: string>, ErrorCode: int, ErrorDescription: int, ErrorMessage: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/v1/products/stocks")
+  let full_url = (build-url $base "/api/v1/products/stocks" $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update the stock qty of an article
@@ -1894,12 +2464,23 @@ export def "products-update-stock update-article" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/v1/products/updatestock")
+  let full_url = (build-url $base "/api/v1/products/updatestock" $auth.query)
   let req_body = {"AutosubtractReservedAmount": $autosubtract_reserved_amount, "BillbeeId": $billbee_id, "DeltaQuantity": $delta_quantity, "ForceSendStockToShops": $force_send_stock_to_shops, "NewQuantity": $new_quantity, "OldQuantity": $old_quantity, "Reason": $reason, "Sku": $sku, "StockId": $stock_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Update the stock code of an article
@@ -1925,12 +2506,23 @@ export def "products-update-stockcode update-article-stock-code" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/v1/products/updatestockcode")
+  let full_url = (build-url $base "/api/v1/products/updatestockcode" $auth.query)
   let req_body = {"BillbeeId": $billbee_id, "Sku": $sku, "StockCode": $stock_code, "StockId": $stock_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Update the stock qty for multiple articles at once
@@ -1953,12 +2545,23 @@ export def "products-update-stockmultiple update-article-stock-multiple" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/v1/products/updatestockmultiple")
+  let full_url = (build-url $base "/api/v1/products/updatestockmultiple" $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes a product
@@ -1981,10 +2584,21 @@ export def "products delete-article-article" [
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/products/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/products/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Queries a single article by id or by sku
@@ -2009,10 +2623,21 @@ export def "products get-article-article" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "lookupBy" $lookup_by "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/products/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/products/{id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"lookupBy": $lookup_by} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"lookupBy": $lookup_by} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates one or more fields of a product
@@ -2037,12 +2662,23 @@ export def "products update-article-article" [
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/products/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/products/{id}") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Returns a list of all images of the product
@@ -2065,10 +2701,21 @@ export def "products-images get-article-by-product-id" [
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($product_id | is-empty) { error make --unspanned { msg: "path parameter 'productId' must be non-empty" } }
-  let full_url = (build-url $base ({product_id: (encode-path-segment $product_id)} | format pattern "/api/v1/products/{product_id}/images"))
+  let full_url = (build-url $base ({product_id: (encode-path-segment $product_id)} | format pattern "/api/v1/products/{product_id}/images") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Add multiple images to a product or replace the product images by the given images
@@ -2095,12 +2742,23 @@ export def "products-images update-article-by-product-id" [
   let base = ($base_url | default $BASE_URL)
   if ($product_id | is-empty) { error make --unspanned { msg: "path parameter 'productId' must be non-empty" } }
   let qp = [(serialize-qp "replace" $replace "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({product_id: (encode-path-segment $product_id)} | format pattern "/api/v1/products/{product_id}/images") $qp)
+  let full_url = (build-url $base ({product_id: (encode-path-segment $product_id)} | format pattern "/api/v1/products/{product_id}/images") $qp $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"replace": $replace} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"replace": $replace} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes a single image from a product
@@ -2125,10 +2783,21 @@ export def "products-images delete-article-by-product-id-image-id" [
   let base = ($base_url | default $BASE_URL)
   if ($product_id | is-empty) { error make --unspanned { msg: "path parameter 'productId' must be non-empty" } }
   if ($image_id | is-empty) { error make --unspanned { msg: "path parameter 'imageId' must be non-empty" } }
-  let full_url = (build-url $base ({product_id: (encode-path-segment $product_id), image_id: (encode-path-segment $image_id)} | format pattern "/api/v1/products/{product_id}/images/{image_id}"))
+  let full_url = (build-url $base ({product_id: (encode-path-segment $product_id), image_id: (encode-path-segment $image_id)} | format pattern "/api/v1/products/{product_id}/images/{image_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Returns a single image by id
@@ -2153,10 +2822,21 @@ export def "products-images get-article-by-product-id-image-id" [
   let base = ($base_url | default $BASE_URL)
   if ($product_id | is-empty) { error make --unspanned { msg: "path parameter 'productId' must be non-empty" } }
   if ($image_id | is-empty) { error make --unspanned { msg: "path parameter 'imageId' must be non-empty" } }
-  let full_url = (build-url $base ({product_id: (encode-path-segment $product_id), image_id: (encode-path-segment $image_id)} | format pattern "/api/v1/products/{product_id}/images/{image_id}"))
+  let full_url = (build-url $base ({product_id: (encode-path-segment $product_id), image_id: (encode-path-segment $image_id)} | format pattern "/api/v1/products/{product_id}/images/{image_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Add or update an existing image of a product
@@ -2189,12 +2869,23 @@ export def "products-images update-article-by-product-id-image-id" [
   let base = ($base_url | default $BASE_URL)
   if ($product_id | is-empty) { error make --unspanned { msg: "path parameter 'productId' must be non-empty" } }
   if ($image_id | is-empty) { error make --unspanned { msg: "path parameter 'imageId' must be non-empty" } }
-  let full_url = (build-url $base ({product_id: (encode-path-segment $product_id), image_id: (encode-path-segment $image_id)} | format pattern "/api/v1/products/{product_id}/images/{image_id}"))
+  let full_url = (build-url $base ({product_id: (encode-path-segment $product_id), image_id: (encode-path-segment $image_id)} | format pattern "/api/v1/products/{product_id}/images/{image_id}") $auth.query)
   let req_body = {"ArticleId": $article_id, "Id": $id, "IsDefault": $is_default, "Position": $position, "ThumbPathExt": $thumb_path_ext, "ThumbUrl": $thumb_url, "Url": $url} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Search for products, customers and orders. Type can be "order", "product" and / or "customer" Term can contains lucene query syntax
@@ -2219,12 +2910,23 @@ export def "search list" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/v1/search")
+  let full_url = (build-url $base "/api/v1/search" $auth.query)
   let req_body = {"SearchMode": $search_mode, "Term": $term, "Type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # GET /api/v1/shipment/ping
@@ -2244,10 +2946,21 @@ export def "shipment-ping get" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/v1/shipment/ping")
+  let full_url = (build-url $base "/api/v1/shipment/ping" $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Creates a new shipment with the selected Shippingprovider
@@ -2287,12 +3000,23 @@ export def "shipment-shipment create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/v1/shipment/shipment")
+  let full_url = (build-url $base "/api/v1/shipment/shipment" $auth.query)
   let req_body = {"ClientReference": $client_reference, "Content": $content, "CustomerNumber": $customer_number, "Dimension": $dimension, "OrderCurrencyCode": $order_currency_code, "OrderSum": $order_sum, "PrinterIdForExportDocs": $printer_id_for_export_docs, "PrinterName": $printer_name, "ProductCode": $product_code, "ProviderName": $provider_name, "ReceiverAddress": $receiver_address, "Services": $services, "ShipDate": $ship_date, "TotalNet": $total_net, "WeightInGram": $weight_in_gram, "shippingCarrier": $shipping_carrier} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get a list of all shipments optionally filtered by date. All parameters are optional.
@@ -2321,10 +3045,21 @@ export def "shipment-shipments get-list" [
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "createdAtMin" $created_at_min "scalar") (serialize-qp "createdAtMax" $created_at_max "scalar") (serialize-qp "orderId" $order_id "scalar") (serialize-qp "minimumShipmentId" $minimum_shipment_id "scalar") (serialize-qp "shippingProviderId" $shipping_provider_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/v1/shipment/shipments" $qp)
+  let full_url = (build-url $base "/api/v1/shipment/shipments" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "pageSize": $page_size, "createdAtMin": $created_at_min, "createdAtMax": $created_at_max, "orderId": $order_id, "minimumShipmentId": $minimum_shipment_id, "shippingProviderId": $shipping_provider_id} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"page": $page, "pageSize": $page_size, "createdAtMin": $created_at_min, "createdAtMax": $created_at_max, "orderId": $order_id, "minimumShipmentId": $minimum_shipment_id, "shippingProviderId": $shipping_provider_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Queries the currently available shipping carriers.
@@ -2345,10 +3080,21 @@ export def "shipment-shippingcarriers get-shipping-carrier" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/v1/shipment/shippingcarriers")
+  let full_url = (build-url $base "/api/v1/shipment/shippingcarriers" $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Query all defined shipping providers
@@ -2369,10 +3115,21 @@ export def "shipment-shippingproviders get" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/v1/shipment/shippingproviders")
+  let full_url = (build-url $base "/api/v1/shipment/shippingproviders" $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Creates a shipment for an order in billbee
@@ -2404,12 +3161,23 @@ export def "shipment-shipwithlabel create-ship-with-label" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/v1/shipment/shipwithlabel")
+  let full_url = (build-url $base "/api/v1/shipment/shipwithlabel" $auth.query)
   let req_body = {"ChangeStateToSend": $change_state_to_send, "ClientReference": $client_reference, "Dimension": $dimension, "OrderId": $order_id, "PrinterName": $printer_name, "ProductId": $product_id, "ProviderId": $provider_id, "ShipDate": $ship_date, "WeightInGram": $weight_in_gram} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes all existing WebHook registrations.
@@ -2430,10 +3198,21 @@ export def "webhooks delete-web-hook-management-list" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/v1/webhooks")
+  let full_url = (build-url $base "/api/v1/webhooks" $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Gets all registered WebHooks for a given user.
@@ -2454,10 +3233,21 @@ export def "webhooks get-web-hook-management" [
 ]: nothing -> table<Description: string, Filters: list<string>, Headers: record, Id: string, IsPaused: bool, Properties: record, Secret: string, WebHookUri: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/v1/webhooks")
+  let full_url = (build-url $base "/api/v1/webhooks" $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Registers a new WebHook for a given user.
@@ -2487,12 +3277,23 @@ export def "webhooks create-web-hook-management" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/v1/webhooks")
+  let full_url = (build-url $base "/api/v1/webhooks" $auth.query)
   let req_body = {"Description": $description, "Filters": $filters, "Headers": $headers, "Id": $id, "IsPaused": $is_paused, "Properties": $properties, "Secret": $secret, "WebHookUri": $web_hook_uri} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Returns a list of all known filters you can use to register webhooks
@@ -2513,10 +3314,21 @@ export def "webhooks-filters get-web-hook-management" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/v1/webhooks/filters")
+  let full_url = (build-url $base "/api/v1/webhooks/filters" $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes an existing WebHook registration.
@@ -2539,10 +3351,21 @@ export def "webhooks delete-web-hook-management" [
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/webhooks/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/webhooks/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Looks up a registered WebHook with the given {id} for a given user.
@@ -2565,10 +3388,21 @@ export def "webhooks get-web-hook-management-lookup" [
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/webhooks/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/webhooks/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates an existing WebHook registration.
@@ -2600,10 +3434,21 @@ export def "webhooks update-web-hook-management" [
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/webhooks/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/webhooks/{id}") $auth.query)
   let req_body = {"Description": $description, "Filters": $filters, "Headers": $headers, "Id": $body_id, "IsPaused": $is_paused, "Properties": $properties, "Secret": $secret, "WebHookUri": $web_hook_uri} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }

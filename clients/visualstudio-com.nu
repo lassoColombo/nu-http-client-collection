@@ -8,7 +8,7 @@ const BASE_URL = "https://online.visualstudio.com"
 # `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
 # where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o VSONLINE_TOKEN | default "" }
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o VSONLINE_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
@@ -41,14 +41,11 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
-# Trick: `url encode --all` over-encodes, then we decode the four unreserved
-# punctuation chars back. Pre-existing %XX sequences in the input survive
-# because `url encode --all` first turns their % into %25.
 def encode-path-segment [v: any]: nothing -> string {
   $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
-# Serialize an array-typed path parameter (issue 49.A). OpenAPI 3 `style: simple`
+# Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
 # (the default for path params) and Swagger 2 `collectionFormat: csv` both join
 # the elements with a literal comma WITHIN the single path segment, each element
 # RFC-3986-encoded individually (so a comma inside an element stays %2C). Without
@@ -59,51 +56,63 @@ def encode-path-array [v: any]: nothing -> string {
   if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
 }
 
-# Build URL from base, path, and optional query string
-def build-url [base: string, path: string, query?: string]: nothing -> string {
+# Build the request URL from base, path, and any number of pre-encoded query
+# fragments (param serializer output and/or the auth query). Each fragment is an
+# `&`-joinable `key=value` string already percent-encoded by its producer; empty
+# fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
+# delimiters are hand-spliced — and any query already on the base URL is merged in.
+def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
   let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
-  let result = ($parsed | upsert path $full_path)
-  if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
+  let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
+  $parsed | upsert path $full_path | upsert query $query | url join
 }
 
-# Build the dry-run record returned by --dry-run. Shape:
-#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
-#    auth: {scheme, location}}
-# `meta` carries logical-form data (the query record by spec name, the pre-serialization
-# body) that do-request itself cannot reconstruct from its wire-format args.
-def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
-  let m = ($meta | default {})
-  {
-    dry_run: true
-    method: $method
-    url: $url
-    query: ($m | get -o query | default {})
-    headers: $auth.headers
-    body: ($m | get -o body)
-    content_type: $content_type
-    timeout: $timeout
-    auth: {scheme: $auth.scheme, location: $auth.location}
-  }
+# Success policy: did this response succeed? Single source of truth, consulted by
+# handle-response and the HEAD header-unwrap. Empty ok_codes means the spec listed
+# none, so fall back to < 400. Otherwise: any 2xx, plus documented success codes.
+def status-ok [status: int, ok_codes: list<int>]: nothing -> bool {
+  if ($ok_codes | is-empty) { $status < 400 } else { ($status >= 200 and $status < 300) or ($status in $ok_codes) }
 }
 
-# Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
-  let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
-  let timeout = ($max_time | default 30min)
-  let ct = ($content_type | default "application/json")
-  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
-  let resp = match $method {
-    "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
-  }
-  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
-  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
+# Unwrap a `--full` HTTP response into the user-facing value. Response arrives
+# via pipeline; ok_codes gates the error throw (see status-ok).
+def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: record -> any {
+  let resp = $in
+  if $allow_errors { return $resp }
+  if not (status-ok $resp.status $ok_codes) { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } }
+  if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
+  if $resp.status == 204 { return null }
+  $resp.body
+}
+
+# GET — bodyless, honours --raw
+def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+}
+
+# POST — body + content-type
+def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# PUT — body + content-type
+def send-put [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http put --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http put --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# PATCH — body + content-type
+def send-patch [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http patch --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http patch --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# DELETE — body via --data
+def send-delete [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http delete --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url } else { http delete --headers $req.headers --content-type $req.content_type --data $body --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url }
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 def base-url-completer [] { ["https://online.visualstudio.com"] }
@@ -162,12 +171,23 @@ export def "agent-telemetry create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/v1/AgentTelemetry")
+  let full_url = (build-url $base "/api/v1/AgentTelemetry" $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # POST /api/v1/AgentTelemetry/standalone
@@ -186,12 +206,23 @@ export def "agent-telemetry-standalone create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/v1/AgentTelemetry/standalone")
+  let full_url = (build-url $base "/api/v1/AgentTelemetry/standalone" $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # GET /api/v1/Agents/{family}
@@ -211,10 +242,21 @@ export def "agents get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($family | is-empty) { error make --unspanned { msg: "path parameter 'family' must be non-empty" } }
-  let full_url = (build-url $base ({family: (encode-path-segment $family)} | format pattern "/api/v1/Agents/{family}"))
+  let full_url = (build-url $base ({family: (encode-path-segment $family)} | format pattern "/api/v1/Agents/{family}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /api/v1/Environments
@@ -236,10 +278,21 @@ export def "environments get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "planId" $plan_id "scalar") (serialize-qp "deleted" $deleted "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/v1/Environments" $qp)
+  let full_url = (build-url $base "/api/v1/Environments" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"name": $name, "planId": $plan_id, "deleted": $deleted} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"name": $name, "planId": $plan_id, "deleted": $deleted} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # POST /api/v1/Environments
@@ -303,12 +356,23 @@ export def "environments create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "access" $access "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/v1/Environments" $qp)
+  let full_url = (build-url $base "/api/v1/Environments" $qp $auth.query)
   let req_body = {"analyticsTrackingId": $analytics_tracking_id, "autoShutdownDelayMinutes": $auto_shutdown_delay_minutes, "billableOwner": $billable_owner, "connection": $connection, "containerImage": $container_image, "createAsPrebuild": $create_as_prebuild, "devContainerJson": $dev_container_json, "devContainerPath": $dev_container_path, "experimentalFeatures": $experimental_features, "features": $features, "friendlyName": $friendly_name, "gitHubApiUrl": $git_hub_api_url, "gitHubAppUrl": $git_hub_app_url, "gitHubPfsAuthEndpoint": $git_hub_pfs_auth_endpoint, "githubEnvironmentEndpoint": $github_environment_endpoint, "hasDevcontainerJson": $has_devcontainer_json, "identity": $identity, "label": $label, "location": $location, "netmonCorrelationData": $netmon_correlation_data, "personalization": $personalization, "planId": $plan_id, "platform": $platform, "runtimeConstraints": $runtime_constraints, "secrets": $secrets, "seed": $seed, "skuName": $sku_name, "testAccount": $test_account, "type": $type, "userTier": $user_tier, "workingDirectory": $working_directory} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"access": $access} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"access": $access} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201 307]
 }
 
 # DELETE /api/v1/Environments/{environmentId}
@@ -327,10 +391,21 @@ export def "environments delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($environment_id | is-empty) { error make --unspanned { msg: "path parameter 'environmentId' must be non-empty" } }
-  let full_url = (build-url $base ({environment_id: (encode-path-segment $environment_id)} | format pattern "/api/v1/Environments/{environment_id}"))
+  let full_url = (build-url $base ({environment_id: (encode-path-segment $environment_id)} | format pattern "/api/v1/Environments/{environment_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # GET /api/v1/Environments/{environmentId}
@@ -356,10 +431,21 @@ export def "environments get-route" [
   let base = ($base_url | default $BASE_URL)
   if ($environment_id | is-empty) { error make --unspanned { msg: "path parameter 'environmentId' must be non-empty" } }
   let qp = [(serialize-qp "connect" $connect "scalar") (serialize-qp "pfConnect" $pf_connect "scalar") (serialize-qp "deleted" $deleted "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({environment_id: (encode-path-segment $environment_id)} | format pattern "/api/v1/Environments/{environment_id}") $qp)
+  let full_url = (build-url $base ({environment_id: (encode-path-segment $environment_id)} | format pattern "/api/v1/Environments/{environment_id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"connect": $connect, "pfConnect": $pf_connect, "deleted": $deleted} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"connect": $connect, "pfConnect": $pf_connect, "deleted": $deleted} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # PATCH /api/v1/Environments/{environmentId}
@@ -388,12 +474,23 @@ export def "environments update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($environment_id | is-empty) { error make --unspanned { msg: "path parameter 'environmentId' must be non-empty" } }
-  let full_url = (build-url $base ({environment_id: (encode-path-segment $environment_id)} | format pattern "/api/v1/Environments/{environment_id}"))
+  let full_url = (build-url $base ({environment_id: (encode-path-segment $environment_id)} | format pattern "/api/v1/Environments/{environment_id}") $auth.query)
   let req_body = {"autoShutdownDelayMinutes": $auto_shutdown_delay_minutes, "failoverDetails": $failover_details, "friendlyName": $friendly_name, "planAccessToken": $plan_access_token, "planId": $plan_id, "skuName": $sku_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # POST /api/v1/Environments/{environmentId}/_callback
@@ -419,12 +516,23 @@ export def "environments-callback update-route" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($environment_id | is-empty) { error make --unspanned { msg: "path parameter 'environmentId' must be non-empty" } }
-  let full_url = (build-url $base ({environment_id: (encode-path-segment $environment_id)} | format pattern "/api/v1/Environments/{environment_id}/_callback"))
+  let full_url = (build-url $base ({environment_id: (encode-path-segment $environment_id)} | format pattern "/api/v1/Environments/{environment_id}/_callback") $auth.query)
   let req_body = {"payload": $payload, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # GET /api/v1/Environments/{environmentId}/archive
@@ -444,10 +552,21 @@ export def "environments-archive get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($environment_id | is-empty) { error make --unspanned { msg: "path parameter 'environmentId' must be non-empty" } }
-  let full_url = (build-url $base ({environment_id: (encode-path-segment $environment_id)} | format pattern "/api/v1/Environments/{environment_id}/archive"))
+  let full_url = (build-url $base ({environment_id: (encode-path-segment $environment_id)} | format pattern "/api/v1/Environments/{environment_id}/archive") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # POST /api/v1/Environments/{environmentId}/archive
@@ -467,10 +586,21 @@ export def "environments-archive create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($environment_id | is-empty) { error make --unspanned { msg: "path parameter 'environmentId' must be non-empty" } }
-  let full_url = (build-url $base ({environment_id: (encode-path-segment $environment_id)} | format pattern "/api/v1/Environments/{environment_id}/archive"))
+  let full_url = (build-url $base ({environment_id: (encode-path-segment $environment_id)} | format pattern "/api/v1/Environments/{environment_id}/archive") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # POST /api/v1/Environments/{environmentId}/export
@@ -490,10 +620,21 @@ export def "environments-export create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($environment_id | is-empty) { error make --unspanned { msg: "path parameter 'environmentId' must be non-empty" } }
-  let full_url = (build-url $base ({environment_id: (encode-path-segment $environment_id)} | format pattern "/api/v1/Environments/{environment_id}/export"))
+  let full_url = (build-url $base ({environment_id: (encode-path-segment $environment_id)} | format pattern "/api/v1/Environments/{environment_id}/export") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # PATCH /api/v1/Environments/{environmentId}/folder
@@ -515,12 +656,23 @@ export def "environments-folder update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($environment_id | is-empty) { error make --unspanned { msg: "path parameter 'environmentId' must be non-empty" } }
-  let full_url = (build-url $base ({environment_id: (encode-path-segment $environment_id)} | format pattern "/api/v1/Environments/{environment_id}/folder"))
+  let full_url = (build-url $base ({environment_id: (encode-path-segment $environment_id)} | format pattern "/api/v1/Environments/{environment_id}/folder") $auth.query)
   let req_body = {"recentFolderPaths": $recent_folder_paths} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # GET /api/v1/Environments/{environmentId}/heartbeattoken
@@ -540,10 +692,21 @@ export def "environments-heartbeattoken get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($environment_id | is-empty) { error make --unspanned { msg: "path parameter 'environmentId' must be non-empty" } }
-  let full_url = (build-url $base ({environment_id: (encode-path-segment $environment_id)} | format pattern "/api/v1/Environments/{environment_id}/heartbeattoken"))
+  let full_url = (build-url $base ({environment_id: (encode-path-segment $environment_id)} | format pattern "/api/v1/Environments/{environment_id}/heartbeattoken") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # POST /api/v1/Environments/{environmentId}/notify
@@ -568,12 +731,23 @@ export def "environments-notify create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($environment_id | is-empty) { error make --unspanned { msg: "path parameter 'environmentId' must be non-empty" } }
-  let full_url = (build-url $base ({environment_id: (encode-path-segment $environment_id)} | format pattern "/api/v1/Environments/{environment_id}/notify"))
+  let full_url = (build-url $base ({environment_id: (encode-path-segment $environment_id)} | format pattern "/api/v1/Environments/{environment_id}/notify") $auth.query)
   let req_body = {"details": $details, "displayMode": $display_mode, "message": $message, "modal": $modal} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # DELETE /api/v1/Environments/{environmentId}/ports/{port}
@@ -594,10 +768,21 @@ export def "environments-ports delete" [
   let base = ($base_url | default $BASE_URL)
   if ($environment_id | is-empty) { error make --unspanned { msg: "path parameter 'environmentId' must be non-empty" } }
   if ($port | is-empty) { error make --unspanned { msg: "path parameter 'port' must be non-empty" } }
-  let full_url = (build-url $base ({environment_id: (encode-path-segment $environment_id), port: (encode-path-segment $port)} | format pattern "/api/v1/Environments/{environment_id}/ports/{port}"))
+  let full_url = (build-url $base ({environment_id: (encode-path-segment $environment_id), port: (encode-path-segment $port)} | format pattern "/api/v1/Environments/{environment_id}/ports/{port}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # PUT /api/v1/Environments/{environmentId}/ports/{port}
@@ -621,12 +806,23 @@ export def "environments-ports update" [
   let base = ($base_url | default $BASE_URL)
   if ($environment_id | is-empty) { error make --unspanned { msg: "path parameter 'environmentId' must be non-empty" } }
   if ($port | is-empty) { error make --unspanned { msg: "path parameter 'port' must be non-empty" } }
-  let full_url = (build-url $base ({environment_id: (encode-path-segment $environment_id), port: (encode-path-segment $port)} | format pattern "/api/v1/Environments/{environment_id}/ports/{port}"))
+  let full_url = (build-url $base ({environment_id: (encode-path-segment $environment_id), port: (encode-path-segment $port)} | format pattern "/api/v1/Environments/{environment_id}/ports/{port}") $auth.query)
   let req_body = {"privacy": $privacy, "tunnelType": $tunnel_type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # PATCH /api/v1/Environments/{environmentId}/restore
@@ -645,10 +841,21 @@ export def "environments-restore update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($environment_id | is-empty) { error make --unspanned { msg: "path parameter 'environmentId' must be non-empty" } }
-  let full_url = (build-url $base ({environment_id: (encode-path-segment $environment_id)} | format pattern "/api/v1/Environments/{environment_id}/restore"))
+  let full_url = (build-url $base ({environment_id: (encode-path-segment $environment_id)} | format pattern "/api/v1/Environments/{environment_id}/restore") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req null $insecure $raw $allow_errors $full [200]
 }
 
 # PUT /api/v1/Environments/{environmentId}/secrets
@@ -672,12 +879,23 @@ export def "environments-secrets update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($environment_id | is-empty) { error make --unspanned { msg: "path parameter 'environmentId' must be non-empty" } }
-  let full_url = (build-url $base ({environment_id: (encode-path-segment $environment_id)} | format pattern "/api/v1/Environments/{environment_id}/secrets"))
+  let full_url = (build-url $base ({environment_id: (encode-path-segment $environment_id)} | format pattern "/api/v1/Environments/{environment_id}/secrets") $auth.query)
   let req_body = {"secrets": $secrets} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [204 307]
 }
 
 # POST /api/v1/Environments/{environmentId}/shutdown
@@ -697,10 +915,21 @@ export def "environments-shutdown create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($environment_id | is-empty) { error make --unspanned { msg: "path parameter 'environmentId' must be non-empty" } }
-  let full_url = (build-url $base ({environment_id: (encode-path-segment $environment_id)} | format pattern "/api/v1/Environments/{environment_id}/shutdown"))
+  let full_url = (build-url $base ({environment_id: (encode-path-segment $environment_id)} | format pattern "/api/v1/Environments/{environment_id}/shutdown") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # POST /api/v1/Environments/{environmentId}/start
@@ -722,10 +951,21 @@ export def "environments-start create" [
   let base = ($base_url | default $BASE_URL)
   if ($environment_id | is-empty) { error make --unspanned { msg: "path parameter 'environmentId' must be non-empty" } }
   let qp = [(serialize-qp "access" $access "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({environment_id: (encode-path-segment $environment_id)} | format pattern "/api/v1/Environments/{environment_id}/start") $qp)
+  let full_url = (build-url $base ({environment_id: (encode-path-segment $environment_id)} | format pattern "/api/v1/Environments/{environment_id}/start") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"access": $access} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"access": $access} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # GET /api/v1/Environments/{environmentId}/state
@@ -744,10 +984,21 @@ export def "environments-state get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($environment_id | is-empty) { error make --unspanned { msg: "path parameter 'environmentId' must be non-empty" } }
-  let full_url = (build-url $base ({environment_id: (encode-path-segment $environment_id)} | format pattern "/api/v1/Environments/{environment_id}/state"))
+  let full_url = (build-url $base ({environment_id: (encode-path-segment $environment_id)} | format pattern "/api/v1/Environments/{environment_id}/state") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /api/v1/Environments/{environmentId}/updates
@@ -767,10 +1018,21 @@ export def "environments-updates get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($environment_id | is-empty) { error make --unspanned { msg: "path parameter 'environmentId' must be non-empty" } }
-  let full_url = (build-url $base ({environment_id: (encode-path-segment $environment_id)} | format pattern "/api/v1/Environments/{environment_id}/updates"))
+  let full_url = (build-url $base ({environment_id: (encode-path-segment $environment_id)} | format pattern "/api/v1/Environments/{environment_id}/updates") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # POST /api/v1/GenevaActions/Billing/resend
@@ -791,12 +1053,23 @@ export def "geneva-actions-billing-resend create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/v1/GenevaActions/Billing/resend")
+  let full_url = (build-url $base "/api/v1/GenevaActions/Billing/resend" $auth.query)
   let req_body = {"endTime": $end_time, "startTime": $start_time} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # GET /api/v1/GenevaActions/Billing/{environmentId}
@@ -819,10 +1092,21 @@ export def "geneva-actions-billing get" [
   let base = ($base_url | default $BASE_URL)
   if ($environment_id | is-empty) { error make --unspanned { msg: "path parameter 'environmentId' must be non-empty" } }
   let qp = [(serialize-qp "startTime" $start_time "scalar") (serialize-qp "endTime" $end_time "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({environment_id: (encode-path-segment $environment_id)} | format pattern "/api/v1/GenevaActions/Billing/{environment_id}") $qp)
+  let full_url = (build-url $base ({environment_id: (encode-path-segment $environment_id)} | format pattern "/api/v1/GenevaActions/Billing/{environment_id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"startTime": $start_time, "endTime": $end_time} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"startTime": $start_time, "endTime": $end_time} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /api/v1/GenevaActions/Billing/{environmentId}/state-changes
@@ -842,10 +1126,21 @@ export def "geneva-actions-billing-state-changes get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($environment_id | is-empty) { error make --unspanned { msg: "path parameter 'environmentId' must be non-empty" } }
-  let full_url = (build-url $base ({environment_id: (encode-path-segment $environment_id)} | format pattern "/api/v1/GenevaActions/Billing/{environment_id}/state-changes"))
+  let full_url = (build-url $base ({environment_id: (encode-path-segment $environment_id)} | format pattern "/api/v1/GenevaActions/Billing/{environment_id}/state-changes") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # POST /api/v1/GenevaActions/Billing/{environmentId}/state-changes
@@ -869,12 +1164,23 @@ export def "geneva-actions-billing-state-changes create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($environment_id | is-empty) { error make --unspanned { msg: "path parameter 'environmentId' must be non-empty" } }
-  let full_url = (build-url $base ({environment_id: (encode-path-segment $environment_id)} | format pattern "/api/v1/GenevaActions/Billing/{environment_id}/state-changes"))
+  let full_url = (build-url $base ({environment_id: (encode-path-segment $environment_id)} | format pattern "/api/v1/GenevaActions/Billing/{environment_id}/state-changes") $auth.query)
   let req_body = {"newValue": $new_value, "oldValue": $old_value, "time": $time} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # POST /api/v1/GenevaActions/Configuration/{target}
@@ -898,12 +1204,23 @@ export def "geneva-actions-configuration create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($target | is-empty) { error make --unspanned { msg: "path parameter 'target' must be non-empty" } }
-  let full_url = (build-url $base ({target: (encode-path-segment $target)} | format pattern "/api/v1/GenevaActions/Configuration/{target}"))
+  let full_url = (build-url $base ({target: (encode-path-segment $target)} | format pattern "/api/v1/GenevaActions/Configuration/{target}") $auth.query)
   let req_body = {"comment": $comment, "key": $key, "value": $value} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # DELETE /api/v1/GenevaActions/Configuration/{target}/{key}
@@ -924,10 +1241,21 @@ export def "geneva-actions-configuration delete" [
   let base = ($base_url | default $BASE_URL)
   if ($target | is-empty) { error make --unspanned { msg: "path parameter 'target' must be non-empty" } }
   if ($key | is-empty) { error make --unspanned { msg: "path parameter 'key' must be non-empty" } }
-  let full_url = (build-url $base ({target: (encode-path-segment $target), key: (encode-path-segment $key)} | format pattern "/api/v1/GenevaActions/Configuration/{target}/{key}"))
+  let full_url = (build-url $base ({target: (encode-path-segment $target), key: (encode-path-segment $key)} | format pattern "/api/v1/GenevaActions/Configuration/{target}/{key}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # GET /api/v1/GenevaActions/Configuration/{target}/{key}
@@ -949,10 +1277,21 @@ export def "geneva-actions-configuration get" [
   let base = ($base_url | default $BASE_URL)
   if ($target | is-empty) { error make --unspanned { msg: "path parameter 'target' must be non-empty" } }
   if ($key | is-empty) { error make --unspanned { msg: "path parameter 'key' must be non-empty" } }
-  let full_url = (build-url $base ({target: (encode-path-segment $target), key: (encode-path-segment $key)} | format pattern "/api/v1/GenevaActions/Configuration/{target}/{key}"))
+  let full_url = (build-url $base ({target: (encode-path-segment $target), key: (encode-path-segment $key)} | format pattern "/api/v1/GenevaActions/Configuration/{target}/{key}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # DELETE /api/v1/GenevaActions/Environments/{environmentId}
@@ -973,10 +1312,21 @@ export def "geneva-actions-environments delete" [
   let base = ($base_url | default $BASE_URL)
   if ($environment_id | is-empty) { error make --unspanned { msg: "path parameter 'environmentId' must be non-empty" } }
   let qp = [(serialize-qp "deletionType" $deletion_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({environment_id: (encode-path-segment $environment_id)} | format pattern "/api/v1/GenevaActions/Environments/{environment_id}") $qp)
+  let full_url = (build-url $base ({environment_id: (encode-path-segment $environment_id)} | format pattern "/api/v1/GenevaActions/Environments/{environment_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"deletionType": $deletion_type} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"deletionType": $deletion_type} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # GET /api/v1/GenevaActions/Environments/{environmentId}
@@ -996,10 +1346,21 @@ export def "geneva-actions-environments get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($environment_id | is-empty) { error make --unspanned { msg: "path parameter 'environmentId' must be non-empty" } }
-  let full_url = (build-url $base ({environment_id: (encode-path-segment $environment_id)} | format pattern "/api/v1/GenevaActions/Environments/{environment_id}"))
+  let full_url = (build-url $base ({environment_id: (encode-path-segment $environment_id)} | format pattern "/api/v1/GenevaActions/Environments/{environment_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # PUT /api/v1/GenevaActions/Environments/{environmentId}/archive
@@ -1019,10 +1380,21 @@ export def "geneva-actions-environments-archive update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($environment_id | is-empty) { error make --unspanned { msg: "path parameter 'environmentId' must be non-empty" } }
-  let full_url = (build-url $base ({environment_id: (encode-path-segment $environment_id)} | format pattern "/api/v1/GenevaActions/Environments/{environment_id}/archive"))
+  let full_url = (build-url $base ({environment_id: (encode-path-segment $environment_id)} | format pattern "/api/v1/GenevaActions/Environments/{environment_id}/archive") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req null $insecure $raw $allow_errors $full [200]
 }
 
 # GET /api/v1/GenevaActions/Environments/{environmentId}/archived_storage_sas/{targetBlob}
@@ -1044,10 +1416,21 @@ export def "geneva-actions-environments-archived-storage-sas get" [
   let base = ($base_url | default $BASE_URL)
   if ($environment_id | is-empty) { error make --unspanned { msg: "path parameter 'environmentId' must be non-empty" } }
   if ($target_blob | is-empty) { error make --unspanned { msg: "path parameter 'targetBlob' must be non-empty" } }
-  let full_url = (build-url $base ({environment_id: (encode-path-segment $environment_id), target_blob: (encode-path-segment $target_blob)} | format pattern "/api/v1/GenevaActions/Environments/{environment_id}/archived_storage_sas/{target_blob}"))
+  let full_url = (build-url $base ({environment_id: (encode-path-segment $environment_id), target_blob: (encode-path-segment $target_blob)} | format pattern "/api/v1/GenevaActions/Environments/{environment_id}/archived_storage_sas/{target_blob}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # PUT /api/v1/GenevaActions/Environments/{environmentId}/shutdown
@@ -1067,10 +1450,21 @@ export def "geneva-actions-environments-shutdown update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($environment_id | is-empty) { error make --unspanned { msg: "path parameter 'environmentId' must be non-empty" } }
-  let full_url = (build-url $base ({environment_id: (encode-path-segment $environment_id)} | format pattern "/api/v1/GenevaActions/Environments/{environment_id}/shutdown"))
+  let full_url = (build-url $base ({environment_id: (encode-path-segment $environment_id)} | format pattern "/api/v1/GenevaActions/Environments/{environment_id}/shutdown") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req null $insecure $raw $allow_errors $full [200]
 }
 
 # POST /api/v1/GenevaActions/Environments/{environmentId}/upload/running/vm/logs
@@ -1090,10 +1484,21 @@ export def "geneva-actions-environments-upload-running-vm-logs create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($environment_id | is-empty) { error make --unspanned { msg: "path parameter 'environmentId' must be non-empty" } }
-  let full_url = (build-url $base ({environment_id: (encode-path-segment $environment_id)} | format pattern "/api/v1/GenevaActions/Environments/{environment_id}/upload/running/vm/logs"))
+  let full_url = (build-url $base ({environment_id: (encode-path-segment $environment_id)} | format pattern "/api/v1/GenevaActions/Environments/{environment_id}/upload/running/vm/logs") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # POST /api/v1/GenevaActions/Pools/change-resource-deletion-setting
@@ -1117,12 +1522,23 @@ export def "geneva-actions-pools-change-resource-deletion-setting create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/v1/GenevaActions/Pools/change-resource-deletion-setting")
+  let full_url = (build-url $base "/api/v1/GenevaActions/Pools/change-resource-deletion-setting" $auth.query)
   let req_body = {"comment": $comment, "enabled": $enabled, "poolCode": $pool_code, "poolType": $pool_type, "region": $region} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # POST /api/v1/GenevaActions/Pools/{poolCode}/rotate-pool
@@ -1141,10 +1557,21 @@ export def "geneva-actions-pools-rotate-pool create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($pool_code | is-empty) { error make --unspanned { msg: "path parameter 'poolCode' must be non-empty" } }
-  let full_url = (build-url $base ({pool_code: (encode-path-segment $pool_code)} | format pattern "/api/v1/GenevaActions/Pools/{pool_code}/rotate-pool"))
+  let full_url = (build-url $base ({pool_code: (encode-path-segment $pool_code)} | format pattern "/api/v1/GenevaActions/Pools/{pool_code}/rotate-pool") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # POST /api/v1/GenevaActions/Pools/{target}
@@ -1172,12 +1599,23 @@ export def "geneva-actions-pools create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($target | is-empty) { error make --unspanned { msg: "path parameter 'target' must be non-empty" } }
-  let full_url = (build-url $base ({target: (encode-path-segment $target)} | format pattern "/api/v1/GenevaActions/Pools/{target}"))
+  let full_url = (build-url $base ({target: (encode-path-segment $target)} | format pattern "/api/v1/GenevaActions/Pools/{target}") $auth.query)
   let req_body = {"comment": $comment, "maxTargetCount": $max_target_count, "minTargetCount": $min_target_count, "poolCode": $pool_code, "poolType": $pool_type, "region": $region, "targetCount": $target_count} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # POST /api/v1/GenevaActions/Prebuilds/pools/createorupdatesettings
@@ -1202,12 +1640,23 @@ export def "geneva-actions-prebuilds-pools-create-orupdatesettings create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/v1/GenevaActions/Prebuilds/pools/createorupdatesettings")
+  let full_url = (build-url $base "/api/v1/GenevaActions/Prebuilds/pools/createorupdatesettings" $auth.query)
   let req_body = {"branchName": $branch_name, "devContainerPath": $dev_container_path, "pools": $pools, "repoId": $repo_id, "storageType": $storage_type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # POST /api/v1/GenevaActions/Prebuilds/pools/delete
@@ -1232,12 +1681,23 @@ export def "geneva-actions-prebuilds-pools-delete create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/v1/GenevaActions/Prebuilds/pools/delete")
+  let full_url = (build-url $base "/api/v1/GenevaActions/Prebuilds/pools/delete" $auth.query)
   let req_body = {"branchName": $branch_name, "devContainerPath": $dev_container_path, "pools": $pools, "repoId": $repo_id, "storageType": $storage_type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # POST /api/v1/GenevaActions/Privacy/refresh-profile-telemetry-properties
@@ -1259,12 +1719,23 @@ export def "geneva-actions-privacy-refresh-profile-telemetry-properties create" 
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/v1/GenevaActions/Privacy/refresh-profile-telemetry-properties")
+  let full_url = (build-url $base "/api/v1/GenevaActions/Privacy/refresh-profile-telemetry-properties" $auth.query)
   let req_body = {"partner": $partner, "tenantId": $tenant_id, "userIds": $user_ids} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # POST /api/v1/GenevaActions/Resources/{resourceId}/under-investigation
@@ -1284,10 +1755,21 @@ export def "geneva-actions-resources-under-investigation create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_id | is-empty) { error make --unspanned { msg: "path parameter 'resourceId' must be non-empty" } }
-  let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/api/v1/GenevaActions/Resources/{resource_id}/under-investigation"))
+  let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/api/v1/GenevaActions/Resources/{resource_id}/under-investigation") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # DELETE /api/v1/GenevaActions/VnetPoolDefinitions
@@ -1312,12 +1794,23 @@ export def "geneva-actions-vnet-pool-definitions delete" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/v1/GenevaActions/VnetPoolDefinitions")
+  let full_url = (build-url $base "/api/v1/GenevaActions/VnetPoolDefinitions" $auth.query)
   let req_body = {"dimensions": $dimensions, "isEnabled": $is_enabled, "location": $location, "logicalSkus": $logical_skus, "subtype": $subtype, "targetCount": $target_count, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # POST /api/v1/GenevaActions/VnetPoolDefinitions
@@ -1342,12 +1835,23 @@ export def "geneva-actions-vnet-pool-definitions create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/v1/GenevaActions/VnetPoolDefinitions")
+  let full_url = (build-url $base "/api/v1/GenevaActions/VnetPoolDefinitions" $auth.query)
   let req_body = {"dimensions": $dimensions, "isEnabled": $is_enabled, "location": $location, "logicalSkus": $logical_skus, "subtype": $subtype, "targetCount": $target_count, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # POST /api/v1/HeartBeat
@@ -1372,12 +1876,23 @@ export def "heart-beat create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/v1/HeartBeat")
+  let full_url = (build-url $base "/api/v1/HeartBeat" $auth.query)
   let req_body = {"agentVersion": $agent_version, "collectedDataList": $collected_data_list, "environmentId": $environment_id, "resourceId": $resource_id, "timeStamp": $time_stamp} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # GET /api/v1/Locations
@@ -1395,10 +1910,21 @@ export def "locations list" [
 ]: nothing -> record<available: list<int>, current: int, hostnames: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/v1/Locations")
+  let full_url = (build-url $base "/api/v1/Locations" $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /api/v1/Locations/{location}
@@ -1420,10 +1946,21 @@ export def "locations get" [
   let base = ($base_url | default $BASE_URL)
   if ($location | is-empty) { error make --unspanned { msg: "path parameter 'location' must be non-empty" } }
   let qp = [(serialize-qp "planId" $plan_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({location: (encode-path-segment $location)} | format pattern "/api/v1/Locations/{location}") $qp)
+  let full_url = (build-url $base ({location: (encode-path-segment $location)} | format pattern "/api/v1/Locations/{location}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"planId": $plan_id} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"planId": $plan_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # POST /api/v1/Prebuilds/pools/{poolId}/instances
@@ -1448,12 +1985,23 @@ export def "prebuilds-pools-instances create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($pool_id | is-empty) { error make --unspanned { msg: "path parameter 'poolId' must be non-empty" } }
-  let full_url = (build-url $base ({pool_id: (encode-path-segment $pool_id)} | format pattern "/api/v1/Prebuilds/pools/{pool_id}/instances"))
+  let full_url = (build-url $base ({pool_id: (encode-path-segment $pool_id)} | format pattern "/api/v1/Prebuilds/pools/{pool_id}/instances") $auth.query)
   let req_body = {"environmentOptions": $environment_options, "secrets": $secrets} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # PUT /api/v1/Prebuilds/pools/{poolId}/instances
@@ -1478,12 +2026,23 @@ export def "prebuilds-pools-instances update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($pool_id | is-empty) { error make --unspanned { msg: "path parameter 'poolId' must be non-empty" } }
-  let full_url = (build-url $base ({pool_id: (encode-path-segment $pool_id)} | format pattern "/api/v1/Prebuilds/pools/{pool_id}/instances"))
+  let full_url = (build-url $base ({pool_id: (encode-path-segment $pool_id)} | format pattern "/api/v1/Prebuilds/pools/{pool_id}/instances") $auth.query)
   let req_body = {"environmentOptions": $environment_options, "secrets": $secrets} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # GET /api/v1/Prebuilds/template/{environmentId}
@@ -1505,10 +2064,21 @@ export def "prebuilds-template get-route" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($environment_id | is-empty) { error make --unspanned { msg: "path parameter 'environmentId' must be non-empty" } }
-  let full_url = (build-url $base ({environment_id: (encode-path-segment $environment_id)} | format pattern "/api/v1/Prebuilds/template/{environment_id}"))
+  let full_url = (build-url $base ({environment_id: (encode-path-segment $environment_id)} | format pattern "/api/v1/Prebuilds/template/{environment_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /api/v1/Prebuilds/templates/repo/{repoId}/branch/{branchName}/hash/{prebuildHash}/location/{location}/skus
@@ -1538,10 +2108,21 @@ export def "prebuilds-templates-repo-branch-hash-location-skus get-readiness-rou
   if ($prebuild_hash | is-empty) { error make --unspanned { msg: "path parameter 'prebuildHash' must be non-empty" } }
   if ($location | is-empty) { error make --unspanned { msg: "path parameter 'location' must be non-empty" } }
   let qp = [(serialize-qp "storageType" $storage_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({repo_id: (encode-path-segment $repo_id), branch_name: (encode-path-segment $branch_name), prebuild_hash: (encode-path-segment $prebuild_hash), location: (encode-path-segment $location)} | format pattern "/api/v1/Prebuilds/templates/repo/{repo_id}/branch/{branch_name}/hash/{prebuild_hash}/location/{location}/skus") $qp)
+  let full_url = (build-url $base ({repo_id: (encode-path-segment $repo_id), branch_name: (encode-path-segment $branch_name), prebuild_hash: (encode-path-segment $prebuild_hash), location: (encode-path-segment $location)} | format pattern "/api/v1/Prebuilds/templates/repo/{repo_id}/branch/{branch_name}/hash/{prebuild_hash}/location/{location}/skus") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"storageType": $storage_type} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"storageType": $storage_type} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /api/v1/Sas
@@ -1559,10 +2140,21 @@ export def "sas get" [
 ]: nothing -> table<filters: list<record>, id: string, lastModified: string, notes: string, scope: int, secretName: string, type: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/v1/Sas")
+  let full_url = (build-url $base "/api/v1/Sas" $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /api/v1/Secrets
@@ -1582,10 +2174,21 @@ export def "secrets get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "planId" $plan_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/v1/Secrets" $qp)
+  let full_url = (build-url $base "/api/v1/Secrets" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"planId": $plan_id} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"planId": $plan_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # POST /api/v1/Secrets
@@ -1614,12 +2217,23 @@ export def "secrets create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "planId" $plan_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/v1/Secrets" $qp)
+  let full_url = (build-url $base "/api/v1/Secrets" $qp $auth.query)
   let req_body = {"filters": $filters, "notes": $notes, "scope": $scope, "secretName": $secret_name, "type": $type, "value": $value} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"planId": $plan_id} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"planId": $plan_id} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # DELETE /api/v1/Secrets/{secretId}
@@ -1641,10 +2255,21 @@ export def "secrets delete" [
   let base = ($base_url | default $BASE_URL)
   if ($secret_id | is-empty) { error make --unspanned { msg: "path parameter 'secretId' must be non-empty" } }
   let qp = [(serialize-qp "planId" $plan_id "scalar") (serialize-qp "scope" $scope "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({secret_id: (encode-path-segment $secret_id)} | format pattern "/api/v1/Secrets/{secret_id}") $qp)
+  let full_url = (build-url $base ({secret_id: (encode-path-segment $secret_id)} | format pattern "/api/v1/Secrets/{secret_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"planId": $plan_id, "scope": $scope} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"planId": $plan_id, "scope": $scope} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # PUT /api/v1/Secrets/{secretId}
@@ -1674,12 +2299,23 @@ export def "secrets update" [
   let base = ($base_url | default $BASE_URL)
   if ($secret_id | is-empty) { error make --unspanned { msg: "path parameter 'secretId' must be non-empty" } }
   let qp = [(serialize-qp "planId" $plan_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({secret_id: (encode-path-segment $secret_id)} | format pattern "/api/v1/Secrets/{secret_id}") $qp)
+  let full_url = (build-url $base ({secret_id: (encode-path-segment $secret_id)} | format pattern "/api/v1/Secrets/{secret_id}") $qp $auth.query)
   let req_body = {"filters": $filters, "notes": $notes, "scope": $scope, "secretName": $secret_name, "value": $value} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"planId": $plan_id} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"planId": $plan_id} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # DELETE /api/v1/Tenant/{tenantId}
@@ -1698,10 +2334,21 @@ export def "tenant delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantId' must be non-empty" } }
-  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id)} | format pattern "/api/v1/Tenant/{tenant_id}"))
+  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id)} | format pattern "/api/v1/Tenant/{tenant_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # GET /api/v1/Tenant/{tenantId}
@@ -1721,10 +2368,21 @@ export def "tenant get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantId' must be non-empty" } }
-  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id)} | format pattern "/api/v1/Tenant/{tenant_id}"))
+  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id)} | format pattern "/api/v1/Tenant/{tenant_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # PUT /api/v1/Tenant/{tenantId}
@@ -1743,10 +2401,21 @@ export def "tenant update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantId' must be non-empty" } }
-  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id)} | format pattern "/api/v1/Tenant/{tenant_id}"))
+  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id)} | format pattern "/api/v1/Tenant/{tenant_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req null $insecure $raw $allow_errors $full [200]
 }
 
 # POST /api/v1/Tokens/plans/{planName}/deleteAllCodespaces
@@ -1768,12 +2437,23 @@ export def "tokens-plans-delete-all-codespaces create" [
   let base = ($base_url | default $BASE_URL)
   if ($plan_name | is-empty) { error make --unspanned { msg: "path parameter 'planName' must be non-empty" } }
   let qp = [(serialize-qp "expiration" $expiration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({plan_name: (encode-path-segment $plan_name)} | format pattern "/api/v1/Tokens/plans/{plan_name}/deleteAllCodespaces") $qp)
+  let full_url = (build-url $base ({plan_name: (encode-path-segment $plan_name)} | format pattern "/api/v1/Tokens/plans/{plan_name}/deleteAllCodespaces") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"x-subscription-id": $x_subscription_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expiration": $expiration} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"expiration": $expiration} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # POST /api/v1/Tokens/plans/{planName}/readAllCodespaces
@@ -1795,12 +2475,23 @@ export def "tokens-plans-read-all-codespaces create" [
   let base = ($base_url | default $BASE_URL)
   if ($plan_name | is-empty) { error make --unspanned { msg: "path parameter 'planName' must be non-empty" } }
   let qp = [(serialize-qp "expiration" $expiration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({plan_name: (encode-path-segment $plan_name)} | format pattern "/api/v1/Tokens/plans/{plan_name}/readAllCodespaces") $qp)
+  let full_url = (build-url $base ({plan_name: (encode-path-segment $plan_name)} | format pattern "/api/v1/Tokens/plans/{plan_name}/readAllCodespaces") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"x-subscription-id": $x_subscription_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expiration": $expiration} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"expiration": $expiration} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # POST /api/v1/Tokens/plans/{planName}/writeCodespaces
@@ -1822,12 +2513,23 @@ export def "tokens-plans-write-codespaces create" [
   let base = ($base_url | default $BASE_URL)
   if ($plan_name | is-empty) { error make --unspanned { msg: "path parameter 'planName' must be non-empty" } }
   let qp = [(serialize-qp "expiration" $expiration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({plan_name: (encode-path-segment $plan_name)} | format pattern "/api/v1/Tokens/plans/{plan_name}/writeCodespaces") $qp)
+  let full_url = (build-url $base ({plan_name: (encode-path-segment $plan_name)} | format pattern "/api/v1/Tokens/plans/{plan_name}/writeCodespaces") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"x-subscription-id": $x_subscription_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expiration": $expiration} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"expiration": $expiration} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # POST /api/v1/Tokens/plans/{planName}/writeDelegates
@@ -1855,14 +2557,25 @@ export def "tokens-plans-write-delegates create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($plan_name | is-empty) { error make --unspanned { msg: "path parameter 'planName' must be non-empty" } }
-  let full_url = (build-url $base ({plan_name: (encode-path-segment $plan_name)} | format pattern "/api/v1/Tokens/plans/{plan_name}/writeDelegates"))
+  let full_url = (build-url $base ({plan_name: (encode-path-segment $plan_name)} | format pattern "/api/v1/Tokens/plans/{plan_name}/writeDelegates") $auth.query)
   let req_body = {"environmentIds": $environment_ids, "expiration": $expiration, "identity": $identity, "portNumbers": $port_numbers, "scope": $scope} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"x-subscription-id": $x_subscription_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # PUT /api/v1/Tokens/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/{providerNamespace}/plans/{resourceName}
@@ -1900,14 +2613,25 @@ export def "tokens-subscriptions-resource-groups-providers-plans update" [
   if ($resource_group | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroup' must be non-empty" } }
   if ($provider_namespace | is-empty) { error make --unspanned { msg: "path parameter 'providerNamespace' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
-  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), provider_namespace: (encode-path-segment $provider_namespace), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/Tokens/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/{provider_namespace}/plans/{resource_name}"))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), provider_namespace: (encode-path-segment $provider_namespace), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/Tokens/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/{provider_namespace}/plans/{resource_name}") $auth.query)
   let req_body = {"id": $id, "identity": $identity, "location": $location, "name": $name, "properties": $properties, "provisioningState": $provisioning_state, "tags": $tags, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"headers": $headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # POST /api/v1/Tokens/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/{providerNamespace}/plans/{resourceName}/deleteAllCodespaces
@@ -1934,10 +2658,21 @@ export def "tokens-subscriptions-resource-groups-providers-plans-delete-all-code
   if ($provider_namespace | is-empty) { error make --unspanned { msg: "path parameter 'providerNamespace' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
   let qp = [(serialize-qp "expiration" $expiration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), provider_namespace: (encode-path-segment $provider_namespace), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/Tokens/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/{provider_namespace}/plans/{resource_name}/deleteAllCodespaces") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), provider_namespace: (encode-path-segment $provider_namespace), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/Tokens/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/{provider_namespace}/plans/{resource_name}/deleteAllCodespaces") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expiration": $expiration} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"expiration": $expiration} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # POST /api/v1/Tokens/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/{providerNamespace}/plans/{resourceName}/deleteAllEnvironments
@@ -1964,10 +2699,21 @@ export def "tokens-subscriptions-resource-groups-providers-plans-delete-all-envi
   if ($provider_namespace | is-empty) { error make --unspanned { msg: "path parameter 'providerNamespace' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
   let qp = [(serialize-qp "expiration" $expiration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), provider_namespace: (encode-path-segment $provider_namespace), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/Tokens/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/{provider_namespace}/plans/{resource_name}/deleteAllEnvironments") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), provider_namespace: (encode-path-segment $provider_namespace), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/Tokens/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/{provider_namespace}/plans/{resource_name}/deleteAllEnvironments") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expiration": $expiration} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"expiration": $expiration} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # POST /api/v1/Tokens/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/{providerNamespace}/plans/{resourceName}/readAllCodespaces
@@ -1994,10 +2740,21 @@ export def "tokens-subscriptions-resource-groups-providers-plans-read-all-codesp
   if ($provider_namespace | is-empty) { error make --unspanned { msg: "path parameter 'providerNamespace' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
   let qp = [(serialize-qp "expiration" $expiration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), provider_namespace: (encode-path-segment $provider_namespace), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/Tokens/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/{provider_namespace}/plans/{resource_name}/readAllCodespaces") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), provider_namespace: (encode-path-segment $provider_namespace), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/Tokens/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/{provider_namespace}/plans/{resource_name}/readAllCodespaces") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expiration": $expiration} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"expiration": $expiration} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # POST /api/v1/Tokens/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/{providerNamespace}/plans/{resourceName}/readAllEnvironments
@@ -2024,10 +2781,21 @@ export def "tokens-subscriptions-resource-groups-providers-plans-read-all-enviro
   if ($provider_namespace | is-empty) { error make --unspanned { msg: "path parameter 'providerNamespace' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
   let qp = [(serialize-qp "expiration" $expiration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), provider_namespace: (encode-path-segment $provider_namespace), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/Tokens/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/{provider_namespace}/plans/{resource_name}/readAllEnvironments") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), provider_namespace: (encode-path-segment $provider_namespace), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/Tokens/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/{provider_namespace}/plans/{resource_name}/readAllEnvironments") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expiration": $expiration} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"expiration": $expiration} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # POST /api/v1/Tokens/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/{providerNamespace}/plans/{resourceName}/writeCodespaces
@@ -2054,10 +2822,21 @@ export def "tokens-subscriptions-resource-groups-providers-plans-write-codespace
   if ($provider_namespace | is-empty) { error make --unspanned { msg: "path parameter 'providerNamespace' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
   let qp = [(serialize-qp "expiration" $expiration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), provider_namespace: (encode-path-segment $provider_namespace), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/Tokens/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/{provider_namespace}/plans/{resource_name}/writeCodespaces") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), provider_namespace: (encode-path-segment $provider_namespace), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/Tokens/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/{provider_namespace}/plans/{resource_name}/writeCodespaces") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expiration": $expiration} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"expiration": $expiration} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # POST /api/v1/Tokens/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/{providerNamespace}/plans/{resourceName}/writeDelegates
@@ -2090,12 +2869,23 @@ export def "tokens-subscriptions-resource-groups-providers-plans-write-delegates
   if ($resource_group | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroup' must be non-empty" } }
   if ($provider_namespace | is-empty) { error make --unspanned { msg: "path parameter 'providerNamespace' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
-  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), provider_namespace: (encode-path-segment $provider_namespace), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/Tokens/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/{provider_namespace}/plans/{resource_name}/writeDelegates"))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), provider_namespace: (encode-path-segment $provider_namespace), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/Tokens/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/{provider_namespace}/plans/{resource_name}/writeDelegates") $auth.query)
   let req_body = {"environmentIds": $environment_ids, "expiration": $expiration, "identity": $identity, "portNumbers": $port_numbers, "scope": $scope} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # POST /api/v1/Tokens/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/{providerNamespace}/plans/{resourceName}/writeEnvironments
@@ -2122,10 +2912,21 @@ export def "tokens-subscriptions-resource-groups-providers-plans-write-environme
   if ($provider_namespace | is-empty) { error make --unspanned { msg: "path parameter 'providerNamespace' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
   let qp = [(serialize-qp "expiration" $expiration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), provider_namespace: (encode-path-segment $provider_namespace), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/Tokens/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/{provider_namespace}/plans/{resource_name}/writeEnvironments") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), provider_namespace: (encode-path-segment $provider_namespace), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/Tokens/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/{provider_namespace}/plans/{resource_name}/writeEnvironments") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expiration": $expiration} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"expiration": $expiration} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # GET /api/v1/Tunnel/{environmentId}/portInfo
@@ -2147,10 +2948,21 @@ export def "tunnel-port-info get" [
   let base = ($base_url | default $BASE_URL)
   if ($environment_id | is-empty) { error make --unspanned { msg: "path parameter 'environmentId' must be non-empty" } }
   let qp = [(serialize-qp "portNumber" $port_number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({environment_id: (encode-path-segment $environment_id)} | format pattern "/api/v1/Tunnel/{environment_id}/portInfo") $qp)
+  let full_url = (build-url $base ({environment_id: (encode-path-segment $environment_id)} | format pattern "/api/v1/Tunnel/{environment_id}/portInfo") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"portNumber": $port_number} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"portNumber": $port_number} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # DELETE /api/v1/UserSubscriptions
@@ -2169,10 +2981,21 @@ export def "user-subscriptions delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "email" $email "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/v1/UserSubscriptions" $qp)
+  let full_url = (build-url $base "/api/v1/UserSubscriptions" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"email": $email} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"email": $email} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # POST /api/v1/UserSubscriptions
@@ -2191,10 +3014,21 @@ export def "user-subscriptions create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "email" $email "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/v1/UserSubscriptions" $qp)
+  let full_url = (build-url $base "/api/v1/UserSubscriptions" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"email": $email} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"email": $email} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # GET /api/v1/pools/default
@@ -2214,10 +3048,21 @@ export def "pools-default get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "skuName" $sku_name "multi")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/v1/pools/default" $qp)
+  let full_url = (build-url $base "/api/v1/pools/default" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"skuName": $sku_name} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"skuName": $sku_name} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # PUT /api/v1/subscriptions/{subscriptionId}/providers/GitHub.Network/{resourceType}/SubscriptionLifeCycleNotification
@@ -2244,12 +3089,23 @@ export def "subscriptions-providers-git-hub-network-subscription-life-cycle-noti
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_type | is-empty) { error make --unspanned { msg: "path parameter 'resourceType' must be non-empty" } }
-  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_type: (encode-path-segment $resource_type)} | format pattern "/api/v1/subscriptions/{subscription_id}/providers/GitHub.Network/{resource_type}/SubscriptionLifeCycleNotification"))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_type: (encode-path-segment $resource_type)} | format pattern "/api/v1/subscriptions/{subscription_id}/providers/GitHub.Network/{resource_type}/SubscriptionLifeCycleNotification") $auth.query)
   let req_body = {"properties": $properties, "registrationDate": $registration_date, "state": $state} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # POST /api/v1/subscriptions/{subscriptionId}/providers/GitHub.Network/{resourceType}/resourceReadBegin
@@ -2274,12 +3130,23 @@ export def "subscriptions-providers-git-hub-network-resource-read-begin create" 
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_type | is-empty) { error make --unspanned { msg: "path parameter 'resourceType' must be non-empty" } }
-  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_type: (encode-path-segment $resource_type)} | format pattern "/api/v1/subscriptions/{subscription_id}/providers/GitHub.Network/{resource_type}/resourceReadBegin"))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_type: (encode-path-segment $resource_type)} | format pattern "/api/v1/subscriptions/{subscription_id}/providers/GitHub.Network/{resource_type}/resourceReadBegin") $auth.query)
   let req_body = {"value": $value} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # PUT /api/v1/subscriptions/{subscriptionId}/providers/Microsoft.Codespaces/plans/SubscriptionLifeCycleNotification
@@ -2304,12 +3171,23 @@ export def "subscriptions-providers-microsoft-codespaces-plans-subscription-life
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
-  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/api/v1/subscriptions/{subscription_id}/providers/Microsoft.Codespaces/plans/SubscriptionLifeCycleNotification"))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/api/v1/subscriptions/{subscription_id}/providers/Microsoft.Codespaces/plans/SubscriptionLifeCycleNotification") $auth.query)
   let req_body = {"properties": $properties, "registrationDate": $registration_date, "state": $state} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # POST /api/v1/subscriptions/{subscriptionId}/providers/Microsoft.Codespaces/plans/resourceReadBegin
@@ -2332,12 +3210,23 @@ export def "subscriptions-providers-microsoft-codespaces-plans-resource-read-beg
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
-  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/api/v1/subscriptions/{subscription_id}/providers/Microsoft.Codespaces/plans/resourceReadBegin"))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/api/v1/subscriptions/{subscription_id}/providers/Microsoft.Codespaces/plans/resourceReadBegin") $auth.query)
   let req_body = {"value": $value} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # PUT /api/v1/subscriptions/{subscriptionId}/providers/Microsoft.VSOnline/plans/SubscriptionLifeCycleNotification
@@ -2362,12 +3251,23 @@ export def "subscriptions-providers-microsoft-vs-online-plans-subscription-life-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
-  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/api/v1/subscriptions/{subscription_id}/providers/Microsoft.VSOnline/plans/SubscriptionLifeCycleNotification"))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/api/v1/subscriptions/{subscription_id}/providers/Microsoft.VSOnline/plans/SubscriptionLifeCycleNotification") $auth.query)
   let req_body = {"properties": $properties, "registrationDate": $registration_date, "state": $state} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # POST /api/v1/subscriptions/{subscriptionId}/providers/Microsoft.VSOnline/plans/resourceReadBegin
@@ -2390,12 +3290,23 @@ export def "subscriptions-providers-microsoft-vs-online-plans-resource-read-begi
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
-  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/api/v1/subscriptions/{subscription_id}/providers/Microsoft.VSOnline/plans/resourceReadBegin"))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/api/v1/subscriptions/{subscription_id}/providers/Microsoft.VSOnline/plans/resourceReadBegin") $auth.query)
   let req_body = {"value": $value} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # POST /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/GitHub.Network/{resourceType}/resourceReadBegin
@@ -2422,12 +3333,23 @@ export def "subscriptions-resource-groups-providers-git-hub-network-resource-rea
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroup' must be non-empty" } }
   if ($resource_type | is-empty) { error make --unspanned { msg: "path parameter 'resourceType' must be non-empty" } }
-  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), resource_type: (encode-path-segment $resource_type)} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/GitHub.Network/{resource_type}/resourceReadBegin"))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), resource_type: (encode-path-segment $resource_type)} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/GitHub.Network/{resource_type}/resourceReadBegin") $auth.query)
   let req_body = {"value": $value} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # DELETE /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/GitHub.Network/{resourceType}/{resourceName}
@@ -2462,12 +3384,23 @@ export def "subscriptions-resource-groups-providers-git-hub-network delete" [
   if ($resource_group | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroup' must be non-empty" } }
   if ($resource_type | is-empty) { error make --unspanned { msg: "path parameter 'resourceType' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
-  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), resource_type: (encode-path-segment $resource_type), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/GitHub.Network/{resource_type}/{resource_name}"))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), resource_type: (encode-path-segment $resource_type), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/GitHub.Network/{resource_type}/{resource_name}") $auth.query)
   let req_body = {"id": $id, "location": $location, "name": $name, "properties": $properties, "provisioningState": $provisioning_state, "tags": $tags, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # PATCH /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/GitHub.Network/{resourceType}/{resourceName}
@@ -2502,12 +3435,23 @@ export def "subscriptions-resource-groups-providers-git-hub-network update-by-su
   if ($resource_group | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroup' must be non-empty" } }
   if ($resource_type | is-empty) { error make --unspanned { msg: "path parameter 'resourceType' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
-  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), resource_type: (encode-path-segment $resource_type), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/GitHub.Network/{resource_type}/{resource_name}"))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), resource_type: (encode-path-segment $resource_type), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/GitHub.Network/{resource_type}/{resource_name}") $auth.query)
   let req_body = {"id": $id, "location": $location, "name": $name, "properties": $properties, "provisioningState": $provisioning_state, "tags": $tags, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # PUT /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/GitHub.Network/{resourceType}/{resourceName}
@@ -2542,12 +3486,23 @@ export def "subscriptions-resource-groups-providers-git-hub-network update-by-su
   if ($resource_group | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroup' must be non-empty" } }
   if ($resource_type | is-empty) { error make --unspanned { msg: "path parameter 'resourceType' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
-  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), resource_type: (encode-path-segment $resource_type), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/GitHub.Network/{resource_type}/{resource_name}"))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), resource_type: (encode-path-segment $resource_type), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/GitHub.Network/{resource_type}/{resource_name}") $auth.query)
   let req_body = {"id": $id, "location": $location, "name": $name, "properties": $properties, "provisioningState": $provisioning_state, "tags": $tags, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # POST /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/GitHub.Network/{resourceType}/{resourceName}/resourceCreationCompleted
@@ -2572,10 +3527,21 @@ export def "subscriptions-resource-groups-providers-git-hub-network-resource-cre
   if ($resource_group | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroup' must be non-empty" } }
   if ($resource_type | is-empty) { error make --unspanned { msg: "path parameter 'resourceType' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
-  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), resource_type: (encode-path-segment $resource_type), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/GitHub.Network/{resource_type}/{resource_name}/resourceCreationCompleted"))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), resource_type: (encode-path-segment $resource_type), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/GitHub.Network/{resource_type}/{resource_name}/resourceCreationCompleted") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # POST /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/GitHub.Network/{resourceType}/{resourceName}/resourceCreationValidate
@@ -2610,12 +3576,23 @@ export def "subscriptions-resource-groups-providers-git-hub-network-resource-cre
   if ($resource_group | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroup' must be non-empty" } }
   if ($resource_type | is-empty) { error make --unspanned { msg: "path parameter 'resourceType' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
-  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), resource_type: (encode-path-segment $resource_type), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/GitHub.Network/{resource_type}/{resource_name}/resourceCreationValidate"))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), resource_type: (encode-path-segment $resource_type), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/GitHub.Network/{resource_type}/{resource_name}/resourceCreationValidate") $auth.query)
   let req_body = {"id": $id, "location": $location, "name": $name, "properties": $properties, "provisioningState": $provisioning_state, "tags": $tags, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # POST /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/GitHub.Network/{resourceType}/{resourceName}/resourceDeletionCompleted
@@ -2640,10 +3617,21 @@ export def "subscriptions-resource-groups-providers-git-hub-network-resource-del
   if ($resource_group | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroup' must be non-empty" } }
   if ($resource_type | is-empty) { error make --unspanned { msg: "path parameter 'resourceType' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
-  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), resource_type: (encode-path-segment $resource_type), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/GitHub.Network/{resource_type}/{resource_name}/resourceDeletionCompleted"))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), resource_type: (encode-path-segment $resource_type), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/GitHub.Network/{resource_type}/{resource_name}/resourceDeletionCompleted") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # POST /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/GitHub.Network/{resourceType}/{resourceName}/resourceDeletionValidate
@@ -2678,12 +3666,23 @@ export def "subscriptions-resource-groups-providers-git-hub-network-resource-del
   if ($resource_group | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroup' must be non-empty" } }
   if ($resource_type | is-empty) { error make --unspanned { msg: "path parameter 'resourceType' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
-  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), resource_type: (encode-path-segment $resource_type), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/GitHub.Network/{resource_type}/{resource_name}/resourceDeletionValidate"))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), resource_type: (encode-path-segment $resource_type), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/GitHub.Network/{resource_type}/{resource_name}/resourceDeletionValidate") $auth.query)
   let req_body = {"id": $id, "location": $location, "name": $name, "properties": $properties, "provisioningState": $provisioning_state, "tags": $tags, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # POST /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/GitHub.Network/{resourceType}/{resourceName}/resourcePatchCompleted
@@ -2708,10 +3707,21 @@ export def "subscriptions-resource-groups-providers-git-hub-network-resource-pat
   if ($resource_group | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroup' must be non-empty" } }
   if ($resource_type | is-empty) { error make --unspanned { msg: "path parameter 'resourceType' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
-  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), resource_type: (encode-path-segment $resource_type), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/GitHub.Network/{resource_type}/{resource_name}/resourcePatchCompleted"))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), resource_type: (encode-path-segment $resource_type), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/GitHub.Network/{resource_type}/{resource_name}/resourcePatchCompleted") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # POST /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/GitHub.Network/{resourceType}/{resourceName}/resourcePatchValidate
@@ -2746,12 +3756,23 @@ export def "subscriptions-resource-groups-providers-git-hub-network-resource-pat
   if ($resource_group | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroup' must be non-empty" } }
   if ($resource_type | is-empty) { error make --unspanned { msg: "path parameter 'resourceType' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
-  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), resource_type: (encode-path-segment $resource_type), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/GitHub.Network/{resource_type}/{resource_name}/resourcePatchValidate"))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), resource_type: (encode-path-segment $resource_type), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/GitHub.Network/{resource_type}/{resource_name}/resourcePatchValidate") $auth.query)
   let req_body = {"id": $id, "location": $location, "name": $name, "properties": $properties, "provisioningState": $provisioning_state, "tags": $tags, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # POST /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/GitHub.Network/{resourceType}/{resourceName}/resourceReadBegin
@@ -2786,12 +3807,23 @@ export def "subscriptions-resource-groups-providers-git-hub-network-resource-rea
   if ($resource_group | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroup' must be non-empty" } }
   if ($resource_type | is-empty) { error make --unspanned { msg: "path parameter 'resourceType' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
-  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), resource_type: (encode-path-segment $resource_type), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/GitHub.Network/{resource_type}/{resource_name}/resourceReadBegin"))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), resource_type: (encode-path-segment $resource_type), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/GitHub.Network/{resource_type}/{resource_name}/resourceReadBegin") $auth.query)
   let req_body = {"id": $id, "location": $location, "name": $name, "properties": $properties, "provisioningState": $provisioning_state, "tags": $tags, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # POST /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.Codespaces/plans/resourceReadBegin
@@ -2816,12 +3848,23 @@ export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-r
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroup' must be non-empty" } }
-  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group)} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.Codespaces/plans/resourceReadBegin"))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group)} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.Codespaces/plans/resourceReadBegin") $auth.query)
   let req_body = {"value": $value} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # PUT /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.Codespaces/plans/{resourceName}
@@ -2857,14 +3900,25 @@ export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans u
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroup' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
-  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.Codespaces/plans/{resource_name}"))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.Codespaces/plans/{resource_name}") $auth.query)
   let req_body = {"id": $id, "identity": $identity, "location": $location, "name": $name, "properties": $properties, "provisioningState": $provisioning_state, "tags": $tags, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"headers": $headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # POST /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.Codespaces/plans/{resourceName}/deleteAllCodespaces
@@ -2889,10 +3943,21 @@ export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-d
   if ($resource_group | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroup' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
   let qp = [(serialize-qp "expiration" $expiration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.Codespaces/plans/{resource_name}/deleteAllCodespaces") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.Codespaces/plans/{resource_name}/deleteAllCodespaces") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expiration": $expiration} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"expiration": $expiration} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # POST /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.Codespaces/plans/{resourceName}/deleteAllEnvironments
@@ -2917,10 +3982,21 @@ export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-d
   if ($resource_group | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroup' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
   let qp = [(serialize-qp "expiration" $expiration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.Codespaces/plans/{resource_name}/deleteAllEnvironments") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.Codespaces/plans/{resource_name}/deleteAllEnvironments") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expiration": $expiration} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"expiration": $expiration} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # POST /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.Codespaces/plans/{resourceName}/readAllCodespaces
@@ -2945,10 +4021,21 @@ export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-r
   if ($resource_group | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroup' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
   let qp = [(serialize-qp "expiration" $expiration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.Codespaces/plans/{resource_name}/readAllCodespaces") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.Codespaces/plans/{resource_name}/readAllCodespaces") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expiration": $expiration} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"expiration": $expiration} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # POST /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.Codespaces/plans/{resourceName}/readAllEnvironments
@@ -2973,10 +4060,21 @@ export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-r
   if ($resource_group | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroup' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
   let qp = [(serialize-qp "expiration" $expiration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.Codespaces/plans/{resource_name}/readAllEnvironments") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.Codespaces/plans/{resource_name}/readAllEnvironments") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expiration": $expiration} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"expiration": $expiration} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # POST /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.Codespaces/plans/{resourceName}/readDelegates
@@ -2999,10 +4097,21 @@ export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-r
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroup' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
-  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.Codespaces/plans/{resource_name}/readDelegates"))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.Codespaces/plans/{resource_name}/readDelegates") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # POST /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.Codespaces/plans/{resourceName}/resourceCreationCompleted
@@ -3025,10 +4134,21 @@ export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-r
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroup' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
-  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.Codespaces/plans/{resource_name}/resourceCreationCompleted"))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.Codespaces/plans/{resource_name}/resourceCreationCompleted") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # POST /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.Codespaces/plans/{resourceName}/resourceCreationValidate
@@ -3063,12 +4183,23 @@ export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-r
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroup' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
-  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.Codespaces/plans/{resource_name}/resourceCreationValidate"))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.Codespaces/plans/{resource_name}/resourceCreationValidate") $auth.query)
   let req_body = {"id": $id, "identity": $identity, "location": $location, "name": $name, "properties": $properties, "provisioningState": $provisioning_state, "tags": $tags, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # POST /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.Codespaces/plans/{resourceName}/resourceDeletionValidate
@@ -3091,10 +4222,21 @@ export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-r
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroup' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
-  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.Codespaces/plans/{resource_name}/resourceDeletionValidate"))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.Codespaces/plans/{resource_name}/resourceDeletionValidate") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # POST /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.Codespaces/plans/{resourceName}/resourcePatchCompleted
@@ -3124,14 +4266,25 @@ export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-r
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroup' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
-  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.Codespaces/plans/{resource_name}/resourcePatchCompleted"))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.Codespaces/plans/{resource_name}/resourcePatchCompleted") $auth.query)
   let req_body = {"identity": $identity, "properties": $properties} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"headers": $headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # POST /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.Codespaces/plans/{resourceName}/resourcePatchValidate
@@ -3160,12 +4313,23 @@ export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-r
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroup' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
-  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.Codespaces/plans/{resource_name}/resourcePatchValidate"))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.Codespaces/plans/{resource_name}/resourcePatchValidate") $auth.query)
   let req_body = {"identity": $identity, "properties": $properties} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # POST /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.Codespaces/plans/{resourceName}/resourceReadBegin
@@ -3200,12 +4364,23 @@ export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-r
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroup' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
-  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.Codespaces/plans/{resource_name}/resourceReadBegin"))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.Codespaces/plans/{resource_name}/resourceReadBegin") $auth.query)
   let req_body = {"id": $id, "identity": $identity, "location": $location, "name": $name, "properties": $properties, "provisioningState": $provisioning_state, "tags": $tags, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # POST /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.Codespaces/plans/{resourceName}/writeCodespaces
@@ -3230,10 +4405,21 @@ export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-w
   if ($resource_group | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroup' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
   let qp = [(serialize-qp "expiration" $expiration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.Codespaces/plans/{resource_name}/writeCodespaces") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.Codespaces/plans/{resource_name}/writeCodespaces") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expiration": $expiration} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"expiration": $expiration} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # POST /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.Codespaces/plans/{resourceName}/writeDelegates
@@ -3264,12 +4450,23 @@ export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-w
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroup' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
-  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.Codespaces/plans/{resource_name}/writeDelegates"))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.Codespaces/plans/{resource_name}/writeDelegates") $auth.query)
   let req_body = {"environmentIds": $environment_ids, "expiration": $expiration, "identity": $identity, "portNumbers": $port_numbers, "scope": $scope} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # POST /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.Codespaces/plans/{resourceName}/writeEnvironments
@@ -3294,10 +4491,21 @@ export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-w
   if ($resource_group | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroup' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
   let qp = [(serialize-qp "expiration" $expiration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.Codespaces/plans/{resource_name}/writeEnvironments") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.Codespaces/plans/{resource_name}/writeEnvironments") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expiration": $expiration} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"expiration": $expiration} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # POST /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.VSOnline/plans/resourceReadBegin
@@ -3322,12 +4530,23 @@ export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-re
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroup' must be non-empty" } }
-  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group)} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.VSOnline/plans/resourceReadBegin"))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group)} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.VSOnline/plans/resourceReadBegin") $auth.query)
   let req_body = {"value": $value} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # PUT /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.VSOnline/plans/{resourceName}
@@ -3363,14 +4582,25 @@ export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans up
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroup' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
-  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.VSOnline/plans/{resource_name}"))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.VSOnline/plans/{resource_name}") $auth.query)
   let req_body = {"id": $id, "identity": $identity, "location": $location, "name": $name, "properties": $properties, "provisioningState": $provisioning_state, "tags": $tags, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"headers": $headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # POST /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.VSOnline/plans/{resourceName}/deleteAllCodespaces
@@ -3395,10 +4625,21 @@ export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-de
   if ($resource_group | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroup' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
   let qp = [(serialize-qp "expiration" $expiration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.VSOnline/plans/{resource_name}/deleteAllCodespaces") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.VSOnline/plans/{resource_name}/deleteAllCodespaces") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expiration": $expiration} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"expiration": $expiration} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # POST /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.VSOnline/plans/{resourceName}/deleteAllEnvironments
@@ -3423,10 +4664,21 @@ export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-de
   if ($resource_group | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroup' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
   let qp = [(serialize-qp "expiration" $expiration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.VSOnline/plans/{resource_name}/deleteAllEnvironments") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.VSOnline/plans/{resource_name}/deleteAllEnvironments") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expiration": $expiration} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"expiration": $expiration} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # POST /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.VSOnline/plans/{resourceName}/readAllCodespaces
@@ -3451,10 +4703,21 @@ export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-re
   if ($resource_group | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroup' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
   let qp = [(serialize-qp "expiration" $expiration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.VSOnline/plans/{resource_name}/readAllCodespaces") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.VSOnline/plans/{resource_name}/readAllCodespaces") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expiration": $expiration} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"expiration": $expiration} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # POST /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.VSOnline/plans/{resourceName}/readAllEnvironments
@@ -3479,10 +4742,21 @@ export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-re
   if ($resource_group | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroup' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
   let qp = [(serialize-qp "expiration" $expiration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.VSOnline/plans/{resource_name}/readAllEnvironments") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.VSOnline/plans/{resource_name}/readAllEnvironments") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expiration": $expiration} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"expiration": $expiration} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # POST /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.VSOnline/plans/{resourceName}/readDelegates
@@ -3505,10 +4779,21 @@ export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-re
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroup' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
-  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.VSOnline/plans/{resource_name}/readDelegates"))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.VSOnline/plans/{resource_name}/readDelegates") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # POST /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.VSOnline/plans/{resourceName}/resourceCreationCompleted
@@ -3531,10 +4816,21 @@ export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-re
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroup' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
-  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.VSOnline/plans/{resource_name}/resourceCreationCompleted"))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.VSOnline/plans/{resource_name}/resourceCreationCompleted") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # POST /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.VSOnline/plans/{resourceName}/resourceCreationValidate
@@ -3569,12 +4865,23 @@ export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-re
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroup' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
-  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.VSOnline/plans/{resource_name}/resourceCreationValidate"))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.VSOnline/plans/{resource_name}/resourceCreationValidate") $auth.query)
   let req_body = {"id": $id, "identity": $identity, "location": $location, "name": $name, "properties": $properties, "provisioningState": $provisioning_state, "tags": $tags, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # POST /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.VSOnline/plans/{resourceName}/resourceDeletionValidate
@@ -3597,10 +4904,21 @@ export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-re
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroup' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
-  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.VSOnline/plans/{resource_name}/resourceDeletionValidate"))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.VSOnline/plans/{resource_name}/resourceDeletionValidate") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # POST /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.VSOnline/plans/{resourceName}/resourcePatchCompleted
@@ -3630,14 +4948,25 @@ export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-re
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroup' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
-  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.VSOnline/plans/{resource_name}/resourcePatchCompleted"))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.VSOnline/plans/{resource_name}/resourcePatchCompleted") $auth.query)
   let req_body = {"identity": $identity, "properties": $properties} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"headers": $headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # POST /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.VSOnline/plans/{resourceName}/resourcePatchValidate
@@ -3666,12 +4995,23 @@ export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-re
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroup' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
-  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.VSOnline/plans/{resource_name}/resourcePatchValidate"))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.VSOnline/plans/{resource_name}/resourcePatchValidate") $auth.query)
   let req_body = {"identity": $identity, "properties": $properties} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # POST /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.VSOnline/plans/{resourceName}/resourceReadBegin
@@ -3706,12 +5046,23 @@ export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-re
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroup' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
-  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.VSOnline/plans/{resource_name}/resourceReadBegin"))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.VSOnline/plans/{resource_name}/resourceReadBegin") $auth.query)
   let req_body = {"id": $id, "identity": $identity, "location": $location, "name": $name, "properties": $properties, "provisioningState": $provisioning_state, "tags": $tags, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # POST /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.VSOnline/plans/{resourceName}/writeCodespaces
@@ -3736,10 +5087,21 @@ export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-wr
   if ($resource_group | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroup' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
   let qp = [(serialize-qp "expiration" $expiration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.VSOnline/plans/{resource_name}/writeCodespaces") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.VSOnline/plans/{resource_name}/writeCodespaces") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expiration": $expiration} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"expiration": $expiration} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # POST /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.VSOnline/plans/{resourceName}/writeDelegates
@@ -3770,12 +5132,23 @@ export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-wr
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroup' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
-  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.VSOnline/plans/{resource_name}/writeDelegates"))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.VSOnline/plans/{resource_name}/writeDelegates") $auth.query)
   let req_body = {"environmentIds": $environment_ids, "expiration": $expiration, "identity": $identity, "portNumbers": $port_numbers, "scope": $scope} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # POST /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.VSOnline/plans/{resourceName}/writeEnvironments
@@ -3800,10 +5173,21 @@ export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-wr
   if ($resource_group | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroup' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
   let qp = [(serialize-qp "expiration" $expiration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.VSOnline/plans/{resource_name}/writeEnvironments") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.VSOnline/plans/{resource_name}/writeEnvironments") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expiration": $expiration} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"expiration": $expiration} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # POST /api/v1/subscriptions/{subscriptionId}/{resourceGroup}/providers/Microsoft.Codespaces/plans/{resourceName}/deleteDelegates
@@ -3826,10 +5210,21 @@ export def "subscriptions-providers-microsoft-codespaces-plans-delete-delegates 
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroup' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
-  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/subscriptions/{subscription_id}/{resource_group}/providers/Microsoft.Codespaces/plans/{resource_name}/deleteDelegates"))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/subscriptions/{subscription_id}/{resource_group}/providers/Microsoft.Codespaces/plans/{resource_name}/deleteDelegates") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # POST /api/v1/subscriptions/{subscriptionId}/{resourceGroup}/providers/Microsoft.VSOnline/plans/{resourceName}/deleteDelegates
@@ -3852,10 +5247,21 @@ export def "subscriptions-providers-microsoft-vs-online-plans-delete-delegates c
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroup' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
-  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/subscriptions/{subscription_id}/{resource_group}/providers/Microsoft.VSOnline/plans/{resource_name}/deleteDelegates"))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/subscriptions/{subscription_id}/{resource_group}/providers/Microsoft.VSOnline/plans/{resource_name}/deleteDelegates") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # DELETE /api/v1/tenant/{tenantId}/Pool/{poolName}
@@ -3876,10 +5282,21 @@ export def "tenant-pool delete" [
   let base = ($base_url | default $BASE_URL)
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantId' must be non-empty" } }
   if ($pool_name | is-empty) { error make --unspanned { msg: "path parameter 'poolName' must be non-empty" } }
-  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), pool_name: (encode-path-segment $pool_name)} | format pattern "/api/v1/tenant/{tenant_id}/Pool/{pool_name}"))
+  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), pool_name: (encode-path-segment $pool_name)} | format pattern "/api/v1/tenant/{tenant_id}/Pool/{pool_name}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # GET /api/v1/tenant/{tenantId}/Pool/{poolName}
@@ -3901,10 +5318,21 @@ export def "tenant-pool get" [
   let base = ($base_url | default $BASE_URL)
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantId' must be non-empty" } }
   if ($pool_name | is-empty) { error make --unspanned { msg: "path parameter 'poolName' must be non-empty" } }
-  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), pool_name: (encode-path-segment $pool_name)} | format pattern "/api/v1/tenant/{tenant_id}/Pool/{pool_name}"))
+  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), pool_name: (encode-path-segment $pool_name)} | format pattern "/api/v1/tenant/{tenant_id}/Pool/{pool_name}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # PATCH /api/v1/tenant/{tenantId}/Pool/{poolName}
@@ -3937,12 +5365,23 @@ export def "tenant-pool update-by-tenant-id-pool-name" [
   let base = ($base_url | default $BASE_URL)
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantId' must be non-empty" } }
   if ($pool_name | is-empty) { error make --unspanned { msg: "path parameter 'poolName' must be non-empty" } }
-  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), pool_name: (encode-path-segment $pool_name)} | format pattern "/api/v1/tenant/{tenant_id}/Pool/{pool_name}"))
+  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), pool_name: (encode-path-segment $pool_name)} | format pattern "/api/v1/tenant/{tenant_id}/Pool/{pool_name}") $auth.query)
   let req_body = {"domainUserCredentials": $domain_user_credentials, "hotPoolSettings": $hot_pool_settings, "poolGroupName": $pool_group_name, "tags": $tags, "userGroupName": $user_group_name, "vmSpecs": $vm_specs} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # PUT /api/v1/tenant/{tenantId}/Pool/{poolName}
@@ -3975,12 +5414,23 @@ export def "tenant-pool update-by-tenant-id-pool-name-1" [
   let base = ($base_url | default $BASE_URL)
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantId' must be non-empty" } }
   if ($pool_name | is-empty) { error make --unspanned { msg: "path parameter 'poolName' must be non-empty" } }
-  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), pool_name: (encode-path-segment $pool_name)} | format pattern "/api/v1/tenant/{tenant_id}/Pool/{pool_name}"))
+  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), pool_name: (encode-path-segment $pool_name)} | format pattern "/api/v1/tenant/{tenant_id}/Pool/{pool_name}") $auth.query)
   let req_body = {"domainUserCredentials": $domain_user_credentials, "hotPoolSettings": $hot_pool_settings, "poolGroupName": $pool_group_name, "tags": $tags, "userGroupName": $user_group_name, "vmSpecs": $vm_specs} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200 202]
 }
 
 # DELETE /api/v1/tenant/{tenantId}/PoolGroup/{poolGroupName}
@@ -4001,10 +5451,21 @@ export def "tenant-pool-group delete" [
   let base = ($base_url | default $BASE_URL)
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantId' must be non-empty" } }
   if ($pool_group_name | is-empty) { error make --unspanned { msg: "path parameter 'poolGroupName' must be non-empty" } }
-  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), pool_group_name: (encode-path-segment $pool_group_name)} | format pattern "/api/v1/tenant/{tenant_id}/PoolGroup/{pool_group_name}"))
+  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), pool_group_name: (encode-path-segment $pool_group_name)} | format pattern "/api/v1/tenant/{tenant_id}/PoolGroup/{pool_group_name}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # GET /api/v1/tenant/{tenantId}/PoolGroup/{poolGroupName}
@@ -4026,10 +5487,21 @@ export def "tenant-pool-group get" [
   let base = ($base_url | default $BASE_URL)
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantId' must be non-empty" } }
   if ($pool_group_name | is-empty) { error make --unspanned { msg: "path parameter 'poolGroupName' must be non-empty" } }
-  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), pool_group_name: (encode-path-segment $pool_group_name)} | format pattern "/api/v1/tenant/{tenant_id}/PoolGroup/{pool_group_name}"))
+  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), pool_group_name: (encode-path-segment $pool_group_name)} | format pattern "/api/v1/tenant/{tenant_id}/PoolGroup/{pool_group_name}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # PATCH /api/v1/tenant/{tenantId}/PoolGroup/{poolGroupName}
@@ -4053,12 +5525,23 @@ export def "tenant-pool-group update-by-tenant-id-pool-group-name" [
   let base = ($base_url | default $BASE_URL)
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantId' must be non-empty" } }
   if ($pool_group_name | is-empty) { error make --unspanned { msg: "path parameter 'poolGroupName' must be non-empty" } }
-  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), pool_group_name: (encode-path-segment $pool_group_name)} | format pattern "/api/v1/tenant/{tenant_id}/PoolGroup/{pool_group_name}"))
+  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), pool_group_name: (encode-path-segment $pool_group_name)} | format pattern "/api/v1/tenant/{tenant_id}/PoolGroup/{pool_group_name}") $auth.query)
   let req_body = {"displayName": $display_name, "tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # PUT /api/v1/tenant/{tenantId}/PoolGroup/{poolGroupName}
@@ -4083,12 +5566,23 @@ export def "tenant-pool-group update-by-tenant-id-pool-group-name-1" [
   let base = ($base_url | default $BASE_URL)
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantId' must be non-empty" } }
   if ($pool_group_name | is-empty) { error make --unspanned { msg: "path parameter 'poolGroupName' must be non-empty" } }
-  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), pool_group_name: (encode-path-segment $pool_group_name)} | format pattern "/api/v1/tenant/{tenant_id}/PoolGroup/{pool_group_name}"))
+  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), pool_group_name: (encode-path-segment $pool_group_name)} | format pattern "/api/v1/tenant/{tenant_id}/PoolGroup/{pool_group_name}") $auth.query)
   let req_body = {"displayName": $display_name, "region": $region, "tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # GET /api/v1/tenant/{tenantId}/pool/{poolName}/Vm
@@ -4110,10 +5604,21 @@ export def "tenant-pool-vm list" [
   let base = ($base_url | default $BASE_URL)
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantId' must be non-empty" } }
   if ($pool_name | is-empty) { error make --unspanned { msg: "path parameter 'poolName' must be non-empty" } }
-  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), pool_name: (encode-path-segment $pool_name)} | format pattern "/api/v1/tenant/{tenant_id}/pool/{pool_name}/Vm"))
+  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), pool_name: (encode-path-segment $pool_name)} | format pattern "/api/v1/tenant/{tenant_id}/pool/{pool_name}/Vm") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # DELETE /api/v1/tenant/{tenantId}/pool/{poolName}/Vm/{vmName}
@@ -4136,10 +5641,21 @@ export def "tenant-pool-vm delete" [
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantId' must be non-empty" } }
   if ($pool_name | is-empty) { error make --unspanned { msg: "path parameter 'poolName' must be non-empty" } }
   if ($vm_name | is-empty) { error make --unspanned { msg: "path parameter 'vmName' must be non-empty" } }
-  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), pool_name: (encode-path-segment $pool_name), vm_name: (encode-path-segment $vm_name)} | format pattern "/api/v1/tenant/{tenant_id}/pool/{pool_name}/Vm/{vm_name}"))
+  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), pool_name: (encode-path-segment $pool_name), vm_name: (encode-path-segment $vm_name)} | format pattern "/api/v1/tenant/{tenant_id}/pool/{pool_name}/Vm/{vm_name}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # GET /api/v1/tenant/{tenantId}/pool/{poolName}/Vm/{vmName}
@@ -4163,10 +5679,21 @@ export def "tenant-pool-vm get" [
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantId' must be non-empty" } }
   if ($pool_name | is-empty) { error make --unspanned { msg: "path parameter 'poolName' must be non-empty" } }
   if ($vm_name | is-empty) { error make --unspanned { msg: "path parameter 'vmName' must be non-empty" } }
-  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), pool_name: (encode-path-segment $pool_name), vm_name: (encode-path-segment $vm_name)} | format pattern "/api/v1/tenant/{tenant_id}/pool/{pool_name}/Vm/{vm_name}"))
+  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), pool_name: (encode-path-segment $pool_name), vm_name: (encode-path-segment $vm_name)} | format pattern "/api/v1/tenant/{tenant_id}/pool/{pool_name}/Vm/{vm_name}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # PUT /api/v1/tenant/{tenantId}/pool/{poolName}/Vm/{vmName}
@@ -4194,12 +5721,23 @@ export def "tenant-pool-vm update" [
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantId' must be non-empty" } }
   if ($pool_name | is-empty) { error make --unspanned { msg: "path parameter 'poolName' must be non-empty" } }
   if ($vm_name | is-empty) { error make --unspanned { msg: "path parameter 'vmName' must be non-empty" } }
-  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), pool_name: (encode-path-segment $pool_name), vm_name: (encode-path-segment $vm_name)} | format pattern "/api/v1/tenant/{tenant_id}/pool/{pool_name}/Vm/{vm_name}"))
+  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), pool_name: (encode-path-segment $pool_name), vm_name: (encode-path-segment $vm_name)} | format pattern "/api/v1/tenant/{tenant_id}/pool/{pool_name}/Vm/{vm_name}") $auth.query)
   let req_body = {"user": $user} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full [200 202]
 }
 
 # POST /api/v1/tenant/{tenantId}/pool/{poolName}/Vm/{vmName}/start
@@ -4222,10 +5760,21 @@ export def "tenant-pool-vm-start create" [
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantId' must be non-empty" } }
   if ($pool_name | is-empty) { error make --unspanned { msg: "path parameter 'poolName' must be non-empty" } }
   if ($vm_name | is-empty) { error make --unspanned { msg: "path parameter 'vmName' must be non-empty" } }
-  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), pool_name: (encode-path-segment $pool_name), vm_name: (encode-path-segment $vm_name)} | format pattern "/api/v1/tenant/{tenant_id}/pool/{pool_name}/Vm/{vm_name}/start"))
+  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), pool_name: (encode-path-segment $pool_name), vm_name: (encode-path-segment $vm_name)} | format pattern "/api/v1/tenant/{tenant_id}/pool/{pool_name}/Vm/{vm_name}/start") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # POST /api/v1/tenant/{tenantId}/pool/{poolName}/Vm/{vmName}/stop
@@ -4248,10 +5797,21 @@ export def "tenant-pool-vm-stop create" [
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantId' must be non-empty" } }
   if ($pool_name | is-empty) { error make --unspanned { msg: "path parameter 'poolName' must be non-empty" } }
   if ($vm_name | is-empty) { error make --unspanned { msg: "path parameter 'vmName' must be non-empty" } }
-  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), pool_name: (encode-path-segment $pool_name), vm_name: (encode-path-segment $vm_name)} | format pattern "/api/v1/tenant/{tenant_id}/pool/{pool_name}/Vm/{vm_name}/stop"))
+  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), pool_name: (encode-path-segment $pool_name), vm_name: (encode-path-segment $vm_name)} | format pattern "/api/v1/tenant/{tenant_id}/pool/{pool_name}/Vm/{vm_name}/stop") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # POST /api/v2/prebuilds/delete
@@ -4273,12 +5833,23 @@ export def "prebuilds-delete create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/v2/prebuilds/delete")
+  let full_url = (build-url $base "/api/v2/prebuilds/delete" $auth.query)
   let req_body = {"branchName": $branch_name, "devContainerPath": $dev_container_path, "prebuildConfigurationId": $prebuild_configuration_id, "repoId": $repo_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # DELETE /api/v2/prebuilds/repository/{repoId}/branch/{branchName}
@@ -4299,10 +5870,21 @@ export def "prebuilds-repository-branch delete" [
   let base = ($base_url | default $BASE_URL)
   if ($repo_id | is-empty) { error make --unspanned { msg: "path parameter 'repoId' must be non-empty" } }
   if ($branch_name | is-empty) { error make --unspanned { msg: "path parameter 'branchName' must be non-empty" } }
-  let full_url = (build-url $base ({repo_id: (encode-path-segment $repo_id), branch_name: (encode-path-segment $branch_name)} | format pattern "/api/v2/prebuilds/repository/{repo_id}/branch/{branch_name}"))
+  let full_url = (build-url $base ({repo_id: (encode-path-segment $repo_id), branch_name: (encode-path-segment $branch_name)} | format pattern "/api/v2/prebuilds/repository/{repo_id}/branch/{branch_name}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # POST /api/v2/prebuilds/templates
@@ -4333,12 +5915,23 @@ export def "prebuilds-templates create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/v2/prebuilds/templates")
+  let full_url = (build-url $base "/api/v2/prebuilds/templates" $auth.query)
   let req_body = {"devContainerPath": $dev_container_path, "experimentalFeatures": $experimental_features, "features": $features, "friendlyName": $friendly_name, "planId": $plan_id, "seed": $seed, "storageType": $storage_type, "templateInfo": $template_info} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # GET /api/v2/prebuilds/templates/skus/repo/{repoId}/branch/{branchName}/hash/{prebuildHash}/location/{location}/devcontainerpath/{devContainerPath}
@@ -4371,10 +5964,21 @@ export def "prebuilds-templates-skus-repo-branch-hash-location-devcontainerpath 
   if ($location | is-empty) { error make --unspanned { msg: "path parameter 'location' must be non-empty" } }
   if ($dev_container_path | is-empty) { error make --unspanned { msg: "path parameter 'devContainerPath' must be non-empty" } }
   let qp = [(serialize-qp "storageType" $storage_type "scalar") (serialize-qp "fastPathEnabled" $fast_path_enabled "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({repo_id: (encode-path-segment $repo_id), branch_name: (encode-path-segment $branch_name), prebuild_hash: (encode-path-segment $prebuild_hash), location: (encode-path-segment $location), dev_container_path: (encode-path-segment $dev_container_path)} | format pattern "/api/v2/prebuilds/templates/skus/repo/{repo_id}/branch/{branch_name}/hash/{prebuild_hash}/location/{location}/devcontainerpath/{dev_container_path}") $qp)
+  let full_url = (build-url $base ({repo_id: (encode-path-segment $repo_id), branch_name: (encode-path-segment $branch_name), prebuild_hash: (encode-path-segment $prebuild_hash), location: (encode-path-segment $location), dev_container_path: (encode-path-segment $dev_container_path)} | format pattern "/api/v2/prebuilds/templates/skus/repo/{repo_id}/branch/{branch_name}/hash/{prebuild_hash}/location/{location}/devcontainerpath/{dev_container_path}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"storageType": $storage_type, "fastPathEnabled": $fast_path_enabled} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"storageType": $storage_type, "fastPathEnabled": $fast_path_enabled} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # POST /api/v2/prebuilds/templates/updatemaxversions
@@ -4396,12 +6000,23 @@ export def "prebuilds-templates-update-maxversions create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/v2/prebuilds/templates/updatemaxversions")
+  let full_url = (build-url $base "/api/v2/prebuilds/templates/updatemaxversions" $auth.query)
   let req_body = {"branchName": $branch_name, "devContainerPath": $dev_container_path, "maxPrebuildTemplateVersions": $max_prebuild_template_versions, "repoId": $repo_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # POST /api/v2/prebuilds/templates/{templateId}/updatestatus
@@ -4422,12 +6037,23 @@ export def "prebuilds-templates-update-status create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($template_id | is-empty) { error make --unspanned { msg: "path parameter 'templateId' must be non-empty" } }
-  let full_url = (build-url $base ({template_id: (encode-path-segment $template_id)} | format pattern "/api/v2/prebuilds/templates/{template_id}/updatestatus"))
+  let full_url = (build-url $base ({template_id: (encode-path-segment $template_id)} | format pattern "/api/v2/prebuilds/templates/{template_id}/updatestatus") $auth.query)
   let req_body = {"isSuccess": $is_success} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # GET /health
@@ -4444,10 +6070,21 @@ export def "health get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/health")
+  let full_url = (build-url $base "/health" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /internal/Netmon/correlation
@@ -4467,10 +6104,21 @@ export def "internal-netmon-correlation get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "macAddress" $mac_address "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/internal/Netmon/correlation" $qp)
+  let full_url = (build-url $base "/internal/Netmon/correlation" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"macAddress": $mac_address} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"macAddress": $mac_address} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /tunnelauth
@@ -4493,10 +6141,21 @@ export def "tunnelauth get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "cluster" $cluster "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "port" $port "scalar") (serialize-qp "pb" $pb "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/tunnelauth" $qp)
+  let full_url = (build-url $base "/tunnelauth" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"id": $id, "cluster": $cluster, "name": $name, "port": $port, "pb": $pb} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"id": $id, "cluster": $cluster, "name": $name, "port": $port, "pb": $pb} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # POST /tunnelauth
@@ -4519,10 +6178,21 @@ export def "tunnelauth create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "op" $op "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "cluster" $cluster "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "port" $port "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/tunnelauth" $qp)
+  let full_url = (build-url $base "/tunnelauth" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"op": $op, "id": $id, "cluster": $cluster, "name": $name, "port": $port} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"op": $op, "id": $id, "cluster": $cluster, "name": $name, "port": $port} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # GET /warmup
@@ -4539,8 +6209,19 @@ export def "warmup get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/warmup")
+  let full_url = (build-url $base "/warmup" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }

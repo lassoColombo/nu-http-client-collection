@@ -8,7 +8,7 @@ const BASE_URL = "https://checkout-test.adyen.com/v70"
 # `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
 # where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o ADYEN_CHECKOUT_API_TOKEN | default "" }
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o ADYEN_CHECKOUT_API_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
@@ -43,14 +43,11 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
-# Trick: `url encode --all` over-encodes, then we decode the four unreserved
-# punctuation chars back. Pre-existing %XX sequences in the input survive
-# because `url encode --all` first turns their % into %25.
 def encode-path-segment [v: any]: nothing -> string {
   $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
-# Serialize an array-typed path parameter (issue 49.A). OpenAPI 3 `style: simple`
+# Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
 # (the default for path params) and Swagger 2 `collectionFormat: csv` both join
 # the elements with a literal comma WITHIN the single path segment, each element
 # RFC-3986-encoded individually (so a comma inside an element stays %2C). Without
@@ -61,51 +58,57 @@ def encode-path-array [v: any]: nothing -> string {
   if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
 }
 
-# Build URL from base, path, and optional query string
-def build-url [base: string, path: string, query?: string]: nothing -> string {
+# Build the request URL from base, path, and any number of pre-encoded query
+# fragments (param serializer output and/or the auth query). Each fragment is an
+# `&`-joinable `key=value` string already percent-encoded by its producer; empty
+# fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
+# delimiters are hand-spliced — and any query already on the base URL is merged in.
+def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
   let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
-  let result = ($parsed | upsert path $full_path)
-  if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
+  let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
+  $parsed | upsert path $full_path | upsert query $query | url join
 }
 
-# Build the dry-run record returned by --dry-run. Shape:
-#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
-#    auth: {scheme, location}}
-# `meta` carries logical-form data (the query record by spec name, the pre-serialization
-# body) that do-request itself cannot reconstruct from its wire-format args.
-def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
-  let m = ($meta | default {})
-  {
-    dry_run: true
-    method: $method
-    url: $url
-    query: ($m | get -o query | default {})
-    headers: $auth.headers
-    body: ($m | get -o body)
-    content_type: $content_type
-    timeout: $timeout
-    auth: {scheme: $auth.scheme, location: $auth.location}
-  }
+# Success policy: did this response succeed? Single source of truth, consulted by
+# handle-response and the HEAD header-unwrap. Empty ok_codes means the spec listed
+# none, so fall back to < 400. Otherwise: any 2xx, plus documented success codes.
+def status-ok [status: int, ok_codes: list<int>]: nothing -> bool {
+  if ($ok_codes | is-empty) { $status < 400 } else { ($status >= 200 and $status < 300) or ($status in $ok_codes) }
 }
 
-# Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
-  let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
-  let timeout = ($max_time | default 30min)
-  let ct = ($content_type | default "application/json")
-  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
-  let resp = match $method {
-    "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
-  }
-  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
-  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
+# Unwrap a `--full` HTTP response into the user-facing value. Response arrives
+# via pipeline; ok_codes gates the error throw (see status-ok).
+def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: record -> any {
+  let resp = $in
+  if $allow_errors { return $resp }
+  if not (status-ok $resp.status $ok_codes) { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } }
+  if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
+  if $resp.status == 204 { return null }
+  $resp.body
+}
+
+# GET — bodyless, honours --raw
+def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+}
+
+# POST — body + content-type
+def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# PATCH — body + content-type
+def send-patch [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http patch --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http patch --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# DELETE — body via --data
+def send-delete [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http delete --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url } else { http delete --headers $req.headers --content-type $req.content_type --data $body --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url }
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 def base-url-completer [] { ["https://checkout-test.adyen.com/v70"] }
@@ -166,14 +169,25 @@ export def "apple-pay-sessions create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/applePay/sessions")
+  let full_url = (build-url $base "/applePay/sessions" $auth.query)
   let req_body = {"displayName": $display_name, "domainName": $domain_name, "merchantIdentifier": $merchant_identifier} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Idempotency-Key": $idempotency_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Cancel an authorised payment
@@ -198,14 +212,25 @@ export def "cancels create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/cancels")
+  let full_url = (build-url $base "/cancels" $auth.query)
   let req_body = {"merchantAccount": $merchant_account, "paymentReference": $payment_reference, "reference": $reference} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Idempotency-Key": $idempotency_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200 201]
 }
 
 # Get the list of brands on the card
@@ -232,14 +257,25 @@ export def "card-details create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/cardDetails")
+  let full_url = (build-url $base "/cardDetails" $auth.query)
   let req_body = {"cardNumber": $card_number, "countryCode": $country_code, "encryptedCardNumber": $encrypted_card_number, "merchantAccount": $merchant_account, "supportedBrands": $supported_brands} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Idempotency-Key": $idempotency_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Start a transaction for donations
@@ -352,14 +388,25 @@ export def "donations create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/donations")
+  let full_url = (build-url $base "/donations" $auth.query)
   let req_body = {"accountInfo": $account_info, "additionalAmount": $additional_amount, "additionalData": $additional_data, "amount": $amount, "applicationInfo": $application_info, "authenticationData": $authentication_data, "billingAddress": $billing_address, "browserInfo": $browser_info, "captureDelayHours": $capture_delay_hours, "channel": $channel, "checkoutAttemptId": $checkout_attempt_id, "company": $company, "conversionId": $conversion_id, "countryCode": $country_code, "dateOfBirth": $date_of_birth, "dccQuote": $dcc_quote, "deliveryAddress": $delivery_address, "deliveryDate": $delivery_date, "deviceFingerprint": $device_fingerprint, "donationAccount": $donation_account, "donationOriginalPspReference": $donation_original_psp_reference, "donationToken": $donation_token, "enableOneClick": $enable_one_click, "enablePayOut": $enable_pay_out, "enableRecurring": $enable_recurring, "entityType": $entity_type, "fraudOffset": $fraud_offset, "industryUsage": $industry_usage, "installments": $installments, "lineItems": $line_items, "localizedShopperStatement": $localized_shopper_statement, "mandate": $mandate, "mcc": $mcc, "merchantAccount": $merchant_account, "merchantOrderReference": $merchant_order_reference, "merchantRiskIndicator": $merchant_risk_indicator, "metadata": $metadata, "mpiData": $mpi_data, "order": $order, "orderReference": $order_reference, "origin": $origin, "paymentMethod": $payment_method, "platformChargebackLogic": $platform_chargeback_logic, "recurringExpiry": $recurring_expiry, "recurringFrequency": $recurring_frequency, "recurringProcessingModel": $recurring_processing_model, "redirectFromIssuerMethod": $redirect_from_issuer_method, "redirectToIssuerMethod": $redirect_to_issuer_method, "reference": $reference, "returnUrl": $return_url, "riskData": $risk_data, "sessionValidity": $session_validity, "shopperEmail": $shopper_email, "shopperIP": $shopper_ip, "shopperInteraction": $shopper_interaction, "shopperLocale": $shopper_locale, "shopperName": $shopper_name, "shopperReference": $shopper_reference, "shopperStatement": $shopper_statement, "socialSecurityNumber": $social_security_number, "splits": $splits, "store": $store, "storePaymentMethod": $store_payment_method, "telephoneNumber": $telephone_number, "threeDS2RequestData": $three_ds2_request_data, "threeDSAuthenticationOnly": $three_ds_authentication_only, "trustedShopper": $trusted_shopper} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Idempotency-Key": $idempotency_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Create an order
@@ -386,14 +433,25 @@ export def "orders create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/orders")
+  let full_url = (build-url $base "/orders" $auth.query)
   let req_body = {"amount": $amount, "expiresAt": $expires_at, "merchantAccount": $merchant_account, "reference": $reference} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Idempotency-Key": $idempotency_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Cancel an order
@@ -418,14 +476,25 @@ export def "orders-cancel create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/orders/cancel")
+  let full_url = (build-url $base "/orders/cancel" $auth.query)
   let req_body = {"merchantAccount": $merchant_account, "order": $order} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Idempotency-Key": $idempotency_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Create originKey values for domains
@@ -450,14 +519,25 @@ export def "origin-keys create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/originKeys")
+  let full_url = (build-url $base "/originKeys" $auth.query)
   let req_body = {"originDomains": $origin_domains} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Idempotency-Key": $idempotency_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Create a payment link
@@ -525,14 +605,25 @@ export def "payment-links create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/paymentLinks")
+  let full_url = (build-url $base "/paymentLinks" $auth.query)
   let req_body = {"allowedPaymentMethods": $allowed_payment_methods, "amount": $amount, "applicationInfo": $application_info, "billingAddress": $billing_address, "blockedPaymentMethods": $blocked_payment_methods, "captureDelayHours": $capture_delay_hours, "countryCode": $country_code, "dateOfBirth": $date_of_birth, "deliverAt": $deliver_at, "deliveryAddress": $delivery_address, "description": $description, "expiresAt": $expires_at, "installmentOptions": $installment_options, "lineItems": $line_items, "manualCapture": $manual_capture, "mcc": $mcc, "merchantAccount": $merchant_account, "merchantOrderReference": $merchant_order_reference, "metadata": $metadata, "recurringProcessingModel": $recurring_processing_model, "reference": $reference, "requiredShopperFields": $required_shopper_fields, "returnUrl": $return_url, "reusable": $reusable, "riskData": $risk_data, "shopperEmail": $shopper_email, "shopperLocale": $shopper_locale, "shopperName": $shopper_name, "shopperReference": $shopper_reference, "shopperStatement": $shopper_statement, "showRemovePaymentMethodButton": $show_remove_payment_method_button, "socialSecurityNumber": $social_security_number, "splitCardFundingSources": $split_card_funding_sources, "splits": $splits, "store": $store, "storePaymentMethodMode": $store_payment_method_mode, "telephoneNumber": $telephone_number, "themeId": $theme_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Idempotency-Key": $idempotency_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200 201]
 }
 
 # Get a payment link
@@ -554,10 +645,21 @@ export def "payment-links get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($link_id | is-empty) { error make --unspanned { msg: "path parameter 'linkId' must be non-empty" } }
-  let full_url = (build-url $base ({link_id: (encode-path-segment $link_id)} | format pattern "/paymentLinks/{link_id}"))
+  let full_url = (build-url $base ({link_id: (encode-path-segment $link_id)} | format pattern "/paymentLinks/{link_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update the status of a payment link
@@ -581,12 +683,23 @@ export def "payment-links update" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($link_id | is-empty) { error make --unspanned { msg: "path parameter 'linkId' must be non-empty" } }
-  let full_url = (build-url $base ({link_id: (encode-path-segment $link_id)} | format pattern "/paymentLinks/{link_id}"))
+  let full_url = (build-url $base ({link_id: (encode-path-segment $link_id)} | format pattern "/paymentLinks/{link_id}") $auth.query)
   let req_body = {"status": $status} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get a list of available payment methods
@@ -623,14 +736,25 @@ export def "payment-methods create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/paymentMethods")
+  let full_url = (build-url $base "/paymentMethods" $auth.query)
   let req_body = {"additionalData": $additional_data, "allowedPaymentMethods": $allowed_payment_methods, "amount": $amount, "blockedPaymentMethods": $blocked_payment_methods, "channel": $channel, "countryCode": $country_code, "merchantAccount": $merchant_account, "order": $order, "shopperLocale": $shopper_locale, "shopperReference": $shopper_reference, "splitCardFundingSources": $split_card_funding_sources, "store": $store} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Idempotency-Key": $idempotency_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get the balance of a gift card
@@ -712,14 +836,25 @@ export def "payment-methods-balance create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/paymentMethods/balance")
+  let full_url = (build-url $base "/paymentMethods/balance" $auth.query)
   let req_body = {"accountInfo": $account_info, "additionalAmount": $additional_amount, "additionalData": $additional_data, "amount": $amount, "applicationInfo": $application_info, "billingAddress": $billing_address, "browserInfo": $browser_info, "captureDelayHours": $capture_delay_hours, "dateOfBirth": $date_of_birth, "dccQuote": $dcc_quote, "deliveryAddress": $delivery_address, "deliveryDate": $delivery_date, "deviceFingerprint": $device_fingerprint, "fraudOffset": $fraud_offset, "installments": $installments, "localizedShopperStatement": $localized_shopper_statement, "mcc": $mcc, "merchantAccount": $merchant_account, "merchantOrderReference": $merchant_order_reference, "merchantRiskIndicator": $merchant_risk_indicator, "metadata": $metadata, "orderReference": $order_reference, "paymentMethod": $payment_method, "recurring": $recurring, "recurringProcessingModel": $recurring_processing_model, "reference": $reference, "selectedBrand": $selected_brand, "selectedRecurringDetailReference": $selected_recurring_detail_reference, "sessionId": $session_id, "shopperEmail": $shopper_email, "shopperIP": $shopper_ip, "shopperInteraction": $shopper_interaction, "shopperLocale": $shopper_locale, "shopperName": $shopper_name, "shopperReference": $shopper_reference, "shopperStatement": $shopper_statement, "socialSecurityNumber": $social_security_number, "splits": $splits, "store": $store, "telephoneNumber": $telephone_number, "threeDS2RequestData": $three_ds2_request_data, "threeDSAuthenticationOnly": $three_ds_authentication_only, "totalsGroup": $totals_group, "trustedShopper": $trusted_shopper} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Idempotency-Key": $idempotency_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Create a payment session
@@ -817,14 +952,25 @@ export def "payment-session create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/paymentSession")
+  let full_url = (build-url $base "/paymentSession" $auth.query)
   let req_body = {"additionalAmount": $additional_amount, "additionalData": $additional_data, "allowedPaymentMethods": $allowed_payment_methods, "amount": $amount, "applicationInfo": $application_info, "billingAddress": $billing_address, "blockedPaymentMethods": $blocked_payment_methods, "captureDelayHours": $capture_delay_hours, "channel": $channel, "checkoutAttemptId": $checkout_attempt_id, "company": $company, "configuration": $configuration, "conversionId": $conversion_id, "countryCode": $country_code, "dateOfBirth": $date_of_birth, "dccQuote": $dcc_quote, "deliveryAddress": $delivery_address, "deliveryDate": $delivery_date, "enableOneClick": $enable_one_click, "enablePayOut": $enable_pay_out, "enableRecurring": $enable_recurring, "entityType": $entity_type, "fraudOffset": $fraud_offset, "installments": $installments, "lineItems": $line_items, "localizedShopperStatement": $localized_shopper_statement, "mandate": $mandate, "mcc": $mcc, "merchantAccount": $merchant_account, "merchantOrderReference": $merchant_order_reference, "metadata": $metadata, "orderReference": $order_reference, "origin": $origin, "platformChargebackLogic": $platform_chargeback_logic, "recurringExpiry": $recurring_expiry, "recurringFrequency": $recurring_frequency, "reference": $reference, "returnUrl": $return_url, "riskData": $risk_data, "sdkVersion": $sdk_version, "sessionValidity": $session_validity, "shopperEmail": $shopper_email, "shopperIP": $shopper_ip, "shopperInteraction": $shopper_interaction, "shopperLocale": $shopper_locale, "shopperName": $shopper_name, "shopperReference": $shopper_reference, "shopperStatement": $shopper_statement, "socialSecurityNumber": $social_security_number, "splits": $splits, "store": $store, "storePaymentMethod": $store_payment_method, "telephoneNumber": $telephone_number, "threeDSAuthenticationOnly": $three_ds_authentication_only, "token": $body_token, "trustedShopper": $trusted_shopper} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Idempotency-Key": $idempotency_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Start a transaction
@@ -934,14 +1080,25 @@ export def "payments create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/payments")
+  let full_url = (build-url $base "/payments" $auth.query)
   let req_body = {"accountInfo": $account_info, "additionalAmount": $additional_amount, "additionalData": $additional_data, "amount": $amount, "applicationInfo": $application_info, "authenticationData": $authentication_data, "billingAddress": $billing_address, "browserInfo": $browser_info, "captureDelayHours": $capture_delay_hours, "channel": $channel, "checkoutAttemptId": $checkout_attempt_id, "company": $company, "conversionId": $conversion_id, "countryCode": $country_code, "dateOfBirth": $date_of_birth, "dccQuote": $dcc_quote, "deliveryAddress": $delivery_address, "deliveryDate": $delivery_date, "deviceFingerprint": $device_fingerprint, "enableOneClick": $enable_one_click, "enablePayOut": $enable_pay_out, "enableRecurring": $enable_recurring, "entityType": $entity_type, "fraudOffset": $fraud_offset, "industryUsage": $industry_usage, "installments": $installments, "lineItems": $line_items, "localizedShopperStatement": $localized_shopper_statement, "mandate": $mandate, "mcc": $mcc, "merchantAccount": $merchant_account, "merchantOrderReference": $merchant_order_reference, "merchantRiskIndicator": $merchant_risk_indicator, "metadata": $metadata, "mpiData": $mpi_data, "order": $order, "orderReference": $order_reference, "origin": $origin, "paymentMethod": $payment_method, "platformChargebackLogic": $platform_chargeback_logic, "recurringExpiry": $recurring_expiry, "recurringFrequency": $recurring_frequency, "recurringProcessingModel": $recurring_processing_model, "redirectFromIssuerMethod": $redirect_from_issuer_method, "redirectToIssuerMethod": $redirect_to_issuer_method, "reference": $reference, "returnUrl": $return_url, "riskData": $risk_data, "sessionValidity": $session_validity, "shopperEmail": $shopper_email, "shopperIP": $shopper_ip, "shopperInteraction": $shopper_interaction, "shopperLocale": $shopper_locale, "shopperName": $shopper_name, "shopperReference": $shopper_reference, "shopperStatement": $shopper_statement, "socialSecurityNumber": $social_security_number, "splits": $splits, "store": $store, "storePaymentMethod": $store_payment_method, "telephoneNumber": $telephone_number, "threeDS2RequestData": $three_ds2_request_data, "threeDSAuthenticationOnly": $three_ds_authentication_only, "trustedShopper": $trusted_shopper} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Idempotency-Key": $idempotency_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Submit details for a payment
@@ -970,14 +1127,25 @@ export def "payments-details create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/payments/details")
+  let full_url = (build-url $base "/payments/details" $auth.query)
   let req_body = {"authenticationData": $authentication_data, "details": $details, "paymentData": $payment_data, "threeDSAuthenticationOnly": $three_ds_authentication_only} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Idempotency-Key": $idempotency_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Verify a payment result
@@ -1002,14 +1170,25 @@ export def "payments-result create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/payments/result")
+  let full_url = (build-url $base "/payments/result" $auth.query)
   let req_body = {"payload": $payload} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Idempotency-Key": $idempotency_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Update an authorised amount
@@ -1040,14 +1219,25 @@ export def "payments-amount-updates create-psp-reference" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($payment_psp_reference | is-empty) { error make --unspanned { msg: "path parameter 'paymentPspReference' must be non-empty" } }
-  let full_url = (build-url $base ({payment_psp_reference: (encode-path-segment $payment_psp_reference)} | format pattern "/payments/{payment_psp_reference}/amountUpdates"))
+  let full_url = (build-url $base ({payment_psp_reference: (encode-path-segment $payment_psp_reference)} | format pattern "/payments/{payment_psp_reference}/amountUpdates") $auth.query)
   let req_body = {"amount": $amount, "industryUsage": $industry_usage, "merchantAccount": $merchant_account, "reference": $reference, "splits": $splits} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Idempotency-Key": $idempotency_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200 201]
 }
 
 # Cancel an authorised payment
@@ -1073,14 +1263,25 @@ export def "payments-cancels create-psp-reference" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($payment_psp_reference | is-empty) { error make --unspanned { msg: "path parameter 'paymentPspReference' must be non-empty" } }
-  let full_url = (build-url $base ({payment_psp_reference: (encode-path-segment $payment_psp_reference)} | format pattern "/payments/{payment_psp_reference}/cancels"))
+  let full_url = (build-url $base ({payment_psp_reference: (encode-path-segment $payment_psp_reference)} | format pattern "/payments/{payment_psp_reference}/cancels") $auth.query)
   let req_body = {"merchantAccount": $merchant_account, "reference": $reference} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Idempotency-Key": $idempotency_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200 201]
 }
 
 # Capture an authorised payment
@@ -1112,14 +1313,25 @@ export def "payments-captures create-psp-reference" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($payment_psp_reference | is-empty) { error make --unspanned { msg: "path parameter 'paymentPspReference' must be non-empty" } }
-  let full_url = (build-url $base ({payment_psp_reference: (encode-path-segment $payment_psp_reference)} | format pattern "/payments/{payment_psp_reference}/captures"))
+  let full_url = (build-url $base ({payment_psp_reference: (encode-path-segment $payment_psp_reference)} | format pattern "/payments/{payment_psp_reference}/captures") $auth.query)
   let req_body = {"amount": $amount, "lineItems": $line_items, "merchantAccount": $merchant_account, "reference": $reference, "splits": $splits} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Idempotency-Key": $idempotency_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200 201]
 }
 
 # Refund a captured payment
@@ -1152,14 +1364,25 @@ export def "payments-refunds create-psp-reference" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($payment_psp_reference | is-empty) { error make --unspanned { msg: "path parameter 'paymentPspReference' must be non-empty" } }
-  let full_url = (build-url $base ({payment_psp_reference: (encode-path-segment $payment_psp_reference)} | format pattern "/payments/{payment_psp_reference}/refunds"))
+  let full_url = (build-url $base ({payment_psp_reference: (encode-path-segment $payment_psp_reference)} | format pattern "/payments/{payment_psp_reference}/refunds") $auth.query)
   let req_body = {"amount": $amount, "lineItems": $line_items, "merchantAccount": $merchant_account, "merchantRefundReason": $merchant_refund_reason, "reference": $reference, "splits": $splits} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Idempotency-Key": $idempotency_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200 201]
 }
 
 # Refund or cancel a payment
@@ -1185,14 +1408,25 @@ export def "payments-reversals create-psp-reference" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($payment_psp_reference | is-empty) { error make --unspanned { msg: "path parameter 'paymentPspReference' must be non-empty" } }
-  let full_url = (build-url $base ({payment_psp_reference: (encode-path-segment $payment_psp_reference)} | format pattern "/payments/{payment_psp_reference}/reversals"))
+  let full_url = (build-url $base ({payment_psp_reference: (encode-path-segment $payment_psp_reference)} | format pattern "/payments/{payment_psp_reference}/reversals") $auth.query)
   let req_body = {"merchantAccount": $merchant_account, "reference": $reference} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Idempotency-Key": $idempotency_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200 201]
 }
 
 # Create a payment session
@@ -1286,14 +1520,25 @@ export def "sessions create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/sessions")
+  let full_url = (build-url $base "/sessions" $auth.query)
   let req_body = {"accountInfo": $account_info, "additionalAmount": $additional_amount, "additionalData": $additional_data, "allowedPaymentMethods": $allowed_payment_methods, "amount": $amount, "applicationInfo": $application_info, "authenticationData": $authentication_data, "billingAddress": $billing_address, "blockedPaymentMethods": $blocked_payment_methods, "captureDelayHours": $capture_delay_hours, "channel": $channel, "company": $company, "countryCode": $country_code, "dateOfBirth": $date_of_birth, "deliverAt": $deliver_at, "deliveryAddress": $delivery_address, "enableOneClick": $enable_one_click, "enablePayOut": $enable_pay_out, "enableRecurring": $enable_recurring, "expiresAt": $expires_at, "fundOrigin": $fund_origin, "fundRecipient": $fund_recipient, "installmentOptions": $installment_options, "lineItems": $line_items, "mandate": $mandate, "mcc": $mcc, "merchantAccount": $merchant_account, "merchantOrderReference": $merchant_order_reference, "metadata": $metadata, "mpiData": $mpi_data, "recurringExpiry": $recurring_expiry, "recurringFrequency": $recurring_frequency, "recurringProcessingModel": $recurring_processing_model, "redirectFromIssuerMethod": $redirect_from_issuer_method, "redirectToIssuerMethod": $redirect_to_issuer_method, "reference": $reference, "returnUrl": $return_url, "riskData": $risk_data, "shopperEmail": $shopper_email, "shopperIP": $shopper_ip, "shopperInteraction": $shopper_interaction, "shopperLocale": $shopper_locale, "shopperName": $shopper_name, "shopperReference": $shopper_reference, "shopperStatement": $shopper_statement, "socialSecurityNumber": $social_security_number, "splitCardFundingSources": $split_card_funding_sources, "splits": $splits, "store": $store, "storePaymentMethod": $store_payment_method, "storePaymentMethodMode": $store_payment_method_mode, "telephoneNumber": $telephone_number, "threeDSAuthenticationOnly": $three_ds_authentication_only, "trustedShopper": $trusted_shopper} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Idempotency-Key": $idempotency_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Get tokens for stored payment details
@@ -1316,10 +1561,21 @@ export def "stored-payment-methods get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "shopperReference" $shopper_reference "scalar") (serialize-qp "merchantAccount" $merchant_account "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/storedPaymentMethods" $qp)
+  let full_url = (build-url $base "/storedPaymentMethods" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"shopperReference": $shopper_reference, "merchantAccount": $merchant_account} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"shopperReference": $shopper_reference, "merchantAccount": $merchant_account} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Delete a token for stored payment details
@@ -1344,8 +1600,19 @@ export def "stored-payment-methods delete-recurring" [
   let base = ($base_url | default $BASE_URL)
   if ($recurring_id | is-empty) { error make --unspanned { msg: "path parameter 'recurringId' must be non-empty" } }
   let qp = [(serialize-qp "shopperReference" $shopper_reference "scalar") (serialize-qp "merchantAccount" $merchant_account "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({recurring_id: (encode-path-segment $recurring_id)} | format pattern "/storedPaymentMethods/{recurring_id}") $qp)
+  let full_url = (build-url $base ({recurring_id: (encode-path-segment $recurring_id)} | format pattern "/storedPaymentMethods/{recurring_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"shopperReference": $shopper_reference, "merchantAccount": $merchant_account} | compact), body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: ({"shopperReference": $shopper_reference, "merchantAccount": $merchant_account} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200 204]
 }

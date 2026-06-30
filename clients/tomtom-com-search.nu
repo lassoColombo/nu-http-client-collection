@@ -8,7 +8,7 @@ const BASE_URL = "https://api.tomtom.com"
 # `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
 # where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o SEARCH_TOKEN | default "" }
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o SEARCH_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
@@ -41,14 +41,11 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
-# Trick: `url encode --all` over-encodes, then we decode the four unreserved
-# punctuation chars back. Pre-existing %XX sequences in the input survive
-# because `url encode --all` first turns their % into %25.
 def encode-path-segment [v: any]: nothing -> string {
   $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
-# Serialize an array-typed path parameter (issue 49.A). OpenAPI 3 `style: simple`
+# Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
 # (the default for path params) and Swagger 2 `collectionFormat: csv` both join
 # the elements with a literal comma WITHIN the single path segment, each element
 # RFC-3986-encoded individually (so a comma inside an element stays %2C). Without
@@ -59,51 +56,45 @@ def encode-path-array [v: any]: nothing -> string {
   if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
 }
 
-# Build URL from base, path, and optional query string
-def build-url [base: string, path: string, query?: string]: nothing -> string {
+# Build the request URL from base, path, and any number of pre-encoded query
+# fragments (param serializer output and/or the auth query). Each fragment is an
+# `&`-joinable `key=value` string already percent-encoded by its producer; empty
+# fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
+# delimiters are hand-spliced — and any query already on the base URL is merged in.
+def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
   let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
-  let result = ($parsed | upsert path $full_path)
-  if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
+  let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
+  $parsed | upsert path $full_path | upsert query $query | url join
 }
 
-# Build the dry-run record returned by --dry-run. Shape:
-#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
-#    auth: {scheme, location}}
-# `meta` carries logical-form data (the query record by spec name, the pre-serialization
-# body) that do-request itself cannot reconstruct from its wire-format args.
-def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
-  let m = ($meta | default {})
-  {
-    dry_run: true
-    method: $method
-    url: $url
-    query: ($m | get -o query | default {})
-    headers: $auth.headers
-    body: ($m | get -o body)
-    content_type: $content_type
-    timeout: $timeout
-    auth: {scheme: $auth.scheme, location: $auth.location}
-  }
+# Success policy: did this response succeed? Single source of truth, consulted by
+# handle-response and the HEAD header-unwrap. Empty ok_codes means the spec listed
+# none, so fall back to < 400. Otherwise: any 2xx, plus documented success codes.
+def status-ok [status: int, ok_codes: list<int>]: nothing -> bool {
+  if ($ok_codes | is-empty) { $status < 400 } else { ($status >= 200 and $status < 300) or ($status in $ok_codes) }
 }
 
-# Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
-  let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
-  let timeout = ($max_time | default 30min)
-  let ct = ($content_type | default "application/json")
-  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
-  let resp = match $method {
-    "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
-  }
-  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
-  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
+# Unwrap a `--full` HTTP response into the user-facing value. Response arrives
+# via pipeline; ok_codes gates the error throw (see status-ok).
+def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: record -> any {
+  let resp = $in
+  if $allow_errors { return $resp }
+  if not (status-ok $resp.status $ok_codes) { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } }
+  if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
+  if $resp.status == 204 { return null }
+  $resp.body
+}
+
+# GET — bodyless, honours --raw
+def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+}
+
+# POST — body + content-type
+def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 def base-url-completer [] { ["https://api.tomtom.com"] }
@@ -159,10 +150,21 @@ export def "search-additional-data-ext get" [
   if ($version_number | is-empty) { error make --unspanned { msg: "path parameter 'versionNumber' must be non-empty" } }
   if ($ext | is-empty) { error make --unspanned { msg: "path parameter 'ext' must be non-empty" } }
   let qp = [(serialize-qp "geometries" $geometries "scalar") (serialize-qp "geometriesZoom" $geometries_zoom "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({version_number: (encode-path-segment $version_number), ext: (encode-path-segment $ext)} | format pattern "/search/{version_number}/additionalData.{ext}") $qp)
+  let full_url = (build-url $base ({version_number: (encode-path-segment $version_number), ext: (encode-path-segment $ext)} | format pattern "/search/{version_number}/additionalData.{ext}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"geometries": $geometries, "geometriesZoom": $geometries_zoom} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"geometries": $geometries, "geometriesZoom": $geometries_zoom} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Low Bandwith Category Search
@@ -202,10 +204,21 @@ export def "search-c-s get" [
   if ($category | is-empty) { error make --unspanned { msg: "path parameter 'category' must be non-empty" } }
   if ($ext | is-empty) { error make --unspanned { msg: "path parameter 'ext' must be non-empty" } }
   let qp = [(serialize-qp "typeahead" $typeahead "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "ofs" $ofs "scalar") (serialize-qp "countrySet" $country_set "scalar") (serialize-qp "lat" $lat "scalar") (serialize-qp "lon" $lon "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "topLeft" $top_left "scalar") (serialize-qp "btmRight" $btm_right "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "idxSet" $idx_set "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({version_number: (encode-path-segment $version_number), category: (encode-path-segment $category), ext: (encode-path-segment $ext)} | format pattern "/search/{version_number}/cS/{category}.{ext}") $qp)
+  let full_url = (build-url $base ({version_number: (encode-path-segment $version_number), category: (encode-path-segment $category), ext: (encode-path-segment $ext)} | format pattern "/search/{version_number}/cS/{category}.{ext}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"typeahead": $typeahead, "limit": $limit, "ofs": $ofs, "countrySet": $country_set, "lat": $lat, "lon": $lon, "radius": $radius, "topLeft": $top_left, "btmRight": $btm_right, "language": $language, "idxSet": $idx_set, "view": $view} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"typeahead": $typeahead, "limit": $limit, "ofs": $ofs, "countrySet": $country_set, "lat": $lat, "lon": $lon, "radius": $radius, "topLeft": $top_left, "btmRight": $btm_right, "language": $language, "idxSet": $idx_set, "view": $view} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Category Search
@@ -243,10 +256,21 @@ export def "search-category-search get" [
   if ($query | is-empty) { error make --unspanned { msg: "path parameter 'query' must be non-empty" } }
   if ($ext | is-empty) { error make --unspanned { msg: "path parameter 'ext' must be non-empty" } }
   let qp = [(serialize-qp "typeahead" $typeahead "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "ofs" $ofs "scalar") (serialize-qp "countrySet" $country_set "scalar") (serialize-qp "lat" $lat "scalar") (serialize-qp "lon" $lon "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "topLeft" $top_left "scalar") (serialize-qp "btmRight" $btm_right "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "extendedPostalCodesFor" $extended_postal_codes_for "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({version_number: (encode-path-segment $version_number), query: (encode-path-segment $query), ext: (encode-path-segment $ext)} | format pattern "/search/{version_number}/categorySearch/{query}.{ext}") $qp)
+  let full_url = (build-url $base ({version_number: (encode-path-segment $version_number), query: (encode-path-segment $query), ext: (encode-path-segment $ext)} | format pattern "/search/{version_number}/categorySearch/{query}.{ext}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"typeahead": $typeahead, "limit": $limit, "ofs": $ofs, "countrySet": $country_set, "lat": $lat, "lon": $lon, "radius": $radius, "topLeft": $top_left, "btmRight": $btm_right, "language": $language, "extendedPostalCodesFor": $extended_postal_codes_for, "view": $view} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"typeahead": $typeahead, "limit": $limit, "ofs": $ofs, "countrySet": $country_set, "lat": $lat, "lon": $lon, "radius": $radius, "topLeft": $top_left, "btmRight": $btm_right, "language": $language, "extendedPostalCodesFor": $extended_postal_codes_for, "view": $view} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Geocode
@@ -286,10 +310,21 @@ export def "search-geocode get" [
   if ($query | is-empty) { error make --unspanned { msg: "path parameter 'query' must be non-empty" } }
   if ($ext | is-empty) { error make --unspanned { msg: "path parameter 'ext' must be non-empty" } }
   let qp = [(serialize-qp "storeResult" $store_result "scalar") (serialize-qp "typeahead" $typeahead "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "ofs" $ofs "scalar") (serialize-qp "countrySet" $country_set "scalar") (serialize-qp "lat" $lat "scalar") (serialize-qp "lon" $lon "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "topLeft" $top_left "scalar") (serialize-qp "btmRight" $btm_right "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "extendedPostalCodesFor" $extended_postal_codes_for "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({version_number: (encode-path-segment $version_number), query: (encode-path-segment $query), ext: (encode-path-segment $ext)} | format pattern "/search/{version_number}/geocode/{query}.{ext}") $qp)
+  let full_url = (build-url $base ({version_number: (encode-path-segment $version_number), query: (encode-path-segment $query), ext: (encode-path-segment $ext)} | format pattern "/search/{version_number}/geocode/{query}.{ext}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"storeResult": $store_result, "typeahead": $typeahead, "limit": $limit, "ofs": $ofs, "countrySet": $country_set, "lat": $lat, "lon": $lon, "radius": $radius, "topLeft": $top_left, "btmRight": $btm_right, "language": $language, "extendedPostalCodesFor": $extended_postal_codes_for, "view": $view} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"storeResult": $store_result, "typeahead": $typeahead, "limit": $limit, "ofs": $ofs, "countrySet": $country_set, "lat": $lat, "lon": $lon, "radius": $radius, "topLeft": $top_left, "btmRight": $btm_right, "language": $language, "extendedPostalCodesFor": $extended_postal_codes_for, "view": $view} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Geometry Filter
@@ -315,10 +350,21 @@ export def "search-geometry-filter-ext get" [
   if ($version_number | is-empty) { error make --unspanned { msg: "path parameter 'versionNumber' must be non-empty" } }
   if ($ext | is-empty) { error make --unspanned { msg: "path parameter 'ext' must be non-empty" } }
   let qp = [(serialize-qp "geometryList" $geometry_list "scalar") (serialize-qp "poiList" $poi_list "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({version_number: (encode-path-segment $version_number), ext: (encode-path-segment $ext)} | format pattern "/search/{version_number}/geometryFilter.{ext}") $qp)
+  let full_url = (build-url $base ({version_number: (encode-path-segment $version_number), ext: (encode-path-segment $ext)} | format pattern "/search/{version_number}/geometryFilter.{ext}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"geometryList": $geometry_list, "poiList": $poi_list} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"geometryList": $geometry_list, "poiList": $poi_list} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Geometry Filter
@@ -346,12 +392,23 @@ export def "search-geometry-filter-ext create" [
   let base = ($base_url | default $BASE_URL)
   if ($version_number | is-empty) { error make --unspanned { msg: "path parameter 'versionNumber' must be non-empty" } }
   if ($ext | is-empty) { error make --unspanned { msg: "path parameter 'ext' must be non-empty" } }
-  let full_url = (build-url $base ({version_number: (encode-path-segment $version_number), ext: (encode-path-segment $ext)} | format pattern "/search/{version_number}/geometryFilter.{ext}"))
+  let full_url = (build-url $base ({version_number: (encode-path-segment $version_number), ext: (encode-path-segment $ext)} | format pattern "/search/{version_number}/geometryFilter.{ext}") $auth.query)
   let req_body = {"geometryList": $geometry_list, "poiList": $poi_list} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Geometry Search
@@ -382,10 +439,21 @@ export def "search-geometry-search get" [
   if ($query | is-empty) { error make --unspanned { msg: "path parameter 'query' must be non-empty" } }
   if ($ext | is-empty) { error make --unspanned { msg: "path parameter 'ext' must be non-empty" } }
   let qp = [(serialize-qp "geometryList" $geometry_list "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "extendedPostalCodesFor" $extended_postal_codes_for "scalar") (serialize-qp "idxSet" $idx_set "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({version_number: (encode-path-segment $version_number), query: (encode-path-segment $query), ext: (encode-path-segment $ext)} | format pattern "/search/{version_number}/geometrySearch/{query}.{ext}") $qp)
+  let full_url = (build-url $base ({version_number: (encode-path-segment $version_number), query: (encode-path-segment $query), ext: (encode-path-segment $ext)} | format pattern "/search/{version_number}/geometrySearch/{query}.{ext}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"geometryList": $geometry_list, "limit": $limit, "language": $language, "extendedPostalCodesFor": $extended_postal_codes_for, "idxSet": $idx_set} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"geometryList": $geometry_list, "limit": $limit, "language": $language, "extendedPostalCodesFor": $extended_postal_codes_for, "idxSet": $idx_set} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Geometry Search
@@ -418,12 +486,23 @@ export def "search-geometry-search create" [
   if ($query | is-empty) { error make --unspanned { msg: "path parameter 'query' must be non-empty" } }
   if ($ext | is-empty) { error make --unspanned { msg: "path parameter 'ext' must be non-empty" } }
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "extendedPostalCodesFor" $extended_postal_codes_for "scalar") (serialize-qp "idxSet" $idx_set "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({version_number: (encode-path-segment $version_number), query: (encode-path-segment $query), ext: (encode-path-segment $ext)} | format pattern "/search/{version_number}/geometrySearch/{query}.{ext}") $qp)
+  let full_url = (build-url $base ({version_number: (encode-path-segment $version_number), query: (encode-path-segment $query), ext: (encode-path-segment $ext)} | format pattern "/search/{version_number}/geometrySearch/{query}.{ext}") $qp $auth.query)
   let req_body = {"geometryList": $geometry_list} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"limit": $limit, "language": $language, "extendedPostalCodesFor": $extended_postal_codes_for, "idxSet": $idx_set} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"limit": $limit, "language": $language, "extendedPostalCodesFor": $extended_postal_codes_for, "idxSet": $idx_set} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Nearby Search
@@ -463,10 +542,21 @@ export def "search-nearby-search-ext get" [
   if ($version_number | is-empty) { error make --unspanned { msg: "path parameter 'versionNumber' must be non-empty" } }
   if ($ext | is-empty) { error make --unspanned { msg: "path parameter 'ext' must be non-empty" } }
   let qp = [(serialize-qp "lat" $lat "scalar") (serialize-qp "lon" $lon "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "ofs" $ofs "scalar") (serialize-qp "countrySet" $country_set "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "topLeft" $top_left "scalar") (serialize-qp "btmRight" $btm_right "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "extendedPostalCodesFor" $extended_postal_codes_for "scalar") (serialize-qp "minFuzzyLevel" $min_fuzzy_level "scalar") (serialize-qp "maxFuzzyLevel" $max_fuzzy_level "scalar") (serialize-qp "idxSet" $idx_set "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({version_number: (encode-path-segment $version_number), ext: (encode-path-segment $ext)} | format pattern "/search/{version_number}/nearbySearch/.{ext}") $qp)
+  let full_url = (build-url $base ({version_number: (encode-path-segment $version_number), ext: (encode-path-segment $ext)} | format pattern "/search/{version_number}/nearbySearch/.{ext}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"lat": $lat, "lon": $lon, "limit": $limit, "ofs": $ofs, "countrySet": $country_set, "radius": $radius, "topLeft": $top_left, "btmRight": $btm_right, "language": $language, "extendedPostalCodesFor": $extended_postal_codes_for, "minFuzzyLevel": $min_fuzzy_level, "maxFuzzyLevel": $max_fuzzy_level, "idxSet": $idx_set, "view": $view} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"lat": $lat, "lon": $lon, "limit": $limit, "ofs": $ofs, "countrySet": $country_set, "radius": $radius, "topLeft": $top_left, "btmRight": $btm_right, "language": $language, "extendedPostalCodesFor": $extended_postal_codes_for, "minFuzzyLevel": $min_fuzzy_level, "maxFuzzyLevel": $max_fuzzy_level, "idxSet": $idx_set, "view": $view} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Points of Interest Search
@@ -504,10 +594,21 @@ export def "search-poi-search get" [
   if ($query | is-empty) { error make --unspanned { msg: "path parameter 'query' must be non-empty" } }
   if ($ext | is-empty) { error make --unspanned { msg: "path parameter 'ext' must be non-empty" } }
   let qp = [(serialize-qp "typeahead" $typeahead "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "ofs" $ofs "scalar") (serialize-qp "countrySet" $country_set "scalar") (serialize-qp "lat" $lat "scalar") (serialize-qp "lon" $lon "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "topLeft" $top_left "scalar") (serialize-qp "btmRight" $btm_right "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "extendedPostalCodesFor" $extended_postal_codes_for "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({version_number: (encode-path-segment $version_number), query: (encode-path-segment $query), ext: (encode-path-segment $ext)} | format pattern "/search/{version_number}/poiSearch/{query}.{ext}") $qp)
+  let full_url = (build-url $base ({version_number: (encode-path-segment $version_number), query: (encode-path-segment $query), ext: (encode-path-segment $ext)} | format pattern "/search/{version_number}/poiSearch/{query}.{ext}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"typeahead": $typeahead, "limit": $limit, "ofs": $ofs, "countrySet": $country_set, "lat": $lat, "lon": $lon, "radius": $radius, "topLeft": $top_left, "btmRight": $btm_right, "language": $language, "extendedPostalCodesFor": $extended_postal_codes_for, "view": $view} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"typeahead": $typeahead, "limit": $limit, "ofs": $ofs, "countrySet": $country_set, "lat": $lat, "lon": $lon, "radius": $radius, "topLeft": $top_left, "btmRight": $btm_right, "language": $language, "extendedPostalCodesFor": $extended_postal_codes_for, "view": $view} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Cross Street lookup
@@ -539,10 +640,21 @@ export def "search-reverse-geocode-cross-street get" [
   if ($position | is-empty) { error make --unspanned { msg: "path parameter 'position' must be non-empty" } }
   if ($ext | is-empty) { error make --unspanned { msg: "path parameter 'ext' must be non-empty" } }
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "spatialKeys" $spatial_keys "scalar") (serialize-qp "heading" $heading "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "language" $language "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({version_number: (encode-path-segment $version_number), position: (encode-path-segment $position), ext: (encode-path-segment $ext)} | format pattern "/search/{version_number}/reverseGeocode/crossStreet/{position}.{ext}") $qp)
+  let full_url = (build-url $base ({version_number: (encode-path-segment $version_number), position: (encode-path-segment $position), ext: (encode-path-segment $ext)} | format pattern "/search/{version_number}/reverseGeocode/crossStreet/{position}.{ext}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"limit": $limit, "spatialKeys": $spatial_keys, "heading": $heading, "radius": $radius, "language": $language} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"limit": $limit, "spatialKeys": $spatial_keys, "heading": $heading, "radius": $radius, "language": $language} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Reverse Geocode
@@ -577,10 +689,21 @@ export def "search-reverse-geocode get" [
   if ($position | is-empty) { error make --unspanned { msg: "path parameter 'position' must be non-empty" } }
   if ($ext | is-empty) { error make --unspanned { msg: "path parameter 'ext' must be non-empty" } }
   let qp = [(serialize-qp "spatialKeys" $spatial_keys "scalar") (serialize-qp "returnSpeedLimit" $return_speed_limit "scalar") (serialize-qp "heading" $heading "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "number" $number "scalar") (serialize-qp "returnRoadUse" $return_road_use "scalar") (serialize-qp "roadUse" $road_use "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({version_number: (encode-path-segment $version_number), position: (encode-path-segment $position), ext: (encode-path-segment $ext)} | format pattern "/search/{version_number}/reverseGeocode/{position}.{ext}") $qp)
+  let full_url = (build-url $base ({version_number: (encode-path-segment $version_number), position: (encode-path-segment $position), ext: (encode-path-segment $ext)} | format pattern "/search/{version_number}/reverseGeocode/{position}.{ext}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"spatialKeys": $spatial_keys, "returnSpeedLimit": $return_speed_limit, "heading": $heading, "radius": $radius, "number": $number, "returnRoadUse": $return_road_use, "roadUse": $road_use, "callback": $callback} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"spatialKeys": $spatial_keys, "returnSpeedLimit": $return_speed_limit, "heading": $heading, "radius": $radius, "number": $number, "returnRoadUse": $return_road_use, "roadUse": $road_use, "callback": $callback} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Routed Filter
@@ -612,10 +735,21 @@ export def "search-routed-filter get" [
   if ($heading | is-empty) { error make --unspanned { msg: "path parameter 'heading' must be non-empty" } }
   if ($ext | is-empty) { error make --unspanned { msg: "path parameter 'ext' must be non-empty" } }
   let qp = [(serialize-qp "poiList" $poi_list "scalar") (serialize-qp "routingTimeout" $routing_timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({version_number: (encode-path-segment $version_number), position: (encode-path-segment $position), heading: (encode-path-segment $heading), ext: (encode-path-segment $ext)} | format pattern "/search/{version_number}/routedFilter/{position}/{heading}.{ext}") $qp)
+  let full_url = (build-url $base ({version_number: (encode-path-segment $version_number), position: (encode-path-segment $position), heading: (encode-path-segment $heading), ext: (encode-path-segment $ext)} | format pattern "/search/{version_number}/routedFilter/{position}/{heading}.{ext}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"poiList": $poi_list, "routingTimeout": $routing_timeout} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"poiList": $poi_list, "routingTimeout": $routing_timeout} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Routed Filter
@@ -649,12 +783,23 @@ export def "search-routed-filter create" [
   if ($heading | is-empty) { error make --unspanned { msg: "path parameter 'heading' must be non-empty" } }
   if ($ext | is-empty) { error make --unspanned { msg: "path parameter 'ext' must be non-empty" } }
   let qp = [(serialize-qp "routingTimeout" $routing_timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({version_number: (encode-path-segment $version_number), position: (encode-path-segment $position), heading: (encode-path-segment $heading), ext: (encode-path-segment $ext)} | format pattern "/search/{version_number}/routedFilter/{position}/{heading}.{ext}") $qp)
+  let full_url = (build-url $base ({version_number: (encode-path-segment $version_number), position: (encode-path-segment $position), heading: (encode-path-segment $heading), ext: (encode-path-segment $ext)} | format pattern "/search/{version_number}/routedFilter/{position}/{heading}.{ext}") $qp $auth.query)
   let req_body = {"poiList": $poi_list} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"routingTimeout": $routing_timeout} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"routingTimeout": $routing_timeout} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Routed Search
@@ -693,10 +838,21 @@ export def "search-routed-search get" [
   if ($heading | is-empty) { error make --unspanned { msg: "path parameter 'heading' must be non-empty" } }
   if ($ext | is-empty) { error make --unspanned { msg: "path parameter 'ext' must be non-empty" } }
   let qp = [(serialize-qp "typeahead" $typeahead "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "multiplier" $multiplier "scalar") (serialize-qp "routingTimeout" $routing_timeout "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "extendedPostalCodesFor" $extended_postal_codes_for "scalar") (serialize-qp "idxSet" $idx_set "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({version_number: (encode-path-segment $version_number), query: (encode-path-segment $query), position: (encode-path-segment $position), heading: (encode-path-segment $heading), ext: (encode-path-segment $ext)} | format pattern "/search/{version_number}/routedSearch/{query}/{position}/{heading}.{ext}") $qp)
+  let full_url = (build-url $base ({version_number: (encode-path-segment $version_number), query: (encode-path-segment $query), position: (encode-path-segment $position), heading: (encode-path-segment $heading), ext: (encode-path-segment $ext)} | format pattern "/search/{version_number}/routedSearch/{query}/{position}/{heading}.{ext}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"typeahead": $typeahead, "limit": $limit, "multiplier": $multiplier, "routingTimeout": $routing_timeout, "language": $language, "extendedPostalCodesFor": $extended_postal_codes_for, "idxSet": $idx_set} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"typeahead": $typeahead, "limit": $limit, "multiplier": $multiplier, "routingTimeout": $routing_timeout, "language": $language, "extendedPostalCodesFor": $extended_postal_codes_for, "idxSet": $idx_set} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Low bandwith Search
@@ -736,10 +892,21 @@ export def "search-s get" [
   if ($query | is-empty) { error make --unspanned { msg: "path parameter 'query' must be non-empty" } }
   if ($ext | is-empty) { error make --unspanned { msg: "path parameter 'ext' must be non-empty" } }
   let qp = [(serialize-qp "typeahead" $typeahead "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "ofs" $ofs "scalar") (serialize-qp "countrySet" $country_set "scalar") (serialize-qp "lat" $lat "scalar") (serialize-qp "lon" $lon "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "topLeft" $top_left "scalar") (serialize-qp "btmRight" $btm_right "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "idxSet" $idx_set "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({version_number: (encode-path-segment $version_number), query: (encode-path-segment $query), ext: (encode-path-segment $ext)} | format pattern "/search/{version_number}/s/{query}.{ext}") $qp)
+  let full_url = (build-url $base ({version_number: (encode-path-segment $version_number), query: (encode-path-segment $query), ext: (encode-path-segment $ext)} | format pattern "/search/{version_number}/s/{query}.{ext}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"typeahead": $typeahead, "limit": $limit, "ofs": $ofs, "countrySet": $country_set, "lat": $lat, "lon": $lon, "radius": $radius, "topLeft": $top_left, "btmRight": $btm_right, "language": $language, "idxSet": $idx_set, "view": $view} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"typeahead": $typeahead, "limit": $limit, "ofs": $ofs, "countrySet": $country_set, "lat": $lat, "lon": $lon, "radius": $radius, "topLeft": $top_left, "btmRight": $btm_right, "language": $language, "idxSet": $idx_set, "view": $view} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Fuzzy Search
@@ -780,10 +947,21 @@ export def "search-search get" [
   if ($query | is-empty) { error make --unspanned { msg: "path parameter 'query' must be non-empty" } }
   if ($ext | is-empty) { error make --unspanned { msg: "path parameter 'ext' must be non-empty" } }
   let qp = [(serialize-qp "typeahead" $typeahead "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "ofs" $ofs "scalar") (serialize-qp "countrySet" $country_set "scalar") (serialize-qp "lat" $lat "scalar") (serialize-qp "lon" $lon "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "topLeft" $top_left "scalar") (serialize-qp "btmRight" $btm_right "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "extendedPostalCodesFor" $extended_postal_codes_for "scalar") (serialize-qp "minFuzzyLevel" $min_fuzzy_level "scalar") (serialize-qp "maxFuzzyLevel" $max_fuzzy_level "scalar") (serialize-qp "idxSet" $idx_set "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({version_number: (encode-path-segment $version_number), query: (encode-path-segment $query), ext: (encode-path-segment $ext)} | format pattern "/search/{version_number}/search/{query}.{ext}") $qp)
+  let full_url = (build-url $base ({version_number: (encode-path-segment $version_number), query: (encode-path-segment $query), ext: (encode-path-segment $ext)} | format pattern "/search/{version_number}/search/{query}.{ext}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"typeahead": $typeahead, "limit": $limit, "ofs": $ofs, "countrySet": $country_set, "lat": $lat, "lon": $lon, "radius": $radius, "topLeft": $top_left, "btmRight": $btm_right, "language": $language, "extendedPostalCodesFor": $extended_postal_codes_for, "minFuzzyLevel": $min_fuzzy_level, "maxFuzzyLevel": $max_fuzzy_level, "idxSet": $idx_set, "view": $view} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"typeahead": $typeahead, "limit": $limit, "ofs": $ofs, "countrySet": $country_set, "lat": $lat, "lon": $lon, "radius": $radius, "topLeft": $top_left, "btmRight": $btm_right, "language": $language, "extendedPostalCodesFor": $extended_postal_codes_for, "minFuzzyLevel": $min_fuzzy_level, "maxFuzzyLevel": $max_fuzzy_level, "idxSet": $idx_set, "view": $view} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Along Route Search
@@ -814,12 +992,23 @@ export def "search-search-along-route create" [
   if ($query | is-empty) { error make --unspanned { msg: "path parameter 'query' must be non-empty" } }
   if ($ext | is-empty) { error make --unspanned { msg: "path parameter 'ext' must be non-empty" } }
   let qp = [(serialize-qp "maxDetourTime" $max_detour_time "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({version_number: (encode-path-segment $version_number), query: (encode-path-segment $query), ext: (encode-path-segment $ext)} | format pattern "/search/{version_number}/searchAlongRoute/{query}.{ext}") $qp)
+  let full_url = (build-url $base ({version_number: (encode-path-segment $version_number), query: (encode-path-segment $query), ext: (encode-path-segment $ext)} | format pattern "/search/{version_number}/searchAlongRoute/{query}.{ext}") $qp $auth.query)
   let req_body = {"route": $route} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"maxDetourTime": $max_detour_time, "limit": $limit} | compact), body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"maxDetourTime": $max_detour_time, "limit": $limit} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Structured Geocode
@@ -857,8 +1046,19 @@ export def "search-structured-geocode-ext get" [
   if ($version_number | is-empty) { error make --unspanned { msg: "path parameter 'versionNumber' must be non-empty" } }
   if ($ext | is-empty) { error make --unspanned { msg: "path parameter 'ext' must be non-empty" } }
   let qp = [(serialize-qp "countryCode" $country_code "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "ofs" $ofs "scalar") (serialize-qp "streetNumber" $street_number "scalar") (serialize-qp "streetName" $street_name "scalar") (serialize-qp "crossStreet" $cross_street "scalar") (serialize-qp "municipality" $municipality "scalar") (serialize-qp "municipalitySubdivision" $municipality_subdivision "scalar") (serialize-qp "countryTertiarySubdivision" $country_tertiary_subdivision "scalar") (serialize-qp "countrySecondarySubdivision" $country_secondary_subdivision "scalar") (serialize-qp "countrySubdivision" $country_subdivision "scalar") (serialize-qp "postalCode" $postal_code "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "extendedPostalCodesFor" $extended_postal_codes_for "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({version_number: (encode-path-segment $version_number), ext: (encode-path-segment $ext)} | format pattern "/search/{version_number}/structuredGeocode.{ext}") $qp)
+  let full_url = (build-url $base ({version_number: (encode-path-segment $version_number), ext: (encode-path-segment $ext)} | format pattern "/search/{version_number}/structuredGeocode.{ext}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"countryCode": $country_code, "limit": $limit, "ofs": $ofs, "streetNumber": $street_number, "streetName": $street_name, "crossStreet": $cross_street, "municipality": $municipality, "municipalitySubdivision": $municipality_subdivision, "countryTertiarySubdivision": $country_tertiary_subdivision, "countrySecondarySubdivision": $country_secondary_subdivision, "countrySubdivision": $country_subdivision, "postalCode": $postal_code, "language": $language, "extendedPostalCodesFor": $extended_postal_codes_for} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"countryCode": $country_code, "limit": $limit, "ofs": $ofs, "streetNumber": $street_number, "streetName": $street_name, "crossStreet": $cross_street, "municipality": $municipality, "municipalitySubdivision": $municipality_subdivision, "countryTertiarySubdivision": $country_tertiary_subdivision, "countrySecondarySubdivision": $country_secondary_subdivision, "countrySubdivision": $country_subdivision, "postalCode": $postal_code, "language": $language, "extendedPostalCodesFor": $extended_postal_codes_for} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }

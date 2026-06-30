@@ -8,7 +8,7 @@ const BASE_URL = "https://viatorapi.viator.com/service"
 # `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
 # where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o VIATOR_API_DOCUMENTATION_AMP_SPECIFICATION_MERCHANT_PARTNERS_TOKEN | default "" }
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o VIATOR_API_DOCUMENTATION_AMP_SPECIFICATION_MERCHANT_PARTNERS_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
@@ -42,14 +42,11 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
-# Trick: `url encode --all` over-encodes, then we decode the four unreserved
-# punctuation chars back. Pre-existing %XX sequences in the input survive
-# because `url encode --all` first turns their % into %25.
 def encode-path-segment [v: any]: nothing -> string {
   $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
-# Serialize an array-typed path parameter (issue 49.A). OpenAPI 3 `style: simple`
+# Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
 # (the default for path params) and Swagger 2 `collectionFormat: csv` both join
 # the elements with a literal comma WITHIN the single path segment, each element
 # RFC-3986-encoded individually (so a comma inside an element stays %2C). Without
@@ -60,51 +57,45 @@ def encode-path-array [v: any]: nothing -> string {
   if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
 }
 
-# Build URL from base, path, and optional query string
-def build-url [base: string, path: string, query?: string]: nothing -> string {
+# Build the request URL from base, path, and any number of pre-encoded query
+# fragments (param serializer output and/or the auth query). Each fragment is an
+# `&`-joinable `key=value` string already percent-encoded by its producer; empty
+# fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
+# delimiters are hand-spliced — and any query already on the base URL is merged in.
+def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
   let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
-  let result = ($parsed | upsert path $full_path)
-  if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
+  let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
+  $parsed | upsert path $full_path | upsert query $query | url join
 }
 
-# Build the dry-run record returned by --dry-run. Shape:
-#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
-#    auth: {scheme, location}}
-# `meta` carries logical-form data (the query record by spec name, the pre-serialization
-# body) that do-request itself cannot reconstruct from its wire-format args.
-def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
-  let m = ($meta | default {})
-  {
-    dry_run: true
-    method: $method
-    url: $url
-    query: ($m | get -o query | default {})
-    headers: $auth.headers
-    body: ($m | get -o body)
-    content_type: $content_type
-    timeout: $timeout
-    auth: {scheme: $auth.scheme, location: $auth.location}
-  }
+# Success policy: did this response succeed? Single source of truth, consulted by
+# handle-response and the HEAD header-unwrap. Empty ok_codes means the spec listed
+# none, so fall back to < 400. Otherwise: any 2xx, plus documented success codes.
+def status-ok [status: int, ok_codes: list<int>]: nothing -> bool {
+  if ($ok_codes | is-empty) { $status < 400 } else { ($status >= 200 and $status < 300) or ($status in $ok_codes) }
 }
 
-# Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
-  let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
-  let timeout = ($max_time | default 30min)
-  let ct = ($content_type | default "application/json")
-  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
-  let resp = match $method {
-    "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
-  }
-  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
-  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
+# Unwrap a `--full` HTTP response into the user-facing value. Response arrives
+# via pipeline; ok_codes gates the error throw (see status-ok).
+def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: record -> any {
+  let resp = $in
+  if $allow_errors { return $resp }
+  if not (status-ok $resp.status $ok_codes) { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } }
+  if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
+  if $resp.status == 204 { return null }
+  $resp.body
+}
+
+# GET — bodyless, honours --raw
+def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+}
+
+# POST — body + content-type
+def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 def base-url-completer [] { ["https://viatorapi.viator.com/service" "https://viatorapi.sandbox.viator.com/service" "https://api.sandbox.viator.com/partner"] }
@@ -163,14 +154,25 @@ export def "available-products create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "exp-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/available/products")
+  let full_url = (build-url $base "/available/products" $auth.query)
   let req_body = {"currencyCode": $currency_code, "endDate": $end_date, "numAdults": $num_adults, "productCodes": $product_codes, "startDate": $start_date} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # /booking/availability
@@ -198,14 +200,25 @@ export def "booking-availability create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "exp-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/booking/availability")
+  let full_url = (build-url $base "/booking/availability" $auth.query)
   let req_body = {"ageBands": $age_bands, "currencyCode": $currency_code, "month": $month, "productCode": $product_code, "year": $year} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # /booking/availability/dates
@@ -228,12 +241,23 @@ export def "booking-availability-dates get" [
   let auth = (build-auth $token ($auth_scheme | default "exp-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "productCode" $product_code "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/booking/availability/dates" $qp)
+  let full_url = (build-url $base "/booking/availability/dates" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"productCode": $product_code} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"productCode": $product_code} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # /booking/availability/tourgrades
@@ -260,14 +284,25 @@ export def "booking-availability-tourgrades create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "exp-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/booking/availability/tourgrades")
+  let full_url = (build-url $base "/booking/availability/tourgrades" $auth.query)
   let req_body = {"ageBands": $age_bands, "bookingDate": $booking_date, "currencyCode": $currency_code, "productCode": $product_code} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # /booking/availability/tourgrades/pricingmatrix
@@ -293,14 +328,25 @@ export def "booking-availability-tourgrades-pricingmatrix create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "exp-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/booking/availability/tourgrades/pricingmatrix")
+  let full_url = (build-url $base "/booking/availability/tourgrades/pricingmatrix" $auth.query)
   let req_body = {"currencyCode": $currency_code, "month": $month, "productCode": $product_code, "year": $year} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # /booking/book
@@ -330,14 +376,25 @@ export def "booking-book create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "exp-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/booking/book")
+  let full_url = (build-url $base "/booking/book" $auth.query)
   let req_body = {"booker": $booker, "currencyCode": $currency_code, "demo": $demo, "items": $items, "partnerDetail": $partner_detail} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # /booking/calculateprice
@@ -362,14 +419,25 @@ export def "booking-calculateprice create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "exp-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/booking/calculateprice")
+  let full_url = (build-url $base "/booking/calculateprice" $auth.query)
   let req_body = {"currencyCode": $currency_code, "items": $items} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # /booking/hotels
@@ -393,12 +461,23 @@ export def "booking-hotels get" [
   let auth = (build-auth $token ($auth_scheme | default "exp-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "productCode" $product_code "scalar") (serialize-qp "destId" $dest_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/booking/hotels" $qp)
+  let full_url = (build-url $base "/booking/hotels" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"productCode": $product_code, "destId": $dest_id} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"productCode": $product_code, "destId": $dest_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # /booking/mybookings
@@ -423,12 +502,23 @@ export def "booking-mybookings get" [
   let auth = (build-auth $token ($auth_scheme | default "exp-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "voucherKey" $voucher_key "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "itineraryOrItemId" $itinerary_or_item_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/booking/mybookings" $qp)
+  let full_url = (build-url $base "/booking/mybookings" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"voucherKey": $voucher_key, "email": $email, "itineraryOrItemId": $itinerary_or_item_id} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"voucherKey": $voucher_key, "email": $email, "itineraryOrItemId": $itinerary_or_item_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # /booking/pastbooking
@@ -453,12 +543,23 @@ export def "booking-pastbooking get" [
   let auth = (build-auth $token ($auth_scheme | default "exp-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "voucherKey" $voucher_key "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "itemId" $item_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/booking/pastbooking" $qp)
+  let full_url = (build-url $base "/booking/pastbooking" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"voucherKey": $voucher_key, "email": $email, "itemId": $item_id} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"voucherKey": $voucher_key, "email": $email, "itemId": $item_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # /booking/pricingmatrix
@@ -484,14 +585,25 @@ export def "booking-pricingmatrix create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "exp-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/booking/pricingmatrix")
+  let full_url = (build-url $base "/booking/pricingmatrix" $auth.query)
   let req_body = {"bookingDate": $booking_date, "currencyCode": $currency_code, "productCode": $product_code, "tourGradeCode": $tour_grade_code} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # /booking/status
@@ -521,14 +633,25 @@ export def "booking-status create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "exp-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/booking/status")
+  let full_url = (build-url $base "/booking/status" $auth.query)
   let req_body = {"bookingDateFrom": $booking_date_from, "bookingDateTo": $booking_date_to, "distributorItemRefs": $distributor_item_refs, "distributorRefs": $distributor_refs, "itemIds": $item_ids, "leadFirstName": $lead_first_name, "leadSurname": $lead_surname, "test": $test} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # /booking/status/items
@@ -558,14 +681,25 @@ export def "booking-status-items create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "exp-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/booking/status/items")
+  let full_url = (build-url $base "/booking/status/items" $auth.query)
   let req_body = {"bookingDateFrom": $booking_date_from, "bookingDateTo": $booking_date_to, "distributorItemRefs": $distributor_item_refs, "distributorRefs": $distributor_refs, "itemIds": $item_ids, "leadFirstName": $lead_first_name, "leadSurname": $lead_surname, "test": $test} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # /booking/voucher
@@ -593,12 +727,23 @@ export def "booking-voucher get" [
   let auth = (build-auth $token ($auth_scheme | default "exp-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "leadLastName" $lead_last_name "scalar") (serialize-qp "itemId" $item_id "scalar") (serialize-qp "embeddedResources" $embedded_resources "scalar") (serialize-qp "voucherKey" $voucher_key "scalar") (serialize-qp "fullHTML" $full_html "scalar") (serialize-qp "mobileVoucher" $mobile_voucher "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/booking/voucher" $qp)
+  let full_url = (build-url $base "/booking/voucher" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"leadLastName": $lead_last_name, "itemId": $item_id, "embeddedResources": $embedded_resources, "voucherKey": $voucher_key, "fullHTML": $full_html, "mobileVoucher": $mobile_voucher} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"leadLastName": $lead_last_name, "itemId": $item_id, "embeddedResources": $embedded_resources, "voucherKey": $voucher_key, "fullHTML": $full_html, "mobileVoucher": $mobile_voucher} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # /bookings/cancel-reasons
@@ -619,12 +764,23 @@ export def "bookings-cancel-reasons get-cancellation" [
 ]: nothing -> table<reasons: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "exp-api-key"))
   let base = ($base_url | default "https://api.sandbox.viator.com/partner")
-  let full_url = (build-url $base "/bookings/cancel-reasons")
+  let full_url = (build-url $base "/bookings/cancel-reasons" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # /bookings/{booking-reference}/cancel
@@ -649,14 +805,25 @@ export def "bookings-cancel cancel" [
   let auth = (build-auth $token ($auth_scheme | default "exp-api-key"))
   let base = ($base_url | default "https://api.sandbox.viator.com/partner")
   if ($booking_reference | is-empty) { error make --unspanned { msg: "path parameter 'booking-reference' must be non-empty" } }
-  let full_url = (build-url $base ({booking_reference: (encode-path-segment $booking_reference)} | format pattern "/bookings/{booking_reference}/cancel"))
+  let full_url = (build-url $base ({booking_reference: (encode-path-segment $booking_reference)} | format pattern "/bookings/{booking_reference}/cancel") $auth.query)
   let req_body = {"reasonCode": $reason_code} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # /bookings/{booking-reference}/cancel-quote
@@ -678,10 +845,21 @@ export def "bookings-cancel-quote cancel" [
   let auth = (build-auth $token ($auth_scheme | default "exp-api-key"))
   let base = ($base_url | default "https://api.sandbox.viator.com/partner")
   if ($booking_reference | is-empty) { error make --unspanned { msg: "path parameter 'booking-reference' must be non-empty" } }
-  let full_url = (build-url $base ({booking_reference: (encode-path-segment $booking_reference)} | format pattern "/bookings/{booking_reference}/cancel-quote"))
+  let full_url = (build-url $base ({booking_reference: (encode-path-segment $booking_reference)} | format pattern "/bookings/{booking_reference}/cancel-quote") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # /health/check
@@ -702,12 +880,23 @@ export def "health-check check" [
 ]: nothing -> record<allGood: bool, capiOk: bool, dbOk: bool, memcachedOk: bool, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "exp-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/health/check")
+  let full_url = (build-url $base "/health/check" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # /merchant/cancellation
@@ -735,14 +924,25 @@ export def "merchant-cancellation create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "exp-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/merchant/cancellation")
+  let full_url = (build-url $base "/merchant/cancellation" $auth.query)
   let req_body = {"cancelItems": $cancel_items, "distributorRef": $distributor_ref, "itineraryId": $itinerary_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # /product
@@ -770,12 +970,23 @@ export def "product get" [
   let auth = (build-auth $token ($auth_scheme | default "exp-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "currencyCode" $currency_code "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "voucherOption" $voucher_option "scalar") (serialize-qp "code" $code "scalar") (serialize-qp "showUnavailable" $show_unavailable "scalar") (serialize-qp "excludeTourGradeAvailability" $exclude_tour_grade_availability "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/product" $qp)
+  let full_url = (build-url $base "/product" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"currencyCode": $currency_code, "sortOrder": $sort_order, "voucherOption": $voucher_option, "code": $code, "showUnavailable": $show_unavailable, "excludeTourGradeAvailability": $exclude_tour_grade_availability} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"currencyCode": $currency_code, "sortOrder": $sort_order, "voucherOption": $voucher_option, "code": $code, "showUnavailable": $show_unavailable, "excludeTourGradeAvailability": $exclude_tour_grade_availability} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # /product/photos
@@ -800,12 +1011,23 @@ export def "product-photos get" [
   let auth = (build-auth $token ($auth_scheme | default "exp-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "topX" $top_x "scalar") (serialize-qp "code" $code "scalar") (serialize-qp "showUnavailable" $show_unavailable "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/product/photos" $qp)
+  let full_url = (build-url $base "/product/photos" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"topX": $top_x, "code": $code, "showUnavailable": $show_unavailable} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"topX": $top_x, "code": $code, "showUnavailable": $show_unavailable} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # /product/reviews
@@ -831,12 +1053,23 @@ export def "product-reviews get" [
   let auth = (build-auth $token ($auth_scheme | default "exp-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "topX" $top_x "scalar") (serialize-qp "code" $code "scalar") (serialize-qp "showUnavailable" $show_unavailable "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/product/reviews" $qp)
+  let full_url = (build-url $base "/product/reviews" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"sortOrder": $sort_order, "topX": $top_x, "code": $code, "showUnavailable": $show_unavailable} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"sortOrder": $sort_order, "topX": $top_x, "code": $code, "showUnavailable": $show_unavailable} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # /search/freetext
@@ -864,14 +1097,25 @@ export def "search-freetext list" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "exp-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/search/freetext")
+  let full_url = (build-url $base "/search/freetext" $auth.query)
   let req_body = {"currencyCode": $currency_code, "destId": $dest_id, "searchTypes": $search_types, "sortOrder": $sort_order, "text": $text, "topX": $top_x} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # /search/products
@@ -902,14 +1146,25 @@ export def "search-products list" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "exp-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/search/products")
+  let full_url = (build-url $base "/search/products" $auth.query)
   let req_body = {"catId": $cat_id, "currencyCode": $currency_code, "destId": $dest_id, "endDate": $end_date, "seoId": $seo_id, "sortOrder": $sort_order, "startDate": $start_date, "subCatId": $sub_cat_id, "topX": $top_x} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # /search/products/codes
@@ -933,14 +1188,25 @@ export def "search-products-codes list" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "exp-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/search/products/codes")
+  let full_url = (build-url $base "/search/products/codes" $auth.query)
   let req_body = {"currencyCode": $currency_code, "productCodes": $product_codes} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # /taxonomy/attractions
@@ -965,14 +1231,25 @@ export def "taxonomy-attractions create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "exp-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/taxonomy/attractions")
+  let full_url = (build-url $base "/taxonomy/attractions" $auth.query)
   let req_body = {"destId": $dest_id, "sortOrder": $sort_order, "topX": $top_x} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # /taxonomy/categories
@@ -995,12 +1272,23 @@ export def "taxonomy-categories get" [
   let auth = (build-auth $token ($auth_scheme | default "exp-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "destId" $dest_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/taxonomy/categories" $qp)
+  let full_url = (build-url $base "/taxonomy/categories" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"destId": $dest_id} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"destId": $dest_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # /taxonomy/destinations
@@ -1021,10 +1309,21 @@ export def "taxonomy-destinations get" [
 ]: nothing -> record<dateStamp: string, errorCodes: list<string>, errorMessage: list<any>, errorMessageText: string, errorName: string, errorReference: string, errorType: string, extraInfo: record, extraObject: record, success: bool, totalCount: int, vmid: string, data: table<defaultCurrencyCode: string, destinationId: int, destinationName: string, destinationType: string, destinationUrlName: string, iataCode: string, latitude: float, longitude: float, lookupId: string, parentId: int, selectable: bool, sortOrder: int, timeZone: string>> {
   let auth = (build-auth $token ($auth_scheme | default "exp-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/taxonomy/destinations")
+  let full_url = (build-url $base "/taxonomy/destinations" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }

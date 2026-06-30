@@ -8,7 +8,7 @@ const BASE_URL = "https://ntp1node.nebl.io"
 # `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
 # where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o NEBLIO_REST_API_SUITE_TOKEN | default "" }
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o NEBLIO_REST_API_SUITE_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
@@ -42,14 +42,11 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
-# Trick: `url encode --all` over-encodes, then we decode the four unreserved
-# punctuation chars back. Pre-existing %XX sequences in the input survive
-# because `url encode --all` first turns their % into %25.
 def encode-path-segment [v: any]: nothing -> string {
   $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
-# Serialize an array-typed path parameter (issue 49.A). OpenAPI 3 `style: simple`
+# Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
 # (the default for path params) and Swagger 2 `collectionFormat: csv` both join
 # the elements with a literal comma WITHIN the single path segment, each element
 # RFC-3986-encoded individually (so a comma inside an element stays %2C). Without
@@ -60,51 +57,45 @@ def encode-path-array [v: any]: nothing -> string {
   if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
 }
 
-# Build URL from base, path, and optional query string
-def build-url [base: string, path: string, query?: string]: nothing -> string {
+# Build the request URL from base, path, and any number of pre-encoded query
+# fragments (param serializer output and/or the auth query). Each fragment is an
+# `&`-joinable `key=value` string already percent-encoded by its producer; empty
+# fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
+# delimiters are hand-spliced — and any query already on the base URL is merged in.
+def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
   let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
-  let result = ($parsed | upsert path $full_path)
-  if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
+  let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
+  $parsed | upsert path $full_path | upsert query $query | url join
 }
 
-# Build the dry-run record returned by --dry-run. Shape:
-#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
-#    auth: {scheme, location}}
-# `meta` carries logical-form data (the query record by spec name, the pre-serialization
-# body) that do-request itself cannot reconstruct from its wire-format args.
-def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
-  let m = ($meta | default {})
-  {
-    dry_run: true
-    method: $method
-    url: $url
-    query: ($m | get -o query | default {})
-    headers: $auth.headers
-    body: ($m | get -o body)
-    content_type: $content_type
-    timeout: $timeout
-    auth: {scheme: $auth.scheme, location: $auth.location}
-  }
+# Success policy: did this response succeed? Single source of truth, consulted by
+# handle-response and the HEAD header-unwrap. Empty ok_codes means the spec listed
+# none, so fall back to < 400. Otherwise: any 2xx, plus documented success codes.
+def status-ok [status: int, ok_codes: list<int>]: nothing -> bool {
+  if ($ok_codes | is-empty) { $status < 400 } else { ($status >= 200 and $status < 300) or ($status in $ok_codes) }
 }
 
-# Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
-  let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
-  let timeout = ($max_time | default 30min)
-  let ct = ($content_type | default "application/json")
-  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
-  let resp = match $method {
-    "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
-  }
-  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
-  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
+# Unwrap a `--full` HTTP response into the user-facing value. Response arrives
+# via pipeline; ok_codes gates the error throw (see status-ok).
+def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: record -> any {
+  let resp = $in
+  if $allow_errors { return $resp }
+  if not (status-ok $resp.status $ok_codes) { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } }
+  if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
+  if $resp.status == 204 { return null }
+  $resp.body
+}
+
+# GET — bodyless, honours --raw
+def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+}
+
+# POST — body + content-type
+def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 def base-url-completer [] { ["https://ntp1node.nebl.io" "http://127.0.0.1:6326" "http://127.0.0.1:16326"] }
@@ -156,12 +147,23 @@ export def "json-rpc create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "http://127.0.0.1:6326")
-  let full_url = (build-url $base "/")
+  let full_url = (build-url $base "/" $auth.query)
   let req_body = {"id": $id, "jsonrpc": $jsonrpc, "method": $method, "params": $params} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Returns address object
@@ -183,10 +185,21 @@ export def "ins-addr get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($address | is-empty) { error make --unspanned { msg: "path parameter 'address' must be non-empty" } }
-  let full_url = (build-url $base ({address: (encode-path-segment $address)} | format pattern "/ins/addr/{address}"))
+  let full_url = (build-url $base ({address: (encode-path-segment $address)} | format pattern "/ins/addr/{address}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns address balance in sats
@@ -208,10 +221,21 @@ export def "ins-addr-balance get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($address | is-empty) { error make --unspanned { msg: "path parameter 'address' must be non-empty" } }
-  let full_url = (build-url $base ({address: (encode-path-segment $address)} | format pattern "/ins/addr/{address}/balance"))
+  let full_url = (build-url $base ({address: (encode-path-segment $address)} | format pattern "/ins/addr/{address}/balance") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns total received by address in sats
@@ -233,10 +257,21 @@ export def "ins-addr-total-received get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($address | is-empty) { error make --unspanned { msg: "path parameter 'address' must be non-empty" } }
-  let full_url = (build-url $base ({address: (encode-path-segment $address)} | format pattern "/ins/addr/{address}/totalReceived"))
+  let full_url = (build-url $base ({address: (encode-path-segment $address)} | format pattern "/ins/addr/{address}/totalReceived") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns total sent by address in sats
@@ -258,10 +293,21 @@ export def "ins-addr-total-sent get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($address | is-empty) { error make --unspanned { msg: "path parameter 'address' must be non-empty" } }
-  let full_url = (build-url $base ({address: (encode-path-segment $address)} | format pattern "/ins/addr/{address}/totalSent"))
+  let full_url = (build-url $base ({address: (encode-path-segment $address)} | format pattern "/ins/addr/{address}/totalSent") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns address unconfirmed balance in sats
@@ -283,10 +329,21 @@ export def "ins-addr-unconfirmed-balance get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($address | is-empty) { error make --unspanned { msg: "path parameter 'address' must be non-empty" } }
-  let full_url = (build-url $base ({address: (encode-path-segment $address)} | format pattern "/ins/addr/{address}/unconfirmedBalance"))
+  let full_url = (build-url $base ({address: (encode-path-segment $address)} | format pattern "/ins/addr/{address}/unconfirmedBalance") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns all UTXOs at a given address
@@ -308,10 +365,21 @@ export def "ins-addr-utxo get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($address | is-empty) { error make --unspanned { msg: "path parameter 'address' must be non-empty" } }
-  let full_url = (build-url $base ({address: (encode-path-segment $address)} | format pattern "/ins/addr/{address}/utxo"))
+  let full_url = (build-url $base ({address: (encode-path-segment $address)} | format pattern "/ins/addr/{address}/utxo") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns block hash of block
@@ -333,10 +401,21 @@ export def "ins-block-index get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($blockindex | is-empty) { error make --unspanned { msg: "path parameter 'blockindex' must be non-empty" } }
-  let full_url = (build-url $base ({blockindex: (encode-path-segment $blockindex)} | format pattern "/ins/block-index/{blockindex}"))
+  let full_url = (build-url $base ({blockindex: (encode-path-segment $blockindex)} | format pattern "/ins/block-index/{blockindex}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns information regarding a Neblio block
@@ -358,10 +437,21 @@ export def "ins-block get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($blockhash | is-empty) { error make --unspanned { msg: "path parameter 'blockhash' must be non-empty" } }
-  let full_url = (build-url $base ({blockhash: (encode-path-segment $blockhash)} | format pattern "/ins/block/{blockhash}"))
+  let full_url = (build-url $base ({blockhash: (encode-path-segment $blockhash)} | format pattern "/ins/block/{blockhash}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns raw transaction hex
@@ -383,10 +473,21 @@ export def "ins-rawtx get-raw-tx" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($txid | is-empty) { error make --unspanned { msg: "path parameter 'txid' must be non-empty" } }
-  let full_url = (build-url $base ({txid: (encode-path-segment $txid)} | format pattern "/ins/rawtx/{txid}"))
+  let full_url = (build-url $base ({txid: (encode-path-segment $txid)} | format pattern "/ins/rawtx/{txid}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Utility API for calling several blockchain node functions
@@ -408,10 +509,21 @@ export def "ins-status get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/ins/status" $qp)
+  let full_url = (build-url $base "/ins/status" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"q": $q} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"q": $q} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get node sync status
@@ -431,10 +543,21 @@ export def "ins-sync get" [
 ]: nothing -> record<blockChainHeight: float, error: string, height: float, status: string, syncPercentage: float, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/ins/sync")
+  let full_url = (build-url $base "/ins/sync" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Broadcasts a signed raw transaction to the network (not NTP1 specific)
@@ -456,12 +579,23 @@ export def "ins-tx-send send" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/ins/tx/send")
+  let full_url = (build-url $base "/ins/tx/send" $auth.query)
   let req_body = {"rawtx": $rawtx} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Returns transaction object
@@ -483,10 +617,21 @@ export def "ins-tx get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($txid | is-empty) { error make --unspanned { msg: "path parameter 'txid' must be non-empty" } }
-  let full_url = (build-url $base ({txid: (encode-path-segment $txid)} | format pattern "/ins/tx/{txid}"))
+  let full_url = (build-url $base ({txid: (encode-path-segment $txid)} | format pattern "/ins/tx/{txid}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get transactions by block or address
@@ -510,10 +655,21 @@ export def "ins-txs get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "address" $address "scalar") (serialize-qp "block" $block "scalar") (serialize-qp "pageNum" $page_num "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/ins/txs" $qp)
+  let full_url = (build-url $base "/ins/txs" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"address": $address, "block": $block, "pageNum": $page_num} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"address": $address, "block": $block, "pageNum": $page_num} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Information On a Neblio Address
@@ -535,10 +691,21 @@ export def "ntp1-addressinfo get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($address | is-empty) { error make --unspanned { msg: "path parameter 'address' must be non-empty" } }
-  let full_url = (build-url $base ({address: (encode-path-segment $address)} | format pattern "/ntp1/addressinfo/{address}"))
+  let full_url = (build-url $base ({address: (encode-path-segment $address)} | format pattern "/ntp1/addressinfo/{address}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Broadcasts a signed raw transaction to the network
@@ -560,12 +727,23 @@ export def "ntp1-broadcast create-tx" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/ntp1/broadcast")
+  let full_url = (build-url $base "/ntp1/broadcast" $auth.query)
   let req_body = {"txHex": $tx_hex} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Builds a transaction that burns an NTP1 Token
@@ -592,12 +770,23 @@ export def "ntp1-burntoken create-burn-token" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/ntp1/burntoken")
+  let full_url = (build-url $base "/ntp1/burntoken" $auth.query)
   let req_body = {"burn": $burn, "fee": $fee, "from": $body_from, "transfer": $transfer} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Builds a transaction that issues a new NTP1 Token
@@ -629,12 +818,23 @@ export def "ntp1-issue create-token" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/ntp1/issue")
+  let full_url = (build-url $base "/ntp1/issue" $auth.query)
   let req_body = {"amount": $amount, "divisibility": $divisibility, "fee": $fee, "flags": $flags, "issueAddress": $issue_address, "metadata": $metadata, "reissuable": $reissuable, "transfer": $transfer} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Builds a transaction that sends an NTP1 Token
@@ -664,12 +864,23 @@ export def "ntp1-sendtoken send-token" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/ntp1/sendtoken")
+  let full_url = (build-url $base "/ntp1/sendtoken" $auth.query)
   let req_body = {"fee": $fee, "flags": $flags, "from": $body_from, "metadata": $metadata, "sendutxo": $sendutxo, "to": $body_to} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get Addresses Holding a Token
@@ -691,10 +902,21 @@ export def "ntp1-stakeholders get-token-holders" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($tokenid | is-empty) { error make --unspanned { msg: "path parameter 'tokenid' must be non-empty" } }
-  let full_url = (build-url $base ({tokenid: (encode-path-segment $tokenid)} | format pattern "/ntp1/stakeholders/{tokenid}"))
+  let full_url = (build-url $base ({tokenid: (encode-path-segment $tokenid)} | format pattern "/ntp1/stakeholders/{tokenid}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the tokenId representing a token
@@ -716,10 +938,21 @@ export def "ntp1-tokenid get-token" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($tokensymbol | is-empty) { error make --unspanned { msg: "path parameter 'tokensymbol' must be non-empty" } }
-  let full_url = (build-url $base ({tokensymbol: (encode-path-segment $tokensymbol)} | format pattern "/ntp1/tokenid/{tokensymbol}"))
+  let full_url = (build-url $base ({tokensymbol: (encode-path-segment $tokensymbol)} | format pattern "/ntp1/tokenid/{tokensymbol}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get Metadata of Token
@@ -743,10 +976,21 @@ export def "ntp1-tokenmetadata list" [
   let base = ($base_url | default $BASE_URL)
   if ($tokenid | is-empty) { error make --unspanned { msg: "path parameter 'tokenid' must be non-empty" } }
   let qp = [(serialize-qp "verbosity" $verbosity "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({tokenid: (encode-path-segment $tokenid)} | format pattern "/ntp1/tokenmetadata/{tokenid}") $qp)
+  let full_url = (build-url $base ({tokenid: (encode-path-segment $tokenid)} | format pattern "/ntp1/tokenmetadata/{tokenid}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"verbosity": $verbosity} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"verbosity": $verbosity} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get UTXO Metadata of Token
@@ -772,10 +1016,21 @@ export def "ntp1-tokenmetadata get-token-metadata" [
   if ($tokenid | is-empty) { error make --unspanned { msg: "path parameter 'tokenid' must be non-empty" } }
   if ($utxo | is-empty) { error make --unspanned { msg: "path parameter 'utxo' must be non-empty" } }
   let qp = [(serialize-qp "verbosity" $verbosity "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({tokenid: (encode-path-segment $tokenid), utxo: (encode-path-segment $utxo)} | format pattern "/ntp1/tokenmetadata/{tokenid}/{utxo}") $qp)
+  let full_url = (build-url $base ({tokenid: (encode-path-segment $tokenid), utxo: (encode-path-segment $utxo)} | format pattern "/ntp1/tokenmetadata/{tokenid}/{utxo}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"verbosity": $verbosity} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"verbosity": $verbosity} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Information On an NTP1 Transaction
@@ -797,10 +1052,21 @@ export def "ntp1-transactioninfo get-transaction" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($txid | is-empty) { error make --unspanned { msg: "path parameter 'txid' must be non-empty" } }
-  let full_url = (build-url $base ({txid: (encode-path-segment $txid)} | format pattern "/ntp1/transactioninfo/{txid}"))
+  let full_url = (build-url $base ({txid: (encode-path-segment $txid)} | format pattern "/ntp1/transactioninfo/{txid}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Withdraws testnet NEBL to the specified address
@@ -823,10 +1089,21 @@ export def "testnet-faucet get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "address" $address "scalar") (serialize-qp "amount" $amount "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/testnet/faucet" $qp)
+  let full_url = (build-url $base "/testnet/faucet" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"address": $address, "amount": $amount} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"address": $address, "amount": $amount} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns address object
@@ -848,10 +1125,21 @@ export def "testnet-ins-addr get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($address | is-empty) { error make --unspanned { msg: "path parameter 'address' must be non-empty" } }
-  let full_url = (build-url $base ({address: (encode-path-segment $address)} | format pattern "/testnet/ins/addr/{address}"))
+  let full_url = (build-url $base ({address: (encode-path-segment $address)} | format pattern "/testnet/ins/addr/{address}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns address balance in sats
@@ -873,10 +1161,21 @@ export def "testnet-ins-addr-balance get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($address | is-empty) { error make --unspanned { msg: "path parameter 'address' must be non-empty" } }
-  let full_url = (build-url $base ({address: (encode-path-segment $address)} | format pattern "/testnet/ins/addr/{address}/balance"))
+  let full_url = (build-url $base ({address: (encode-path-segment $address)} | format pattern "/testnet/ins/addr/{address}/balance") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns total received by address in sats
@@ -898,10 +1197,21 @@ export def "testnet-ins-addr-total-received get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($address | is-empty) { error make --unspanned { msg: "path parameter 'address' must be non-empty" } }
-  let full_url = (build-url $base ({address: (encode-path-segment $address)} | format pattern "/testnet/ins/addr/{address}/totalReceived"))
+  let full_url = (build-url $base ({address: (encode-path-segment $address)} | format pattern "/testnet/ins/addr/{address}/totalReceived") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns total sent by address in sats
@@ -923,10 +1233,21 @@ export def "testnet-ins-addr-total-sent get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($address | is-empty) { error make --unspanned { msg: "path parameter 'address' must be non-empty" } }
-  let full_url = (build-url $base ({address: (encode-path-segment $address)} | format pattern "/testnet/ins/addr/{address}/totalSent"))
+  let full_url = (build-url $base ({address: (encode-path-segment $address)} | format pattern "/testnet/ins/addr/{address}/totalSent") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns address unconfirmed balance in sats
@@ -948,10 +1269,21 @@ export def "testnet-ins-addr-unconfirmed-balance get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($address | is-empty) { error make --unspanned { msg: "path parameter 'address' must be non-empty" } }
-  let full_url = (build-url $base ({address: (encode-path-segment $address)} | format pattern "/testnet/ins/addr/{address}/unconfirmedBalance"))
+  let full_url = (build-url $base ({address: (encode-path-segment $address)} | format pattern "/testnet/ins/addr/{address}/unconfirmedBalance") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns all UTXOs at a given address
@@ -973,10 +1305,21 @@ export def "testnet-ins-addr-utxo get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($address | is-empty) { error make --unspanned { msg: "path parameter 'address' must be non-empty" } }
-  let full_url = (build-url $base ({address: (encode-path-segment $address)} | format pattern "/testnet/ins/addr/{address}/utxo"))
+  let full_url = (build-url $base ({address: (encode-path-segment $address)} | format pattern "/testnet/ins/addr/{address}/utxo") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns block hash of block
@@ -998,10 +1341,21 @@ export def "testnet-ins-block-index get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($blockindex | is-empty) { error make --unspanned { msg: "path parameter 'blockindex' must be non-empty" } }
-  let full_url = (build-url $base ({blockindex: (encode-path-segment $blockindex)} | format pattern "/testnet/ins/block-index/{blockindex}"))
+  let full_url = (build-url $base ({blockindex: (encode-path-segment $blockindex)} | format pattern "/testnet/ins/block-index/{blockindex}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns information regarding a Neblio block
@@ -1023,10 +1377,21 @@ export def "testnet-ins-block get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($blockhash | is-empty) { error make --unspanned { msg: "path parameter 'blockhash' must be non-empty" } }
-  let full_url = (build-url $base ({blockhash: (encode-path-segment $blockhash)} | format pattern "/testnet/ins/block/{blockhash}"))
+  let full_url = (build-url $base ({blockhash: (encode-path-segment $blockhash)} | format pattern "/testnet/ins/block/{blockhash}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns raw transaction hex
@@ -1048,10 +1413,21 @@ export def "testnet-ins-rawtx get-raw-tx" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($txid | is-empty) { error make --unspanned { msg: "path parameter 'txid' must be non-empty" } }
-  let full_url = (build-url $base ({txid: (encode-path-segment $txid)} | format pattern "/testnet/ins/rawtx/{txid}"))
+  let full_url = (build-url $base ({txid: (encode-path-segment $txid)} | format pattern "/testnet/ins/rawtx/{txid}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Utility API for calling several blockchain node functions
@@ -1073,10 +1449,21 @@ export def "testnet-ins-status get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/testnet/ins/status" $qp)
+  let full_url = (build-url $base "/testnet/ins/status" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"q": $q} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"q": $q} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get node sync status
@@ -1096,10 +1483,21 @@ export def "testnet-ins-sync get" [
 ]: nothing -> record<blockChainHeight: float, error: string, height: float, status: string, syncPercentage: float, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/testnet/ins/sync")
+  let full_url = (build-url $base "/testnet/ins/sync" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Broadcasts a signed raw transaction to the network (not NTP1 specific)
@@ -1121,12 +1519,23 @@ export def "testnet-ins-tx-send send" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/testnet/ins/tx/send")
+  let full_url = (build-url $base "/testnet/ins/tx/send" $auth.query)
   let req_body = {"rawtx": $rawtx} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Returns transaction object
@@ -1148,10 +1557,21 @@ export def "testnet-ins-tx get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($txid | is-empty) { error make --unspanned { msg: "path parameter 'txid' must be non-empty" } }
-  let full_url = (build-url $base ({txid: (encode-path-segment $txid)} | format pattern "/testnet/ins/tx/{txid}"))
+  let full_url = (build-url $base ({txid: (encode-path-segment $txid)} | format pattern "/testnet/ins/tx/{txid}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get transactions by block or address
@@ -1175,10 +1595,21 @@ export def "testnet-ins-txs get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "address" $address "scalar") (serialize-qp "block" $block "scalar") (serialize-qp "pageNum" $page_num "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/testnet/ins/txs" $qp)
+  let full_url = (build-url $base "/testnet/ins/txs" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"address": $address, "block": $block, "pageNum": $page_num} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"address": $address, "block": $block, "pageNum": $page_num} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Information On a Neblio Address
@@ -1200,10 +1631,21 @@ export def "testnet-ntp1-addressinfo get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($address | is-empty) { error make --unspanned { msg: "path parameter 'address' must be non-empty" } }
-  let full_url = (build-url $base ({address: (encode-path-segment $address)} | format pattern "/testnet/ntp1/addressinfo/{address}"))
+  let full_url = (build-url $base ({address: (encode-path-segment $address)} | format pattern "/testnet/ntp1/addressinfo/{address}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Broadcasts a signed raw transaction to the network
@@ -1225,12 +1667,23 @@ export def "testnet-ntp1-broadcast create-tx" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/testnet/ntp1/broadcast")
+  let full_url = (build-url $base "/testnet/ntp1/broadcast" $auth.query)
   let req_body = {"txHex": $tx_hex} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Builds a transaction that burns an NTP1 Token
@@ -1257,12 +1710,23 @@ export def "testnet-ntp1-burntoken create-burn-token" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/testnet/ntp1/burntoken")
+  let full_url = (build-url $base "/testnet/ntp1/burntoken" $auth.query)
   let req_body = {"burn": $burn, "fee": $fee, "from": $body_from, "transfer": $transfer} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Builds a transaction that issues a new NTP1 Token
@@ -1294,12 +1758,23 @@ export def "testnet-ntp1-issue create-token" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/testnet/ntp1/issue")
+  let full_url = (build-url $base "/testnet/ntp1/issue" $auth.query)
   let req_body = {"amount": $amount, "divisibility": $divisibility, "fee": $fee, "flags": $flags, "issueAddress": $issue_address, "metadata": $metadata, "reissuable": $reissuable, "transfer": $transfer} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Builds a transaction that sends an NTP1 Token
@@ -1329,12 +1804,23 @@ export def "testnet-ntp1-sendtoken send-token" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/testnet/ntp1/sendtoken")
+  let full_url = (build-url $base "/testnet/ntp1/sendtoken" $auth.query)
   let req_body = {"fee": $fee, "flags": $flags, "from": $body_from, "metadata": $metadata, "sendutxo": $sendutxo, "to": $body_to} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get Addresses Holding a Token
@@ -1356,10 +1842,21 @@ export def "testnet-ntp1-stakeholders get-token-holders" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($tokenid | is-empty) { error make --unspanned { msg: "path parameter 'tokenid' must be non-empty" } }
-  let full_url = (build-url $base ({tokenid: (encode-path-segment $tokenid)} | format pattern "/testnet/ntp1/stakeholders/{tokenid}"))
+  let full_url = (build-url $base ({tokenid: (encode-path-segment $tokenid)} | format pattern "/testnet/ntp1/stakeholders/{tokenid}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the tokenId representing a token
@@ -1381,10 +1878,21 @@ export def "testnet-ntp1-tokenid get-token" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($tokensymbol | is-empty) { error make --unspanned { msg: "path parameter 'tokensymbol' must be non-empty" } }
-  let full_url = (build-url $base ({tokensymbol: (encode-path-segment $tokensymbol)} | format pattern "/testnet/ntp1/tokenid/{tokensymbol}"))
+  let full_url = (build-url $base ({tokensymbol: (encode-path-segment $tokensymbol)} | format pattern "/testnet/ntp1/tokenid/{tokensymbol}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get Metadata of Token
@@ -1408,10 +1916,21 @@ export def "testnet-ntp1-tokenmetadata list" [
   let base = ($base_url | default $BASE_URL)
   if ($tokenid | is-empty) { error make --unspanned { msg: "path parameter 'tokenid' must be non-empty" } }
   let qp = [(serialize-qp "verbosity" $verbosity "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({tokenid: (encode-path-segment $tokenid)} | format pattern "/testnet/ntp1/tokenmetadata/{tokenid}") $qp)
+  let full_url = (build-url $base ({tokenid: (encode-path-segment $tokenid)} | format pattern "/testnet/ntp1/tokenmetadata/{tokenid}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"verbosity": $verbosity} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"verbosity": $verbosity} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get UTXO Metadata of Token
@@ -1437,10 +1956,21 @@ export def "testnet-ntp1-tokenmetadata get-token-metadata" [
   if ($tokenid | is-empty) { error make --unspanned { msg: "path parameter 'tokenid' must be non-empty" } }
   if ($utxo | is-empty) { error make --unspanned { msg: "path parameter 'utxo' must be non-empty" } }
   let qp = [(serialize-qp "verbosity" $verbosity "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({tokenid: (encode-path-segment $tokenid), utxo: (encode-path-segment $utxo)} | format pattern "/testnet/ntp1/tokenmetadata/{tokenid}/{utxo}") $qp)
+  let full_url = (build-url $base ({tokenid: (encode-path-segment $tokenid), utxo: (encode-path-segment $utxo)} | format pattern "/testnet/ntp1/tokenmetadata/{tokenid}/{utxo}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"verbosity": $verbosity} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"verbosity": $verbosity} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Information On an NTP1 Transaction
@@ -1462,8 +1992,19 @@ export def "testnet-ntp1-transactioninfo get-transaction" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($txid | is-empty) { error make --unspanned { msg: "path parameter 'txid' must be non-empty" } }
-  let full_url = (build-url $base ({txid: (encode-path-segment $txid)} | format pattern "/testnet/ntp1/transactioninfo/{txid}"))
+  let full_url = (build-url $base ({txid: (encode-path-segment $txid)} | format pattern "/testnet/ntp1/transactioninfo/{txid}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }

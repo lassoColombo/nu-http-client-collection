@@ -8,7 +8,7 @@ const BASE_URL = "http://keycloak.local"
 # `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
 # where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o KEYCLOAK_ADMIN_REST_API_TOKEN | default "" }
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o KEYCLOAK_ADMIN_REST_API_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
@@ -41,14 +41,11 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
-# Trick: `url encode --all` over-encodes, then we decode the four unreserved
-# punctuation chars back. Pre-existing %XX sequences in the input survive
-# because `url encode --all` first turns their % into %25.
 def encode-path-segment [v: any]: nothing -> string {
   $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
-# Serialize an array-typed path parameter (issue 49.A). OpenAPI 3 `style: simple`
+# Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
 # (the default for path params) and Swagger 2 `collectionFormat: csv` both join
 # the elements with a literal comma WITHIN the single path segment, each element
 # RFC-3986-encoded individually (so a comma inside an element stays %2C). Without
@@ -59,51 +56,57 @@ def encode-path-array [v: any]: nothing -> string {
   if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
 }
 
-# Build URL from base, path, and optional query string
-def build-url [base: string, path: string, query?: string]: nothing -> string {
+# Build the request URL from base, path, and any number of pre-encoded query
+# fragments (param serializer output and/or the auth query). Each fragment is an
+# `&`-joinable `key=value` string already percent-encoded by its producer; empty
+# fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
+# delimiters are hand-spliced — and any query already on the base URL is merged in.
+def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
   let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
-  let result = ($parsed | upsert path $full_path)
-  if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
+  let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
+  $parsed | upsert path $full_path | upsert query $query | url join
 }
 
-# Build the dry-run record returned by --dry-run. Shape:
-#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
-#    auth: {scheme, location}}
-# `meta` carries logical-form data (the query record by spec name, the pre-serialization
-# body) that do-request itself cannot reconstruct from its wire-format args.
-def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
-  let m = ($meta | default {})
-  {
-    dry_run: true
-    method: $method
-    url: $url
-    query: ($m | get -o query | default {})
-    headers: $auth.headers
-    body: ($m | get -o body)
-    content_type: $content_type
-    timeout: $timeout
-    auth: {scheme: $auth.scheme, location: $auth.location}
-  }
+# Success policy: did this response succeed? Single source of truth, consulted by
+# handle-response and the HEAD header-unwrap. Empty ok_codes means the spec listed
+# none, so fall back to < 400. Otherwise: any 2xx, plus documented success codes.
+def status-ok [status: int, ok_codes: list<int>]: nothing -> bool {
+  if ($ok_codes | is-empty) { $status < 400 } else { ($status >= 200 and $status < 300) or ($status in $ok_codes) }
 }
 
-# Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
-  let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
-  let timeout = ($max_time | default 30min)
-  let ct = ($content_type | default "application/json")
-  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
-  let resp = match $method {
-    "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
-  }
-  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
-  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
+# Unwrap a `--full` HTTP response into the user-facing value. Response arrives
+# via pipeline; ok_codes gates the error throw (see status-ok).
+def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: record -> any {
+  let resp = $in
+  if $allow_errors { return $resp }
+  if not (status-ok $resp.status $ok_codes) { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } }
+  if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
+  if $resp.status == 204 { return null }
+  $resp.body
+}
+
+# GET — bodyless, honours --raw
+def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+}
+
+# POST — body + content-type
+def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# PUT — body + content-type
+def send-put [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http put --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http put --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# DELETE — body via --data
+def send-delete [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http delete --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url } else { http delete --headers $req.headers --content-type $req.content_type --data $body --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url }
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 def base-url-completer [] { ["http://keycloak.local"] }
@@ -151,10 +154,21 @@ export def "root get" [
 ]: nothing -> record<builtinProtocolMappers: record, clientImporters: list<record>, clientInstallations: record, componentTypes: record, enums: record, identityProviders: list<record>, memoryInfo: record<free: int, freeFormated: string, freePercentage: int, total: int, totalFormated: string, used: int, usedFormated: string>, passwordPolicies: table<configType: string, defaultValue: string, displayName: string, id: string, multipleSupported: bool>, profileInfo: record<disabledFeatures: list<string>, experimentalFeatures: list<string>, name: string, previewFeatures: list<string>>, protocolMapperTypes: record, providers: record, socialProviders: list<record>, systemInfo: record<fileEncoding: string, javaHome: string, javaRuntime: string, javaVendor: string, javaVersion: string, javaVm: string, javaVmVersion: string, osArchitecture: string, osName: string, osVersion: string, serverTime: string, uptime: string, uptimeMillis: int, userDir: string, userLocale: string, userName: string, userTimezone: string, version: string>, themes: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/")
+  let full_url = (build-url $base "/" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Import a realm Imports a realm from a full representation of that realm.
@@ -305,12 +319,23 @@ export def "realms-admin create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/")
+  let full_url = (build-url $base "/" $auth.query)
   let req_body = {"accessCodeLifespan": $access_code_lifespan, "accessCodeLifespanLogin": $access_code_lifespan_login, "accessCodeLifespanUserAction": $access_code_lifespan_user_action, "accessTokenLifespan": $access_token_lifespan, "accessTokenLifespanForImplicitFlow": $access_token_lifespan_for_implicit_flow, "accountTheme": $account_theme, "actionTokenGeneratedByAdminLifespan": $action_token_generated_by_admin_lifespan, "actionTokenGeneratedByUserLifespan": $action_token_generated_by_user_lifespan, "adminEventsDetailsEnabled": $admin_events_details_enabled, "adminEventsEnabled": $admin_events_enabled, "adminTheme": $admin_theme, "attributes": $attributes, "authenticationFlows": $authentication_flows, "authenticatorConfig": $authenticator_config, "browserFlow": $browser_flow, "browserSecurityHeaders": $browser_security_headers, "bruteForceProtected": $brute_force_protected, "clientAuthenticationFlow": $client_authentication_flow, "clientScopeMappings": $client_scope_mappings, "clientScopes": $client_scopes, "clientSessionIdleTimeout": $client_session_idle_timeout, "clientSessionMaxLifespan": $client_session_max_lifespan, "clients": $clients, "components": $components, "defaultDefaultClientScopes": $default_default_client_scopes, "defaultGroups": $default_groups, "defaultLocale": $default_locale, "defaultOptionalClientScopes": $default_optional_client_scopes, "defaultRoles": $default_roles, "defaultSignatureAlgorithm": $default_signature_algorithm, "directGrantFlow": $direct_grant_flow, "displayName": $display_name, "displayNameHtml": $display_name_html, "dockerAuthenticationFlow": $docker_authentication_flow, "duplicateEmailsAllowed": $duplicate_emails_allowed, "editUsernameAllowed": $edit_username_allowed, "emailTheme": $email_theme, "enabled": $enabled, "enabledEventTypes": $enabled_event_types, "eventsEnabled": $events_enabled, "eventsExpiration": $events_expiration, "eventsListeners": $events_listeners, "failureFactor": $failure_factor, "federatedUsers": $federated_users, "groups": $groups, "id": $id, "identityProviderMappers": $identity_provider_mappers, "identityProviders": $identity_providers, "internationalizationEnabled": $internationalization_enabled, "keycloakVersion": $keycloak_version, "loginTheme": $login_theme, "loginWithEmailAllowed": $login_with_email_allowed, "maxDeltaTimeSeconds": $max_delta_time_seconds, "maxFailureWaitSeconds": $max_failure_wait_seconds, "minimumQuickLoginWaitSeconds": $minimum_quick_login_wait_seconds, "notBefore": $not_before, "offlineSessionIdleTimeout": $offline_session_idle_timeout, "offlineSessionMaxLifespan": $offline_session_max_lifespan, "offlineSessionMaxLifespanEnabled": $offline_session_max_lifespan_enabled, "otpPolicyAlgorithm": $otp_policy_algorithm, "otpPolicyDigits": $otp_policy_digits, "otpPolicyInitialCounter": $otp_policy_initial_counter, "otpPolicyLookAheadWindow": $otp_policy_look_ahead_window, "otpPolicyPeriod": $otp_policy_period, "otpPolicyType": $otp_policy_type, "otpSupportedApplications": $otp_supported_applications, "passwordPolicy": $password_policy, "permanentLockout": $permanent_lockout, "protocolMappers": $protocol_mappers, "quickLoginCheckMilliSeconds": $quick_login_check_milli_seconds, "realm": $realm, "refreshTokenMaxReuse": $refresh_token_max_reuse, "registrationAllowed": $registration_allowed, "registrationEmailAsUsername": $registration_email_as_username, "registrationFlow": $registration_flow, "rememberMe": $remember_me, "requiredActions": $required_actions, "resetCredentialsFlow": $reset_credentials_flow, "resetPasswordAllowed": $reset_password_allowed, "revokeRefreshToken": $revoke_refresh_token, "roles": $roles, "scopeMappings": $scope_mappings, "smtpServer": $smtp_server, "sslRequired": $ssl_required, "ssoSessionIdleTimeout": $sso_session_idle_timeout, "ssoSessionIdleTimeoutRememberMe": $sso_session_idle_timeout_remember_me, "ssoSessionMaxLifespan": $sso_session_max_lifespan, "ssoSessionMaxLifespanRememberMe": $sso_session_max_lifespan_remember_me, "supportedLocales": $supported_locales, "userFederationMappers": $user_federation_mappers, "userFederationProviders": $user_federation_providers, "userManagedAccessAllowed": $user_managed_access_allowed, "users": $users, "verifyEmail": $verify_email, "waitIncrementSeconds": $wait_increment_seconds, "webAuthnPolicyAcceptableAaguids": $web_authn_policy_acceptable_aaguids, "webAuthnPolicyAttestationConveyancePreference": $web_authn_policy_attestation_conveyance_preference, "webAuthnPolicyAuthenticatorAttachment": $web_authn_policy_authenticator_attachment, "webAuthnPolicyAvoidSameAuthenticatorRegister": $web_authn_policy_avoid_same_authenticator_register, "webAuthnPolicyCreateTimeout": $web_authn_policy_create_timeout, "webAuthnPolicyPasswordlessAcceptableAaguids": $web_authn_policy_passwordless_acceptable_aaguids, "webAuthnPolicyPasswordlessAttestationConveyancePreference": $web_authn_policy_passwordless_attestation_conveyance_preference, "webAuthnPolicyPasswordlessAuthenticatorAttachment": $web_authn_policy_passwordless_authenticator_attachment, "webAuthnPolicyPasswordlessAvoidSameAuthenticatorRegister": $web_authn_policy_passwordless_avoid_same_authenticator_register, "webAuthnPolicyPasswordlessCreateTimeout": $web_authn_policy_passwordless_create_timeout, "webAuthnPolicyPasswordlessRequireResidentKey": $web_authn_policy_passwordless_require_resident_key, "webAuthnPolicyPasswordlessRpEntityName": $web_authn_policy_passwordless_rp_entity_name, "webAuthnPolicyPasswordlessRpId": $web_authn_policy_passwordless_rp_id, "webAuthnPolicyPasswordlessSignatureAlgorithms": $web_authn_policy_passwordless_signature_algorithms, "webAuthnPolicyPasswordlessUserVerificationRequirement": $web_authn_policy_passwordless_user_verification_requirement, "webAuthnPolicyRequireResidentKey": $web_authn_policy_require_resident_key, "webAuthnPolicyRpEntityName": $web_authn_policy_rp_entity_name, "webAuthnPolicyRpId": $web_authn_policy_rp_id, "webAuthnPolicySignatureAlgorithms": $web_authn_policy_signature_algorithms, "webAuthnPolicyUserVerificationRequirement": $web_authn_policy_user_verification_requirement} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full []
 }
 
 # Need this for admin console to display simple name of provider when displaying client detail KEYCLOAK-4328
@@ -331,10 +356,21 @@ export def "name get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/{id}/name"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/{id}/name") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Delete the realm
@@ -355,10 +391,21 @@ export def "realms-admin delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full []
 }
 
 # Get the top-level representation of the realm It will not include nested information like User and Client representations.
@@ -379,10 +426,21 @@ export def "realms-admin get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Update the top-level information of the realm Any user, roles or client information in the representation will be ignored.
@@ -535,12 +593,23 @@ export def "realms-admin update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}") $auth.query)
   let req_body = {"accessCodeLifespan": $access_code_lifespan, "accessCodeLifespanLogin": $access_code_lifespan_login, "accessCodeLifespanUserAction": $access_code_lifespan_user_action, "accessTokenLifespan": $access_token_lifespan, "accessTokenLifespanForImplicitFlow": $access_token_lifespan_for_implicit_flow, "accountTheme": $account_theme, "actionTokenGeneratedByAdminLifespan": $action_token_generated_by_admin_lifespan, "actionTokenGeneratedByUserLifespan": $action_token_generated_by_user_lifespan, "adminEventsDetailsEnabled": $admin_events_details_enabled, "adminEventsEnabled": $admin_events_enabled, "adminTheme": $admin_theme, "attributes": $attributes, "authenticationFlows": $authentication_flows, "authenticatorConfig": $authenticator_config, "browserFlow": $browser_flow, "browserSecurityHeaders": $browser_security_headers, "bruteForceProtected": $brute_force_protected, "clientAuthenticationFlow": $client_authentication_flow, "clientScopeMappings": $client_scope_mappings, "clientScopes": $client_scopes, "clientSessionIdleTimeout": $client_session_idle_timeout, "clientSessionMaxLifespan": $client_session_max_lifespan, "clients": $clients, "components": $components, "defaultDefaultClientScopes": $default_default_client_scopes, "defaultGroups": $default_groups, "defaultLocale": $default_locale, "defaultOptionalClientScopes": $default_optional_client_scopes, "defaultRoles": $default_roles, "defaultSignatureAlgorithm": $default_signature_algorithm, "directGrantFlow": $direct_grant_flow, "displayName": $display_name, "displayNameHtml": $display_name_html, "dockerAuthenticationFlow": $docker_authentication_flow, "duplicateEmailsAllowed": $duplicate_emails_allowed, "editUsernameAllowed": $edit_username_allowed, "emailTheme": $email_theme, "enabled": $enabled, "enabledEventTypes": $enabled_event_types, "eventsEnabled": $events_enabled, "eventsExpiration": $events_expiration, "eventsListeners": $events_listeners, "failureFactor": $failure_factor, "federatedUsers": $federated_users, "groups": $groups, "id": $id, "identityProviderMappers": $identity_provider_mappers, "identityProviders": $identity_providers, "internationalizationEnabled": $internationalization_enabled, "keycloakVersion": $keycloak_version, "loginTheme": $login_theme, "loginWithEmailAllowed": $login_with_email_allowed, "maxDeltaTimeSeconds": $max_delta_time_seconds, "maxFailureWaitSeconds": $max_failure_wait_seconds, "minimumQuickLoginWaitSeconds": $minimum_quick_login_wait_seconds, "notBefore": $not_before, "offlineSessionIdleTimeout": $offline_session_idle_timeout, "offlineSessionMaxLifespan": $offline_session_max_lifespan, "offlineSessionMaxLifespanEnabled": $offline_session_max_lifespan_enabled, "otpPolicyAlgorithm": $otp_policy_algorithm, "otpPolicyDigits": $otp_policy_digits, "otpPolicyInitialCounter": $otp_policy_initial_counter, "otpPolicyLookAheadWindow": $otp_policy_look_ahead_window, "otpPolicyPeriod": $otp_policy_period, "otpPolicyType": $otp_policy_type, "otpSupportedApplications": $otp_supported_applications, "passwordPolicy": $password_policy, "permanentLockout": $permanent_lockout, "protocolMappers": $protocol_mappers, "quickLoginCheckMilliSeconds": $quick_login_check_milli_seconds, "realm": $body_realm, "refreshTokenMaxReuse": $refresh_token_max_reuse, "registrationAllowed": $registration_allowed, "registrationEmailAsUsername": $registration_email_as_username, "registrationFlow": $registration_flow, "rememberMe": $remember_me, "requiredActions": $required_actions, "resetCredentialsFlow": $reset_credentials_flow, "resetPasswordAllowed": $reset_password_allowed, "revokeRefreshToken": $revoke_refresh_token, "roles": $roles, "scopeMappings": $scope_mappings, "smtpServer": $smtp_server, "sslRequired": $ssl_required, "ssoSessionIdleTimeout": $sso_session_idle_timeout, "ssoSessionIdleTimeoutRememberMe": $sso_session_idle_timeout_remember_me, "ssoSessionMaxLifespan": $sso_session_max_lifespan, "ssoSessionMaxLifespanRememberMe": $sso_session_max_lifespan_remember_me, "supportedLocales": $supported_locales, "userFederationMappers": $user_federation_mappers, "userFederationProviders": $user_federation_providers, "userManagedAccessAllowed": $user_managed_access_allowed, "users": $users, "verifyEmail": $verify_email, "waitIncrementSeconds": $wait_increment_seconds, "webAuthnPolicyAcceptableAaguids": $web_authn_policy_acceptable_aaguids, "webAuthnPolicyAttestationConveyancePreference": $web_authn_policy_attestation_conveyance_preference, "webAuthnPolicyAuthenticatorAttachment": $web_authn_policy_authenticator_attachment, "webAuthnPolicyAvoidSameAuthenticatorRegister": $web_authn_policy_avoid_same_authenticator_register, "webAuthnPolicyCreateTimeout": $web_authn_policy_create_timeout, "webAuthnPolicyPasswordlessAcceptableAaguids": $web_authn_policy_passwordless_acceptable_aaguids, "webAuthnPolicyPasswordlessAttestationConveyancePreference": $web_authn_policy_passwordless_attestation_conveyance_preference, "webAuthnPolicyPasswordlessAuthenticatorAttachment": $web_authn_policy_passwordless_authenticator_attachment, "webAuthnPolicyPasswordlessAvoidSameAuthenticatorRegister": $web_authn_policy_passwordless_avoid_same_authenticator_register, "webAuthnPolicyPasswordlessCreateTimeout": $web_authn_policy_passwordless_create_timeout, "webAuthnPolicyPasswordlessRequireResidentKey": $web_authn_policy_passwordless_require_resident_key, "webAuthnPolicyPasswordlessRpEntityName": $web_authn_policy_passwordless_rp_entity_name, "webAuthnPolicyPasswordlessRpId": $web_authn_policy_passwordless_rp_id, "webAuthnPolicyPasswordlessSignatureAlgorithms": $web_authn_policy_passwordless_signature_algorithms, "webAuthnPolicyPasswordlessUserVerificationRequirement": $web_authn_policy_passwordless_user_verification_requirement, "webAuthnPolicyRequireResidentKey": $web_authn_policy_require_resident_key, "webAuthnPolicyRpEntityName": $web_authn_policy_rp_entity_name, "webAuthnPolicyRpId": $web_authn_policy_rp_id, "webAuthnPolicySignatureAlgorithms": $web_authn_policy_signature_algorithms, "webAuthnPolicyUserVerificationRequirement": $web_authn_policy_user_verification_requirement} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full []
 }
 
 # Delete all admin events
@@ -561,10 +630,21 @@ export def "admin-events delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/admin-events"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/admin-events") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full []
 }
 
 # Get admin events Returns all admin events, or filters events based on URL query parameters listed here
@@ -597,10 +677,21 @@ export def "admin-events get" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   let qp = [(serialize-qp "authClient" $auth_client "scalar") (serialize-qp "authIpAddress" $auth_ip_address "scalar") (serialize-qp "authRealm" $auth_realm "scalar") (serialize-qp "authUser" $auth_user "scalar") (serialize-qp "dateFrom" $date_from "scalar") (serialize-qp "dateTo" $date_to "scalar") (serialize-qp "first" $first "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "operationTypes" $operation_types "multi") (serialize-qp "resourcePath" $resource_path "scalar") (serialize-qp "resourceTypes" $resource_types "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/admin-events") $qp)
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/admin-events") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"authClient": $auth_client, "authIpAddress": $auth_ip_address, "authRealm": $auth_realm, "authUser": $auth_user, "dateFrom": $date_from, "dateTo": $date_to, "first": $first, "max": $max, "operationTypes": $operation_types, "resourcePath": $resource_path, "resourceTypes": $resource_types} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"authClient": $auth_client, "authIpAddress": $auth_ip_address, "authRealm": $auth_realm, "authUser": $auth_user, "dateFrom": $date_from, "dateTo": $date_to, "first": $first, "max": $max, "operationTypes": $operation_types, "resourcePath": $resource_path, "resourceTypes": $resource_types} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Clear any user login failures for all users This can release temporary disabled users
@@ -621,10 +712,21 @@ export def "attack-detection-brute-force-users delete-by-realm" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/attack-detection/brute-force/users"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/attack-detection/brute-force/users") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full []
 }
 
 # Clear any user login failures for the user This can release temporary disabled user
@@ -647,10 +749,21 @@ export def "attack-detection-brute-force-users delete-by-realm-user-id" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), user_id: (encode-path-segment $user_id)} | format pattern "/{realm}/attack-detection/brute-force/users/{user_id}"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), user_id: (encode-path-segment $user_id)} | format pattern "/{realm}/attack-detection/brute-force/users/{user_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full []
 }
 
 # Get status of a username in brute force detection
@@ -673,10 +786,21 @@ export def "attack-detection-brute-force-users get" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), user_id: (encode-path-segment $user_id)} | format pattern "/{realm}/attack-detection/brute-force/users/{user_id}"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), user_id: (encode-path-segment $user_id)} | format pattern "/{realm}/attack-detection/brute-force/users/{user_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Get authenticator providers Returns a list of authenticator providers.
@@ -697,10 +821,21 @@ export def "authentication-authenticator-providers get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/authentication/authenticator-providers"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/authentication/authenticator-providers") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Get client authenticator providers Returns a list of client authenticator providers.
@@ -721,10 +856,21 @@ export def "authentication-client-authenticator-providers get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/authentication/client-authenticator-providers"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/authentication/client-authenticator-providers") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Get authenticator provider’s configuration description
@@ -747,10 +893,21 @@ export def "authentication-config-description get" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($provider_id | is-empty) { error make --unspanned { msg: "path parameter 'providerId' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), provider_id: (encode-path-segment $provider_id)} | format pattern "/{realm}/authentication/config-description/{provider_id}"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), provider_id: (encode-path-segment $provider_id)} | format pattern "/{realm}/authentication/config-description/{provider_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Delete authenticator configuration
@@ -773,10 +930,21 @@ export def "authentication-config delete" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/authentication/config/{id}"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/authentication/config/{id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full []
 }
 
 # Get authenticator configuration
@@ -799,10 +967,21 @@ export def "authentication-config get" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/authentication/config/{id}"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/authentication/config/{id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Update authenticator configuration
@@ -829,12 +1008,23 @@ export def "authentication-config update" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/authentication/config/{id}"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/authentication/config/{id}") $auth.query)
   let req_body = {"alias": $alias, "config": $config, "id": $body_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full []
 }
 
 # Add new authentication execution
@@ -865,12 +1055,23 @@ export def "authentication-executions create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/authentication/executions"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/authentication/executions") $auth.query)
   let req_body = {"authenticator": $authenticator, "authenticatorConfig": $authenticator_config, "authenticatorFlow": $authenticator_flow, "autheticatorFlow": $autheticator_flow, "flowId": $flow_id, "id": $id, "parentFlow": $parent_flow, "priority": $priority, "requirement": $requirement} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full []
 }
 
 # Delete execution
@@ -893,10 +1094,21 @@ export def "authentication-executions delete" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($execution_id | is-empty) { error make --unspanned { msg: "path parameter 'executionId' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), execution_id: (encode-path-segment $execution_id)} | format pattern "/{realm}/authentication/executions/{execution_id}"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), execution_id: (encode-path-segment $execution_id)} | format pattern "/{realm}/authentication/executions/{execution_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full []
 }
 
 # Get Single Execution
@@ -919,10 +1131,21 @@ export def "authentication-executions get" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($execution_id | is-empty) { error make --unspanned { msg: "path parameter 'executionId' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), execution_id: (encode-path-segment $execution_id)} | format pattern "/{realm}/authentication/executions/{execution_id}"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), execution_id: (encode-path-segment $execution_id)} | format pattern "/{realm}/authentication/executions/{execution_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Update execution with new configuration
@@ -949,12 +1172,23 @@ export def "authentication-executions-config create" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($execution_id | is-empty) { error make --unspanned { msg: "path parameter 'executionId' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), execution_id: (encode-path-segment $execution_id)} | format pattern "/{realm}/authentication/executions/{execution_id}/config"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), execution_id: (encode-path-segment $execution_id)} | format pattern "/{realm}/authentication/executions/{execution_id}/config") $auth.query)
   let req_body = {"alias": $alias, "config": $config, "id": $id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full []
 }
 
 # Lower execution’s priority
@@ -977,10 +1211,21 @@ export def "authentication-executions-lower-priority create" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($execution_id | is-empty) { error make --unspanned { msg: "path parameter 'executionId' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), execution_id: (encode-path-segment $execution_id)} | format pattern "/{realm}/authentication/executions/{execution_id}/lower-priority"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), execution_id: (encode-path-segment $execution_id)} | format pattern "/{realm}/authentication/executions/{execution_id}/lower-priority") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full []
 }
 
 # Raise execution’s priority
@@ -1003,10 +1248,21 @@ export def "authentication-executions-raise-priority create" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($execution_id | is-empty) { error make --unspanned { msg: "path parameter 'executionId' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), execution_id: (encode-path-segment $execution_id)} | format pattern "/{realm}/authentication/executions/{execution_id}/raise-priority"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), execution_id: (encode-path-segment $execution_id)} | format pattern "/{realm}/authentication/executions/{execution_id}/raise-priority") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full []
 }
 
 # Get authentication flows Returns a list of authentication flows.
@@ -1027,10 +1283,21 @@ export def "authentication-flows list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/authentication/flows"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/authentication/flows") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Create a new authentication flow
@@ -1060,12 +1327,23 @@ export def "authentication-flows create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/authentication/flows"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/authentication/flows") $auth.query)
   let req_body = {"alias": $alias, "authenticationExecutions": $authentication_executions, "builtIn": $built_in, "description": $description, "id": $id, "providerId": $provider_id, "topLevel": $top_level} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full []
 }
 
 # Copy existing authentication flow under a new name The new name is given as 'newName' attribute of the passed JSON object
@@ -1090,12 +1368,23 @@ export def "authentication-flows-copy create" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($flow_alias | is-empty) { error make --unspanned { msg: "path parameter 'flowAlias' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), flow_alias: (encode-path-segment $flow_alias)} | format pattern "/{realm}/authentication/flows/{flow_alias}/copy"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), flow_alias: (encode-path-segment $flow_alias)} | format pattern "/{realm}/authentication/flows/{flow_alias}/copy") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full []
 }
 
 # Get authentication executions for a flow
@@ -1118,10 +1407,21 @@ export def "authentication-flows-executions get" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($flow_alias | is-empty) { error make --unspanned { msg: "path parameter 'flowAlias' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), flow_alias: (encode-path-segment $flow_alias)} | format pattern "/{realm}/authentication/flows/{flow_alias}/executions"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), flow_alias: (encode-path-segment $flow_alias)} | format pattern "/{realm}/authentication/flows/{flow_alias}/executions") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Update authentication executions of a flow
@@ -1157,12 +1457,23 @@ export def "authentication-flows-executions update" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($flow_alias | is-empty) { error make --unspanned { msg: "path parameter 'flowAlias' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), flow_alias: (encode-path-segment $flow_alias)} | format pattern "/{realm}/authentication/flows/{flow_alias}/executions"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), flow_alias: (encode-path-segment $flow_alias)} | format pattern "/{realm}/authentication/flows/{flow_alias}/executions") $auth.query)
   let req_body = {"alias": $alias, "authenticationConfig": $authentication_config, "authenticationFlow": $authentication_flow, "configurable": $configurable, "displayName": $display_name, "flowId": $flow_id, "id": $id, "index": $index, "level": $level, "providerId": $provider_id, "requirement": $requirement, "requirementChoices": $requirement_choices} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full []
 }
 
 # Add new authentication execution to a flow
@@ -1187,12 +1498,23 @@ export def "authentication-flows-executions-execution create" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($flow_alias | is-empty) { error make --unspanned { msg: "path parameter 'flowAlias' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), flow_alias: (encode-path-segment $flow_alias)} | format pattern "/{realm}/authentication/flows/{flow_alias}/executions/execution"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), flow_alias: (encode-path-segment $flow_alias)} | format pattern "/{realm}/authentication/flows/{flow_alias}/executions/execution") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full []
 }
 
 # Add new flow with new execution to existing flow
@@ -1217,12 +1539,23 @@ export def "authentication-flows-executions-flow create" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($flow_alias | is-empty) { error make --unspanned { msg: "path parameter 'flowAlias' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), flow_alias: (encode-path-segment $flow_alias)} | format pattern "/{realm}/authentication/flows/{flow_alias}/executions/flow"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), flow_alias: (encode-path-segment $flow_alias)} | format pattern "/{realm}/authentication/flows/{flow_alias}/executions/flow") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full []
 }
 
 # Delete an authentication flow
@@ -1245,10 +1578,21 @@ export def "authentication-flows delete" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/authentication/flows/{id}"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/authentication/flows/{id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full []
 }
 
 # Get authentication flow for id
@@ -1271,10 +1615,21 @@ export def "authentication-flows get" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/authentication/flows/{id}"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/authentication/flows/{id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Update an authentication flow
@@ -1306,12 +1661,23 @@ export def "authentication-flows update" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/authentication/flows/{id}"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/authentication/flows/{id}") $auth.query)
   let req_body = {"alias": $alias, "authenticationExecutions": $authentication_executions, "builtIn": $built_in, "description": $description, "id": $body_id, "providerId": $provider_id, "topLevel": $top_level} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full []
 }
 
 # Get form action providers Returns a list of form action providers.
@@ -1332,10 +1698,21 @@ export def "authentication-form-action-providers get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/authentication/form-action-providers"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/authentication/form-action-providers") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Get form providers Returns a list of form providers.
@@ -1356,10 +1733,21 @@ export def "authentication-form-providers get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/authentication/form-providers"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/authentication/form-providers") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Get configuration descriptions for all clients
@@ -1380,10 +1768,21 @@ export def "authentication-per-client-config-description get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/authentication/per-client-config-description"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/authentication/per-client-config-description") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Register a new required actions
@@ -1406,12 +1805,23 @@ export def "authentication-register-required-action create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/authentication/register-required-action"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/authentication/register-required-action") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full []
 }
 
 # Get required actions Returns a list of required actions.
@@ -1432,10 +1842,21 @@ export def "authentication-required-actions list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/authentication/required-actions"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/authentication/required-actions") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Delete required action
@@ -1458,10 +1879,21 @@ export def "authentication-required-actions delete" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($alias | is-empty) { error make --unspanned { msg: "path parameter 'alias' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), alias: (encode-path-segment $alias)} | format pattern "/{realm}/authentication/required-actions/{alias}"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), alias: (encode-path-segment $alias)} | format pattern "/{realm}/authentication/required-actions/{alias}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full []
 }
 
 # Get required action for alias
@@ -1484,10 +1916,21 @@ export def "authentication-required-actions get" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($alias | is-empty) { error make --unspanned { msg: "path parameter 'alias' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), alias: (encode-path-segment $alias)} | format pattern "/{realm}/authentication/required-actions/{alias}"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), alias: (encode-path-segment $alias)} | format pattern "/{realm}/authentication/required-actions/{alias}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Update required action
@@ -1518,12 +1961,23 @@ export def "authentication-required-actions update" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($alias | is-empty) { error make --unspanned { msg: "path parameter 'alias' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), alias: (encode-path-segment $alias)} | format pattern "/{realm}/authentication/required-actions/{alias}"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), alias: (encode-path-segment $alias)} | format pattern "/{realm}/authentication/required-actions/{alias}") $auth.query)
   let req_body = {"alias": $body_alias, "config": $config, "defaultAction": $default_action, "enabled": $enabled, "name": $name, "priority": $priority, "providerId": $provider_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full []
 }
 
 # Lower required action’s priority
@@ -1546,10 +2000,21 @@ export def "authentication-required-actions-lower-priority create" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($alias | is-empty) { error make --unspanned { msg: "path parameter 'alias' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), alias: (encode-path-segment $alias)} | format pattern "/{realm}/authentication/required-actions/{alias}/lower-priority"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), alias: (encode-path-segment $alias)} | format pattern "/{realm}/authentication/required-actions/{alias}/lower-priority") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full []
 }
 
 # Raise required action’s priority
@@ -1572,10 +2037,21 @@ export def "authentication-required-actions-raise-priority create" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($alias | is-empty) { error make --unspanned { msg: "path parameter 'alias' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), alias: (encode-path-segment $alias)} | format pattern "/{realm}/authentication/required-actions/{alias}/raise-priority"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), alias: (encode-path-segment $alias)} | format pattern "/{realm}/authentication/required-actions/{alias}/raise-priority") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full []
 }
 
 # Get unregistered required actions Returns a list of unregistered required actions.
@@ -1596,10 +2072,21 @@ export def "authentication-unregistered-required-actions get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/authentication/unregistered-required-actions"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/authentication/unregistered-required-actions") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Clear cache of external public keys (Public keys of clients or Identity providers)
@@ -1620,10 +2107,21 @@ export def "clear-keys-cache create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/clear-keys-cache"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/clear-keys-cache") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full []
 }
 
 # Clear realm cache
@@ -1644,10 +2142,21 @@ export def "clear-realm-cache create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/clear-realm-cache"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/clear-realm-cache") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full []
 }
 
 # Clear user cache
@@ -1668,10 +2177,21 @@ export def "clear-user-cache create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/clear-user-cache"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/clear-user-cache") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full []
 }
 
 # Base path for importing clients under this realm.
@@ -1694,12 +2214,23 @@ export def "client-description-converter create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/client-description-converter"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/client-description-converter") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "text/plain" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "text/plain"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full []
 }
 
 # Base path for retrieve providers with the configProperties properly filled
@@ -1720,10 +2251,21 @@ export def "client-registration-policy-providers get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/client-registration-policy/providers"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/client-registration-policy/providers") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Get client scopes belonging to the realm Returns a list of client scopes belonging to the realm
@@ -1744,10 +2286,21 @@ export def "client-scopes list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/client-scopes"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/client-scopes") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Create a new client scope Client Scope’s name must be unique!
@@ -1776,12 +2329,23 @@ export def "client-scopes create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/client-scopes"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/client-scopes") $auth.query)
   let req_body = {"attributes": $attributes, "description": $description, "id": $id, "name": $name, "protocol": $protocol, "protocolMappers": $protocol_mappers} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full []
 }
 
 # Delete the mapper
@@ -1806,10 +2370,21 @@ export def "client-scopes-protocol-mappers-models delete" [
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id1 | is-empty) { error make --unspanned { msg: "path parameter 'id1' must be non-empty" } }
   if ($id2 | is-empty) { error make --unspanned { msg: "path parameter 'id2' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id1: (encode-path-segment $id1), id2: (encode-path-segment $id2)} | format pattern "/{realm}/client-scopes/{id1}/protocol-mappers/models/{id2}"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id1: (encode-path-segment $id1), id2: (encode-path-segment $id2)} | format pattern "/{realm}/client-scopes/{id1}/protocol-mappers/models/{id2}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full []
 }
 
 # Get mapper by id
@@ -1834,10 +2409,21 @@ export def "client-scopes-protocol-mappers-models get" [
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id1 | is-empty) { error make --unspanned { msg: "path parameter 'id1' must be non-empty" } }
   if ($id2 | is-empty) { error make --unspanned { msg: "path parameter 'id2' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id1: (encode-path-segment $id1), id2: (encode-path-segment $id2)} | format pattern "/{realm}/client-scopes/{id1}/protocol-mappers/models/{id2}"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id1: (encode-path-segment $id1), id2: (encode-path-segment $id2)} | format pattern "/{realm}/client-scopes/{id1}/protocol-mappers/models/{id2}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Update the mapper
@@ -1868,12 +2454,23 @@ export def "client-scopes-protocol-mappers-models update" [
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id1 | is-empty) { error make --unspanned { msg: "path parameter 'id1' must be non-empty" } }
   if ($id2 | is-empty) { error make --unspanned { msg: "path parameter 'id2' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id1: (encode-path-segment $id1), id2: (encode-path-segment $id2)} | format pattern "/{realm}/client-scopes/{id1}/protocol-mappers/models/{id2}"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id1: (encode-path-segment $id1), id2: (encode-path-segment $id2)} | format pattern "/{realm}/client-scopes/{id1}/protocol-mappers/models/{id2}") $auth.query)
   let req_body = {"config": $config, "id": $id, "name": $name, "protocol": $protocol, "protocolMapper": $protocol_mapper} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full []
 }
 
 # Delete the client scope
@@ -1896,10 +2493,21 @@ export def "client-scopes delete" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/client-scopes/{id}"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/client-scopes/{id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full []
 }
 
 # Get representation of the client scope
@@ -1922,10 +2530,21 @@ export def "client-scopes get" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/client-scopes/{id}"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/client-scopes/{id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Update the client scope
@@ -1956,12 +2575,23 @@ export def "client-scopes update" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/client-scopes/{id}"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/client-scopes/{id}") $auth.query)
   let req_body = {"attributes": $attributes, "description": $description, "id": $body_id, "name": $name, "protocol": $protocol, "protocolMappers": $protocol_mappers} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full []
 }
 
 # Create multiple mappers
@@ -1986,12 +2616,23 @@ export def "client-scopes-protocol-mappers-add-models create" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/client-scopes/{id}/protocol-mappers/add-models"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/client-scopes/{id}/protocol-mappers/add-models") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full []
 }
 
 # Get mappers
@@ -2014,10 +2655,21 @@ export def "client-scopes-protocol-mappers-models list" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/client-scopes/{id}/protocol-mappers/models"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/client-scopes/{id}/protocol-mappers/models") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Create a mapper
@@ -2046,12 +2698,23 @@ export def "client-scopes-protocol-mappers-models create" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/client-scopes/{id}/protocol-mappers/models"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/client-scopes/{id}/protocol-mappers/models") $auth.query)
   let req_body = {"config": $config, "id": $body_id, "name": $name, "protocol": $protocol, "protocolMapper": $protocol_mapper} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full []
 }
 
 # Get mappers by name for a specific protocol
@@ -2076,10 +2739,21 @@ export def "client-scopes-protocol-mappers-protocol get" [
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($protocol | is-empty) { error make --unspanned { msg: "path parameter 'protocol' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), protocol: (encode-path-segment $protocol)} | format pattern "/{realm}/client-scopes/{id}/protocol-mappers/protocol/{protocol}"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), protocol: (encode-path-segment $protocol)} | format pattern "/{realm}/client-scopes/{id}/protocol-mappers/protocol/{protocol}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Get all scope mappings for the client
@@ -2102,10 +2776,21 @@ export def "client-scopes-scope-mappings get" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/client-scopes/{id}/scope-mappings"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/client-scopes/{id}/scope-mappings") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Remove client-level roles from the client’s scope.
@@ -2132,12 +2817,23 @@ export def "client-scopes-scope-mappings-clients delete" [
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($client | is-empty) { error make --unspanned { msg: "path parameter 'client' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), client: (encode-path-segment $client)} | format pattern "/{realm}/client-scopes/{id}/scope-mappings/clients/{client}"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), client: (encode-path-segment $client)} | format pattern "/{realm}/client-scopes/{id}/scope-mappings/clients/{client}") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req $req_body $insecure $raw $allow_errors $full []
 }
 
 # Get the roles associated with a client’s scope Returns roles for the client.
@@ -2162,10 +2858,21 @@ export def "client-scopes-scope-mappings-clients get" [
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($client | is-empty) { error make --unspanned { msg: "path parameter 'client' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), client: (encode-path-segment $client)} | format pattern "/{realm}/client-scopes/{id}/scope-mappings/clients/{client}"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), client: (encode-path-segment $client)} | format pattern "/{realm}/client-scopes/{id}/scope-mappings/clients/{client}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Add client-level roles to the client’s scope
@@ -2192,12 +2899,23 @@ export def "client-scopes-scope-mappings-clients create" [
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($client | is-empty) { error make --unspanned { msg: "path parameter 'client' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), client: (encode-path-segment $client)} | format pattern "/{realm}/client-scopes/{id}/scope-mappings/clients/{client}"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), client: (encode-path-segment $client)} | format pattern "/{realm}/client-scopes/{id}/scope-mappings/clients/{client}") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full []
 }
 
 # The available client-level roles Returns the roles for the client that can be associated with the client’s scope
@@ -2222,10 +2940,21 @@ export def "client-scopes-scope-mappings-clients-available get" [
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($client | is-empty) { error make --unspanned { msg: "path parameter 'client' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), client: (encode-path-segment $client)} | format pattern "/{realm}/client-scopes/{id}/scope-mappings/clients/{client}/available"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), client: (encode-path-segment $client)} | format pattern "/{realm}/client-scopes/{id}/scope-mappings/clients/{client}/available") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Get effective client roles Returns the roles for the client that are associated with the client’s scope.
@@ -2250,10 +2979,21 @@ export def "client-scopes-scope-mappings-clients-composite get" [
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($client | is-empty) { error make --unspanned { msg: "path parameter 'client' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), client: (encode-path-segment $client)} | format pattern "/{realm}/client-scopes/{id}/scope-mappings/clients/{client}/composite"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), client: (encode-path-segment $client)} | format pattern "/{realm}/client-scopes/{id}/scope-mappings/clients/{client}/composite") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Remove a set of realm-level roles from the client’s scope
@@ -2278,12 +3018,23 @@ export def "client-scopes-scope-mappings-realm delete" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/client-scopes/{id}/scope-mappings/realm"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/client-scopes/{id}/scope-mappings/realm") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req $req_body $insecure $raw $allow_errors $full []
 }
 
 # Get realm-level roles associated with the client’s scope
@@ -2306,10 +3057,21 @@ export def "client-scopes-scope-mappings-realm get" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/client-scopes/{id}/scope-mappings/realm"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/client-scopes/{id}/scope-mappings/realm") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Add a set of realm-level roles to the client’s scope
@@ -2334,12 +3096,23 @@ export def "client-scopes-scope-mappings-realm create" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/client-scopes/{id}/scope-mappings/realm"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/client-scopes/{id}/scope-mappings/realm") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full []
 }
 
 # Get realm-level roles that are available to attach to this client’s scope
@@ -2362,10 +3135,21 @@ export def "client-scopes-scope-mappings-realm-available get" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/client-scopes/{id}/scope-mappings/realm/available"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/client-scopes/{id}/scope-mappings/realm/available") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Get effective realm-level roles associated with the client’s scope What this does is recurse any composite roles associated with the client’s scope and adds the roles to this lists.
@@ -2388,10 +3172,21 @@ export def "client-scopes-scope-mappings-realm-composite get" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/client-scopes/{id}/scope-mappings/realm/composite"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/client-scopes/{id}/scope-mappings/realm/composite") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Get client session stats Returns a JSON map.
@@ -2412,10 +3207,21 @@ export def "client-session-stats get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/client-session-stats"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/client-session-stats") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Get clients belonging to the realm Returns a list of clients belonging to the realm
@@ -2442,10 +3248,21 @@ export def "clients list" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   let qp = [(serialize-qp "clientId" $client_id "scalar") (serialize-qp "first" $first "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "viewableOnly" $viewable_only "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/clients") $qp)
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/clients") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"clientId": $client_id, "first": $first, "max": $max, "search": $search, "viewableOnly": $viewable_only} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"clientId": $client_id, "first": $first, "max": $max, "search": $search, "viewableOnly": $viewable_only} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Create a new client Client’s client_id must be unique!
@@ -2507,12 +3324,23 @@ export def "clients create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/clients"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/clients") $auth.query)
   let req_body = {"access": $access, "adminUrl": $admin_url, "alwaysDisplayInConsole": $always_display_in_console, "attributes": $attributes, "authenticationFlowBindingOverrides": $authentication_flow_binding_overrides, "authorizationServicesEnabled": $authorization_services_enabled, "authorizationSettings": $authorization_settings, "baseUrl": $body_base_url, "bearerOnly": $bearer_only, "clientAuthenticatorType": $client_authenticator_type, "clientId": $client_id, "consentRequired": $consent_required, "defaultClientScopes": $default_client_scopes, "defaultRoles": $default_roles, "description": $description, "directAccessGrantsEnabled": $direct_access_grants_enabled, "enabled": $enabled, "frontchannelLogout": $frontchannel_logout, "fullScopeAllowed": $full_scope_allowed, "id": $id, "implicitFlowEnabled": $implicit_flow_enabled, "name": $name, "nodeReRegistrationTimeout": $node_re_registration_timeout, "notBefore": $not_before, "optionalClientScopes": $optional_client_scopes, "origin": $origin, "protocol": $protocol, "protocolMappers": $protocol_mappers, "publicClient": $public_client, "redirectUris": $redirect_uris, "registeredNodes": $registered_nodes, "registrationAccessToken": $registration_access_token, "rootUrl": $root_url, "secret": $secret, "serviceAccountsEnabled": $service_accounts_enabled, "standardFlowEnabled": $standard_flow_enabled, "surrogateAuthRequired": $surrogate_auth_required, "webOrigins": $web_origins} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full []
 }
 
 # GET /{realm}/clients-initial-access
@@ -2531,10 +3359,21 @@ export def "clients-initial-access get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/clients-initial-access"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/clients-initial-access") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Create a new initial access token.
@@ -2558,12 +3397,23 @@ export def "clients-initial-access create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/clients-initial-access"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/clients-initial-access") $auth.query)
   let req_body = {"count": $count, "expiration": $expiration} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full []
 }
 
 # DELETE /{realm}/clients-initial-access/{id}
@@ -2584,10 +3434,21 @@ export def "clients-initial-access delete" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/clients-initial-access/{id}"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/clients-initial-access/{id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full []
 }
 
 # Delete the mapper
@@ -2612,10 +3473,21 @@ export def "clients-protocol-mappers-models delete" [
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id1 | is-empty) { error make --unspanned { msg: "path parameter 'id1' must be non-empty" } }
   if ($id2 | is-empty) { error make --unspanned { msg: "path parameter 'id2' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id1: (encode-path-segment $id1), id2: (encode-path-segment $id2)} | format pattern "/{realm}/clients/{id1}/protocol-mappers/models/{id2}"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id1: (encode-path-segment $id1), id2: (encode-path-segment $id2)} | format pattern "/{realm}/clients/{id1}/protocol-mappers/models/{id2}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full []
 }
 
 # Get mapper by id
@@ -2640,10 +3512,21 @@ export def "clients-protocol-mappers-models get" [
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id1 | is-empty) { error make --unspanned { msg: "path parameter 'id1' must be non-empty" } }
   if ($id2 | is-empty) { error make --unspanned { msg: "path parameter 'id2' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id1: (encode-path-segment $id1), id2: (encode-path-segment $id2)} | format pattern "/{realm}/clients/{id1}/protocol-mappers/models/{id2}"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id1: (encode-path-segment $id1), id2: (encode-path-segment $id2)} | format pattern "/{realm}/clients/{id1}/protocol-mappers/models/{id2}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Update the mapper
@@ -2674,12 +3557,23 @@ export def "clients-protocol-mappers-models update" [
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id1 | is-empty) { error make --unspanned { msg: "path parameter 'id1' must be non-empty" } }
   if ($id2 | is-empty) { error make --unspanned { msg: "path parameter 'id2' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id1: (encode-path-segment $id1), id2: (encode-path-segment $id2)} | format pattern "/{realm}/clients/{id1}/protocol-mappers/models/{id2}"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id1: (encode-path-segment $id1), id2: (encode-path-segment $id2)} | format pattern "/{realm}/clients/{id1}/protocol-mappers/models/{id2}") $auth.query)
   let req_body = {"config": $config, "id": $id, "name": $name, "protocol": $protocol, "protocolMapper": $protocol_mapper} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full []
 }
 
 # Delete the client
@@ -2702,10 +3596,21 @@ export def "clients delete" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/clients/{id}"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/clients/{id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full []
 }
 
 # Get representation of the client
@@ -2728,10 +3633,21 @@ export def "clients get" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/clients/{id}"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/clients/{id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Update the client
@@ -2795,12 +3711,23 @@ export def "clients update" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/clients/{id}"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/clients/{id}") $auth.query)
   let req_body = {"access": $access, "adminUrl": $admin_url, "alwaysDisplayInConsole": $always_display_in_console, "attributes": $attributes, "authenticationFlowBindingOverrides": $authentication_flow_binding_overrides, "authorizationServicesEnabled": $authorization_services_enabled, "authorizationSettings": $authorization_settings, "baseUrl": $body_base_url, "bearerOnly": $bearer_only, "clientAuthenticatorType": $client_authenticator_type, "clientId": $client_id, "consentRequired": $consent_required, "defaultClientScopes": $default_client_scopes, "defaultRoles": $default_roles, "description": $description, "directAccessGrantsEnabled": $direct_access_grants_enabled, "enabled": $enabled, "frontchannelLogout": $frontchannel_logout, "fullScopeAllowed": $full_scope_allowed, "id": $body_id, "implicitFlowEnabled": $implicit_flow_enabled, "name": $name, "nodeReRegistrationTimeout": $node_re_registration_timeout, "notBefore": $not_before, "optionalClientScopes": $optional_client_scopes, "origin": $origin, "protocol": $protocol, "protocolMappers": $protocol_mappers, "publicClient": $public_client, "redirectUris": $redirect_uris, "registeredNodes": $registered_nodes, "registrationAccessToken": $registration_access_token, "rootUrl": $root_url, "secret": $secret, "serviceAccountsEnabled": $service_accounts_enabled, "standardFlowEnabled": $standard_flow_enabled, "surrogateAuthRequired": $surrogate_auth_required, "webOrigins": $web_origins} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full []
 }
 
 # Get key info
@@ -2825,10 +3752,21 @@ export def "clients-certificates get" [
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($attr | is-empty) { error make --unspanned { msg: "path parameter 'attr' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), attr: (encode-path-segment $attr)} | format pattern "/{realm}/clients/{id}/certificates/{attr}"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), attr: (encode-path-segment $attr)} | format pattern "/{realm}/clients/{id}/certificates/{attr}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Get a keystore file for the client, containing private key and public certificate
@@ -2860,12 +3798,23 @@ export def "clients-certificates-download create" [
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($attr | is-empty) { error make --unspanned { msg: "path parameter 'attr' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), attr: (encode-path-segment $attr)} | format pattern "/{realm}/clients/{id}/certificates/{attr}/download"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), attr: (encode-path-segment $attr)} | format pattern "/{realm}/clients/{id}/certificates/{attr}/download") $auth.query)
   let req_body = {"format": $format, "keyAlias": $key_alias, "keyPassword": $key_password, "realmAlias": $realm_alias, "realmCertificate": $realm_certificate, "storePassword": $store_password} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full []
 }
 
 # Generate a new certificate with new key pair
@@ -2890,10 +3839,21 @@ export def "clients-certificates-generate create" [
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($attr | is-empty) { error make --unspanned { msg: "path parameter 'attr' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), attr: (encode-path-segment $attr)} | format pattern "/{realm}/clients/{id}/certificates/{attr}/generate"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), attr: (encode-path-segment $attr)} | format pattern "/{realm}/clients/{id}/certificates/{attr}/generate") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full []
 }
 
 # Generate a new keypair and certificate, and get the private key file Generates a keypair and certificate and serves the private key in a specified keystore format.
@@ -2925,12 +3885,23 @@ export def "clients-certificates-generate-and-download create" [
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($attr | is-empty) { error make --unspanned { msg: "path parameter 'attr' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), attr: (encode-path-segment $attr)} | format pattern "/{realm}/clients/{id}/certificates/{attr}/generate-and-download"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), attr: (encode-path-segment $attr)} | format pattern "/{realm}/clients/{id}/certificates/{attr}/generate-and-download") $auth.query)
   let req_body = {"format": $format, "keyAlias": $key_alias, "keyPassword": $key_password, "realmAlias": $realm_alias, "realmCertificate": $realm_certificate, "storePassword": $store_password} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full []
 }
 
 # Upload certificate and eventually private key
@@ -2955,10 +3926,21 @@ export def "clients-certificates-upload create" [
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($attr | is-empty) { error make --unspanned { msg: "path parameter 'attr' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), attr: (encode-path-segment $attr)} | format pattern "/{realm}/clients/{id}/certificates/{attr}/upload"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), attr: (encode-path-segment $attr)} | format pattern "/{realm}/clients/{id}/certificates/{attr}/upload") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full []
 }
 
 # Upload only certificate, not private key
@@ -2983,10 +3965,21 @@ export def "clients-certificates-upload-certificate create" [
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($attr | is-empty) { error make --unspanned { msg: "path parameter 'attr' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), attr: (encode-path-segment $attr)} | format pattern "/{realm}/clients/{id}/certificates/{attr}/upload-certificate"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), attr: (encode-path-segment $attr)} | format pattern "/{realm}/clients/{id}/certificates/{attr}/upload-certificate") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full []
 }
 
 # Get the client secret
@@ -3009,10 +4002,21 @@ export def "clients-client-secret get" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/clients/{id}/client-secret"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/clients/{id}/client-secret") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Generate a new secret for the client
@@ -3035,10 +4039,21 @@ export def "clients-client-secret create" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/clients/{id}/client-secret"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/clients/{id}/client-secret") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full []
 }
 
 # Get default client scopes.
@@ -3061,10 +4076,21 @@ export def "clients-default-client-scopes get" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/clients/{id}/default-client-scopes"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/clients/{id}/default-client-scopes") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # DELETE /{realm}/clients/{id}/default-client-scopes/{clientScopeId}
@@ -3087,10 +4113,21 @@ export def "clients-default-client-scopes delete" [
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($client_scope_id | is-empty) { error make --unspanned { msg: "path parameter 'clientScopeId' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), client_scope_id: (encode-path-segment $client_scope_id)} | format pattern "/{realm}/clients/{id}/default-client-scopes/{client_scope_id}"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), client_scope_id: (encode-path-segment $client_scope_id)} | format pattern "/{realm}/clients/{id}/default-client-scopes/{client_scope_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full []
 }
 
 # PUT /{realm}/clients/{id}/default-client-scopes/{clientScopeId}
@@ -3113,10 +4150,21 @@ export def "clients-default-client-scopes update" [
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($client_scope_id | is-empty) { error make --unspanned { msg: "path parameter 'clientScopeId' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), client_scope_id: (encode-path-segment $client_scope_id)} | format pattern "/{realm}/clients/{id}/default-client-scopes/{client_scope_id}"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), client_scope_id: (encode-path-segment $client_scope_id)} | format pattern "/{realm}/clients/{id}/default-client-scopes/{client_scope_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req null $insecure $raw $allow_errors $full []
 }
 
 # Create JSON with payload of example access token
@@ -3142,10 +4190,21 @@ export def "clients-evaluate-scopes-generate-example-access-token get" [
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "scope" $scope "scalar") (serialize-qp "userId" $user_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/clients/{id}/evaluate-scopes/generate-example-access-token") $qp)
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/clients/{id}/evaluate-scopes/generate-example-access-token") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"scope": $scope, "userId": $user_id} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"scope": $scope, "userId": $user_id} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Return list of all protocol mappers, which will be used when generating tokens issued for particular client.
@@ -3170,10 +4229,21 @@ export def "clients-evaluate-scopes-protocol-mappers get" [
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "scope" $scope "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/clients/{id}/evaluate-scopes/protocol-mappers") $qp)
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/clients/{id}/evaluate-scopes/protocol-mappers") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"scope": $scope} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"scope": $scope} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Get effective scope mapping of all roles of particular role container, which this client is defacto allowed to have in the accessToken issued for him.
@@ -3200,10 +4270,21 @@ export def "clients-evaluate-scopes-scope-mappings-granted get" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($role_container_id | is-empty) { error make --unspanned { msg: "path parameter 'roleContainerId' must be non-empty" } }
   let qp = [(serialize-qp "scope" $scope "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), role_container_id: (encode-path-segment $role_container_id)} | format pattern "/{realm}/clients/{id}/evaluate-scopes/scope-mappings/{role_container_id}/granted") $qp)
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), role_container_id: (encode-path-segment $role_container_id)} | format pattern "/{realm}/clients/{id}/evaluate-scopes/scope-mappings/{role_container_id}/granted") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"scope": $scope} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"scope": $scope} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Get roles, which this client doesn’t have scope for and can’t have them in the accessToken issued for him.
@@ -3230,10 +4311,21 @@ export def "clients-evaluate-scopes-scope-mappings-not-granted get" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($role_container_id | is-empty) { error make --unspanned { msg: "path parameter 'roleContainerId' must be non-empty" } }
   let qp = [(serialize-qp "scope" $scope "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), role_container_id: (encode-path-segment $role_container_id)} | format pattern "/{realm}/clients/{id}/evaluate-scopes/scope-mappings/{role_container_id}/not-granted") $qp)
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), role_container_id: (encode-path-segment $role_container_id)} | format pattern "/{realm}/clients/{id}/evaluate-scopes/scope-mappings/{role_container_id}/not-granted") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"scope": $scope} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"scope": $scope} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # GET /{realm}/clients/{id}/installation/providers/{providerId}
@@ -3256,10 +4348,21 @@ export def "clients-installation-providers get" [
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($provider_id | is-empty) { error make --unspanned { msg: "path parameter 'providerId' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), provider_id: (encode-path-segment $provider_id)} | format pattern "/{realm}/clients/{id}/installation/providers/{provider_id}"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), provider_id: (encode-path-segment $provider_id)} | format pattern "/{realm}/clients/{id}/installation/providers/{provider_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Return object stating whether client Authorization permissions have been initialized or not and a reference
@@ -3282,10 +4385,21 @@ export def "clients-management-permissions get" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/clients/{id}/management/permissions"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/clients/{id}/management/permissions") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Return object stating whether client Authorization permissions have been initialized or not and a reference
@@ -3312,12 +4426,23 @@ export def "clients-management-permissions update" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/clients/{id}/management/permissions"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/clients/{id}/management/permissions") $auth.query)
   let req_body = {"enabled": $enabled, "resource": $resource, "scopePermissions": $scope_permissions} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full []
 }
 
 # Register a cluster node with the client Manually register cluster node to this client - usually it’s not needed to call this directly as adapter should handle by sending registration request to Keycloak
@@ -3342,12 +4467,23 @@ export def "clients-nodes create" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/clients/{id}/nodes"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/clients/{id}/nodes") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full []
 }
 
 # Unregister a cluster node from the client
@@ -3372,10 +4508,21 @@ export def "clients-nodes delete" [
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($node | is-empty) { error make --unspanned { msg: "path parameter 'node' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), node: (encode-path-segment $node)} | format pattern "/{realm}/clients/{id}/nodes/{node}"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), node: (encode-path-segment $node)} | format pattern "/{realm}/clients/{id}/nodes/{node}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full []
 }
 
 # Get application offline session count Returns a number of offline user sessions associated with this client { "count": number }
@@ -3398,10 +4545,21 @@ export def "clients-offline-session-count get" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/clients/{id}/offline-session-count"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/clients/{id}/offline-session-count") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Get offline sessions for client Returns a list of offline user sessions associated with this client
@@ -3427,10 +4585,21 @@ export def "clients-offline-sessions get" [
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "first" $first "scalar") (serialize-qp "max" $max "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/clients/{id}/offline-sessions") $qp)
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/clients/{id}/offline-sessions") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"first": $first, "max": $max} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"first": $first, "max": $max} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Get optional client scopes.
@@ -3453,10 +4622,21 @@ export def "clients-optional-client-scopes get" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/clients/{id}/optional-client-scopes"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/clients/{id}/optional-client-scopes") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # DELETE /{realm}/clients/{id}/optional-client-scopes/{clientScopeId}
@@ -3479,10 +4659,21 @@ export def "clients-optional-client-scopes delete" [
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($client_scope_id | is-empty) { error make --unspanned { msg: "path parameter 'clientScopeId' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), client_scope_id: (encode-path-segment $client_scope_id)} | format pattern "/{realm}/clients/{id}/optional-client-scopes/{client_scope_id}"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), client_scope_id: (encode-path-segment $client_scope_id)} | format pattern "/{realm}/clients/{id}/optional-client-scopes/{client_scope_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full []
 }
 
 # PUT /{realm}/clients/{id}/optional-client-scopes/{clientScopeId}
@@ -3505,10 +4696,21 @@ export def "clients-optional-client-scopes update" [
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($client_scope_id | is-empty) { error make --unspanned { msg: "path parameter 'clientScopeId' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), client_scope_id: (encode-path-segment $client_scope_id)} | format pattern "/{realm}/clients/{id}/optional-client-scopes/{client_scope_id}"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), client_scope_id: (encode-path-segment $client_scope_id)} | format pattern "/{realm}/clients/{id}/optional-client-scopes/{client_scope_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req null $insecure $raw $allow_errors $full []
 }
 
 # Create multiple mappers
@@ -3533,12 +4735,23 @@ export def "clients-protocol-mappers-add-models create" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/clients/{id}/protocol-mappers/add-models"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/clients/{id}/protocol-mappers/add-models") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full []
 }
 
 # Get mappers
@@ -3561,10 +4774,21 @@ export def "clients-protocol-mappers-models list" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/clients/{id}/protocol-mappers/models"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/clients/{id}/protocol-mappers/models") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Create a mapper
@@ -3593,12 +4817,23 @@ export def "clients-protocol-mappers-models create" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/clients/{id}/protocol-mappers/models"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/clients/{id}/protocol-mappers/models") $auth.query)
   let req_body = {"config": $config, "id": $body_id, "name": $name, "protocol": $protocol, "protocolMapper": $protocol_mapper} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full []
 }
 
 # Get mappers by name for a specific protocol
@@ -3623,10 +4858,21 @@ export def "clients-protocol-mappers-protocol get" [
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($protocol | is-empty) { error make --unspanned { msg: "path parameter 'protocol' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), protocol: (encode-path-segment $protocol)} | format pattern "/{realm}/clients/{id}/protocol-mappers/protocol/{protocol}"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), protocol: (encode-path-segment $protocol)} | format pattern "/{realm}/clients/{id}/protocol-mappers/protocol/{protocol}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Push the client’s revocation policy to its admin URL If the client has an admin URL, push revocation policy to it.
@@ -3649,10 +4895,21 @@ export def "clients-push-revocation create" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/clients/{id}/push-revocation"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/clients/{id}/push-revocation") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full []
 }
 
 # Generate a new registration access token for the client
@@ -3675,10 +4932,21 @@ export def "clients-registration-access-token create" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/clients/{id}/registration-access-token"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/clients/{id}/registration-access-token") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full []
 }
 
 # Get all roles for the realm or client
@@ -3706,10 +4974,21 @@ export def "clients-roles list" [
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "briefRepresentation" $brief_representation "scalar") (serialize-qp "first" $first "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "search" $search "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/clients/{id}/roles") $qp)
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/clients/{id}/roles") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"briefRepresentation": $brief_representation, "first": $first, "max": $max, "search": $search} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"briefRepresentation": $brief_representation, "first": $first, "max": $max, "search": $search} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Create a new role for the realm or client
@@ -3742,12 +5021,23 @@ export def "clients-roles create" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/clients/{id}/roles"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/clients/{id}/roles") $auth.query)
   let req_body = {"attributes": $attributes, "clientRole": $client_role, "composite": $composite, "composites": $composites, "containerId": $container_id, "description": $description, "id": $body_id, "name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full []
 }
 
 # Delete a role by name
@@ -3772,10 +5062,21 @@ export def "clients-roles delete" [
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($role_name | is-empty) { error make --unspanned { msg: "path parameter 'role-name' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), role_name: (encode-path-segment $role_name)} | format pattern "/{realm}/clients/{id}/roles/{role_name}"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), role_name: (encode-path-segment $role_name)} | format pattern "/{realm}/clients/{id}/roles/{role_name}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full []
 }
 
 # Get a role by name
@@ -3800,10 +5101,21 @@ export def "clients-roles get" [
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($role_name | is-empty) { error make --unspanned { msg: "path parameter 'role-name' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), role_name: (encode-path-segment $role_name)} | format pattern "/{realm}/clients/{id}/roles/{role_name}"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), role_name: (encode-path-segment $role_name)} | format pattern "/{realm}/clients/{id}/roles/{role_name}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Update a role by name
@@ -3838,12 +5150,23 @@ export def "clients-roles update" [
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($role_name | is-empty) { error make --unspanned { msg: "path parameter 'role-name' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), role_name: (encode-path-segment $role_name)} | format pattern "/{realm}/clients/{id}/roles/{role_name}"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), role_name: (encode-path-segment $role_name)} | format pattern "/{realm}/clients/{id}/roles/{role_name}") $auth.query)
   let req_body = {"attributes": $attributes, "clientRole": $client_role, "composite": $composite, "composites": $composites, "containerId": $container_id, "description": $description, "id": $body_id, "name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full []
 }
 
 # Remove roles from the role’s composite
@@ -3870,12 +5193,23 @@ export def "clients-roles-composites delete" [
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($role_name | is-empty) { error make --unspanned { msg: "path parameter 'role-name' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), role_name: (encode-path-segment $role_name)} | format pattern "/{realm}/clients/{id}/roles/{role_name}/composites"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), role_name: (encode-path-segment $role_name)} | format pattern "/{realm}/clients/{id}/roles/{role_name}/composites") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req $req_body $insecure $raw $allow_errors $full []
 }
 
 # Get composites of the role
@@ -3900,10 +5234,21 @@ export def "clients-roles-composites get" [
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($role_name | is-empty) { error make --unspanned { msg: "path parameter 'role-name' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), role_name: (encode-path-segment $role_name)} | format pattern "/{realm}/clients/{id}/roles/{role_name}/composites"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), role_name: (encode-path-segment $role_name)} | format pattern "/{realm}/clients/{id}/roles/{role_name}/composites") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Add a composite to the role
@@ -3930,12 +5275,23 @@ export def "clients-roles-composites create" [
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($role_name | is-empty) { error make --unspanned { msg: "path parameter 'role-name' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), role_name: (encode-path-segment $role_name)} | format pattern "/{realm}/clients/{id}/roles/{role_name}/composites"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), role_name: (encode-path-segment $role_name)} | format pattern "/{realm}/clients/{id}/roles/{role_name}/composites") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full []
 }
 
 # An app-level roles for the specified app for the role’s composite
@@ -3962,10 +5318,21 @@ export def "clients-roles-composites-clients get" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($role_name | is-empty) { error make --unspanned { msg: "path parameter 'role-name' must be non-empty" } }
   if ($client | is-empty) { error make --unspanned { msg: "path parameter 'client' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), role_name: (encode-path-segment $role_name), client: (encode-path-segment $client)} | format pattern "/{realm}/clients/{id}/roles/{role_name}/composites/clients/{client}"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), role_name: (encode-path-segment $role_name), client: (encode-path-segment $client)} | format pattern "/{realm}/clients/{id}/roles/{role_name}/composites/clients/{client}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Get realm-level roles of the role’s composite
@@ -3990,10 +5357,21 @@ export def "clients-roles-composites-realm get" [
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($role_name | is-empty) { error make --unspanned { msg: "path parameter 'role-name' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), role_name: (encode-path-segment $role_name)} | format pattern "/{realm}/clients/{id}/roles/{role_name}/composites/realm"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), role_name: (encode-path-segment $role_name)} | format pattern "/{realm}/clients/{id}/roles/{role_name}/composites/realm") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Return List of Groups that have the specified role name
@@ -4022,10 +5400,21 @@ export def "clients-roles-groups get" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($role_name | is-empty) { error make --unspanned { msg: "path parameter 'role-name' must be non-empty" } }
   let qp = [(serialize-qp "briefRepresentation" $brief_representation "scalar") (serialize-qp "first" $first "scalar") (serialize-qp "max" $max "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), role_name: (encode-path-segment $role_name)} | format pattern "/{realm}/clients/{id}/roles/{role_name}/groups") $qp)
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), role_name: (encode-path-segment $role_name)} | format pattern "/{realm}/clients/{id}/roles/{role_name}/groups") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"briefRepresentation": $brief_representation, "first": $first, "max": $max} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"briefRepresentation": $brief_representation, "first": $first, "max": $max} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Return object stating whether role Authoirzation permissions have been initialized or not and a reference
@@ -4050,10 +5439,21 @@ export def "clients-roles-management-permissions get" [
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($role_name | is-empty) { error make --unspanned { msg: "path parameter 'role-name' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), role_name: (encode-path-segment $role_name)} | format pattern "/{realm}/clients/{id}/roles/{role_name}/management/permissions"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), role_name: (encode-path-segment $role_name)} | format pattern "/{realm}/clients/{id}/roles/{role_name}/management/permissions") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Return object stating whether role Authoirzation permissions have been initialized or not and a reference
@@ -4082,12 +5482,23 @@ export def "clients-roles-management-permissions update" [
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($role_name | is-empty) { error make --unspanned { msg: "path parameter 'role-name' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), role_name: (encode-path-segment $role_name)} | format pattern "/{realm}/clients/{id}/roles/{role_name}/management/permissions"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), role_name: (encode-path-segment $role_name)} | format pattern "/{realm}/clients/{id}/roles/{role_name}/management/permissions") $auth.query)
   let req_body = {"enabled": $enabled, "resource": $resource, "scopePermissions": $scope_permissions} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full []
 }
 
 # Return List of Users that have the specified role name
@@ -4115,10 +5526,21 @@ export def "clients-roles-users get" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($role_name | is-empty) { error make --unspanned { msg: "path parameter 'role-name' must be non-empty" } }
   let qp = [(serialize-qp "first" $first "scalar") (serialize-qp "max" $max "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), role_name: (encode-path-segment $role_name)} | format pattern "/{realm}/clients/{id}/roles/{role_name}/users") $qp)
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), role_name: (encode-path-segment $role_name)} | format pattern "/{realm}/clients/{id}/roles/{role_name}/users") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"first": $first, "max": $max} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"first": $first, "max": $max} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Get all scope mappings for the client
@@ -4141,10 +5563,21 @@ export def "clients-scope-mappings get" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/clients/{id}/scope-mappings"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/clients/{id}/scope-mappings") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Remove client-level roles from the client’s scope.
@@ -4171,12 +5604,23 @@ export def "clients-scope-mappings-clients delete" [
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($client | is-empty) { error make --unspanned { msg: "path parameter 'client' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), client: (encode-path-segment $client)} | format pattern "/{realm}/clients/{id}/scope-mappings/clients/{client}"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), client: (encode-path-segment $client)} | format pattern "/{realm}/clients/{id}/scope-mappings/clients/{client}") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req $req_body $insecure $raw $allow_errors $full []
 }
 
 # Get the roles associated with a client’s scope Returns roles for the client.
@@ -4201,10 +5645,21 @@ export def "clients-scope-mappings-clients get" [
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($client | is-empty) { error make --unspanned { msg: "path parameter 'client' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), client: (encode-path-segment $client)} | format pattern "/{realm}/clients/{id}/scope-mappings/clients/{client}"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), client: (encode-path-segment $client)} | format pattern "/{realm}/clients/{id}/scope-mappings/clients/{client}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Add client-level roles to the client’s scope
@@ -4231,12 +5686,23 @@ export def "clients-scope-mappings-clients create" [
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($client | is-empty) { error make --unspanned { msg: "path parameter 'client' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), client: (encode-path-segment $client)} | format pattern "/{realm}/clients/{id}/scope-mappings/clients/{client}"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), client: (encode-path-segment $client)} | format pattern "/{realm}/clients/{id}/scope-mappings/clients/{client}") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full []
 }
 
 # The available client-level roles Returns the roles for the client that can be associated with the client’s scope
@@ -4261,10 +5727,21 @@ export def "clients-scope-mappings-clients-available get" [
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($client | is-empty) { error make --unspanned { msg: "path parameter 'client' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), client: (encode-path-segment $client)} | format pattern "/{realm}/clients/{id}/scope-mappings/clients/{client}/available"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), client: (encode-path-segment $client)} | format pattern "/{realm}/clients/{id}/scope-mappings/clients/{client}/available") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Get effective client roles Returns the roles for the client that are associated with the client’s scope.
@@ -4289,10 +5766,21 @@ export def "clients-scope-mappings-clients-composite get" [
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($client | is-empty) { error make --unspanned { msg: "path parameter 'client' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), client: (encode-path-segment $client)} | format pattern "/{realm}/clients/{id}/scope-mappings/clients/{client}/composite"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), client: (encode-path-segment $client)} | format pattern "/{realm}/clients/{id}/scope-mappings/clients/{client}/composite") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Remove a set of realm-level roles from the client’s scope
@@ -4317,12 +5805,23 @@ export def "clients-scope-mappings-realm delete" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/clients/{id}/scope-mappings/realm"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/clients/{id}/scope-mappings/realm") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req $req_body $insecure $raw $allow_errors $full []
 }
 
 # Get realm-level roles associated with the client’s scope
@@ -4345,10 +5844,21 @@ export def "clients-scope-mappings-realm get" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/clients/{id}/scope-mappings/realm"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/clients/{id}/scope-mappings/realm") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Add a set of realm-level roles to the client’s scope
@@ -4373,12 +5883,23 @@ export def "clients-scope-mappings-realm create" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/clients/{id}/scope-mappings/realm"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/clients/{id}/scope-mappings/realm") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full []
 }
 
 # Get realm-level roles that are available to attach to this client’s scope
@@ -4401,10 +5922,21 @@ export def "clients-scope-mappings-realm-available get" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/clients/{id}/scope-mappings/realm/available"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/clients/{id}/scope-mappings/realm/available") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Get effective realm-level roles associated with the client’s scope What this does is recurse any composite roles associated with the client’s scope and adds the roles to this lists.
@@ -4427,10 +5959,21 @@ export def "clients-scope-mappings-realm-composite get" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/clients/{id}/scope-mappings/realm/composite"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/clients/{id}/scope-mappings/realm/composite") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Get a user dedicated to the service account
@@ -4453,10 +5996,21 @@ export def "clients-service-account-user get" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/clients/{id}/service-account-user"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/clients/{id}/service-account-user") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Get application session count Returns a number of user sessions associated with this client { "count": number }
@@ -4479,10 +6033,21 @@ export def "clients-session-count get" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/clients/{id}/session-count"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/clients/{id}/session-count") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Test if registered cluster nodes are available Tests availability by sending 'ping' request to all cluster nodes.
@@ -4505,10 +6070,21 @@ export def "clients-test-nodes-available get" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/clients/{id}/test-nodes-available"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/clients/{id}/test-nodes-available") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Get user sessions for client Returns a list of user sessions associated with this client
@@ -4534,10 +6110,21 @@ export def "clients-user-sessions get" [
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "first" $first "scalar") (serialize-qp "max" $max "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/clients/{id}/user-sessions") $qp)
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/clients/{id}/user-sessions") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"first": $first, "max": $max} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"first": $first, "max": $max} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # GET /{realm}/components
@@ -4560,10 +6147,21 @@ export def "components list" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "parent" $parent "scalar") (serialize-qp "type" $type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/components") $qp)
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/components") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"name": $name, "parent": $parent, "type": $type} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"name": $name, "parent": $parent, "type": $type} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # POST /{realm}/components
@@ -4592,12 +6190,23 @@ export def "components create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/components"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/components") $auth.query)
   let req_body = {"config": $config, "id": $id, "name": $name, "parentId": $parent_id, "providerId": $provider_id, "providerType": $provider_type, "subType": $sub_type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full []
 }
 
 # DELETE /{realm}/components/{id}
@@ -4618,10 +6227,21 @@ export def "components delete" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/components/{id}"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/components/{id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full []
 }
 
 # GET /{realm}/components/{id}
@@ -4642,10 +6262,21 @@ export def "components get" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/components/{id}"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/components/{id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # PUT /{realm}/components/{id}
@@ -4676,12 +6307,23 @@ export def "components update" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/components/{id}"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/components/{id}") $auth.query)
   let req_body = {"config": $config, "id": $body_id, "name": $name, "parentId": $parent_id, "providerId": $provider_id, "providerType": $provider_type, "subType": $sub_type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full []
 }
 
 # List of subcomponent types that are available to configure for a particular parent component.
@@ -4706,10 +6348,21 @@ export def "components-sub-component-types get" [
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "type" $type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/components/{id}/sub-component-types") $qp)
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/components/{id}/sub-component-types") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"type": $type} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"type": $type} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # GET /{realm}/credential-registrators
@@ -4728,10 +6381,21 @@ export def "credential-registrators get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/credential-registrators"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/credential-registrators") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Get realm default client scopes.
@@ -4752,10 +6416,21 @@ export def "default-default-client-scopes get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/default-default-client-scopes"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/default-default-client-scopes") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # DELETE /{realm}/default-default-client-scopes/{clientScopeId}
@@ -4776,10 +6451,21 @@ export def "default-default-client-scopes delete" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($client_scope_id | is-empty) { error make --unspanned { msg: "path parameter 'clientScopeId' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), client_scope_id: (encode-path-segment $client_scope_id)} | format pattern "/{realm}/default-default-client-scopes/{client_scope_id}"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), client_scope_id: (encode-path-segment $client_scope_id)} | format pattern "/{realm}/default-default-client-scopes/{client_scope_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full []
 }
 
 # PUT /{realm}/default-default-client-scopes/{clientScopeId}
@@ -4800,10 +6486,21 @@ export def "default-default-client-scopes update" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($client_scope_id | is-empty) { error make --unspanned { msg: "path parameter 'clientScopeId' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), client_scope_id: (encode-path-segment $client_scope_id)} | format pattern "/{realm}/default-default-client-scopes/{client_scope_id}"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), client_scope_id: (encode-path-segment $client_scope_id)} | format pattern "/{realm}/default-default-client-scopes/{client_scope_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req null $insecure $raw $allow_errors $full []
 }
 
 # Get group hierarchy.
@@ -4824,10 +6521,21 @@ export def "default-groups get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/default-groups"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/default-groups") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # DELETE /{realm}/default-groups/{groupId}
@@ -4848,10 +6556,21 @@ export def "default-groups delete" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), group_id: (encode-path-segment $group_id)} | format pattern "/{realm}/default-groups/{group_id}"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), group_id: (encode-path-segment $group_id)} | format pattern "/{realm}/default-groups/{group_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full []
 }
 
 # PUT /{realm}/default-groups/{groupId}
@@ -4872,10 +6591,21 @@ export def "default-groups update" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), group_id: (encode-path-segment $group_id)} | format pattern "/{realm}/default-groups/{group_id}"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), group_id: (encode-path-segment $group_id)} | format pattern "/{realm}/default-groups/{group_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req null $insecure $raw $allow_errors $full []
 }
 
 # Get realm optional client scopes.
@@ -4896,10 +6626,21 @@ export def "default-optional-client-scopes get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/default-optional-client-scopes"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/default-optional-client-scopes") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # DELETE /{realm}/default-optional-client-scopes/{clientScopeId}
@@ -4920,10 +6661,21 @@ export def "default-optional-client-scopes delete" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($client_scope_id | is-empty) { error make --unspanned { msg: "path parameter 'clientScopeId' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), client_scope_id: (encode-path-segment $client_scope_id)} | format pattern "/{realm}/default-optional-client-scopes/{client_scope_id}"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), client_scope_id: (encode-path-segment $client_scope_id)} | format pattern "/{realm}/default-optional-client-scopes/{client_scope_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full []
 }
 
 # PUT /{realm}/default-optional-client-scopes/{clientScopeId}
@@ -4944,10 +6696,21 @@ export def "default-optional-client-scopes update" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($client_scope_id | is-empty) { error make --unspanned { msg: "path parameter 'clientScopeId' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), client_scope_id: (encode-path-segment $client_scope_id)} | format pattern "/{realm}/default-optional-client-scopes/{client_scope_id}"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), client_scope_id: (encode-path-segment $client_scope_id)} | format pattern "/{realm}/default-optional-client-scopes/{client_scope_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req null $insecure $raw $allow_errors $full []
 }
 
 # Delete all events
@@ -4968,10 +6731,21 @@ export def "events delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/events"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/events") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full []
 }
 
 # Get events Returns all events, or filters them based on URL query parameters listed here
@@ -5001,10 +6775,21 @@ export def "events get" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   let qp = [(serialize-qp "client" $client "scalar") (serialize-qp "dateFrom" $date_from "scalar") (serialize-qp "dateTo" $date_to "scalar") (serialize-qp "first" $first "scalar") (serialize-qp "ipAddress" $ip_address "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "type" $type "multi") (serialize-qp "user" $user "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/events") $qp)
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/events") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"client": $client, "dateFrom": $date_from, "dateTo": $date_to, "first": $first, "ipAddress": $ip_address, "max": $max, "type": $type, "user": $user} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"client": $client, "dateFrom": $date_from, "dateTo": $date_to, "first": $first, "ipAddress": $ip_address, "max": $max, "type": $type, "user": $user} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Get the events provider configuration Returns JSON object with events provider configuration
@@ -5025,10 +6810,21 @@ export def "events-config get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/events/config"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/events/config") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Update the events provider Change the events provider and/or its configuration
@@ -5056,12 +6852,23 @@ export def "events-config update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/events/config"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/events/config") $auth.query)
   let req_body = {"adminEventsDetailsEnabled": $admin_events_details_enabled, "adminEventsEnabled": $admin_events_enabled, "enabledEventTypes": $enabled_event_types, "eventsEnabled": $events_enabled, "eventsExpiration": $events_expiration, "eventsListeners": $events_listeners} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full []
 }
 
 # GET /{realm}/group-by-path/{path}
@@ -5082,10 +6889,21 @@ export def "group-by-path get" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($path | is-empty) { error make --unspanned { msg: "path parameter 'path' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), path: (encode-path-segment $path)} | format pattern "/{realm}/group-by-path/{path}"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), path: (encode-path-segment $path)} | format pattern "/{realm}/group-by-path/{path}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Get group hierarchy.
@@ -5111,10 +6929,21 @@ export def "groups list" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   let qp = [(serialize-qp "briefRepresentation" $brief_representation "scalar") (serialize-qp "first" $first "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "search" $search "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/groups") $qp)
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/groups") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"briefRepresentation": $brief_representation, "first": $first, "max": $max, "search": $search} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"briefRepresentation": $brief_representation, "first": $first, "max": $max, "search": $search} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # create or add a top level realm groupSet or create child.
@@ -5145,12 +6974,23 @@ export def "groups create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/groups"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/groups") $auth.query)
   let req_body = {"access": $access, "attributes": $attributes, "clientRoles": $client_roles, "id": $id, "name": $name, "path": $path, "realmRoles": $realm_roles, "subGroups": $sub_groups} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full []
 }
 
 # Returns the groups counts.
@@ -5174,10 +7014,21 @@ export def "groups-count get" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "top" $top "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/groups/count") $qp)
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/groups/count") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"search": $search, "top": $top} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"search": $search, "top": $top} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # DELETE /{realm}/groups/{id}
@@ -5198,10 +7049,21 @@ export def "groups delete" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/groups/{id}"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/groups/{id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full []
 }
 
 # GET /{realm}/groups/{id}
@@ -5222,10 +7084,21 @@ export def "groups get" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/groups/{id}"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/groups/{id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Update group, ignores subgroups.
@@ -5258,12 +7131,23 @@ export def "groups update" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/groups/{id}"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/groups/{id}") $auth.query)
   let req_body = {"access": $access, "attributes": $attributes, "clientRoles": $client_roles, "id": $body_id, "name": $name, "path": $path, "realmRoles": $realm_roles, "subGroups": $sub_groups} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full []
 }
 
 # Set or create child.
@@ -5296,12 +7180,23 @@ export def "groups-children create" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/groups/{id}/children"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/groups/{id}/children") $auth.query)
   let req_body = {"access": $access, "attributes": $attributes, "clientRoles": $client_roles, "id": $body_id, "name": $name, "path": $path, "realmRoles": $realm_roles, "subGroups": $sub_groups} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full []
 }
 
 # Return object stating whether client Authorization permissions have been initialized or not and a reference
@@ -5324,10 +7219,21 @@ export def "groups-management-permissions get" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/groups/{id}/management/permissions"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/groups/{id}/management/permissions") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Return object stating whether client Authorization permissions have been initialized or not and a reference
@@ -5354,12 +7260,23 @@ export def "groups-management-permissions update" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/groups/{id}/management/permissions"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/groups/{id}/management/permissions") $auth.query)
   let req_body = {"enabled": $enabled, "resource": $resource, "scopePermissions": $scope_permissions} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full []
 }
 
 # Get users Returns a list of users, filtered according to query parameters
@@ -5386,10 +7303,21 @@ export def "groups-members get" [
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "briefRepresentation" $brief_representation "scalar") (serialize-qp "first" $first "scalar") (serialize-qp "max" $max "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/groups/{id}/members") $qp)
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/groups/{id}/members") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"briefRepresentation": $brief_representation, "first": $first, "max": $max} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"briefRepresentation": $brief_representation, "first": $first, "max": $max} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Get role mappings
@@ -5412,10 +7340,21 @@ export def "groups-role-mappings get" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/groups/{id}/role-mappings"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/groups/{id}/role-mappings") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Delete client-level roles from user role mapping
@@ -5442,12 +7381,23 @@ export def "groups-role-mappings-clients delete" [
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($client | is-empty) { error make --unspanned { msg: "path parameter 'client' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), client: (encode-path-segment $client)} | format pattern "/{realm}/groups/{id}/role-mappings/clients/{client}"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), client: (encode-path-segment $client)} | format pattern "/{realm}/groups/{id}/role-mappings/clients/{client}") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req $req_body $insecure $raw $allow_errors $full []
 }
 
 # Get client-level role mappings for the user, and the app
@@ -5472,10 +7422,21 @@ export def "groups-role-mappings-clients get" [
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($client | is-empty) { error make --unspanned { msg: "path parameter 'client' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), client: (encode-path-segment $client)} | format pattern "/{realm}/groups/{id}/role-mappings/clients/{client}"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), client: (encode-path-segment $client)} | format pattern "/{realm}/groups/{id}/role-mappings/clients/{client}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Add client-level roles to the user role mapping
@@ -5502,12 +7463,23 @@ export def "groups-role-mappings-clients create" [
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($client | is-empty) { error make --unspanned { msg: "path parameter 'client' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), client: (encode-path-segment $client)} | format pattern "/{realm}/groups/{id}/role-mappings/clients/{client}"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), client: (encode-path-segment $client)} | format pattern "/{realm}/groups/{id}/role-mappings/clients/{client}") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full []
 }
 
 # Get available client-level roles that can be mapped to the user
@@ -5532,10 +7504,21 @@ export def "groups-role-mappings-clients-available get" [
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($client | is-empty) { error make --unspanned { msg: "path parameter 'client' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), client: (encode-path-segment $client)} | format pattern "/{realm}/groups/{id}/role-mappings/clients/{client}/available"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), client: (encode-path-segment $client)} | format pattern "/{realm}/groups/{id}/role-mappings/clients/{client}/available") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Get effective client-level role mappings This recurses any composite roles
@@ -5560,10 +7543,21 @@ export def "groups-role-mappings-clients-composite get" [
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($client | is-empty) { error make --unspanned { msg: "path parameter 'client' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), client: (encode-path-segment $client)} | format pattern "/{realm}/groups/{id}/role-mappings/clients/{client}/composite"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), client: (encode-path-segment $client)} | format pattern "/{realm}/groups/{id}/role-mappings/clients/{client}/composite") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Delete realm-level role mappings
@@ -5588,12 +7582,23 @@ export def "groups-role-mappings-realm delete" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/groups/{id}/role-mappings/realm"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/groups/{id}/role-mappings/realm") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req $req_body $insecure $raw $allow_errors $full []
 }
 
 # Get realm-level role mappings
@@ -5616,10 +7621,21 @@ export def "groups-role-mappings-realm get" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/groups/{id}/role-mappings/realm"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/groups/{id}/role-mappings/realm") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Add realm-level role mappings to the user
@@ -5644,12 +7660,23 @@ export def "groups-role-mappings-realm create" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/groups/{id}/role-mappings/realm"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/groups/{id}/role-mappings/realm") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full []
 }
 
 # Get realm-level roles that can be mapped
@@ -5672,10 +7699,21 @@ export def "groups-role-mappings-realm-available get" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/groups/{id}/role-mappings/realm/available"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/groups/{id}/role-mappings/realm/available") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Get effective realm-level role mappings This will recurse all composite roles to get the result.
@@ -5698,10 +7736,21 @@ export def "groups-role-mappings-realm-composite get" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/groups/{id}/role-mappings/realm/composite"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/groups/{id}/role-mappings/realm/composite") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Import identity provider from uploaded JSON file
@@ -5722,10 +7771,21 @@ export def "identity-provider-import-config create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/identity-provider/import-config"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/identity-provider/import-config") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full []
 }
 
 # Get identity providers
@@ -5746,10 +7806,21 @@ export def "identity-provider-instances list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/identity-provider/instances"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/identity-provider/instances") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Create a new identity provider
@@ -5783,12 +7854,23 @@ export def "identity-provider-instances create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/identity-provider/instances"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/identity-provider/instances") $auth.query)
   let req_body = {"addReadTokenRoleOnCreate": $add_read_token_role_on_create, "alias": $alias, "config": $config, "displayName": $display_name, "enabled": $enabled, "firstBrokerLoginFlowAlias": $first_broker_login_flow_alias, "internalId": $internal_id, "linkOnly": $link_only, "postBrokerLoginFlowAlias": $post_broker_login_flow_alias, "providerId": $provider_id, "storeToken": $store_token, "trustEmail": $trust_email} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full []
 }
 
 # Delete the identity provider
@@ -5811,10 +7893,21 @@ export def "identity-provider-instances delete" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($alias | is-empty) { error make --unspanned { msg: "path parameter 'alias' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), alias: (encode-path-segment $alias)} | format pattern "/{realm}/identity-provider/instances/{alias}"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), alias: (encode-path-segment $alias)} | format pattern "/{realm}/identity-provider/instances/{alias}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full []
 }
 
 # Get the identity provider
@@ -5837,10 +7930,21 @@ export def "identity-provider-instances get" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($alias | is-empty) { error make --unspanned { msg: "path parameter 'alias' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), alias: (encode-path-segment $alias)} | format pattern "/{realm}/identity-provider/instances/{alias}"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), alias: (encode-path-segment $alias)} | format pattern "/{realm}/identity-provider/instances/{alias}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Update the identity provider
@@ -5876,12 +7980,23 @@ export def "identity-provider-instances update" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($alias | is-empty) { error make --unspanned { msg: "path parameter 'alias' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), alias: (encode-path-segment $alias)} | format pattern "/{realm}/identity-provider/instances/{alias}"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), alias: (encode-path-segment $alias)} | format pattern "/{realm}/identity-provider/instances/{alias}") $auth.query)
   let req_body = {"addReadTokenRoleOnCreate": $add_read_token_role_on_create, "alias": $body_alias, "config": $config, "displayName": $display_name, "enabled": $enabled, "firstBrokerLoginFlowAlias": $first_broker_login_flow_alias, "internalId": $internal_id, "linkOnly": $link_only, "postBrokerLoginFlowAlias": $post_broker_login_flow_alias, "providerId": $provider_id, "storeToken": $store_token, "trustEmail": $trust_email} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full []
 }
 
 # Export public broker configuration for identity provider
@@ -5906,10 +8021,21 @@ export def "identity-provider-instances-export get" [
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($alias | is-empty) { error make --unspanned { msg: "path parameter 'alias' must be non-empty" } }
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), alias: (encode-path-segment $alias)} | format pattern "/{realm}/identity-provider/instances/{alias}/export") $qp)
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), alias: (encode-path-segment $alias)} | format pattern "/{realm}/identity-provider/instances/{alias}/export") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"format": $format} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"format": $format} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Return object stating whether client Authorization permissions have been initialized or not and a reference
@@ -5932,10 +8058,21 @@ export def "identity-provider-instances-management-permissions get" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($alias | is-empty) { error make --unspanned { msg: "path parameter 'alias' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), alias: (encode-path-segment $alias)} | format pattern "/{realm}/identity-provider/instances/{alias}/management/permissions"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), alias: (encode-path-segment $alias)} | format pattern "/{realm}/identity-provider/instances/{alias}/management/permissions") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Return object stating whether client Authorization permissions have been initialized or not and a reference
@@ -5962,12 +8099,23 @@ export def "identity-provider-instances-management-permissions update" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($alias | is-empty) { error make --unspanned { msg: "path parameter 'alias' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), alias: (encode-path-segment $alias)} | format pattern "/{realm}/identity-provider/instances/{alias}/management/permissions"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), alias: (encode-path-segment $alias)} | format pattern "/{realm}/identity-provider/instances/{alias}/management/permissions") $auth.query)
   let req_body = {"enabled": $enabled, "resource": $resource, "scopePermissions": $scope_permissions} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full []
 }
 
 # Get mapper types for identity provider
@@ -5990,10 +8138,21 @@ export def "identity-provider-instances-mapper-types get" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($alias | is-empty) { error make --unspanned { msg: "path parameter 'alias' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), alias: (encode-path-segment $alias)} | format pattern "/{realm}/identity-provider/instances/{alias}/mapper-types"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), alias: (encode-path-segment $alias)} | format pattern "/{realm}/identity-provider/instances/{alias}/mapper-types") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Get mappers for identity provider
@@ -6016,10 +8175,21 @@ export def "identity-provider-instances-mappers list" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($alias | is-empty) { error make --unspanned { msg: "path parameter 'alias' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), alias: (encode-path-segment $alias)} | format pattern "/{realm}/identity-provider/instances/{alias}/mappers"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), alias: (encode-path-segment $alias)} | format pattern "/{realm}/identity-provider/instances/{alias}/mappers") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Add a mapper to identity provider
@@ -6048,12 +8218,23 @@ export def "identity-provider-instances-mappers create" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($alias | is-empty) { error make --unspanned { msg: "path parameter 'alias' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), alias: (encode-path-segment $alias)} | format pattern "/{realm}/identity-provider/instances/{alias}/mappers"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), alias: (encode-path-segment $alias)} | format pattern "/{realm}/identity-provider/instances/{alias}/mappers") $auth.query)
   let req_body = {"config": $config, "id": $id, "identityProviderAlias": $identity_provider_alias, "identityProviderMapper": $identity_provider_mapper, "name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full []
 }
 
 # Delete a mapper for the identity provider
@@ -6078,10 +8259,21 @@ export def "identity-provider-instances-mappers delete" [
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($alias | is-empty) { error make --unspanned { msg: "path parameter 'alias' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), alias: (encode-path-segment $alias), id: (encode-path-segment $id)} | format pattern "/{realm}/identity-provider/instances/{alias}/mappers/{id}"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), alias: (encode-path-segment $alias), id: (encode-path-segment $id)} | format pattern "/{realm}/identity-provider/instances/{alias}/mappers/{id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full []
 }
 
 # Get mapper by id for the identity provider
@@ -6106,10 +8298,21 @@ export def "identity-provider-instances-mappers get" [
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($alias | is-empty) { error make --unspanned { msg: "path parameter 'alias' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), alias: (encode-path-segment $alias), id: (encode-path-segment $id)} | format pattern "/{realm}/identity-provider/instances/{alias}/mappers/{id}"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), alias: (encode-path-segment $alias), id: (encode-path-segment $id)} | format pattern "/{realm}/identity-provider/instances/{alias}/mappers/{id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Update a mapper for the identity provider
@@ -6140,12 +8343,23 @@ export def "identity-provider-instances-mappers update" [
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($alias | is-empty) { error make --unspanned { msg: "path parameter 'alias' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), alias: (encode-path-segment $alias), id: (encode-path-segment $id)} | format pattern "/{realm}/identity-provider/instances/{alias}/mappers/{id}"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), alias: (encode-path-segment $alias), id: (encode-path-segment $id)} | format pattern "/{realm}/identity-provider/instances/{alias}/mappers/{id}") $auth.query)
   let req_body = {"config": $config, "id": $body_id, "identityProviderAlias": $identity_provider_alias, "identityProviderMapper": $identity_provider_mapper, "name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full []
 }
 
 # Get identity providers
@@ -6168,10 +8382,21 @@ export def "identity-provider-providers get" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($provider_id | is-empty) { error make --unspanned { msg: "path parameter 'provider_id' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), provider_id: (encode-path-segment $provider_id)} | format pattern "/{realm}/identity-provider/providers/{provider_id}"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), provider_id: (encode-path-segment $provider_id)} | format pattern "/{realm}/identity-provider/providers/{provider_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # GET /{realm}/keys
@@ -6190,10 +8415,21 @@ export def "keys get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/keys"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/keys") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Removes all user sessions.
@@ -6214,10 +8450,21 @@ export def "logout-all create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/logout-all"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/logout-all") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full []
 }
 
 # Partial export of existing realm into a JSON file.
@@ -6241,10 +8488,21 @@ export def "partial-export create" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   let qp = [(serialize-qp "exportClients" $export_clients "scalar") (serialize-qp "exportGroupsAndRoles" $export_groups_and_roles "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/partial-export") $qp)
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/partial-export") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"exportClients": $export_clients, "exportGroupsAndRoles": $export_groups_and_roles} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"exportClients": $export_clients, "exportGroupsAndRoles": $export_groups_and_roles} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full []
 }
 
 # Partial import from a JSON file to an existing realm.
@@ -6278,12 +8536,23 @@ export def "partial-import create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/partialImport"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/partialImport") $auth.query)
   let req_body = {"clients": $clients, "groups": $groups, "identityProviders": $identity_providers, "ifResourceExists": $if_resource_exists, "policy": $policy, "roles": $roles, "users": $users} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full []
 }
 
 # Push the realm’s revocation policy to any client that has an admin url associated with it.
@@ -6304,10 +8573,21 @@ export def "push-revocation create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/push-revocation"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/push-revocation") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full []
 }
 
 # Get all roles for the realm or client
@@ -6333,10 +8613,21 @@ export def "roles list" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   let qp = [(serialize-qp "briefRepresentation" $brief_representation "scalar") (serialize-qp "first" $first "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "search" $search "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/roles") $qp)
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/roles") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"briefRepresentation": $brief_representation, "first": $first, "max": $max, "search": $search} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"briefRepresentation": $brief_representation, "first": $first, "max": $max, "search": $search} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Create a new role for the realm or client
@@ -6367,12 +8658,23 @@ export def "roles create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/roles"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/roles") $auth.query)
   let req_body = {"attributes": $attributes, "clientRole": $client_role, "composite": $composite, "composites": $composites, "containerId": $container_id, "description": $description, "id": $id, "name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full []
 }
 
 # Delete the role
@@ -6395,10 +8697,21 @@ export def "roles-by-id delete" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($role_id | is-empty) { error make --unspanned { msg: "path parameter 'role-id' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), role_id: (encode-path-segment $role_id)} | format pattern "/{realm}/roles-by-id/{role_id}"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), role_id: (encode-path-segment $role_id)} | format pattern "/{realm}/roles-by-id/{role_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full []
 }
 
 # Get a specific role’s representation
@@ -6421,10 +8734,21 @@ export def "roles-by-id get" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($role_id | is-empty) { error make --unspanned { msg: "path parameter 'role-id' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), role_id: (encode-path-segment $role_id)} | format pattern "/{realm}/roles-by-id/{role_id}"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), role_id: (encode-path-segment $role_id)} | format pattern "/{realm}/roles-by-id/{role_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Update the role
@@ -6457,12 +8781,23 @@ export def "roles-by-id update" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($role_id | is-empty) { error make --unspanned { msg: "path parameter 'role-id' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), role_id: (encode-path-segment $role_id)} | format pattern "/{realm}/roles-by-id/{role_id}"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), role_id: (encode-path-segment $role_id)} | format pattern "/{realm}/roles-by-id/{role_id}") $auth.query)
   let req_body = {"attributes": $attributes, "clientRole": $client_role, "composite": $composite, "composites": $composites, "containerId": $container_id, "description": $description, "id": $id, "name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full []
 }
 
 # Remove a set of roles from the role’s composite
@@ -6487,12 +8822,23 @@ export def "roles-by-id-composites delete" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($role_id | is-empty) { error make --unspanned { msg: "path parameter 'role-id' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), role_id: (encode-path-segment $role_id)} | format pattern "/{realm}/roles-by-id/{role_id}/composites"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), role_id: (encode-path-segment $role_id)} | format pattern "/{realm}/roles-by-id/{role_id}/composites") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req $req_body $insecure $raw $allow_errors $full []
 }
 
 # Get role’s children Returns a set of role’s children provided the role is a composite.
@@ -6515,10 +8861,21 @@ export def "roles-by-id-composites get" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($role_id | is-empty) { error make --unspanned { msg: "path parameter 'role-id' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), role_id: (encode-path-segment $role_id)} | format pattern "/{realm}/roles-by-id/{role_id}/composites"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), role_id: (encode-path-segment $role_id)} | format pattern "/{realm}/roles-by-id/{role_id}/composites") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Make the role a composite role by associating some child roles
@@ -6543,12 +8900,23 @@ export def "roles-by-id-composites create" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($role_id | is-empty) { error make --unspanned { msg: "path parameter 'role-id' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), role_id: (encode-path-segment $role_id)} | format pattern "/{realm}/roles-by-id/{role_id}/composites"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), role_id: (encode-path-segment $role_id)} | format pattern "/{realm}/roles-by-id/{role_id}/composites") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full []
 }
 
 # Get client-level roles for the client that are in the role’s composite
@@ -6573,10 +8941,21 @@ export def "roles-by-id-composites-clients get" [
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($role_id | is-empty) { error make --unspanned { msg: "path parameter 'role-id' must be non-empty" } }
   if ($client | is-empty) { error make --unspanned { msg: "path parameter 'client' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), role_id: (encode-path-segment $role_id), client: (encode-path-segment $client)} | format pattern "/{realm}/roles-by-id/{role_id}/composites/clients/{client}"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), role_id: (encode-path-segment $role_id), client: (encode-path-segment $client)} | format pattern "/{realm}/roles-by-id/{role_id}/composites/clients/{client}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Get realm-level roles that are in the role’s composite
@@ -6599,10 +8978,21 @@ export def "roles-by-id-composites-realm get" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($role_id | is-empty) { error make --unspanned { msg: "path parameter 'role-id' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), role_id: (encode-path-segment $role_id)} | format pattern "/{realm}/roles-by-id/{role_id}/composites/realm"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), role_id: (encode-path-segment $role_id)} | format pattern "/{realm}/roles-by-id/{role_id}/composites/realm") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Return object stating whether role Authoirzation permissions have been initialized or not and a reference
@@ -6625,10 +9015,21 @@ export def "roles-by-id-management-permissions get" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($role_id | is-empty) { error make --unspanned { msg: "path parameter 'role-id' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), role_id: (encode-path-segment $role_id)} | format pattern "/{realm}/roles-by-id/{role_id}/management/permissions"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), role_id: (encode-path-segment $role_id)} | format pattern "/{realm}/roles-by-id/{role_id}/management/permissions") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Return object stating whether role Authoirzation permissions have been initialized or not and a reference
@@ -6655,12 +9056,23 @@ export def "roles-by-id-management-permissions update" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($role_id | is-empty) { error make --unspanned { msg: "path parameter 'role-id' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), role_id: (encode-path-segment $role_id)} | format pattern "/{realm}/roles-by-id/{role_id}/management/permissions"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), role_id: (encode-path-segment $role_id)} | format pattern "/{realm}/roles-by-id/{role_id}/management/permissions") $auth.query)
   let req_body = {"enabled": $enabled, "resource": $resource, "scopePermissions": $scope_permissions} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full []
 }
 
 # Delete a role by name
@@ -6683,10 +9095,21 @@ export def "roles delete" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($role_name | is-empty) { error make --unspanned { msg: "path parameter 'role-name' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), role_name: (encode-path-segment $role_name)} | format pattern "/{realm}/roles/{role_name}"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), role_name: (encode-path-segment $role_name)} | format pattern "/{realm}/roles/{role_name}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full []
 }
 
 # Get a role by name
@@ -6709,10 +9132,21 @@ export def "roles get" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($role_name | is-empty) { error make --unspanned { msg: "path parameter 'role-name' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), role_name: (encode-path-segment $role_name)} | format pattern "/{realm}/roles/{role_name}"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), role_name: (encode-path-segment $role_name)} | format pattern "/{realm}/roles/{role_name}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Update a role by name
@@ -6745,12 +9179,23 @@ export def "roles update" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($role_name | is-empty) { error make --unspanned { msg: "path parameter 'role-name' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), role_name: (encode-path-segment $role_name)} | format pattern "/{realm}/roles/{role_name}"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), role_name: (encode-path-segment $role_name)} | format pattern "/{realm}/roles/{role_name}") $auth.query)
   let req_body = {"attributes": $attributes, "clientRole": $client_role, "composite": $composite, "composites": $composites, "containerId": $container_id, "description": $description, "id": $id, "name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full []
 }
 
 # Remove roles from the role’s composite
@@ -6775,12 +9220,23 @@ export def "roles-composites delete" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($role_name | is-empty) { error make --unspanned { msg: "path parameter 'role-name' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), role_name: (encode-path-segment $role_name)} | format pattern "/{realm}/roles/{role_name}/composites"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), role_name: (encode-path-segment $role_name)} | format pattern "/{realm}/roles/{role_name}/composites") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req $req_body $insecure $raw $allow_errors $full []
 }
 
 # Get composites of the role
@@ -6803,10 +9259,21 @@ export def "roles-composites get" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($role_name | is-empty) { error make --unspanned { msg: "path parameter 'role-name' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), role_name: (encode-path-segment $role_name)} | format pattern "/{realm}/roles/{role_name}/composites"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), role_name: (encode-path-segment $role_name)} | format pattern "/{realm}/roles/{role_name}/composites") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Add a composite to the role
@@ -6831,12 +9298,23 @@ export def "roles-composites create" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($role_name | is-empty) { error make --unspanned { msg: "path parameter 'role-name' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), role_name: (encode-path-segment $role_name)} | format pattern "/{realm}/roles/{role_name}/composites"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), role_name: (encode-path-segment $role_name)} | format pattern "/{realm}/roles/{role_name}/composites") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full []
 }
 
 # An app-level roles for the specified app for the role’s composite
@@ -6861,10 +9339,21 @@ export def "roles-composites-clients get" [
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($role_name | is-empty) { error make --unspanned { msg: "path parameter 'role-name' must be non-empty" } }
   if ($client | is-empty) { error make --unspanned { msg: "path parameter 'client' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), role_name: (encode-path-segment $role_name), client: (encode-path-segment $client)} | format pattern "/{realm}/roles/{role_name}/composites/clients/{client}"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), role_name: (encode-path-segment $role_name), client: (encode-path-segment $client)} | format pattern "/{realm}/roles/{role_name}/composites/clients/{client}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Get realm-level roles of the role’s composite
@@ -6887,10 +9376,21 @@ export def "roles-composites-realm get" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($role_name | is-empty) { error make --unspanned { msg: "path parameter 'role-name' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), role_name: (encode-path-segment $role_name)} | format pattern "/{realm}/roles/{role_name}/composites/realm"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), role_name: (encode-path-segment $role_name)} | format pattern "/{realm}/roles/{role_name}/composites/realm") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Return List of Groups that have the specified role name
@@ -6917,10 +9417,21 @@ export def "roles-groups get" [
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($role_name | is-empty) { error make --unspanned { msg: "path parameter 'role-name' must be non-empty" } }
   let qp = [(serialize-qp "briefRepresentation" $brief_representation "scalar") (serialize-qp "first" $first "scalar") (serialize-qp "max" $max "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), role_name: (encode-path-segment $role_name)} | format pattern "/{realm}/roles/{role_name}/groups") $qp)
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), role_name: (encode-path-segment $role_name)} | format pattern "/{realm}/roles/{role_name}/groups") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"briefRepresentation": $brief_representation, "first": $first, "max": $max} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"briefRepresentation": $brief_representation, "first": $first, "max": $max} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Return object stating whether role Authoirzation permissions have been initialized or not and a reference
@@ -6943,10 +9454,21 @@ export def "roles-management-permissions get" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($role_name | is-empty) { error make --unspanned { msg: "path parameter 'role-name' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), role_name: (encode-path-segment $role_name)} | format pattern "/{realm}/roles/{role_name}/management/permissions"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), role_name: (encode-path-segment $role_name)} | format pattern "/{realm}/roles/{role_name}/management/permissions") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Return object stating whether role Authoirzation permissions have been initialized or not and a reference
@@ -6973,12 +9495,23 @@ export def "roles-management-permissions update" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($role_name | is-empty) { error make --unspanned { msg: "path parameter 'role-name' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), role_name: (encode-path-segment $role_name)} | format pattern "/{realm}/roles/{role_name}/management/permissions"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), role_name: (encode-path-segment $role_name)} | format pattern "/{realm}/roles/{role_name}/management/permissions") $auth.query)
   let req_body = {"enabled": $enabled, "resource": $resource, "scopePermissions": $scope_permissions} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full []
 }
 
 # Return List of Users that have the specified role name
@@ -7004,10 +9537,21 @@ export def "roles-users get" [
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($role_name | is-empty) { error make --unspanned { msg: "path parameter 'role-name' must be non-empty" } }
   let qp = [(serialize-qp "first" $first "scalar") (serialize-qp "max" $max "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), role_name: (encode-path-segment $role_name)} | format pattern "/{realm}/roles/{role_name}/users") $qp)
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), role_name: (encode-path-segment $role_name)} | format pattern "/{realm}/roles/{role_name}/users") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"first": $first, "max": $max} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"first": $first, "max": $max} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Remove a specific user session.
@@ -7030,10 +9574,21 @@ export def "sessions delete" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($session | is-empty) { error make --unspanned { msg: "path parameter 'session' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), session: (encode-path-segment $session)} | format pattern "/{realm}/sessions/{session}"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), session: (encode-path-segment $session)} | format pattern "/{realm}/sessions/{session}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full []
 }
 
 # Test LDAP connection
@@ -7063,12 +9618,23 @@ export def "test-ldap-connection create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/testLDAPConnection"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/testLDAPConnection") $auth.query)
   let req_body = {"action": $action, "bindCredential": $bind_credential, "bindDn": $bind_dn, "componentId": $component_id, "connectionTimeout": $connection_timeout, "connectionUrl": $connection_url, "startTls": $start_tls, "useTruststoreSpi": $use_truststore_spi} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full []
 }
 
 # POST /{realm}/testSMTPConnection
@@ -7089,12 +9655,23 @@ export def "test-smtp-connection create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/testSMTPConnection"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/testSMTPConnection") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full []
 }
 
 # Need this for admin console to display simple name of provider when displaying user detail KEYCLOAK-4328
@@ -7117,10 +9694,21 @@ export def "user-storage-name get" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/user-storage/{id}/name"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/user-storage/{id}/name") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Remove imported users
@@ -7143,10 +9731,21 @@ export def "user-storage-remove-imported-users create" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/user-storage/{id}/remove-imported-users"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/user-storage/{id}/remove-imported-users") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full []
 }
 
 # Trigger sync of users Action can be "triggerFullSync" or "triggerChangedUsersSync"
@@ -7171,10 +9770,21 @@ export def "user-storage-sync create" [
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "action" $action "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/user-storage/{id}/sync") $qp)
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/user-storage/{id}/sync") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"action": $action} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"action": $action} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full []
 }
 
 # Unlink imported users from a storage provider
@@ -7197,10 +9807,21 @@ export def "user-storage-unlink-users create" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/user-storage/{id}/unlink-users"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/user-storage/{id}/unlink-users") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full []
 }
 
 # Trigger sync of mapper data related to ldap mapper (roles, groups, …​) direction is "fedToKeycloak" or "keycloakToFed"
@@ -7227,10 +9848,21 @@ export def "user-storage-mappers-sync create" [
   if ($parent_id | is-empty) { error make --unspanned { msg: "path parameter 'parentId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "direction" $direction "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), parent_id: (encode-path-segment $parent_id), id: (encode-path-segment $id)} | format pattern "/{realm}/user-storage/{parent_id}/mappers/{id}/sync") $qp)
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), parent_id: (encode-path-segment $parent_id), id: (encode-path-segment $id)} | format pattern "/{realm}/user-storage/{parent_id}/mappers/{id}/sync") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"direction": $direction} | compact), body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: ({"direction": $direction} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full []
 }
 
 # Get users Returns a list of users, filtered according to query parameters
@@ -7260,10 +9892,21 @@ export def "users list" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   let qp = [(serialize-qp "briefRepresentation" $brief_representation "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "first" $first "scalar") (serialize-qp "firstName" $first_name "scalar") (serialize-qp "lastName" $last_name "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "username" $username "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/users") $qp)
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/users") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"briefRepresentation": $brief_representation, "email": $email, "first": $first, "firstName": $first_name, "lastName": $last_name, "max": $max, "search": $search, "username": $username} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"briefRepresentation": $brief_representation, "email": $email, "first": $first, "firstName": $first_name, "lastName": $last_name, "max": $max, "search": $search, "username": $username} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Create a new user Username must be unique.
@@ -7311,12 +9954,23 @@ export def "users create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/users"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/users") $auth.query)
   let req_body = {"access": $access, "attributes": $attributes, "clientConsents": $client_consents, "clientRoles": $client_roles, "createdTimestamp": $created_timestamp, "credentials": $credentials, "disableableCredentialTypes": $disableable_credential_types, "email": $email, "emailVerified": $email_verified, "enabled": $enabled, "federatedIdentities": $federated_identities, "federationLink": $federation_link, "firstName": $first_name, "groups": $groups, "id": $id, "lastName": $last_name, "notBefore": $not_before, "origin": $origin, "realmRoles": $realm_roles, "requiredActions": $required_actions, "self": $self, "serviceAccountClientId": $service_account_client_id, "username": $username} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full []
 }
 
 # GET /{realm}/users-management-permissions
@@ -7335,10 +9989,21 @@ export def "users-management-permissions get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/users-management-permissions"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/users-management-permissions") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # PUT /{realm}/users-management-permissions
@@ -7361,12 +10026,23 @@ export def "users-management-permissions update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/users-management-permissions"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/users-management-permissions") $auth.query)
   let req_body = {"enabled": $enabled, "resource": $resource, "scopePermissions": $scope_permissions} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full []
 }
 
 # Returns the number of users that match the given criteria.
@@ -7393,10 +10069,21 @@ export def "users-count get" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   let qp = [(serialize-qp "email" $email "scalar") (serialize-qp "firstName" $first_name "scalar") (serialize-qp "lastName" $last_name "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "username" $username "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/users/count") $qp)
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/users/count") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"email": $email, "firstName": $first_name, "lastName": $last_name, "search": $search, "username": $username} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"email": $email, "firstName": $first_name, "lastName": $last_name, "search": $search, "username": $username} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Delete the user
@@ -7419,10 +10106,21 @@ export def "users delete" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/users/{id}"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/users/{id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full []
 }
 
 # Get representation of the user
@@ -7445,10 +10143,21 @@ export def "users get" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/users/{id}"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/users/{id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Update the user
@@ -7498,12 +10207,23 @@ export def "users update" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/users/{id}"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/users/{id}") $auth.query)
   let req_body = {"access": $access, "attributes": $attributes, "clientConsents": $client_consents, "clientRoles": $client_roles, "createdTimestamp": $created_timestamp, "credentials": $credentials, "disableableCredentialTypes": $disableable_credential_types, "email": $email, "emailVerified": $email_verified, "enabled": $enabled, "federatedIdentities": $federated_identities, "federationLink": $federation_link, "firstName": $first_name, "groups": $groups, "id": $body_id, "lastName": $last_name, "notBefore": $not_before, "origin": $origin, "realmRoles": $realm_roles, "requiredActions": $required_actions, "self": $self, "serviceAccountClientId": $service_account_client_id, "username": $username} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full []
 }
 
 # Return credential types, which are provided by the user storage where user is stored.
@@ -7526,10 +10246,21 @@ export def "users-configured-user-storage-credential-types get" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/users/{id}/configured-user-storage-credential-types"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/users/{id}/configured-user-storage-credential-types") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Get consents granted by the user
@@ -7552,10 +10283,21 @@ export def "users-consents get" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/users/{id}/consents"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/users/{id}/consents") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Revoke consent and offline tokens for particular client from user
@@ -7580,10 +10322,21 @@ export def "users-consents delete" [
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($client | is-empty) { error make --unspanned { msg: "path parameter 'client' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), client: (encode-path-segment $client)} | format pattern "/{realm}/users/{id}/consents/{client}"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), client: (encode-path-segment $client)} | format pattern "/{realm}/users/{id}/consents/{client}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full []
 }
 
 # GET /{realm}/users/{id}/credentials
@@ -7604,10 +10357,21 @@ export def "users-credentials get" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/users/{id}/credentials"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/users/{id}/credentials") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Remove a credential for a user
@@ -7632,10 +10396,21 @@ export def "users-credentials delete" [
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($credential_id | is-empty) { error make --unspanned { msg: "path parameter 'credentialId' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), credential_id: (encode-path-segment $credential_id)} | format pattern "/{realm}/users/{id}/credentials/{credential_id}"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), credential_id: (encode-path-segment $credential_id)} | format pattern "/{realm}/users/{id}/credentials/{credential_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full []
 }
 
 # Move a credential to a position behind another credential
@@ -7662,10 +10437,21 @@ export def "users-credentials-move-after create" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($credential_id | is-empty) { error make --unspanned { msg: "path parameter 'credentialId' must be non-empty" } }
   if ($new_previous_credential_id | is-empty) { error make --unspanned { msg: "path parameter 'newPreviousCredentialId' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), credential_id: (encode-path-segment $credential_id), new_previous_credential_id: (encode-path-segment $new_previous_credential_id)} | format pattern "/{realm}/users/{id}/credentials/{credential_id}/moveAfter/{new_previous_credential_id}"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), credential_id: (encode-path-segment $credential_id), new_previous_credential_id: (encode-path-segment $new_previous_credential_id)} | format pattern "/{realm}/users/{id}/credentials/{credential_id}/moveAfter/{new_previous_credential_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full []
 }
 
 # Move a credential to a first position in the credentials list of the user
@@ -7690,10 +10476,21 @@ export def "users-credentials-move-to-first create" [
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($credential_id | is-empty) { error make --unspanned { msg: "path parameter 'credentialId' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), credential_id: (encode-path-segment $credential_id)} | format pattern "/{realm}/users/{id}/credentials/{credential_id}/moveToFirst"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), credential_id: (encode-path-segment $credential_id)} | format pattern "/{realm}/users/{id}/credentials/{credential_id}/moveToFirst") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full []
 }
 
 # Update a credential label for a user
@@ -7720,12 +10517,23 @@ export def "users-credentials-user-label update" [
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($credential_id | is-empty) { error make --unspanned { msg: "path parameter 'credentialId' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), credential_id: (encode-path-segment $credential_id)} | format pattern "/{realm}/users/{id}/credentials/{credential_id}/userLabel"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), credential_id: (encode-path-segment $credential_id)} | format pattern "/{realm}/users/{id}/credentials/{credential_id}/userLabel") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "text/plain" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "text/plain"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full []
 }
 
 # Disable all credentials for a user of a specific type
@@ -7750,12 +10558,23 @@ export def "users-disable-credential-types update" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/users/{id}/disable-credential-types"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/users/{id}/disable-credential-types") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full []
 }
 
 # Send a update account email to the user An email contains a link the user can click to perform a set of required actions.
@@ -7784,12 +10603,23 @@ export def "users-execute-actions-email update" [
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "client_id" $client_id "scalar") (serialize-qp "lifespan" $lifespan "scalar") (serialize-qp "redirect_uri" $redirect_uri "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/users/{id}/execute-actions-email") $qp)
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/users/{id}/execute-actions-email") $qp $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"client_id": $client_id, "lifespan": $lifespan, "redirect_uri": $redirect_uri} | compact), body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"client_id": $client_id, "lifespan": $lifespan, "redirect_uri": $redirect_uri} | compact)
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full []
 }
 
 # Get social logins associated with the user
@@ -7812,10 +10642,21 @@ export def "users-federated-identity get" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/users/{id}/federated-identity"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/users/{id}/federated-identity") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Remove a social login provider from user
@@ -7840,10 +10681,21 @@ export def "users-federated-identity delete" [
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($provider | is-empty) { error make --unspanned { msg: "path parameter 'provider' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), provider: (encode-path-segment $provider)} | format pattern "/{realm}/users/{id}/federated-identity/{provider}"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), provider: (encode-path-segment $provider)} | format pattern "/{realm}/users/{id}/federated-identity/{provider}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full []
 }
 
 # Add a social login provider to the user
@@ -7872,12 +10724,23 @@ export def "users-federated-identity create" [
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($provider | is-empty) { error make --unspanned { msg: "path parameter 'provider' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), provider: (encode-path-segment $provider)} | format pattern "/{realm}/users/{id}/federated-identity/{provider}"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), provider: (encode-path-segment $provider)} | format pattern "/{realm}/users/{id}/federated-identity/{provider}") $auth.query)
   let req_body = {"identityProvider": $identity_provider, "userId": $user_id, "userName": $user_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full []
 }
 
 # GET /{realm}/users/{id}/groups
@@ -7903,10 +10766,21 @@ export def "users-groups get" [
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "briefRepresentation" $brief_representation "scalar") (serialize-qp "first" $first "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "search" $search "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/users/{id}/groups") $qp)
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/users/{id}/groups") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"briefRepresentation": $brief_representation, "first": $first, "max": $max, "search": $search} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"briefRepresentation": $brief_representation, "first": $first, "max": $max, "search": $search} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # GET /{realm}/users/{id}/groups/count
@@ -7929,10 +10803,21 @@ export def "users-groups-count get" [
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "search" $search "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/users/{id}/groups/count") $qp)
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/users/{id}/groups/count") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"search": $search} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"search": $search} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # DELETE /{realm}/users/{id}/groups/{groupId}
@@ -7955,10 +10840,21 @@ export def "users-groups delete" [
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), group_id: (encode-path-segment $group_id)} | format pattern "/{realm}/users/{id}/groups/{group_id}"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), group_id: (encode-path-segment $group_id)} | format pattern "/{realm}/users/{id}/groups/{group_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full []
 }
 
 # PUT /{realm}/users/{id}/groups/{groupId}
@@ -7981,10 +10877,21 @@ export def "users-groups update" [
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), group_id: (encode-path-segment $group_id)} | format pattern "/{realm}/users/{id}/groups/{group_id}"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), group_id: (encode-path-segment $group_id)} | format pattern "/{realm}/users/{id}/groups/{group_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req null $insecure $raw $allow_errors $full []
 }
 
 # Impersonate the user
@@ -8007,10 +10914,21 @@ export def "users-impersonation create" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/users/{id}/impersonation"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/users/{id}/impersonation") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full []
 }
 
 # Remove all user sessions associated with the user Also send notification to all clients that have an admin URL to invalidate the sessions for the particular user.
@@ -8033,10 +10951,21 @@ export def "users-logout create" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/users/{id}/logout"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/users/{id}/logout") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full []
 }
 
 # Get offline sessions associated with the user and client
@@ -8061,10 +10990,21 @@ export def "users-offline-sessions get" [
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($client_id | is-empty) { error make --unspanned { msg: "path parameter 'clientId' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), client_id: (encode-path-segment $client_id)} | format pattern "/{realm}/users/{id}/offline-sessions/{client_id}"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), client_id: (encode-path-segment $client_id)} | format pattern "/{realm}/users/{id}/offline-sessions/{client_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Set up a new password for the user.
@@ -8097,12 +11037,23 @@ export def "users-reset-password update" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/users/{id}/reset-password"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/users/{id}/reset-password") $auth.query)
   let req_body = {"createdDate": $created_date, "credentialData": $credential_data, "id": $body_id, "priority": $priority, "secretData": $secret_data, "temporary": $temporary, "type": $type, "userLabel": $user_label, "value": $value} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req $req_body $insecure $raw $allow_errors $full []
 }
 
 # Get role mappings
@@ -8125,10 +11076,21 @@ export def "users-role-mappings get" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/users/{id}/role-mappings"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/users/{id}/role-mappings") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Delete client-level roles from user role mapping
@@ -8155,12 +11117,23 @@ export def "users-role-mappings-clients delete" [
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($client | is-empty) { error make --unspanned { msg: "path parameter 'client' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), client: (encode-path-segment $client)} | format pattern "/{realm}/users/{id}/role-mappings/clients/{client}"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), client: (encode-path-segment $client)} | format pattern "/{realm}/users/{id}/role-mappings/clients/{client}") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req $req_body $insecure $raw $allow_errors $full []
 }
 
 # Get client-level role mappings for the user, and the app
@@ -8185,10 +11158,21 @@ export def "users-role-mappings-clients get" [
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($client | is-empty) { error make --unspanned { msg: "path parameter 'client' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), client: (encode-path-segment $client)} | format pattern "/{realm}/users/{id}/role-mappings/clients/{client}"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), client: (encode-path-segment $client)} | format pattern "/{realm}/users/{id}/role-mappings/clients/{client}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Add client-level roles to the user role mapping
@@ -8215,12 +11199,23 @@ export def "users-role-mappings-clients create" [
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($client | is-empty) { error make --unspanned { msg: "path parameter 'client' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), client: (encode-path-segment $client)} | format pattern "/{realm}/users/{id}/role-mappings/clients/{client}"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), client: (encode-path-segment $client)} | format pattern "/{realm}/users/{id}/role-mappings/clients/{client}") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full []
 }
 
 # Get available client-level roles that can be mapped to the user
@@ -8245,10 +11240,21 @@ export def "users-role-mappings-clients-available get" [
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($client | is-empty) { error make --unspanned { msg: "path parameter 'client' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), client: (encode-path-segment $client)} | format pattern "/{realm}/users/{id}/role-mappings/clients/{client}/available"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), client: (encode-path-segment $client)} | format pattern "/{realm}/users/{id}/role-mappings/clients/{client}/available") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Get effective client-level role mappings This recurses any composite roles
@@ -8273,10 +11279,21 @@ export def "users-role-mappings-clients-composite get" [
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($client | is-empty) { error make --unspanned { msg: "path parameter 'client' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), client: (encode-path-segment $client)} | format pattern "/{realm}/users/{id}/role-mappings/clients/{client}/composite"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), client: (encode-path-segment $client)} | format pattern "/{realm}/users/{id}/role-mappings/clients/{client}/composite") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Delete realm-level role mappings
@@ -8301,12 +11318,23 @@ export def "users-role-mappings-realm delete" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/users/{id}/role-mappings/realm"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/users/{id}/role-mappings/realm") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req $req_body $insecure $raw $allow_errors $full []
 }
 
 # Get realm-level role mappings
@@ -8329,10 +11357,21 @@ export def "users-role-mappings-realm get" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/users/{id}/role-mappings/realm"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/users/{id}/role-mappings/realm") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Add realm-level role mappings to the user
@@ -8357,12 +11396,23 @@ export def "users-role-mappings-realm create" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/users/{id}/role-mappings/realm"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/users/{id}/role-mappings/realm") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full []
 }
 
 # Get realm-level roles that can be mapped
@@ -8385,10 +11435,21 @@ export def "users-role-mappings-realm-available get" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/users/{id}/role-mappings/realm/available"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/users/{id}/role-mappings/realm/available") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Get effective realm-level role mappings This will recurse all composite roles to get the result.
@@ -8411,10 +11472,21 @@ export def "users-role-mappings-realm-composite get" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/users/{id}/role-mappings/realm/composite"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/users/{id}/role-mappings/realm/composite") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Send an email-verification email to the user An email contains a link the user can click to verify their email address.
@@ -8440,10 +11512,21 @@ export def "users-send-verify-email update" [
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "client_id" $client_id "scalar") (serialize-qp "redirect_uri" $redirect_uri "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/users/{id}/send-verify-email") $qp)
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/users/{id}/send-verify-email") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"client_id": $client_id, "redirect_uri": $redirect_uri} | compact), body: null}
+  let req = {
+    method: "put"
+    url: $full_url
+    query: ({"client_id": $client_id, "redirect_uri": $redirect_uri} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-put $req null $insecure $raw $allow_errors $full []
 }
 
 # Get sessions associated with the user
@@ -8466,8 +11549,19 @@ export def "users-sessions get" [
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/users/{id}/sessions"))
+  let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/users/{id}/sessions") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full []
 }

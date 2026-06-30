@@ -8,7 +8,7 @@ const BASE_URL = "http://runtime.lex.us-east-1.amazonaws.com"
 # `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
 # where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o AMAZON_LEX_RUNTIME_SERVICE_TOKEN | default "" }
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o AMAZON_LEX_RUNTIME_SERVICE_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
@@ -41,14 +41,11 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
-# Trick: `url encode --all` over-encodes, then we decode the four unreserved
-# punctuation chars back. Pre-existing %XX sequences in the input survive
-# because `url encode --all` first turns their % into %25.
 def encode-path-segment [v: any]: nothing -> string {
   $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
-# Serialize an array-typed path parameter (issue 49.A). OpenAPI 3 `style: simple`
+# Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
 # (the default for path params) and Swagger 2 `collectionFormat: csv` both join
 # the elements with a literal comma WITHIN the single path segment, each element
 # RFC-3986-encoded individually (so a comma inside an element stays %2C). Without
@@ -59,51 +56,51 @@ def encode-path-array [v: any]: nothing -> string {
   if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
 }
 
-# Build URL from base, path, and optional query string
-def build-url [base: string, path: string, query?: string]: nothing -> string {
+# Build the request URL from base, path, and any number of pre-encoded query
+# fragments (param serializer output and/or the auth query). Each fragment is an
+# `&`-joinable `key=value` string already percent-encoded by its producer; empty
+# fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
+# delimiters are hand-spliced — and any query already on the base URL is merged in.
+def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
   let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
-  let result = ($parsed | upsert path $full_path)
-  if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
+  let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
+  $parsed | upsert path $full_path | upsert query $query | url join
 }
 
-# Build the dry-run record returned by --dry-run. Shape:
-#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
-#    auth: {scheme, location}}
-# `meta` carries logical-form data (the query record by spec name, the pre-serialization
-# body) that do-request itself cannot reconstruct from its wire-format args.
-def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
-  let m = ($meta | default {})
-  {
-    dry_run: true
-    method: $method
-    url: $url
-    query: ($m | get -o query | default {})
-    headers: $auth.headers
-    body: ($m | get -o body)
-    content_type: $content_type
-    timeout: $timeout
-    auth: {scheme: $auth.scheme, location: $auth.location}
-  }
+# Success policy: did this response succeed? Single source of truth, consulted by
+# handle-response and the HEAD header-unwrap. Empty ok_codes means the spec listed
+# none, so fall back to < 400. Otherwise: any 2xx, plus documented success codes.
+def status-ok [status: int, ok_codes: list<int>]: nothing -> bool {
+  if ($ok_codes | is-empty) { $status < 400 } else { ($status >= 200 and $status < 300) or ($status in $ok_codes) }
 }
 
-# Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
-  let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
-  let timeout = ($max_time | default 30min)
-  let ct = ($content_type | default "application/json")
-  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
-  let resp = match $method {
-    "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
-  }
-  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
-  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
+# Unwrap a `--full` HTTP response into the user-facing value. Response arrives
+# via pipeline; ok_codes gates the error throw (see status-ok).
+def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: record -> any {
+  let resp = $in
+  if $allow_errors { return $resp }
+  if not (status-ok $resp.status $ok_codes) { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } }
+  if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
+  if $resp.status == 204 { return null }
+  $resp.body
+}
+
+# GET — bodyless, honours --raw
+def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+}
+
+# POST — body + content-type
+def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
+# DELETE — body via --data
+def send-delete [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http delete --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url } else { http delete --headers $req.headers --content-type $req.content_type --data $body --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url }
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 def base-url-completer [] { ["http://runtime.lex.us-east-1.amazonaws.com" "http://runtime.lex.us-east-2.amazonaws.com" "http://runtime.lex.us-west-1.amazonaws.com" "http://runtime.lex.us-west-2.amazonaws.com" "http://runtime.lex.us-gov-west-1.amazonaws.com" "http://runtime.lex.us-gov-east-1.amazonaws.com" "http://runtime.lex.ca-central-1.amazonaws.com" "http://runtime.lex.eu-north-1.amazonaws.com" "http://runtime.lex.eu-west-1.amazonaws.com" "http://runtime.lex.eu-west-2.amazonaws.com" "http://runtime.lex.eu-west-3.amazonaws.com" "http://runtime.lex.eu-central-1.amazonaws.com" "http://runtime.lex.eu-south-1.amazonaws.com" "http://runtime.lex.af-south-1.amazonaws.com" "http://runtime.lex.ap-northeast-1.amazonaws.com" "http://runtime.lex.ap-northeast-2.amazonaws.com" "http://runtime.lex.ap-northeast-3.amazonaws.com" "http://runtime.lex.ap-southeast-1.amazonaws.com" "http://runtime.lex.ap-southeast-2.amazonaws.com" "http://runtime.lex.ap-east-1.amazonaws.com" "http://runtime.lex.ap-south-1.amazonaws.com" "http://runtime.lex.sa-east-1.amazonaws.com" "http://runtime.lex.me-south-1.amazonaws.com" "https://runtime.lex.us-east-1.amazonaws.com" "https://runtime.lex.us-east-2.amazonaws.com" "https://runtime.lex.us-west-1.amazonaws.com" "https://runtime.lex.us-west-2.amazonaws.com" "https://runtime.lex.us-gov-west-1.amazonaws.com" "https://runtime.lex.us-gov-east-1.amazonaws.com" "https://runtime.lex.ca-central-1.amazonaws.com" "https://runtime.lex.eu-north-1.amazonaws.com" "https://runtime.lex.eu-west-1.amazonaws.com" "https://runtime.lex.eu-west-2.amazonaws.com" "https://runtime.lex.eu-west-3.amazonaws.com" "https://runtime.lex.eu-central-1.amazonaws.com" "https://runtime.lex.eu-south-1.amazonaws.com" "https://runtime.lex.af-south-1.amazonaws.com" "https://runtime.lex.ap-northeast-1.amazonaws.com" "https://runtime.lex.ap-northeast-2.amazonaws.com" "https://runtime.lex.ap-northeast-3.amazonaws.com" "https://runtime.lex.ap-southeast-1.amazonaws.com" "https://runtime.lex.ap-southeast-2.amazonaws.com" "https://runtime.lex.ap-east-1.amazonaws.com" "https://runtime.lex.ap-south-1.amazonaws.com" "https://runtime.lex.sa-east-1.amazonaws.com" "https://runtime.lex.me-south-1.amazonaws.com" "http://runtime.lex.cn-north-1.amazonaws.com.cn" "http://runtime.lex.cn-northwest-1.amazonaws.com.cn" "https://runtime.lex.cn-north-1.amazonaws.com.cn" "https://runtime.lex.cn-northwest-1.amazonaws.com.cn"] }
@@ -163,12 +160,23 @@ export def "bot-alias-user-session delete" [
   if ($bot_name | is-empty) { error make --unspanned { msg: "path parameter 'botName' must be non-empty" } }
   if ($bot_alias | is-empty) { error make --unspanned { msg: "path parameter 'botAlias' must be non-empty" } }
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
-  let full_url = (build-url $base ({bot_name: (encode-path-segment $bot_name), bot_alias: (encode-path-segment $bot_alias), user_id: (encode-path-segment $user_id)} | format pattern "/bot/{bot_name}/alias/{bot_alias}/user/{user_id}/session"))
+  let full_url = (build-url $base ({bot_name: (encode-path-segment $bot_name), bot_alias: (encode-path-segment $bot_alias), user_id: (encode-path-segment $user_id)} | format pattern "/bot/{bot_name}/alias/{bot_alias}/user/{user_id}/session") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "delete"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Creates a new session or modifies an existing session with an Amazon Lex bot. Use this operation to enable your application to set the state of the bot. For more information, see Managing Sessions (https://docs.aws.amazon.com/lex/latest/dg/how-session-api.html).
@@ -210,14 +218,25 @@ export def "bot-alias-user-session update" [
   if ($bot_name | is-empty) { error make --unspanned { msg: "path parameter 'botName' must be non-empty" } }
   if ($bot_alias | is-empty) { error make --unspanned { msg: "path parameter 'botAlias' must be non-empty" } }
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
-  let full_url = (build-url $base ({bot_name: (encode-path-segment $bot_name), bot_alias: (encode-path-segment $bot_alias), user_id: (encode-path-segment $user_id)} | format pattern "/bot/{bot_name}/alias/{bot_alias}/user/{user_id}/session"))
+  let full_url = (build-url $base ({bot_name: (encode-path-segment $bot_name), bot_alias: (encode-path-segment $bot_alias), user_id: (encode-path-segment $user_id)} | format pattern "/bot/{bot_name}/alias/{bot_alias}/user/{user_id}/session") $auth.query)
   let req_body = {"sessionAttributes": $session_attributes, "dialogAction": $dialog_action, "recentIntentSummaryView": $recent_intent_summary_view, "activeContexts": $active_contexts} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Returns session information for a specified bot, alias, and user ID.
@@ -252,12 +271,23 @@ export def "bot-alias-user-session get" [
   if ($bot_alias | is-empty) { error make --unspanned { msg: "path parameter 'botAlias' must be non-empty" } }
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
   let qp = [(serialize-qp "checkpointLabelFilter" $checkpoint_label_filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bot_name: (encode-path-segment $bot_name), bot_alias: (encode-path-segment $bot_alias), user_id: (encode-path-segment $user_id)} | format pattern "/bot/{bot_name}/alias/{bot_alias}/user/{user_id}/session/") $qp)
+  let full_url = (build-url $base ({bot_name: (encode-path-segment $bot_name), bot_alias: (encode-path-segment $bot_alias), user_id: (encode-path-segment $user_id)} | format pattern "/bot/{bot_name}/alias/{bot_alias}/user/{user_id}/session/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"checkpointLabelFilter": $checkpoint_label_filter} | compact), body: null}
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"checkpointLabelFilter": $checkpoint_label_filter} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Sends user input (text or speech) to Amazon Lex. Clients use this API to send text and audio requests to Amazon Lex at runtime. Amazon Lex interprets the user input using the machine learning model that it built for the bot. The PostContent operation supports audio input at 8kHz and 16kHz. You can use 8kHz audio to achieve higher speech recognition accuracy in telephone audio applications. In response, Amazon Lex returns the next message to convey to the user. Consider the following example messages: For a user input "I would like a pizza," Amazon Lex might return a response with a message eliciting slot data (for example, PizzaSize): "What size pizza would you like?". After the user provides all of the pizza order information, Amazon Lex might return a response with a message to get user confirmation: "Order the pizza?". After the user replies "Yes" to the confirmation prompt, Amazon Lex might return a conclusion statement: "Thank you, your cheese pizza has been ordered.". Not all Amazon Lex messages require a response from the user. For example, conclusion statements do not require a response. Some messages require only a yes or no response. In addition to the message, Amazon Lex provides additional context about the message in the response that you can use to enhance client behavior, such as displaying the appropriate client user interface. Consider the following examples: If the message is to elicit slot data, Amazon Lex returns the following context information: x-amz-lex-dialog-state header set to ElicitSlot x-amz-lex-intent-name header set to the intent name in the current context x-amz-lex-slot-to-elicit header set to the slot name for which the message is eliciting information x-amz-lex-slots header set to a map of slots configured for the intent with their current values If the message is a confirmation prompt, the x-amz-lex-dialog-state header is set to Confirmation and the x-amz-lex-slot-to-elicit header is omitted. If the message is a clarification prompt configured for the intent, indicating that the user intent is not understood, the x-amz-dialog-state header is set to ElicitIntent and the x-amz-slot-to-elicit header is omitted. In addition, Amazon Lex also returns your application-specific sessionAttributes. For more information, see Managing Conversation Context (https://docs.aws.amazon.com/lex/latest/dg/context-mgmt.html).
@@ -297,7 +327,7 @@ export def "bot-alias-user-content create" [
   if ($bot_name | is-empty) { error make --unspanned { msg: "path parameter 'botName' must be non-empty" } }
   if ($bot_alias | is-empty) { error make --unspanned { msg: "path parameter 'botAlias' must be non-empty" } }
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
-  let full_url = (build-url $base ({bot_name: (encode-path-segment $bot_name), bot_alias: (encode-path-segment $bot_alias), user_id: (encode-path-segment $user_id)} | format pattern "/bot/{bot_name}/alias/{bot_alias}/user/{user_id}/content"))
+  let full_url = (build-url $base ({bot_name: (encode-path-segment $bot_name), bot_alias: (encode-path-segment $bot_alias), user_id: (encode-path-segment $user_id)} | format pattern "/bot/{bot_name}/alias/{bot_alias}/user/{user_id}/content") $auth.query)
   let req_body = {"inputStream": $input_stream} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
@@ -306,7 +336,18 @@ export def "bot-alias-user-content create" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let effective_ct = ($content_type | default "application/json")
   let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $effective_ct $req_body_wire {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: $effective_ct
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Sends user input to Amazon Lex. Client applications can use this API to send requests to Amazon Lex at runtime. Amazon Lex then interprets the user input using the machine learning model it built for the bot. In response, Amazon Lex returns the next message to convey to the user an optional responseCard to display. Consider the following example messages: For a user input "I would like a pizza", Amazon Lex might return a response with a message eliciting slot data (for example, PizzaSize): "What size pizza would you like?" After the user provides all of the pizza order information, Amazon Lex might return a response with a message to obtain user confirmation "Proceed with the pizza order?". After the user replies to a confirmation prompt with a "yes", Amazon Lex might return a conclusion statement: "Thank you, your cheese pizza has been ordered.". Not all Amazon Lex messages require a user response. For example, a conclusion statement does not require a response. Some messages require only a "yes" or "no" user response. In addition to the message, Amazon Lex provides additional context about the message in the response that you might use to enhance client behavior, for example, to display the appropriate client user interface. These are the slotToElicit, dialogState, intentName, and slots fields in the response. Consider the following examples: If the message is to elicit slot data, Amazon Lex returns the following context information: dialogState set to ElicitSlot intentName set to the intent name in the current context slotToElicit set to the slot name for which the message is eliciting information slots set to a map of slots, configured for the intent, with currently known values If the message is a confirmation prompt, the dialogState is set to ConfirmIntent and SlotToElicit is set to null. If the message is a clarification prompt (configured for the intent) that indicates that user intent is not understood, the dialogState is set to ElicitIntent and slotToElicit is set to null. In addition, Amazon Lex also returns your application-specific sessionAttributes. For more information, see Managing Conversation Context (https://docs.aws.amazon.com/lex/latest/dg/context-mgmt.html).
@@ -345,12 +386,23 @@ export def "bot-alias-user-text create" [
   if ($bot_name | is-empty) { error make --unspanned { msg: "path parameter 'botName' must be non-empty" } }
   if ($bot_alias | is-empty) { error make --unspanned { msg: "path parameter 'botAlias' must be non-empty" } }
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
-  let full_url = (build-url $base ({bot_name: (encode-path-segment $bot_name), bot_alias: (encode-path-segment $bot_alias), user_id: (encode-path-segment $user_id)} | format pattern "/bot/{bot_name}/alias/{bot_alias}/user/{user_id}/text"))
+  let full_url = (build-url $base ({bot_name: (encode-path-segment $bot_name), bot_alias: (encode-path-segment $bot_alias), user_id: (encode-path-segment $user_id)} | format pattern "/bot/{bot_name}/alias/{bot_alias}/user/{user_id}/text") $auth.query)
   let req_body = {"sessionAttributes": $session_attributes, "requestAttributes": $request_attributes, "inputText": $input_text, "activeContexts": $active_contexts} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
